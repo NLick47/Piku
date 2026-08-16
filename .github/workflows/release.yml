@@ -50,8 +50,12 @@ jobs:
 
       - name: Verify APK signature
         run: |
-          APKSIGNER=$ANDROID_HOME/build-tools/*/apksigner
-          $APKSIGNER verify --print-certs piku/build/outputs/apk/release/piku-release.apk
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)
+          if [ -z "$APKSIGNER" ]; then
+            echo "::error::未找到 apksigner"
+            exit 1
+          fi
+          "$APKSIGNER" verify --print-certs piku/build/outputs/apk/release/piku-release.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
