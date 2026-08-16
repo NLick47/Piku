@@ -1,0 +1,1317 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!DOCTYPE html>
+<html lang="ja">
+	<head>
+		
+
+
+
+
+
+<meta charset="utf-8">
+<meta http-equiv="Pragma" content="no-cache"/>
+<meta http-equiv="Cache-Control" content="no-cache"/>
+<meta http-equiv="Expires" content="0"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta http-equiv="Content-Language" content="ja">
+
+
+<meta name="pinterest" content="nopin" />
+<link rel="icon" href="https://cdn.poipiku.com/assets/favicon_2.ico" />
+<link href="https://fonts.googleapis.com/earlyaccess/roundedmplus1c.css" rel="stylesheet" />
+<link href="https://cdn.poipiku.com/assets/css/TBase-45.css" type="text/css" rel="stylesheet" />
+<link href="https://cdn.poipiku.com/assets/css/TMaking-227.css" type="text/css" rel="stylesheet" />
+<link href="https://cdn.poipiku.com/assets/css/TBasePc-91.css" type="text/css" rel="stylesheet" />
+<link href="https://cdn.poipiku.com/assets/font/typicons.min.css" type="text/css" rel="stylesheet" />
+    
+    <link href="https://cdn.poipiku.com/assets/webfonts/all.min.css" type="text/css" rel="stylesheet" />
+    
+
+<link rel="apple-touch-icon" sizes="114x114" href="https://cdn.poipiku.com/assets/img/apple-touch-icon-114x114_2.png" />
+<link rel="apple-touch-icon" sizes="72x72" href="https://cdn.poipiku.com/assets/img/apple-touch-icon-72x72_2.png" />
+<link rel="apple-touch-icon" sizes="57x57" href="https://cdn.poipiku.com/assets/img/apple-touch-icon_2.png" />
+<script type="text/javascript" src="https://cdn.poipiku.com/assets/js/jquery-1.12.4.min.js"></script>
+<script type="text/javascript" src="https://cdn.poipiku.com/assets/js/jquery.creditCardValidator.js"></script>
+<script type="text/javascript" src="https://cdn.poipiku.com/assets/js/dayjs-1.8.27.min.js"></script>
+<script type="text/javascript" src="https://cdn.poipiku.com/assets/js/common-136.js"></script>
+
+
+<script src="https://cdn.poipiku.com/assets/js/sweetalert2/sweetalert2-11.10.1.min.js"></script>
+<link rel="stylesheet" href="https://cdn.poipiku.com/assets/js/sweetalert2/sweetalert2-11.10.1.css">
+<link rel="stylesheet" href="https://cdn.poipiku.com/assets/js/sweetalert2/sweetalert2-11.10.1_custom.css">
+
+
+
+
+<script async src="https://www.googletagmanager.com/gtag/js?id=UA-125150180-1"></script>
+<script>
+window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+
+gtag('config', 'UA-125150180-1');
+</script>
+
+<!-- Google Tag Manager -->
+<script>
+(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});
+var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';
+j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;
+f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','GTM-W34FVDDN');
+</script>
+<!-- End Google Tag Manager -->
+
+
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8563032836738586" crossorigin="anonymous"></script>
+
+<script async src="https://securepubads.g.doubleclick.net/tag/js/gpt.js"></script>
+<script>window.googletag = window.googletag || {cmd: []};</script>
+
+
+<link href="https://cdn.poipiku.com/assets/css/TPcAppend-94.css" type="text/css" rel="stylesheet" />
+
+
+	
+		
+
+		
+	
+
+
+		
+
+
+
+		
+
+<script async src='https://static.secure.epsilon.jp/js/token.js'></script>
+
+<script>
+	if (typeof AGENT === 'undefined') {
+		const AGENT = {
+			"EPSILON": 2,
+		};
+		window.AGENT = AGENT;
+	}
+
+	function getAmountDlgHtml(emojiImgTag){
+		return '<div class="CardInfoDlgInfo">' + emojiImgTag + 'に' + getCheerAmountOptionHtml() + '円の</div>';
+	}
+
+	function getRegistCreditCardDlgHtml(strTitle, strDescription){
+		return `
+<style>
+	.CardInfoDlgTitle{padding: 10px 0 0 0;}
+	.CardInfoDlgInfo{font-size: 14px; text-align: left;}
+	.CardInfoDlgInputItem{margin: 4px;}
+	.CardInfoDlgInputLabel{font-size: 16px;}
+	.CardInfoDlgInfoCheckList{text-align: left; font-size: 16px;}
+	.swal2-popup .CardInfoDlgInputItem .swal2-input{margin-top: 4px; font-size: 1.1em; height: 1.825em;}
+	.swal2-popup .CardInfoDlgInputItem .swal2-input::placeholder{font-style: italic;}
+	.swal2-popup .swal2-footer {font-size: 0.75em;}
+</style>
+<h2 class="CardInfoDlgTitle">
+` + strTitle + `
+</h2>
+<div class="CardInfoDlgInfo">
+	<p>` + strDescription + `</p>
+</div>
+<div class="CardInfoDlgInputItem">
+	<div class="CardInfoDlgInputLabel">クレジットカード番号</div>
+	<span>
+	<img src="https://cdn.poipiku.com/assets/img/credit_card_logo_visa.png" height="30px" style="padding-top: 4px;"/>
+	<img src="https://cdn.poipiku.com/assets/img/credit_card_logo_master.gif" height="30px" style="padding-top: 4px;"/>
+	<img src="https://cdn.poipiku.com/assets/img/credit_card_logo_jcb.gif" height="30px" style="padding-top: 4px;"/>
+	<img src="https://cdn.poipiku.com/assets/img/credit_card_logo_ae.gif" height="30px" style="padding-top: 4px;"/>
+	<img src="https://cdn.poipiku.com/assets/img/credit_card_logo_diners.gif" height="30px" style="padding-top: 4px;"/>
+	</span>
+	<input id="card_number" class="swal2-input" autocomplete="off"　style="margin-top: 4px;" maxlength="16" placeholder="4111111111111111"/>
+</div>
+<div class="CardInfoDlgInputItem">
+	<div class="CardInfoDlgInputLabel">カード名義</div>
+	<input id="cc_holder" class="swal2-input" style="margin-top: 4px;" maxlength="100" placeholder="TARO POIPIKU"/>
+</div>
+<div class="CardInfoDlgInputItem">
+	<div class="CardInfoDlgInputLabel">有効期限(MM/YY)</div>
+	<input id="cc_exp" class="swal2-input" style="margin-top: 4px;" maxlength="5" placeholder="01/23"/>
+</div>
+<div class="CardInfoDlgInputItem">
+	<div class="CardInfoDlgInputLabel">セキュリティーコード<div/>
+	<input id="cc_csc" class="swal2-input" style="margin-top: 4px;" maxlength="4" placeholder="012"/>
+</div>
+`;
+	}
+
+	function createAgentInfo(agent, token, tokenExpire){
+		return {
+			"agentId": agent,
+			"token": token,
+			"tokenExpire": tokenExpire,
+		};
+	}
+
+	function verifyCardDlgInput(){
+		
+
+		// 入力内容の検証
+		const vals = {
+			cardNum: $("#card_number").val(),
+            cardHolderName: $("#cc_holder").val(),
+			cardExp: $("#cc_exp").val(),
+			cardSec: $("#cc_csc").val(),
+		}
+
+		// カード番号
+		if (vals.cardNum === '') {
+			return Swal.showValidationMessage('カード番号を入力してください');
+		}
+		const validateCreditCardResult = $("#card_number").validateCreditCard(
+			{ accept: [
+					'visa', 'mastercard', 'diners_club_international', 'jcb', 'amex',
+				] });
+		if(!validateCreditCardResult.valid){
+			return Swal.showValidationMessage('カード番号に誤りがあるか、取り扱えないカードブランドです。');
+		}
+		if (vals.cardHolderName === '') {
+			return Swal.showValidationMessage('カードの名義を入力してください');
+		}
+		if (vals.cardExp === '') {
+			return Swal.showValidationMessage('有効期限を入力してください');
+		}
+
+		// 有効期限 use dayjs
+		const MM = Number(vals.cardExp.split('/')[0]);
+		const YY = Number(vals.cardExp.split('/')[1]);
+		const expDay = dayjs("20" + YY + "-" + MM + "-01");
+		if(isNaN(MM)||isNaN(YY)||!expDay){
+			return Swal.showValidationMessage('有効期限は半角で、MM/YYの形式で入力してください。');
+		}
+		const now = dayjs();
+		const limit = now.add(60, 'day');
+		if(limit>expDay){
+			return Swal.showValidationMessage('有効期限が切れているか迫っているため、このカードは登録できません。');
+		}
+
+		// セキュリティーコード
+		if (vals.cardSec === ''){
+			return Swal.showValidationMessage('セキュリティーコードを入力してください');
+		}
+		if (/^\d+$/.exec(vals.cardSec) == null){
+			return Swal.showValidationMessage('セキュリティーコードは半角数字で入力してください');
+		}
+		if (vals.cardSec.length < 3){
+			return Swal.showValidationMessage('セキュリティーコードの桁数がたりません');
+		}
+		return vals;
+	}
+</script>
+
+		
+<script>
+	function SendEmojiAjax(emojiInfo) {
+		$.ajax({
+			"type": "post",
+			"data": {
+				"IID": emojiInfo.contentId,
+				"EMJ": emojiInfo.emoji,
+				"UID": emojiInfo.userId,
+			},
+			"url": "/f/SendEmojiF.jsp",
+			"dataType": "json",
+		}).then( data => {
+				if (data.result_num > 0) {
+					const $objResEmoji = $("<span/>").addClass("ResEmoji").html(data.result);
+					$("#ResEmojiAdd_" + emojiInfo.contentId).before($objResEmoji);
+					if (vg) vg.vgrefresh();
+
+					const $UserInfoCmdFollow = $("#IllustItem_" + emojiInfo.contentId + " > .IllustItemUser .UserInfoCmdFollow");
+					if ($UserInfoCmdFollow.length > 0 && !$UserInfoCmdFollow.hasClass("Selected")) {
+						setTimeout(()=>{
+							$("#EncourageFollowUp_" + emojiInfo.contentId).show(500);
+						}, 550);
+					}
+				} else {
+					switch (data.error_code) {
+						case -40:
+							
+							showIntroductionPoipassDlgHtml(
+								'ポイパスで絵文字100連打！',
+								'ポイパス加入で、送れる絵文字の数が1作品につき1日あたり10個から<strong>100個</strong>に大幅アップします！',
+								'ポイパス設定画面を見る',
+								'<div style="text-align:center;font-size:14px;color:#ff7272">はじめての方限定！<br><a style="color:#ff7272;text-decoration:underline;" href="https://poipiku.com/MyEditSettingPcV.jsp?MENUID=POIPASS">初月無料おためしキャンペーン実施中！</a></div>'
+							);
+							
+							break;
+						case -99:
+							DispMsg("サーバエラーが発生しました。");
+							break;
+					}
+				}},
+			error => {
+				DispMsg("ポイピクサーバにてエラーが発生しました。");
+			}
+		);
+	}
+
+	function SendEmoji(nContentId, strEmoji, nUserId, elThis) {
+		const emojiInfo = {
+			"contentId": nContentId,
+			"emoji": strEmoji,
+			"userId": nUserId,
+		};
+
+		SendEmojiAjax(emojiInfo, null, null, null, null);
+		return false;
+	}
+</script>
+
+		
+<script>
+	function _getReplyEmojiInfoHtml() {
+		return `
+	<h3 class="ReplyEmojiInfoDlgTitle"><i class="fas fa-reply"></i>リプライ</h3>
+	<div class="ReplyEmojiInfoDlgBody">
+	<p>もらったリアクションをタップすると、リアクションを送ってくれたユーザーに絵文字を返信できます。</p>
+	<p>返信に使う絵文字は設定画面→絵文字にて変更できます。</p>
+	<p>１リアクション１リプライまでです。連打しても複数送信されません。</p>
+	</div>
+	`;
+	}
+
+	function _getReplyEmojiInfoFooter() {
+		return `<p>本機能はベータ版です。名称・機能は頻繁に更新されることがあります。</p>`;
+	}
+
+	function replyEmoji(_this) {return _replyEmoji(_this, -1);}
+	function DispAlreadyReplied() { DispMsg("返信済みです", 500); }
+	function DispNeedLogin() { DispMsg("ログインするとリアクションの返信を受け取ることができます", 2000); }
+	function DispReplyDone() { DispMsg("返信しました！", 500); }
+</script>
+
+		<meta name="description" content="8/15ナポレオン・ボナパルト257歳のお誕生日おめでとぅ。ちゅ&gt;₃&lt;ദ്ദി(｡•̀ ,&lt;)~✩" />
+		
+		<meta name="twitter:card" content="summary_large_image" />
+		<meta name="twitter:image" content="https://cdn.poipiku.com/013240156/013349246_000000000_pzhAUsv5M.jpeg_640.jpg" />
+		
+		<meta name="twitter:site" content="@pipajp" />
+		<meta name="twitter:title" content="[らくがき] (全8枚) - ユムコチャン・ボナパルトのポイピク" />
+		<meta name="twitter:description" content="" />
+		<link rel="canonical" href="https://poipiku.com/13240156/13349246.html" />
+		<link rel="alternate" media="only screen and (max-width: 640px)" href="https://poipiku.com/13240156/13349246.html" />
+		<title>[らくがき] (全8枚) 8/15ナポレオン・ボナパルト  - ユムコチャン・ボナパルトのポイピク | イラストとか箱「ポイピク」</title>
+		<script type="application/ld+json">
+		{
+			"@context":"http://schema.org",
+			"@type":"ItemList",
+			"itemListElement":[
+				{"@type":"ListItem", "position":1, "url":"https://poipiku.com/13240156/13349246.html",
+				 "name": "[らくがき] (全8枚) 8/15ナポレオン・ボナパルト  - ユムコチャン・ボナパルトのポイピク | イラストとか箱「ポイピク」",
+				 
+				 "image": "EnvUrl.getPoipikuUrl("/img/poipiku_icon_512x512_2.png")
+				 
+				}
+			]
+		}
+		</script>
+
+		<script type="text/javascript">
+			$(function(){
+				$('#MenuNew').addClass('Selected');
+				$(document).on('click', '.PrivateIcon', (ev) => {
+					DispMsg("(非公開)<br>このコンテンツは他のユーザーからは見えません");
+				});
+				$(document).on('click', '.OutOfPeriodIcon', (ev) => {
+					DispMsg("(公開期間外)<br>このコンテンツは他のユーザーからは見えません");
+				});
+			});
+		</script>
+
+		
+<script>
+	function DeleteContent(nUserId, nContentId, bPreviousTweetExist) {
+		$.ajax({
+			"type": "post",
+			"data": {"CID": nContentId},
+			"url": "/f/CheckRequestStatusF.jsp",
+			"dataType": "json"
+		}).then( (data) => {
+			if (data.error_code === 0){
+				if (data.exist === 1){
+					DispMsg("リクエスト納品物は削除できません");
+				} else {
+					DeleteContentInteractive(
+						nUserId, nContentId, bPreviousTweetExist,
+						'削除しますか？ <br/> <span style="font-size:14px">更新画面で「非公開」にすると、他の人から見えないようにもできます。</span>',
+						'削除する',
+						'やめておく',
+						'アップロード時のツイートも削除しますか',
+						'削除する',
+						'残す'
+					);
+				}
+			} else {
+				DispMsg("サーバーとの通信に失敗しました");
+			}
+		});
+	}
+</script>
+
+		
+<script type="text/javascript">
+	function dispRequestDlg(requestId) {
+		$.ajax({
+			"type": "post",
+			"data": { "ID": requestId },
+			"url": "/f/GetRequestF.jsp",
+			"dataType": "json",
+		})
+		.then(
+			data => {
+				swal.fire({
+					html: "<h2>依頼の内容</h2><pre style='text-align:left;font-size:13px;white-space:pre-wrap;'>" + data.text + "</pre>",
+					showConfirmButton: false,
+					showCloseButton: true,
+				});
+			},
+			error => {
+				console.log(error);
+			}
+		);
+	}
+</script>
+
+		
+<script type="text/javascript">
+	function DispRetweetMsg(respRetweetContentF) {
+		if (respRetweetContentF.result === 1) {
+			DispMsg("リツイートしました！");
+		} else if(respRetweetContentF.result === 4) {
+			// pass
+		} else {
+			if (respRetweetContentF.error_detail_code === -40) {
+				DispMsg("ポイピクにログインしてTwitterアカウントと連携すると、リツイートできます。>", 4000);
+			} else {
+				DispMsg("リツイートできませんでした。<br>作者のツイートにアクセスできない、非公開ツイートである、自分のツイート数が上限に達しているなどの可能性があります。", 5000);
+			}
+		}
+	}
+
+	function _getRetweetContentHtml(){
+		return `
+<style>
+	.RetweetContentDlgTitle{padding: 10px 0 0 0; color: #3498db;font-weight: 500;}
+	.RetweetContentDlgInfo{font-size: 14px; text-align: left;}
+</style>
+<div class="RetweetContentDlg">
+
+<div class="RetweetContentDlgTitle"><i class="fab fa-twitter"></i> リツイート限定</div>
+
+<div class="RetweetContentDlgInfo" style="margin: 15px 0 15px 0;">
+作者による作品紹介ツイートをリツイートすると、つづきを見ることができます！
+</div>
+
+<div class="RetweetContentDlgInfo" style="text-align: center;">
+<input id="NotDisplayFeature" name="NotDisplayFeature" type="checkbox">
+<label for="NotDisplayFeature" class="RetweetContentDlgInfo">今後はこのダイアログを表示しない</label>
+<div>
+
+</div>
+`;
+	}
+
+	function showRetweetContentDlg() {
+		return Swal.fire({
+			html: _getRetweetContentHtml(),
+			focusConfirm: false,
+			showCloseButton: true,
+			showCancelButton: false,
+			confirmButtonText: "リツイートしてつづきを見る",
+			preConfirm: () => {return {'NotDisplayFeature': $("#NotDisplayFeature").prop('checked')};},
+		});
+	}
+</script>
+		
+<script type="text/javascript">
+function _getTwitterFollowerLimitInfoHtml(){
+	return `
+<style>
+.TwitterFollowerLimitInfoDlgTitle{padding: 10px 0 0 0; color: #3498db;font-weight: 500;}
+.TwitterFollowerLimitInfoDlgInfo{font-size: 14px; text-align: left;}
+</style>
+<div class="TwitterFollowerLimitInfoDlg">
+<div class="TwitterFollowerLimitInfoDlgTitle"><i class="fab fa-twitter"></i> フォロワー限定試験運用中</div>
+<div class="TwitterFollowerLimitInfoDlgInfo" style="margin: 15px 0 15px 0;">
+
+<p><i class="far fa-check-square"></i> 投稿ユーザーが鍵アカの場合、過去作品含めフォロワーの確認ができなくなりました。</p>
+<p><i class="far fa-check-square"></i> 厳しい条件での運用のため、リアルタイムでフォロワー確認ができないことがあります。その際は数時間後にもう一度お試しください。</p>
+
+
+</div>
+</div>
+`;
+	}
+
+function showTwitterFollowerLimitInfoDlg() {
+	return Swal.fire({
+		html: _getTwitterFollowerLimitInfoHtml(),
+		focusConfirm: true,
+		showCloseButton: true,
+		showCancelButton: false,
+		preConfirm: () => {return {'NotDisplayFeature': $("#NotDisplayFeature").prop('checked')};},
+	});
+}
+</script>
+		<script type="text/javascript">
+			$(function(){
+				
+				$('body, .Wrapper').each(function(index, element){
+					$(element).on("contextmenu drag dragstart copy",function(e){return false;});
+				});
+				
+				$("#AnalogicoInfo .AnalogicoInfoSubTitle").html('ユムコチャン・ボナパルトはポイピクに11枚のイラストとかをポイポイしています。');
+				
+				$("#AnalogicoInfo .AnalogicoMoreInfo").html('すべて見るなら今すぐ登録！');
+				
+
+				
+			});
+		</script>
+		<style>
+			.RelatedItemList {display: block; margin: 0 15px 15px 15px; box-sizing: border-box; float: left;}
+			.Wrapper.ViewPc {flex-flow: row-reverse wrap;}
+			.Wrapper.ViewPc .PcSideBar .FixFrame {position: sticky; top: 81px;}
+			.Wrapper.ViewPc .PcSideBar .PcSideBarItem:last-child {position: static;}
+			.IllustItem.Password .IllustItemThumb {min-height: 240px;}
+			.Wrapper.ViewPc .IllustItemList.Related {width: 100%; flex: 0 0 100%;}
+		
+		.UserInfo {background-image: url('https://cdn.poipiku.com/013240156/header_20260726021504.png_640.jpg');}
+		
+
+		</style>
+
+		
+	</head>
+
+	<body>
+		
+
+
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-W34FVDDN"
+height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+
+		
+
+
+
+<script>
+function dispTwLoginUnsuccessfulInfo(callbackPath){
+	Swal.fire({
+		html: '<h2>違うユーザーで認証されてしまう</h2>' +
+			'<div style="text-align: left; font-size: 13px"><p>以下のボタンでログインすると、Twitter認証画面で一度止まります。<p>' +
+			'<p style="text-align: left; font-size: 13px">想定と異なるTwitterユーザーが表示されていたら、Twitter側でユーザーを切り替えてから、もう一度ポイピクのログインをお試し下さい。<p></div>',
+		showCancelButton: false,
+		showCloseButton: true,
+		confirmButtonText: '<i class="typcn typcn-social-twitter"></i> 待ってログイン',
+	}).then((result) => {
+		if (result.value) {
+			location.href = "/LoginFormTwitter.jsp?AUTH=authorize&CBPATH=" + callbackPath;
+		}
+	});
+}
+</script>
+
+
+
+
+
+<script>
+function showSwitchContentsViewModeDlg(mode){
+	if (mode === 1){
+		Swal.fire({
+			title: "あなたは18歳以上ですか？",
+			text: "この先成人向けのコンテンツが表示されます。18歳未満の方のアクセスはお断り致します。",
+			focusConfirm: true,
+			confirmButtonText: "はい",
+			cancelButtonText: "いいえ",
+			showCloseButton: true,
+			showCancelButton: true,
+		}).then(formValues => {
+			// キャンセル
+			if(formValues.dismiss){return false;}
+			$.ajax({
+				type: "POST",
+				url: "/f/SwitchContentsViewModeF.jsp",
+				data: {MD: 1},
+                dataType: "json",
+			}).done(function(data){
+				console.log(data);
+                if(data.result === 1){
+                    location.reload();
+                }
+            });
+		});
+    } else {
+		$.ajax({
+			type: "POST",
+			url: "/f/SwitchContentsViewModeF.jsp",
+			data: {MD: 0},
+			dataType: "json",
+        }).done(function(data){
+            if(data.result === 1){
+                location.reload();
+            }
+        });
+	}
+}
+</script>
+
+
+<header class="Header">
+	<div id="HeaderSlider"></div>
+	<div class="HeaderWrapper">
+		<div class="HeaderInnerWrapper">
+			<div id="HeaderTitleWrapper" class="HeaderTitleWrapper">
+				<h1 class="HeaderTitle">
+					<a id="HeaderLink" class="HeaderLink" href="/">
+						<img  class="HeaderImg" src="https://cdn.poipiku.com/assets/img/pc_top_title-03.png" alt="イラストとか箱「ポイピク」" />
+					</a>
+				</h1>
+				
+			</div>
+			
+			<nav class="FooterMenu">
+				<a id="MenuHome" class="FooterMenuItem" href="/MyHomePcV.jsp?ID=-1">
+					<span class="FooterMenuItemIcon"></span>
+					<span class="FooterMenuItemName">こそフォロ</span>
+				</a>
+				<a id="MenuNew" class="FooterMenuItem" href="/NewArrivalPcV.jsp?ID=-1">
+					<span class="FooterMenuItemIcon"></span>
+					<span class="FooterMenuItemName">新着/Hot</span>
+				</a>
+				<a id="MenuAct" style="margin-right: 18px;" class="FooterMenuItem" href="/ActivityListPcV.jsp?ID=-1">
+					<span class="FooterMenuItemIcon">
+						<div id="InfoNumAct" class="InfoNum">0</div>
+					</span>
+					<span class="FooterMenuItemName">お知らせ</span>
+				</a>
+				<a id="MenuMe" style="margin-right: 20px;" class="FooterMenuItem" href="/MyIllustListPcV.jsp?ID=-1">
+					<span class="FooterMenuItemIcon"></span>
+					<span class="FooterMenuItemName">マイボックス</span>
+				</a>
+				
+			</nav>
+			<nav class="FooterMenu" style="flex-grow: 1;">
+				
+				<span style="color: #3498db; margin: 14px 4px 0 0 ">start<span style="margin-left: 3px; font-size: 12px">with</span></span>
+				<form method="post" name="login_from_twitter_tmenupc_01" action="/LoginFormTwitter.jsp">
+					<input id="login_from_twitter_tmenupc_callback_01" type="hidden" name="CBPATH" value=""/>
+					<script>{
+						let s = document.URL.split("/");
+						for(let i=0; i<3; i++){s.shift();}
+						$('#login_from_twitter_tmenupc_callback_01').val("/" + s.join("/"));
+					}</script>
+					<a class="BtnBase Rev HeaderLoginBtnPc LoginButton" href="javascript:login_from_twitter_tmenupc_01.submit()">
+						<span class="typcn typcn-social-twitter"></span>
+					</a>
+				</form>
+				<form method="post" name="login_from_facebook_tmenupc_01" action="/LoginFormFacebook.jsp">
+					<input id="login_from_facebook_tmenupc_callback_01" type="hidden" name="CBPATH" value=""/>
+					<script>{
+						let s = document.URL.split("/");
+						for(let i=0; i<3; i++){s.shift();}
+						$('#login_from_facebook_tmenupc_callback_01').val("/" + s.join("/"));
+					}</script>
+					<a class="BtnBase Rev HeaderLoginBtnPc LoginButton" href="javascript:login_from_facebook_tmenupc_01.submit()">
+						<span class="typcn typcn-social-facebook"></span>
+					</a>
+				</form>
+				<a class="BtnBase LoginButton" href="/MyHomePcV.jsp">
+					<span class="typcn typcn-mail" style="font-size: 20px; line-height: 16px;"></span>
+				</a>
+
+				
+				<form id="HeaderSearchWrapper" class="HeaderSearchWrapper" method="get" style="float: right;">
+					<div class="HeaderSearch">
+						<div class="HeaderSearchInputWrapper">
+							<input name="KWD" id="HeaderSearchBox" class="HeaderSearchBox" type="text" maxlength="20"
+									placeholder="ワード | #タグ | @ユーザ名orID" value=""
+									autocomplete="off" enterkeyhint="search" oninput="onSearchInput()"
+							/>
+							<div id="HeaderSearchClear" class="HeaderSearchClear">
+								<i class="fas fa-times-circle" onclick="clearHeaderSearchInput()"></i>
+							</div>
+						</div>
+						<div id="HeaderSearchBtn" class="HeaderSearchBtn">
+							<i class="fas fa-search"></i>
+						</div>
+					</div>
+				</form>
+				<a id="MenuSwitchContentsViewMode" class="SwitchContentsViewMode" onclick="showSwitchContentsViewModeDlg(1);">
+					<span class="SwitchContentsViewModeBtn">一般</span>
+				</a>
+			</nav>
+			
+		</div>
+		
+		
+			<div id="PulldownSearchWrapper" class="SearchWrapper pulldown">
+				<div class="RecentSearchHeader">最近の検索</div>
+				<ul id="RecentSearchList" class="RecentSearchList"></ul>
+				
+			</div>
+			<script>
+				function showSearch(idSuf) {
+					const suffix = idSuf && typeof idSuf == 'string' ? idSuf : '';
+					$('#PulldownSearchWrapper' + suffix).slideDown();
+					
+					showSearchHistory(null, suffix ? '' : 'ログインすると検索履歴を見られます', 60);
+					
+				}
+				$('#HeaderSearchBox').on('focus', showSearch);
+				$(document).on('click', '.RecentSearchKW', ev => {
+					$('#PulldownSearchWrapper').hide();
+					$('ul.RecentSearchList').empty();
+					SearchByKeyword('Contents', -1, 5, $(ev.currentTarget).text())();
+				});
+				$(document).on('click', '.RecentSearchDelBtn', ev => {
+					
+						deleteSearchHistory('Contents', $(ev.target).closest('.RecentSearchRow').find('.RecentSearchKW').text())
+						.then(() => {
+							showSearchHistory('Contents', 'キーワードを入力してコンテンツ・タグ・ユーザーを検索しよう', 60, -1, 5, false);
+						});
+					
+				});
+				$(document).on('click touchend', function(ev) {
+					if (!$(ev.target).closest('#PulldownSearchWrapper, .HeaderSearch').length) $('#PulldownSearchWrapper').hide();
+					if (!$(ev.target).closest('#PulldownSearchWrapperIntro, .search_box').length) $('#PulldownSearchWrapperIntro').hide();
+				});
+			</script>
+		
+	</div>
+</header>
+
+
+<script>
+	function onSearchInput(idPre) {
+		const searchId = idPre && typeof idPre == 'string' ? idPre + 'SearchBox' : 'HeaderSearchBox';
+		const prevTimeout = getLocalStrage('search-suggestion-timeout');
+		if (prevTimeout) clearTimeout(prevTimeout);
+		const inputStr = $('#' + searchId).val().trim();
+		if (!inputStr) {
+			$(`#`).val('');
+			toggleClearSearchBtn();
+			showSearch(idPre && typeof idPre == 'string' ? idPre : null);
+			return false;
+		}
+		toggleClearSearchBtn();
+		setLocalStrage('search-suggestion-timeout', setTimeout(() => {
+			const searchStr = $('#' + searchId).val().trim();
+			if (searchStr && !/^(\d|\w|[\u3040-\u30FFＡ-Ｚａ-ｚ０-９])$/.test(searchStr)) {
+				showSearchSuggestion('Contents', searchStr, searchId);
+			} else {
+				showSearch(idPre && typeof idPre == 'string' ? idPre : null);
+			}
+		}, 800));
+	}
+	localStorage.removeItem('search-suggestion-timeout');
+	$('#HeaderSearchWrapper').on('submit', SearchByKeyword('Contents', -1, 5));
+	$('#HeaderSearchBtn').on('click', SearchByKeyword('Contents', -1, 5));
+	toggleClearSearchBtn();
+</script>
+
+
+
+
+
+<script>
+	$(function () {
+		var bLoginButtonClicked = false;
+		$(".LoginButton").click(function () {
+			if(bLoginButtonClicked){
+				$(this).attr("href", "javascript:void(0);");
+			}else{
+				bLoginButtonClicked=true;
+			}
+		})
+	})
+</script>
+
+
+
+
+		
+
+
+
+
+<div class="HeaderPoiPassAd" style="width: 100%;">
+	<a class="HeaderPoiPassAdBanner" href="/StartPoiPassPcV.jsp">
+		<img src="https://cdn.poipiku.com/assets/img/poipiku_passport_logo3_60.png" alt="POIPASS"/>
+		
+		<span>ポイパスで400枚まとめて投稿！</span>
+	</a>
+	<div class="CreateAccountInfo">
+		<div class="CreateAccountBenefit">
+			
+			ログインすると作者をこっそりフォローできます
+		</div>
+		
+		<div class="CreateAccountButtons">
+			<div class="CreateAccountButtonsLabel">持っているアカウントではじめる</div>
+			<a class="BtnBase LoginButton" href="javascript:login_from_twitter_tmenupc_01.submit()">
+				<span class="typcn typcn-social-twitter"></span>
+			</a>
+			<a class="BtnBase LoginButton" href="javascript:login_from_facebook_tmenupc_01.submit()">
+				<span class="typcn typcn-social-facebook"></span>
+			</a>
+			<a class="BtnBase LoginButton" href="/LoginFormEmailPcV.jsp">
+				<span class="typcn typcn-mail"></span>
+			</a>
+		</div>
+	</div>
+</div>
+
+
+
+		<article class="Wrapper" style="width: 100%;">
+			<div class="UserInfo Float">
+				
+<script>
+	function UpdateBlock() {
+		var bBlocked = $("#UserInfoCmdBlock").hasClass('Selected');
+		$.ajaxSingle({
+			"type": "post",
+			"data": { "UID": -1, "IID": 13240156, "CHK": (bBlocked)?0:1 },
+			"url": "/f/UpdateBlockF.jsp",
+			"dataType": "json",
+			"success": function(data) {
+				if(data.result==1) {
+					$('.UserInfoCmdBlock').addClass('Selected');
+					$('.UserInfoCmdFollow').removeClass('Selected');
+					$('.UserInfoCmdFollow').html("☆こそフォロ");
+					$('.UserInfoCmdFollow').hide();
+					location.reload(true);
+				} else if(data.result==2) {
+					$('.UserInfoCmdBlock').removeClass('Selected');
+					$('.UserInfoCmdFollow').removeClass('Selected');
+					$('.UserInfoCmdFollow').html("☆こそフォロ");
+					$('.UserInfoCmdFollow').show();
+					location.reload(true);
+				} else {
+					DispMsg('ブロックできませんでした');
+				}
+			},
+			"error": function(req, stat, ex){
+				DispMsg('Connection error');
+			}
+		});
+	}
+</script>
+
+<a id="UserInfoCmdBlock" class="typcn typcn-cancel UserInfoCmdBlock" href="/"></a>
+
+				<div class="UserInfoBg"></div>
+				<section class="UserInfoUser">
+					<a class="UserInfoUserThumb" style="background-image: url('https://cdn.poipiku.com/013240156/profile_20260226213557.jpeg')" href="/13240156/"></a>
+					<h2 class="UserInfoUserName"><a href="/13240156/">ユムコチャン・ボナパルト</a></h2>
+					
+					
+					<h3 class="UserInfoProfile"><a class="fab fa-twitter" target="_blank" href="https://twitter.com/2domenojinse1">@2domenojinse1</a></h3>
+					
+					<h3 class="UserInfoProfile">超絶新規QuizKnockファンです！実在の人物を投稿するカモしれません！</h3>
+					
+					<span class="UserInfoCmd">
+						
+						
+						<a class="BtnBase UserInfoCmdFollow" href="/">☆こそフォロ</a>
+						
+
+						<span class="IllustItemCommandSub">
+							<a class="IllustItemCommandTweet fab fa-twitter-square" href="https://twitter.com/intent/tweet?text=%E3%83%A6%E3%83%A0%E3%82%B3%E3%83%81%E3%83%A3%E3%83%B3%E3%83%BB%E3%83%9C%E3%83%8A%E3%83%91%E3%83%AB%E3%83%88%E3%81%AE%E3%83%9D%E3%82%A4%E3%83%94%E3%82%AF+%E3%81%9F%E3%81%A0%E3%81%84%E3%81%BE11%E3%83%9D%E3%82%A4%E3%83%9D%E3%82%A4+%23poipiku&url=https%3A%2F%2Fpoipiku.com%2F13240156%2F" target="_blank"></a>
+						</span>
+					</span>
+
+					
+
+
+<span class="UserInfoCmd" style="padding-bottom: 0">
+	絵文字で応援する
+	
+	<span title="send message" class="AddWaveMessage" onclick="$('#WaveMessage').toggle(100)"><i class="far fa-comment-dots"></i></span>
+	
+</span>
+
+
+<span class="UserInfoCmd" style="padding-bottom: 0">
+<span id="WaveMessage" class="UserInfoCmd" style="padding-bottom: 0; display: none">
+	<textarea maxlength="500" id="EditWaveMessage" class="WaveMessageText" placeholder="メッセージを添える(500文字まで)"></textarea>
+	<br><span class="WaveMessageInfo">絵文字をタップすると送信します</span>
+</span></span>
+
+
+<span class="UserInfoCmd">
+
+
+<span class="WaveButton" onclick="sendUserWave(-1, 13240156, '💖', this)"><img class="Twemoji" draggable="false" alt="💖" src="https://cdn.poipiku.com/assets/emoji/1f496.png" /></span>
+
+<span class="WaveButton" onclick="sendUserWave(-1, 13240156, '👍', this)"><img class="Twemoji" draggable="false" alt="👍" src="https://cdn.poipiku.com/assets/emoji/1f44d.png" /></span>
+
+<span class="WaveButton" onclick="sendUserWave(-1, 13240156, '🎉', this)"><img class="Twemoji" draggable="false" alt="🎉" src="https://cdn.poipiku.com/assets/emoji/1f389.png" /></span>
+
+<span class="WaveButton" onclick="sendUserWave(-1, 13240156, '😍', this)"><img class="Twemoji" draggable="false" alt="😍" src="https://cdn.poipiku.com/assets/emoji/1f60d.png" /></span>
+
+</span>
+
+
+
+
+				</section>
+				<section class="UserInfoState">
+					
+<a class="UserInfoStateItem" href="/13240156/">
+	
+	<span class="UserInfoStateItemTitle">ポイポイ</span>
+	<span class="UserInfoStateItemNum">11</span>
+	
+</a>
+
+				</section>
+			</div>
+		</article>
+
+		
+		<article class="Wrapper ViewPc GridList">
+
+			<aside class="PcSideBar" style="margin-top: 30px;">
+				
+				<div class="PcSideBarItem">
+					
+
+
+<div class="PcSideBarAd">
+	
+
+
+
+
+
+
+
+	
+		
+<script src="//ad.adpon.jp/fr.js?fid=2fbe0897-f359-45ae-9561-dc172561ce91"></script>
+	
+
+
+
+</div>
+
+				</div>
+				
+
+				<div class="PcSideBarItem">
+					
+
+
+
+<ul class="EventItemList">
+	<li class="EventItem" aria-hidden="true" style="">
+		<a href="/event/20190901/TopPcV.jsp">
+			<img class="EventBanner" src="https://cdn.poipiku.com/assets/event/20190901/banner_odai.png" />
+		</a>
+	</li>
+	<li class="EventItem">
+		<a href="/event/202608/TopPcV.jsp">
+			<img class="EventBanner" src="https://cdn.poipiku.com/assets/event/202608/banner_odai.jpg" />
+		</a>
+	</li>
+	
+	<li class="EventItem" aria-hidden="true" style="">
+		<a href="/StartPoiPassPcV.jsp">
+			<img class="EventBanner" src="https://cdn.poipiku.com/assets/img/poipiku_passport_banner_01.png" />
+		</a>
+	</li>
+	
+</ul>
+
+				</div>
+
+				<div class="FixFrame">
+					<div class="PcSideBarItem">
+						<div class="UserInfo" style="border: none;">
+							<div class="UserInfoBgImg"></div>
+							<div class="UserInfoBg"></div>
+							<div class="UserInfoUser">
+								<a class="UserInfoUserThumb" style="background-image: url('https://cdn.poipiku.com/013240156/profile_20260226213557.jpeg')" href="/13240156/"></a>
+								<h2 class="UserInfoUserName"><a href="/13240156/">ユムコチャン・ボナパルト</a></h2>
+								<h3 class="UserInfoProfile">超絶新規QuizKnockファンです！実在の人物を投稿するカモしれません！</h3>
+								<span class="UserInfoCmd">
+									
+									<a class="BtnBase UserInfoCmdFollow" href="/">☆こそフォロ</a>
+									
+								</span>
+							</div>
+						</div>
+					</div>
+
+					
+					<div class="PcSideBarItem">
+						
+
+
+
+<div class="PcSideBarAd">
+
+
+
+
+
+	
+		
+<script src="//ad.adpon.jp/fr.js?fid=2fbe0897-f359-45ae-9561-dc172561ce91"></script>
+	
+
+
+</div>
+
+
+					</div>
+					
+				</div>
+			</aside>
+
+			<section id="IllustItemList" class="IllustItemList">
+				
+
+
+				<div class="IllustItem  Upload" id="IllustItem_13349246"><div class="IllustItemUser"><a class="IllustItemUserThumb" href="/13240156/" style="background-image:url('https://cdn.poipiku.com/013240156/profile_20260226213557.jpeg_120.jpg')"></a><h2 class="IllustItemUserName"><a href="/13240156/">ユムコチャン・ボナパルト</a></h2><span class="BtnBase UserInfoCmdFollow UserInfoCmdFollow_13240156  "  onclick="UpdateFollowUser(-1, 13240156)">☆こそフォロ</span></div><div class="IllustItemCommand"><h2 id="IllustItemCategory_13349246" class="IllustItemCategory"><a class="Category C4" href="/NewArrivalPcV.jsp?CD=4">らくがき</a></h2><div class="IllustItemCommandSub"><a class="IllustItemCommandInfo fas fa-info-circle" href="/ReportFormPcV.jsp?ID=13240156&TD=13349246"></a><div class="IllustItemCmd"><a class="NonFrameBtnBase IllustItemShareButton" href="javascript:void(0)" onclick="shareContent(13240156, 13349246, false);"></a></div><div class="IllustItemCmd"><a id="IllustItemBookmarkBtn_13349246" class="NonFrameBtnBase IllustItemBookmarkBtn" href="javascript:void(0)" onclick="UpdateBookmark(-1, 13349246);"><i class="far fa-bookmark"></i></a></div></div></div><h1 id="IllustItemDesc_13349246" class="IllustItemDesc" >8/15ナポレオン・ボナパルト257歳のお誕生日おめでとぅ。ちゅ&gt;₃&lt;ദ്ദി(｡•̀ ,&lt;)~✩</h1><h2 id="IllustItemTag_13349246" style="display: none;"></h2>
+<a class="IllustItemThumb" href="javascript:void(0)" onclick="showIllustDetail(13240156, 13349246, -1)"><img class="IllustItemThumbImg" src="https://cdn.poipiku.com/013240156/013349246_000000000_pzhAUsv5M.jpeg_640.jpg" onload="setImgHeightStyle(this)"/></a><div class="IllustItemThubExpand"></div><div class="IllustItemExpand"><a class="BtnBase IllustItemExpandBtn" href="javascript:void(0)" onclick="ShowAppendFile(13240156, 13349246, 0, this)"
+> すべて表示(+7枚)</a>
+</div><div class="IllustItemTProhibit"><span class="TapToFull">タップで全画面(原寸:2894x3859)</span>AI学習禁止・無断転載禁止</div><div id="IllustItemResList_13349246" class="IllustItemResList" ><data class="LastCommentId" value="0"></data>
+<span id="ResEmojiAdd_13349246" class="ResEmojiAdd" ><span class="fas fa-plus-square"></span></span></div><div class="IllustItemResBtnList"><div class="IllustItemResListTitle">リアクションをたくさん送って応援しよう！<a class="ReplyBtn fas fa-reply" onclick="switchEmojiReply(13349246, -1, 2)"></a>
+</div><div class="ResBtnSetList"><a class="BtnBase ResBtnSetItem " onclick="switchEmojiKeyboard(this, 13349246, 0, 'Recent')">よく使う</a><a class="BtnBase ResBtnSetItem Selected" onclick="switchEmojiKeyboard(this, 13349246, 1, 'Popular')">人気</a><a class="BtnBase ResBtnSetItem" onclick="switchEmojiKeyboard(this, 13349246, 2, 'Food')">おやつ</a><a class="BtnBase ResBtnSetItem" onclick="switchEmojiKeyboard(this, 13349246, 3, 'All')">その他</a></div><div class="ResEmojiCheerNowPayment" style="display:none"><span class="CheerLoading"></span><span>支払処理中</span></div><div class="ResEmojiBtnList Recent" style="display: none;"></div><div class="ResEmojiBtnList Popular"><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '💖', -1, this)"><img class="Twemoji" draggable="false" alt="💖" src="https://cdn.poipiku.com/assets/emoji/1f496.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '🍆', -1, this)"><img class="Twemoji" draggable="false" alt="🍆" src="https://cdn.poipiku.com/assets/emoji/1f346.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '😍', -1, this)"><img class="Twemoji" draggable="false" alt="😍" src="https://cdn.poipiku.com/assets/emoji/1f60d.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '❤', -1, this)"><img class="Twemoji" draggable="false" alt="❤" src="https://cdn.poipiku.com/assets/emoji/2764.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '😋', -1, this)"><img class="Twemoji" draggable="false" alt="😋" src="https://cdn.poipiku.com/assets/emoji/1f60b.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '😭', -1, this)"><img class="Twemoji" draggable="false" alt="😭" src="https://cdn.poipiku.com/assets/emoji/1f62d.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '👏', -1, this)"><img class="Twemoji" draggable="false" alt="👏" src="https://cdn.poipiku.com/assets/emoji/1f44f.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '🍼', -1, this)"><img class="Twemoji" draggable="false" alt="🍼" src="https://cdn.poipiku.com/assets/emoji/1f37c.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '🌋', -1, this)"><img class="Twemoji" draggable="false" alt="🌋" src="https://cdn.poipiku.com/assets/emoji/1f30b.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '🙏', -1, this)"><img class="Twemoji" draggable="false" alt="🙏" src="https://cdn.poipiku.com/assets/emoji/1f64f.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '☺', -1, this)"><img class="Twemoji" draggable="false" alt="☺" src="https://cdn.poipiku.com/assets/emoji/263a.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '💒', -1, this)"><img class="Twemoji" draggable="false" alt="💒" src="https://cdn.poipiku.com/assets/emoji/1f492.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '💜', -1, this)"><img class="Twemoji" draggable="false" alt="💜" src="https://cdn.poipiku.com/assets/emoji/1f49c.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '💴', -1, this)"><img class="Twemoji" draggable="false" alt="💴" src="https://cdn.poipiku.com/assets/emoji/1f4b4.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '💯', -1, this)"><img class="Twemoji" draggable="false" alt="💯" src="https://cdn.poipiku.com/assets/emoji/1f4af.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '💞', -1, this)"><img class="Twemoji" draggable="false" alt="💞" src="https://cdn.poipiku.com/assets/emoji/1f49e.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '💘', -1, this)"><img class="Twemoji" draggable="false" alt="💘" src="https://cdn.poipiku.com/assets/emoji/1f498.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '💗', -1, this)"><img class="Twemoji" draggable="false" alt="💗" src="https://cdn.poipiku.com/assets/emoji/1f497.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '👍', -1, this)"><img class="Twemoji" draggable="false" alt="👍" src="https://cdn.poipiku.com/assets/emoji/1f44d.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '💚', -1, this)"><img class="Twemoji" draggable="false" alt="💚" src="https://cdn.poipiku.com/assets/emoji/1f49a.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '🍑', -1, this)"><img class="Twemoji" draggable="false" alt="🍑" src="https://cdn.poipiku.com/assets/emoji/1f351.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '💙', -1, this)"><img class="Twemoji" draggable="false" alt="💙" src="https://cdn.poipiku.com/assets/emoji/1f499.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '💕', -1, this)"><img class="Twemoji" draggable="false" alt="💕" src="https://cdn.poipiku.com/assets/emoji/1f495.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '💛', -1, this)"><img class="Twemoji" draggable="false" alt="💛" src="https://cdn.poipiku.com/assets/emoji/1f49b.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '🥰', -1, this)"><img class="Twemoji" draggable="false" alt="🥰" src="https://cdn.poipiku.com/assets/emoji/1f970.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '🫪', -1, this)"><img class="Twemoji" draggable="false" alt="🫪" src="https://cdn.poipiku.com/assets/emoji/1faea.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '🇪', -1, this)"><img class="Twemoji" draggable="false" alt="🇪" src="https://cdn.poipiku.com/assets/emoji/1f1ea.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '🇴', -1, this)"><img class="Twemoji" draggable="false" alt="🇴" src="https://cdn.poipiku.com/assets/emoji/1f1f4.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '🐰', -1, this)"><img class="Twemoji" draggable="false" alt="🐰" src="https://cdn.poipiku.com/assets/emoji/1f430.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '🩷', -1, this)"><img class="Twemoji" draggable="false" alt="🩷" src="https://cdn.poipiku.com/assets/emoji/1fa77.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '🇱', -1, this)"><img class="Twemoji" draggable="false" alt="🇱" src="https://cdn.poipiku.com/assets/emoji/1f1f1.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '😂', -1, this)"><img class="Twemoji" draggable="false" alt="😂" src="https://cdn.poipiku.com/assets/emoji/1f602.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '🫶', -1, this)"><img class="Twemoji" draggable="false" alt="🫶" src="https://cdn.poipiku.com/assets/emoji/1faf6.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '👮', -1, this)"><img class="Twemoji" draggable="false" alt="👮" src="https://cdn.poipiku.com/assets/emoji/1f46e.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '😻', -1, this)"><img class="Twemoji" draggable="false" alt="😻" src="https://cdn.poipiku.com/assets/emoji/1f63b.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '🍌', -1, this)"><img class="Twemoji" draggable="false" alt="🍌" src="https://cdn.poipiku.com/assets/emoji/1f34c.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '🇻', -1, this)"><img class="Twemoji" draggable="false" alt="🇻" src="https://cdn.poipiku.com/assets/emoji/1f1fb.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, 'ℹ', -1, this)"><img class="Twemoji" draggable="false" alt="ℹ" src="https://cdn.poipiku.com/assets/emoji/2139.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '🌠', -1, this)"><img class="Twemoji" draggable="false" alt="🌠" src="https://cdn.poipiku.com/assets/emoji/1f320.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '🔐', -1, this)"><img class="Twemoji" draggable="false" alt="🔐" src="https://cdn.poipiku.com/assets/emoji/1f510.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '🐷', -1, this)"><img class="Twemoji" draggable="false" alt="🐷" src="https://cdn.poipiku.com/assets/emoji/1f437.png" /></a><a class="ResEmojiBtn" href="javascript:void(0)" onclick="SendEmoji(13349246, '🧡', -1, this)"><img class="Twemoji" draggable="false" alt="🧡" src="https://cdn.poipiku.com/assets/emoji/1f9e1.png" /></a></div><div class="ResEmojiBtnList Food" style="display: none;"></div><div class="ResEmojiBtnList All" style="display: none;"></div></div><div class="IllustItemReplyList">
+	<a class="ReplyBtn fas fa-reply" onclick="switchEmojiReply(13349246, null, 0)"></a>
+	<div class="IllustItemReplyListTitle">
+	作者からのリプライ
+	<a class="ReplyInfoBtn" href="javascript:void(0)" onclick="dispReplyEmojiInfo();">
+	<i class="fas fa-info-circle"></i>
+	</a>
+	</div>
+	<div id="ReplyEmojiList_13349246" class="IllustItemResList"></div>
+</div>
+<div id="EncourageFollowUp_13349246" class="EncourageFollowUp" style="display:none"><span>気になる人をどんどんフォローしよう！</span><span class="BtnBase UserInfoCmdFollow UserInfoCmdFollow_13240156 " onclick="UpdateFollowUser(-1,13240156)">☆こそフォロ</span></div></div>
+
+				<div class="RelatedItemList">
+					
+						<div class="IllustThumb"><a class="IllustUser" href="/13240156/"><img class="IllustUserThumb" src="https://cdn.poipiku.com/013240156/profile_20260226213557.jpeg_120.jpg" alt="ユムコチャン・ボナパルト" decoding="async"/><h2 class="IllustUserName">ユムコチャン・ボナパルト</h2></a><span class="IllustInfo IllustMeta"><a class="CategoryInfo" href="/NewArrivalPcV.jsp?CD=4"><span class="Category C4">らくがき</span></a></span><a class="IllustInfo" href="/13240156/13349246.html"><span class="IllustInfoDesc">8/15ナポレオン・ボナパルト257歳のお誕生日おめでとぅ。ちゅ&gt;₃&lt;ദ്ദി(｡•̀ ,&lt;)~✩</span></a><a class="IllustThumbImg" href="/13240156/13349246.html"><img class="IllustThumbImgPic" src="https://cdn.poipiku.com/013240156/013349246_000000000_pzhAUsv5M.jpeg_360.jpg" alt="8/15ナポレオン・ボナパルト257歳のお誕生日おめでとぅ。ちゅ&gt;₃&lt;ദ്ദി(｡•̀ ,&lt;)~✩" loading="lazy" decoding="async"/><span class="IllustInfoBottom"><span class="Num"><i class="far fa-images"></i> 8</span></span></a></div>
+					
+						<div class="IllustThumb"><a class="IllustUser" href="/13240156/"><img class="IllustUserThumb" src="https://cdn.poipiku.com/013240156/profile_20260226213557.jpeg_120.jpg" alt="ユムコチャン・ボナパルト" decoding="async"/><h2 class="IllustUserName">ユムコチャン・ボナパルト</h2></a><span class="IllustInfo IllustMeta"><a class="CategoryInfo" href="/NewArrivalPcV.jsp?CD=4"><span class="Category C4">らくがき</span></a></span><a class="IllustInfo" href="/13240156/13308600.html"><span class="IllustInfoDesc">人生初ヌードデッサンした！！！！これは休憩時間に木炭で描いたガチのラクガキ</span></a><a class="IllustThumbImg" href="/13240156/13308600.html"><img class="IllustThumbImgPic" src="https://cdn.poipiku.com/013240156/013308600_000000000_8JpTkDido.jpeg_360.jpg" alt="人生初ヌードデッサンした！！！！これは休憩時間に木炭で描いたガチのラクガキ" loading="lazy" decoding="async"/><span class="IllustInfoBottom"><span class="Num"><i class="far fa-images"></i> 6</span></span></a></div>
+					
+						<div class="IllustThumb"><a class="IllustUser" href="/13240156/"><img class="IllustUserThumb" src="https://cdn.poipiku.com/013240156/profile_20260226213557.jpeg_120.jpg" alt="ユムコチャン・ボナパルト" decoding="async"/><h2 class="IllustUserName">ユムコチャン・ボナパルト</h2></a><span class="IllustInfo IllustMeta"><a class="CategoryInfo" href="/NewArrivalPcV.jsp?CD=4"><span class="Category C4">らくがき</span></a></span><a class="IllustInfo" href="/13240156/13247423.html"><span class="IllustInfoDesc">ベンキョーしたくなさすぎてコレ<br />ゆむこの最近の推しぴ</span></a><a class="IllustThumbImg" href="/13240156/13247423.html"><img class="IllustThumbImgPic" src="https://cdn.poipiku.com/013240156/013247423_000000000_S8J4LBwjr.jpeg_360.jpg" alt="ベンキョーしたくなさすぎてコレ ゆむこの最近の推しぴ" loading="lazy" decoding="async"/><span class="IllustInfoBottom"><span class="Num"><i class="far fa-images"></i> 3</span></span></a></div>
+					
+						<div class="IllustThumb"><a class="IllustUser" href="/13240156/"><img class="IllustUserThumb" src="https://cdn.poipiku.com/013240156/profile_20260226213557.jpeg_120.jpg" alt="ユムコチャン・ボナパルト" decoding="async"/><h2 class="IllustUserName">ユムコチャン・ボナパルト</h2></a><span class="IllustInfo IllustMeta"><a class="CategoryInfo" href="/NewArrivalPcV.jsp?CD=7"><span class="Category C7">過去のを晒す</span></a></span><a class="IllustInfo" href="/13240156/13189459.html"><span class="IllustInfoDesc">ヘッダー全貌 2026/2022</span></a><a class="IllustThumbImg" href="/13240156/13189459.html"><img class="IllustThumbImgPic" src="https://cdn.poipiku.com/013240156/013189459_000000000_wa9BYQHqz.jpeg_360.jpg" alt="ヘッダー全貌 2026/2022" loading="lazy" decoding="async"/><span class="IllustInfoBottom"><span class="Num"><i class="far fa-images"></i> 8</span></span></a></div>
+					
+						<div class="IllustThumb"><a class="IllustUser" href="/13240156/"><img class="IllustUserThumb" src="https://cdn.poipiku.com/013240156/profile_20260226213557.jpeg_120.jpg" alt="ユムコチャン・ボナパルト" decoding="async"/><h2 class="IllustUserName">ユムコチャン・ボナパルト</h2></a><span class="IllustInfo IllustMeta"><a class="CategoryInfo" href="/NewArrivalPcV.jsp?CD=7"><span class="Category C7">過去のを晒す</span></a></span><a class="IllustInfo" href="/13240156/13189188.html"><span class="IllustInfoDesc">こんなところに中学時代の絵が落ちてるだと！！！！</span></a><a class="IllustThumbImg" href="/13240156/13189188.html"><img class="IllustThumbImgPic" src="https://cdn.poipiku.com/013240156/013189188_000000000_tOFHxxPb0.jpeg_360.jpg" alt="こんなところに中学時代の絵が落ちてるだと！！！！" loading="lazy" decoding="async"/><span class="IllustInfoBottom"><span class="Num"><i class="far fa-images"></i> 9</span></span></a></div>
+					
+						<div class="IllustThumb"><a class="IllustUser" href="/13240156/"><img class="IllustUserThumb" src="https://cdn.poipiku.com/013240156/profile_20260226213557.jpeg_120.jpg" alt="ユムコチャン・ボナパルト" decoding="async"/><h2 class="IllustUserName">ユムコチャン・ボナパルト</h2></a><span class="IllustInfo IllustMeta"><a class="CategoryInfo" href="/NewArrivalPcV.jsp?CD=9"><span class="Category C9">供養</span></a></span><a class="IllustInfo" href="/13240156/13147965.html"><span class="IllustInfoDesc">じゃあキミたちに、ボツになったゲームの前半部分を見せてゃりマスょ。。。</span></a><a class="IllustThumbImg" href="/13240156/13147965.html"><img class="IllustThumbImgPic" src="https://cdn.poipiku.com/013240156/013147965_030179010_bpvzprhst.jpeg_360.jpg" alt="じゃあキミたちに、ボツになったゲームの前半部分を見せてゃりマスょ。。。" loading="lazy" decoding="async"/><span class="IllustInfoBottom"><span class="Num"><i class="far fa-images"></i> 9</span></span></a></div>
+					
+				</div>
+
+				
+
+				
+				<h2 class="IllustItemListRelatedTitle">おすすめ作品</h2>
+				<div class="RelatedItemList">
+						
+						<div class="IllustThumb"><a class="IllustUser" href="/134480/"><img class="IllustUserThumb" src="https://cdn.poipiku.com/000134480/profile_20201128221857.png_120.jpg" alt="からと(Mcp)" decoding="async"/><h2 class="IllustUserName">からと(Mcp)</h2></a><span class="IllustInfo IllustMeta"><a class="CategoryInfo" href="/NewArrivalPcV.jsp?CD=16"><span class="Category C16">かけねえ</span></a></span><a class="IllustInfo" href="/134480/853984.html"><span class="IllustInfoDesc">もっもしてるリパ+エマちゃんが描きたかった記憶</span></a><a class="IllustThumbImg" href="/134480/853984.html"><img class="IllustThumbImgPic" src="https://cdn.poipiku.com/000134480/000853984_B9nxxzaXe.png_360.jpg" alt="#リパ＋エマ　#版権" loading="lazy" decoding="async"/><span class="IllustInfoBottom"></span></a></div>
+						
+						<div class="IllustThumb"><a class="IllustUser" href="/2850160/"><img class="IllustUserThumb" src="https://cdn.poipiku.com/002850160/profile_20240301081404.png_120.jpg" alt="viikavi" decoding="async"/><h2 class="IllustUserName">viikavi</h2></a><span class="IllustInfo IllustMeta"><a class="CategoryInfo" href="/NewArrivalPcV.jsp?CD=6"><span class="Category C6">できた</span></a></span><a class="IllustInfo" href="/2850160/10736630.html"><span class="IllustInfoDesc">Support me and get a lot of goodies💖: www.patreon.com/viikavi<br />All links: viikavi.carrd.co/</span></a><a class="IllustThumbImg" href="/2850160/10736630.html"><img class="IllustThumbImgPic" src="https://cdn.poipiku.com/img/R-18.png_360.jpg" alt="" loading="lazy" decoding="async"/><span class="IllustInfoBottom"></span></a></div>
+						
+						<div class="IllustThumb"><a class="IllustUser" href="/10983749/"><img class="IllustUserThumb" src="https://cdn.poipiku.com/010983749/profile_20251230162409.jpeg_120.jpg" alt="Ura_4780" decoding="async"/><h2 class="IllustUserName">Ura_4780</h2></a><span class="IllustInfo IllustMeta"><a class="CategoryInfo" href="/NewArrivalPcV.jsp?CD=6"><span class="Category C6">できた</span></a></span><a class="IllustInfo" href="/10983749/11419433.html"><span class="IllustInfoDesc">今回はリクエストの魁斗と律です<br />🔑18↑?(yes/no)</span></a><a class="IllustThumbImg" href="/10983749/11419433.html"><img class="IllustThumbImgPic" src="https://cdn.poipiku.com/img/R-18.png_360.jpg" alt="" loading="lazy" decoding="async"/><span class="IllustInfoBottom"><span class="Publish SafeFilterIco04"></span><span class="Publish PasswordIco"></span><span class="Num"><i class="far fa-images"></i> 3</span></span></a></div>
+						
+						<div class="IllustThumb"><a class="IllustUser" href="/7800374/"><img class="IllustUserThumb" src="https://cdn.poipiku.com/007800374/profile_20250619044514.jpeg_120.jpg" alt="yumikumo53" decoding="async"/><h2 class="IllustUserName">yumikumo53</h2></a><span class="IllustInfo IllustMeta"><a class="CategoryInfo" href="/NewArrivalPcV.jsp?CD=4"><span class="Category C4">らくがき</span></a></span><a class="IllustInfo" href="/7800374/12336345.html"><span class="IllustInfoDesc">夫妻同款，野得一样🌚<br />灵珠魔丸打得非常激烈。都失去了意识，只是按照野兽的习性和本能行动 🌚🙏 当然是爽了。</span></a><a class="IllustThumbImg" href="/7800374/12336345.html"><img class="IllustThumbImgPic" src="https://cdn.poipiku.com/007800374/012336345_027940810_JdisGVsKd.png_360.jpg" alt="#藕饼" loading="lazy" decoding="async"/><span class="IllustInfoBottom"><span class="Num"><i class="far fa-images"></i> 2</span></span></a></div>
+						
+						<div class="IllustThumb"><a class="IllustUser" href="/3370732/"><img class="IllustUserThumb" src="https://cdn.poipiku.com/003370732/profile_20220927085419.png_120.jpg" alt="あきざくら" decoding="async"/><h2 class="IllustUserName">あきざくら</h2></a><span class="IllustInfo IllustMeta"><a class="CategoryInfo" href="/NewArrivalPcV.jsp?CD=4"><span class="Category C4">らくがき</span></a></span><a class="IllustInfo" href="/3370732/12336576.html"><span class="IllustInfoDesc">リアビげんみ❌同卓任意<br />卓までのお楽しみでもいいかもしれない</span></a><a class="IllustThumbImg" href="/3370732/12336576.html"><img class="IllustThumbImgPic" src="https://cdn.poipiku.com/img/warning.png_360.jpg" alt="" loading="lazy" decoding="async"/><span class="IllustInfoBottom"><span class="Num"><i class="far fa-images"></i> 2</span></span></a></div>
+						
+						<div class="IllustThumb"><a class="IllustUser" href="/3227478/"><img class="IllustUserThumb" src="https://cdn.poipiku.com/003227478/profile_20241022072536.png_120.jpg" alt="わーちゃん/藤山" decoding="async"/><h2 class="IllustUserName">わーちゃん/藤山</h2></a><span class="IllustInfo IllustMeta"><a class="CategoryInfo" href="/NewArrivalPcV.jsp?CD=4"><span class="Category C4">らくがき</span></a></span><a class="IllustInfo" href="/3227478/12336591.html"><span class="IllustInfoDesc">パル子🔞</span></a><a class="IllustThumbImg" href="/3227478/12336591.html"><img class="IllustThumbImgPic" src="https://cdn.poipiku.com/img/R-18.png_360.jpg" alt="" loading="lazy" decoding="async"/><span class="IllustInfoBottom"></span></a></div>
+						
+						<div class="IllustThumb"><a class="IllustUser" href="/6038364/"><img class="IllustUserThumb" src="https://cdn.poipiku.com/img/default_user.jpg_120.jpg" alt="yoroko_777" decoding="async"/><h2 class="IllustUserName">yoroko_777</h2></a><span class="IllustInfo IllustMeta"><a class="CategoryInfo" href="/NewArrivalPcV.jsp?CD=4"><span class="Category C4">らくがき</span></a></span><a class="IllustInfo" href="/6038364/12337145.html"><span class="IllustInfoDesc">強い幸福感</span></a><a class="IllustThumbImg" href="/6038364/12337145.html"><img class="IllustThumbImgPic" src="https://cdn.poipiku.com/006038364/012337145_u1kz1aZcZ.png_360.jpg" alt="強い幸福感" loading="lazy" decoding="async"/><span class="IllustInfoBottom"><span class="Num"><i class="far fa-images"></i> 2</span></span></a></div>
+						
+						<div class="IllustThumb"><a class="IllustUser" href="/12305917/"><img class="IllustUserThumb" src="https://cdn.poipiku.com/img/default_user.jpg_120.jpg" alt="bbr_topia" decoding="async"/><h2 class="IllustUserName">bbr_topia</h2></a><span class="IllustInfo IllustMeta"><a class="CategoryInfo" href="/NewArrivalPcV.jsp?CD=4"><span class="Category C4">らくがき</span></a></span><a class="IllustInfo" href="/12305917/12337307.html"><span class="IllustInfoDesc">作中計画のために事前の準備は怠らない面影<br />はじめても滞りなく完遂させるつもりで事前にきちんと準備してくれるはず、という妄想<br />きっと和服に慣れてない澄野君は脱がすのに手こずるよね…という配慮から、洗浄したあと脱いだままでいる</span></a><a class="IllustThumbImg" href="/12305917/12337307.html"><img class="IllustThumbImgPic" src="https://cdn.poipiku.com/img/warning.png_360.jpg" alt="" loading="lazy" decoding="async"/><span class="IllustInfoBottom"><span class="Num"><i class="far fa-images"></i> 2</span></span></a></div>
+						
+						<div class="IllustThumb"><a class="IllustUser" href="/12524559/"><img class="IllustUserThumb" src="https://cdn.poipiku.com/img/default_user.jpg_120.jpg" alt="やわらか" decoding="async"/><h2 class="IllustUserName">やわらか</h2></a><span class="IllustInfo IllustMeta"><a class="CategoryInfo" href="/NewArrivalPcV.jsp?CD=4"><span class="Category C4">らくがき</span></a></span><a class="IllustInfo" href="/12524559/12337344.html"><span class="IllustInfoDesc">ポイピク作ってみた。一応首絞めなのでワンク！<br />親分あんま気に入ってないんですけどね…<br />初投稿これかぁ…</span></a><a class="IllustThumbImg" href="/12524559/12337344.html"><img class="IllustThumbImgPic" src="https://cdn.poipiku.com/img/warning.png_360.jpg" alt="" loading="lazy" decoding="async"/><span class="IllustInfoBottom"></span></a></div>
+						
+				</div>
+				
+
+				<!--
+				<nav class="PageBar">
+					
+					
+					
+					
+					
+				</nav>
+				-->
+			</section>
+		</article>
+
+		
+<div id="DetailOverlay" style="width: 100%">
+	<div id="DetailOverlayLoading" class="loadingSpinner2">
+		<div class="rect1"></div><div class="rect2"></div><div class="rect3"></div><div class="rect4"></div><div class="rect5"></div>
+	</div>
+	
+	<div class="DetailOverlayHeader">
+		<div id="DetailOverlayClose" class="DetailOverlayClose">
+			<svg x="0px" y="0px" viewBox="0 0 512 512" style="width: 15px; height: 15px; opacity: 1;" xml:space="preserve">
+			<style type="text/css">.st0{fill:#4B4B4B;}</style>
+			<g><polygon class="st0" points="512,52.535 459.467,0.002 256.002,203.462 52.538,0.002 0,52.535 203.47,256.005 0,459.465 52.533,511.998 256.002,308.527 459.467,511.998 512,459.475 308.536,256.005" style="fill: rgb(243, 243, 243);"></polygon></g>
+			</svg>
+		</div>
+	</div>
+	<div id="DetailOverlayInner"></div>
+</div>
+
+<div id="DetailIllustAd" class="DetailIllustItemAd">
+	
+	
+	<div class="PcOverlayCarpetAd">
+		<!-- span class="OverlayCarpetAdClose" onclick="this.parentElement.style.display='none'">×</span -->
+		
+
+
+
+
+
+	</div>
+	
+	
+</div>
+
+<script type="text/javascript">
+	function DispNeedLoginMsg() {
+		DispMsg("アカウント登録してログインすると全画面表示できるようになります", 3000);
+	}
+	function DispUnknownErrorMsg() {
+		DispMsg("エラーが発生しました");
+	}
+	const detailOverlay = document.getElementById('DetailOverlay');
+	const detailToucheMoveHandler = createDetailToucheMoveHandler(detailOverlay);
+	const detailScrollHandler = createDetailScrollHandler(detailOverlay);
+	$(function(){
+		initDetailOverlay();
+	});
+</script>
+
+		
+
+
+<div style="clear: both;"></div>
+
+<div class="FooterAd">
+	
+	
+
+
+
+
+<div class="PcSideBarAd">
+
+
+
+
+
+	
+		
+<script src="//ad.adpon.jp/fr.js?fid=2fbe0897-f359-45ae-9561-dc172561ce91"></script>
+	
+
+
+</div>
+
+
+
+
+
+
+<div class="PcSideBarAd">
+
+
+
+
+
+	
+		
+<script src="//ad.adpon.jp/fr.js?fid=2fbe0897-f359-45ae-9561-dc172561ce91"></script>
+	
+
+
+</div>
+
+
+
+
+
+
+<div class="PcSideBarAd">
+
+
+
+
+
+	
+		
+<script src="//ad.adpon.jp/fr.js?fid=2fbe0897-f359-45ae-9561-dc172561ce91"></script>
+	
+
+
+</div>
+
+
+
+	
+</div>
+
+
+
+
+<div style="clear: both;"></div>
+<footer class="Footer">
+	
+	<article class="AnalogicoInfo">
+		<h1 class="AnalogicoInfoTitle">
+			放置絵ポイポイ<br />
+練習ポイポイ<br />
+らくがきポイポイ<br />
+進捗ポイポイ<br />
+イラストポイポイSNS「ポイピク」
+		</h1>
+		<a class="AnalogicoMoreInfo" href="/">
+			もっと詳しく...
+		</a>
+		<div class="AnalogicoInfoRegist">
+			<form method="post" name="login_from_twitter_tfooterbase_00" action="/LoginFormTwitter.jsp">
+				<input id="login_from_twitter_tfooterbase_callback_00" type="hidden" name="CBPATH" value=""/>
+				<script>{
+					let s = document.URL.split("/");
+					for(let i=0; i<3; i++){s.shift();}
+					$('#login_from_twitter_tfooterbase_callback_00').val("/" + s.join("/"));
+				}</script>
+				<a class="BtnBase Rev AnalogicoInfoRegistBtn" style="width:200px;" href="javascript:login_from_twitter_tfooterbase_00.submit()">
+					<span class="typcn typcn-social-twitter"></span> ログイン
+				</a>
+			</form>
+		</div>
+		<div class="AnalogicoInfoRegist">
+			<form method="post" name="login_from_facebook_tfooterbase_00" action="/LoginFormFacebook.jsp">
+				<input id="login_from_facebook_tfooterbase_callback_00" type="hidden" name="CBPATH" value="/" />
+				<script>{
+					let s = document.URL.split("/");
+					for(let i=0; i<3; i++){s.shift();}
+					$('#login_from_facebook_tfooterbase_callback_00').val("/" + s.join("/"));
+				}</script>
+				<a class="BtnBase Rev AnalogicoInfoRegistBtn" style="width:200px;" href="javascript:login_from_facebook_tfooterbase_00.submit()">
+					<span class="typcn typcn-social-facebook"></span> ログイン
+				</a>
+			</form>
+		</div>
+		<div class="AnalogicoInfoRegist">
+			<a class="BtnBase Rev AnalogicoInfoRegistBtn" style="width:200px;" href="/MyHomePcV.jsp">
+				<span class="typcn typcn-mail"></span> メールで登録/ログイン
+			</a>
+		</div>
+	</article>
+	
+
+
+
+
+
+
+
+
+	<nav class="FooterLink">
+		<dl>
+			<dt><i class="fas fa-globe"></i>言語 <a class="FooterHref" style="font-weight: normal" href="/TranslationSuggestionPcV.jsp">翻訳の提案</a></dt>
+			<dd><a class="FooterHref" hreflang="en" onclick="ChLang('en', false)" href="javascript:void(0);">English</a></dd>
+			<dd><a class="FooterHref" hreflang="es" onclick="ChLang('es', false)" href="javascript:void(0);">español</a></dd>
+			<dd><a class="FooterHref" hreflang="vi" onclick="ChLang('vi', false)" href="javascript:void(0);">Tiếng Việt</a></dd>
+			<dd><a class="FooterHref" hreflang="ko" onclick="ChLang('ko', false)" href="javascript:void(0);">한국</a></dd>
+			<dd><a class="FooterHref" hreflang="zh-cmn-Hans" onclick="ChLang('zh_CN', false)" href="javascript:void(0);">简体中文</a></dd>
+			<dd><a class="FooterHref" hreflang="zh-cmn-Hant" onclick="ChLang('zh_TW', false)" href="javascript:void(0);">繁體中文</a></dd>
+			<dd><a class="FooterHref" hreflang="th" onclick="ChLang('th', false)" href="javascript:void(0);">ไทย</a></dd>
+			<dd><a class="FooterHref" hreflang="ru" onclick="ChLang('ru', false)" href="javascript:void(0);">русский</a></dd>
+			<dd><a class="FooterHref" hreflang="ja" onclick="ChLang('ja', false)" href="javascript:void(0);">日本語</a></dd>
+		</dl>
+		<dl>
+			<dt>ご利用について</dt>
+			<dd><a class="FooterHref" href="/StartPoipikuPcV.jsp">ポイピクとは?</a></dd>
+			<dd><a class="FooterHref" href="/how_to/TopPcV.jsp">ポイピクの使い方</a></dd>
+			<dd><a class="FooterHref" href="/StartPoiPassPcV.jsp">ポイパスとは?</a></dd>
+		</dl>
+		<dl>
+			<dt>利用規約等</dt>
+			<dd><a class="FooterHref" href="/RulePcS.jsp">利用規約</a></dd>
+			<dd><a class="FooterHref" href="/GuideLinePcV.jsp">ガイドライン</a></dd>
+			<dd><a class="FooterHref" href="/PrivacyPolicyPcS.jsp">プライバシーポリシー</a></dd>
+			<dd><a class="FooterHref" href="/TransactionLawPcS.jsp">特定商取引法に基づく表記</a></dd>
+		</dl>
+		<dl>
+			<dt>お知らせ・お問い合わせ</dt>
+
+			<dd><a class="FooterHref" href="/2/" target="_blank">お知らせ(運営アカウント)</a></dd>
+			<dd><a class="FooterHref" href="https://twitter.com/pipajp" target="_blank">公式Twitter</a></dd>
+			
+			<dd><a class="FooterHref" href="/FAQPcS.jsp">よくある質問</a></dd>
+			
+			<dd>お問い合わせ(要ログイン)</dd>
+			
+			<dd><a class="FooterHref" href="https://twitter.com/pipajp" target="_blank">ログインできない</a></dd>
+			<dd><a class="FooterHref" href="/LogoUsageGuideLinePcS.jsp">ロゴの使用について</a></dd>
+			<dd><a class="FooterHref" href="https://poipiku.com/comic/">ポイコミ</a></dd>
+		</dl>
+		<dl>
+			<dt>会社情報</dt>
+			<dd><a class="FooterHref" href="https://www.pipa.jp/" target="_blank">株式会社Pipa.jp</a></dd>
+		</dl>
+	</nav>
+
+	<article class="FooterInfo" style="font-size: 10px; margin: 10px 0;">
+		異工程混在表示方式およびカテゴリタグ(マイタグ)・コマンドタグ等各種機能は特許出願中です。
+		当サイトの各種技術・コンセプト・デザイン・商標等は特許法、著作権法、不正競争防止法等を始めとした各種法律により保護されています。<br />
+		Various functions including 'Mixed process display system', 'Category tag' etc. are patent pending.The technologies, concepts, designs, trademarks etc. of this site are protected by laws.
+	</article>
+
+	<div class="FooterCopy">
+		Copyright(C) 2017 -
+		based on <a class="FooterHref" href="https://analogico.pipa.jp/" target="_blank">analogico</a> by
+		<a class="FooterHref" href="https://www.pipa.jp/" target="_blank">Pipa.jp Ltd.</a>
+	</div>
+</footer>
+
+
+	</body>
+</html>
