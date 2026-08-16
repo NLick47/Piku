@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
@@ -7,6 +8,17 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
 }
+
+fun loadSigningProps(): Properties {
+    val props = Properties()
+    val file = rootProject.file("local.properties")
+    if (file.exists()) {
+        file.inputStream().use { props.load(it) }
+    }
+    return props
+}
+
+val signingProps = loadSigningProps()
 
 android {
     namespace = "com.piku.client"
@@ -28,6 +40,15 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            val keystorePath = signingProps.getProperty("piku.keystore.path")
+            if (keystorePath != null && file(keystorePath).exists()) {
+                signingConfig = signingConfigs.create("release") {
+                    storeFile = file(keystorePath)
+                    storePassword = signingProps.getProperty("piku.keystore.password")
+                    keyAlias = signingProps.getProperty("piku.key.alias")
+                    keyPassword = signingProps.getProperty("piku.key.password")
+                }
+            }
         }
     }
 

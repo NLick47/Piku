@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-release-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Restore signing keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > piku-keystore.jks
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+
+      - name: Write signing properties
+        run: |
+          cat >> local.properties <<EOF
+          piku.keystore.path=$PWD/piku-keystore.jks
+          piku.keystore.password=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          piku.key.alias=${{ secrets.ANDROID_KEY_ALIAS }}
+          piku.key.password=${{ secrets.ANDROID_KEY_PASSWORD }}
+          EOF
+
+      - name: Build release APK
+        run: ./gradlew :piku:assembleRelease
+
+      - name: Verify APK signature
+        run: |
+          APKSIGNER=$ANDROID_HOME/build-tools/*/apksigner
+          $APKSIGNER verify --print-certs piku/build/outputs/apk/release/piku-release.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: piku-release-apk
+          path: piku/build/outputs/apk/release/piku-release.apk
+          if-no-files-found: error
