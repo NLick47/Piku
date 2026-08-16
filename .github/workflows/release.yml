@@ -26,10 +26,15 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Restore signing keystore
-        run: |
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > piku-keystore.jks
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > piku-keystore.jks
+          if [ ! -s piku-keystore.jks ]; then
+            echo "::error::无法解码 keystore，请检查 ANDROID_KEYSTORE_BASE64 secret：内容须为 piku-keystore.jks 的 base64（无换行、无空格、无多余字符）"
+            exit 1
+          fi
+          file piku-keystore.jks
 
       - name: Write signing properties
         run: |
