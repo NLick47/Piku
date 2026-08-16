@@ -20,6 +20,33 @@ fun loadSigningProps(): Properties {
 
 val signingProps = loadSigningProps()
 
+fun resolveVersionName(): String {
+    val ciRef = System.getenv("GITHUB_REF_NAME")
+    if (!ciRef.isNullOrBlank() && ciRef.startsWith("v")) {
+        return ciRef.removePrefix("v")
+    }
+    return try {
+        val out = ProcessBuilder("git", "describe", "--tags", "--abbrev=0")
+            .directory(rootProject.projectDir)
+            .start()
+            .inputStream
+            .bufferedReader()
+            .readText()
+            .trim()
+        out.removePrefix("v")
+    } catch (_: Exception) {
+        "0.1.0"
+    }
+}
+
+fun versionNameToCode(name: String): Int {
+    val parts = name.split(".").map { it.toIntOrNull() ?: 0 }
+    return (parts.getOrElse(0) { 0 }) * 10000 + (parts.getOrElse(1) { 0 }) * 100 + parts.getOrElse(2) { 0 }
+}
+
+val appVersionName = resolveVersionName()
+val appVersionCode = versionNameToCode(appVersionName)
+
 android {
     namespace = "com.piku.client"
     compileSdk = 37
@@ -28,8 +55,8 @@ android {
         applicationId = "com.piku.client"
         minSdk = 26
         targetSdk = 37
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
     }
 
     buildTypes {
