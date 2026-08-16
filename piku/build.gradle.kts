@@ -25,18 +25,14 @@ fun resolveVersionName(): String {
     if (!ciRef.isNullOrBlank() && ciRef.startsWith("v")) {
         return ciRef.removePrefix("v")
     }
-    return try {
-        val out = ProcessBuilder("git", "describe", "--tags", "--abbrev=0")
-            .directory(rootProject.projectDir)
-            .start()
-            .inputStream
-            .bufferedReader()
-            .readText()
-            .trim()
-        out.removePrefix("v")
-    } catch (_: Exception) {
-        "0.1.0"
+    return providers.exec {
+        commandLine("git", "describe", "--tags", "--abbrev=0")
+        workingDir(rootProject.projectDir)
+        isIgnoreExitValue = true
     }
+        .standardOutput.asText
+        .map { it.trim().removePrefix("v").ifBlank { "0.1.0" } }
+        .get()
 }
 
 fun versionNameToCode(name: String): Int {
@@ -60,6 +56,10 @@ android {
     }
 
     buildTypes {
+        debug {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
