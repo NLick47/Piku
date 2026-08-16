@@ -373,7 +373,7 @@ private fun DrawerHeader(
                     // 未登录提示：引导用户点击头像/此处登录
                     Text(
                         text = stringResource(R.string.drawer_login_hint),
-                        color = AccentPurple,
+                        color = if (dark) LoginTextPrimaryDark else AccentPurple,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
