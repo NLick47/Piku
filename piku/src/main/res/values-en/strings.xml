@@ -224,5 +224,6 @@
     <string name="detail_follow_sent">Now following</string>
     <string name="detail_unfollow_sent">Unfollowed</string>
     <string name="detail_follow_failed">Failed to update follow status</string>
+    <string name="detail_author_home">View author\'s page</string>
     <string name="tab_wip">Under development</string>
 </resources>

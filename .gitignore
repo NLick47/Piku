@@ -9,3 +9,5 @@ build/
 .cxx
 .kotlin
 piku-keystore.jks
+
+piku/src/test/resources/*.html

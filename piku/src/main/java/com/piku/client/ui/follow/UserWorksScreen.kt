@@ -122,7 +122,7 @@ fun UserWorksScreen(
             val info = gridState.layoutInfo
             val first = info.visibleItemsInfo.firstOrNull() ?: return@derivedStateOf 0f
             if (first.index > 0) 1f
-            else (-first.offset.x.toFloat() / headerHeightPx).coerceIn(0f, 1f)
+            else (-first.offset.y.toFloat() / headerHeightPx).coerceIn(0f, 1f)
         }
     }
 

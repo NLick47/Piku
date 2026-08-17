@@ -224,5 +224,6 @@
     <string name="detail_follow_sent">フォローしました</string>
     <string name="detail_unfollow_sent">フォローを解除しました</string>
     <string name="detail_follow_failed">フォローに失敗しました</string>
+    <string name="detail_author_home">作者のページを見る</string>
     <string name="tab_wip">準備中</string>
 </resources>

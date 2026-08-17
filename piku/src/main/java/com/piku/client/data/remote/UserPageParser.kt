@@ -35,6 +35,9 @@ object UserPageParser {
     /** 背景图：`background: url(...)` / `background-image: url(...)` */
     private val BG_IMAGE = Regex("""background(?:-image)?\s*:\s*url\('?([^')]+)'?\)""")
 
+    /** 关注状态：`UserInfoCmdFollow` 按钮 class 含 Selected = 当前登录用户已关注（匿名恒无） */
+    private val FOLLOW_BTN = Regex("""class="([^"]*UserInfoCmdFollow[^"]*)"""")
+
     fun parse(html: String): UserPageInfo {
         val headerUrl = HEADER_IMAGE.find(html)?.groupValues?.get(1)?.takeIf { it.isNotBlank() }
 
@@ -46,6 +49,12 @@ object UserPageParser {
 
         val ogDesc = OG_DESCRIPTION.find(html)?.groupValues?.get(1).orEmpty()
         val workCount = WORK_COUNT.find(ogDesc)?.groupValues?.get(1)?.toIntOrNull()
+
+        // 关注状态：与关注列表（FollowListF）一致的 Selected 标记
+        val followed = FOLLOW_BTN.find(html)
+            ?.groupValues?.get(1)
+            ?.split(" ")
+            ?.any { it == "Selected" } == true
 
         // 整页背景：提取 style 块中 .UserInfo 规则之外的 background 属性（Poipass 背景色/背景图）
         var bgColorHex: String? = null
@@ -68,6 +77,7 @@ object UserPageParser {
             workCount = workCount,
             bgColorHex = bgColorHex,
             bgImageUrl = bgImageUrl,
+            followed = followed,
         )
     }
 }

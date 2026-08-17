@@ -2,14 +2,19 @@ package com.piku.client.data.remote
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 
 class WorkDetailParserTest {
 
-    private val html = javaClass.classLoader
-        ?.getResource("workdetail.html")
-        ?.readText(Charsets.UTF_8)
-        ?: error("workdetail.html not found")
+
+    private fun readResource(name: String): String {
+        val res = javaClass.classLoader?.getResource(name)?.readText(Charsets.UTF_8)
+        assumeTrue("fixture $name 缺失，跳过（快照仅本地）", res != null)
+        return res!!
+    }
+
+    private val html: String by lazy { readResource("workdetail.html") }
 
     @Test
     fun parsesDetail() {
@@ -79,10 +84,7 @@ class WorkDetailParserTest {
 
     @Test
     fun parsesRealPageWithSingleQuotedProfileLink() {
-        val html = javaClass.classLoader
-            ?.getResource("workdetail_link.html")
-            ?.readText(Charsets.UTF_8)
-            ?: error("workdetail_link.html not found")
+        val html = readResource("workdetail_link.html")
         val detail = WorkDetailParser.parse(html)
         assertEquals(
             "[https://twitter.com/radreamra]@radreamra[/https://twitter.com/radreamra]",
@@ -96,10 +98,7 @@ class WorkDetailParserTest {
 
     @Test
     fun parsesJapanesePageRelatedWorks() {
-        val jaHtml = javaClass.classLoader
-            ?.getResource("workdetail_ja.html")
-            ?.readText(Charsets.UTF_8)
-            ?: error("workdetail_ja.html not found")
+        val jaHtml = readResource("workdetail_ja.html")
         val detail = WorkDetailParser.parse(jaHtml)
         assertTrue(
             "japanese page related works should be parsed, got ${detail.relatedWorks.size}",
@@ -113,10 +112,7 @@ class WorkDetailParserTest {
 
     @Test
     fun authorProfileMultiLineBreaksToNewlines() {
-        val brHtml = javaClass.classLoader
-            ?.getResource("workdetail_br.html")
-            ?.readText(Charsets.UTF_8)
-            ?: error("workdetail_br.html not found")
+        val brHtml = readResource("workdetail_br.html")
         val detail = WorkDetailParser.parse(brHtml)
         assertEquals(
             "cn：院长/江\n大杂食家\n会更一些其他圈子\n我的所有相关作品，除非我本人同意，任何人不能在任何平台进行二转",
@@ -127,10 +123,7 @@ class WorkDetailParserTest {
 
     @Test
     fun titleAndDescriptionWithoutBr() {
-        val brHtml = javaClass.classLoader
-            ?.getResource("workdetail_br.html")
-            ?.readText(Charsets.UTF_8)
-            ?: error("workdetail_br.html not found")
+        val brHtml = readResource("workdetail_br.html")
         val detail = WorkDetailParser.parse(brHtml)
         assertEquals("摸鱼", detail.title)
         assertTrue(detail.description.isEmpty())
@@ -139,10 +132,7 @@ class WorkDetailParserTest {
 
     @Test
     fun relatedWorksTitlesContainNoBareBr() {
-        val brHtml = javaClass.classLoader
-            ?.getResource("workdetail_br.html")
-            ?.readText(Charsets.UTF_8)
-            ?: error("workdetail_br.html not found")
+        val brHtml = readResource("workdetail_br.html")
         val detail = WorkDetailParser.parse(brHtml)
         assertTrue("related works should be parsed, got ${detail.relatedWorks.size}", detail.relatedWorks.isNotEmpty())
         assertTrue(

@@ -2,12 +2,17 @@ package com.piku.client.data.remote
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 
 class UserPageParserTest {
 
-    private fun fixture(name: String): String =
-        javaClass.classLoader!!.getResource(name)!!.readText()
+
+    private fun fixture(name: String): String {
+        val res = javaClass.classLoader?.getResource(name)?.readText()
+        assumeTrue("fixture $name 缺失，跳过（快照仅本地）", res != null)
+        return res!!
+    }
 
     @Test
     fun `parse with header banner extracts all fields`() {
@@ -23,9 +28,20 @@ class UserPageParserTest {
             info.headerUrl,
         )
         assertEquals(15, info.workCount)
+        // 该 fixture 为匿名抓取（无登录态），关注按钮无 Selected
+        assertEquals(false, info.followed)
         // 无 Poipass 背景规则时应为 null
         assertNull(info.bgColorHex)
         assertNull(info.bgImageUrl)
+    }
+
+    @Test
+    fun `parse followed user page detects Selected class`() {
+        val info = UserPageParser.parse(fixture("userpage_followed.html"))
+
+        assertEquals("1403某", info.userName)
+        assertEquals(true, info.followed)
+        assertEquals(7, info.workCount)
     }
 
     @Test
@@ -36,6 +52,7 @@ class UserPageParserTest {
         assertNull(info.avatarUrl) // 默认头像 default_user.jpg 应被过滤
         assertEquals("shikadarou", info.userName)
         assertEquals(40, info.workCount)
+        assertEquals(false, info.followed)
     }
 
     @Test

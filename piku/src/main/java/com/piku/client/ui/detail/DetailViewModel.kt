@@ -104,7 +104,7 @@ class DetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
-    private val authorId: Long = savedStateHandle["authorId"] ?: -1L
+    val authorId: Long = savedStateHandle["authorId"] ?: -1L
     private val workId: Long = savedStateHandle["workId"] ?: -1L
     private val work = Work(
         id = workId,

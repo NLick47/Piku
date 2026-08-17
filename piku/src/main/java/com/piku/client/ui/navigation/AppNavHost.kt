@@ -224,6 +224,15 @@ fun AppNavHost() {
                         navController.navigate(Routes.detail(authorId, workId, thumbnailUrl))
                     }
                 },
+                onAuthorClick = { authorId, authorName ->
+                    // 详情页 → 作者主页：作品页头部卡片展示作者主页信息，关注状态由页面自行解析
+                    navController.navigate(
+                        Routes.userWorks(
+                            userId = authorId,
+                            userName = authorName,
+                        ),
+                    )
+                },
             )
         }
     }

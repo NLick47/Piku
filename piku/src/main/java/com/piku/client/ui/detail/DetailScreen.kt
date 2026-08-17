@@ -167,6 +167,7 @@ fun DetailScreen(
     onHomeClick: () -> Unit,
     onTagClick: (String) -> Unit,
     onRelatedWorkClick: (Long, Long, String) -> Unit,
+    onAuthorClick: (Long, String) -> Unit,
 ) {
     val viewModel: DetailViewModel = hiltViewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -300,6 +301,9 @@ fun DetailScreen(
                         passwordLoading = state.passwordLoading,
                         onTagClick = onTagClick,
                         onRelatedWorkClick = onRelatedWorkClick,
+                        onAuthorClick = {
+                            onAuthorClick(viewModel.authorId, state.detail!!.authorName)
+                        },
                         customTags = state.customTags.toSet(),
                         onToggleCustomTag = viewModel::toggleCustomTag,
                     )
@@ -755,6 +759,7 @@ private fun DetailContent(
     passwordLoading: Boolean,
     onTagClick: (String) -> Unit,
     onRelatedWorkClick: (Long, Long, String) -> Unit,
+    onAuthorClick: () -> Unit,
     customTags: Set<String>,
     onToggleCustomTag: (String) -> Unit,
 ) {
@@ -765,7 +770,7 @@ private fun DetailContent(
             .verticalScroll(rememberScrollState())
             .padding(start = 16.dp, end = 16.dp, bottom = 96.dp),
     ) {
-        AuthorRow(detail = detail, dark = dark)
+        AuthorRow(detail = detail, dark = dark, onAuthorClick = onAuthorClick)
         if (detail.authorProfile.isNotBlank()) {
             Text(
                 text = linkify(detail.authorProfile, dark, onRelatedWorkClick),
@@ -881,15 +886,16 @@ private fun DetailContent(
 }
 
 @Composable
-private fun AuthorRow(detail: WorkDetail, dark: Boolean) {
+private fun AuthorRow(detail: WorkDetail, dark: Boolean, onAuthorClick: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         AsyncImage(
             model = detail.authorAvatarUrl,
-            contentDescription = null,
+            contentDescription = stringResource(R.string.detail_author_home),
             modifier = Modifier
                 .size(36.dp)
                 .clip(CircleShape)
-                .background(if (dark) LoginCardDark else LoginCardLight),
+                .background(if (dark) LoginCardDark else LoginCardLight)
+                .clickable(onClick = onAuthorClick),
             contentScale = ContentScale.Crop,
         )
         Spacer(Modifier.width(10.dp))
@@ -900,7 +906,11 @@ private fun AuthorRow(detail: WorkDetail, dark: Boolean) {
             fontWeight = FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(onClick = onAuthorClick)
+                .padding(vertical = 4.dp),
         )
         if (detail.categoryName.isNotBlank()) {
             Text(

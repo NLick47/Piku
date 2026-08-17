@@ -59,7 +59,14 @@ class UserWorksViewModel @Inject constructor(
     private val userId: Long = savedStateHandle["userId"] ?: -1L
     private val userNameArg: String = savedStateHandle["userName"] ?: ""
 
-    private val _uiState = MutableStateFlow(UserWorksUiState(userId = userId, userName = userNameArg))
+    private val _uiState = MutableStateFlow(
+        UserWorksUiState(
+            userId = userId,
+            userName = userNameArg,
+            // 初始假设已关注（关注列表入口）；第一页加载后由页面 Selected 标记覆盖为真实状态
+            followed = true,
+        ),
+    )
     val uiState: StateFlow<UserWorksUiState> = _uiState.asStateFlow()
 
     private var page = 0
@@ -174,8 +181,10 @@ class UserWorksViewModel @Inject constructor(
                             loadingMore = false,
                             loadMoreErrorRes = null,
                             userName = name,
-                            // 页头信息只在第一页刷新，避免分页响应覆盖（分页 pageInfo 为 null）
+                            // 页头信息只在第一页刷新，避免分页响应覆盖（分页 pageInfo 为 null）；
+                            // 关注状态同样取自页面 Selected 标记（与关注列表一致）
                             pageInfo = result.pageInfo ?: it.pageInfo,
+                            followed = result.pageInfo?.followed ?: it.followed,
                             works = if (append) it.works + list else list,
                             endReached = list.isEmpty(),
                         )
