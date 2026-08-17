@@ -2,6 +2,7 @@ package com.piku.client.ui.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.piku.client.data.local.SettingsRepository
 import com.piku.client.data.repository.AuthRepository
 import com.piku.client.data.repository.ThumbnailResolver
 import com.piku.client.domain.model.AppError
@@ -101,6 +102,7 @@ class HomeViewModel @Inject constructor(
     private val setHistoryRetentionUseCase: SetHistoryRetentionUseCase,
     private val observeLanguageUseCase: ObserveLanguageUseCase,
     private val setLanguageUseCase: SetLanguageUseCase,
+    private val settingsRepository: SettingsRepository,
     private val authRepository: AuthRepository,
     private val thumbnailResolver: ThumbnailResolver,
 ) : ViewModel() {
@@ -480,6 +482,12 @@ class HomeViewModel @Inject constructor(
             }
                 .onFailure { error ->
                     if (generation != gen) return@launch
+                    android.util.Log.d(
+                        "PikuDiag",
+                        "loadPage fail append=$append tab=$tab tag=$tag keyword=$keyword " +
+                            "category=$category page=$targetPage error=${error::class.simpleName}: ${error.message}",
+                        error,
+                    )
                     noticePending = false
                     oldFirstId = null
                     _uiState.update {

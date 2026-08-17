@@ -10,3 +10,4 @@ class ObserveThemeModeUseCase @Inject constructor(
 ) {
     operator fun invoke(): Flow<ThemeMode> = settingsRepository.themeMode
 }
+

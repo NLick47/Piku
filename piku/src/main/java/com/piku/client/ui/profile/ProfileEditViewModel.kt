@@ -52,6 +52,11 @@ class ProfileEditViewModel @Inject constructor(
             authRepository.updateNickName(trimmed)
                 .onSuccess { _uiState.update { it.copy(savingName = false, saved = true) } }
                 .onFailure { error ->
+                    android.util.Log.d(
+                        "PikuDiag",
+                        "updateNickName fail error=${error::class.simpleName}: ${error.message}",
+                        error,
+                    )
                     _uiState.update {
                         it.copy(savingName = false, errorRes = error.toErrorRes())
                     }
@@ -74,6 +79,11 @@ class ProfileEditViewModel @Inject constructor(
                 }
                 .onFailure { error ->
                     cacheFile.delete()
+                    android.util.Log.d(
+                        "PikuDiag",
+                        "updateAvatar fail error=${error::class.simpleName}: ${error.message}",
+                        error,
+                    )
                     _uiState.update {
                         it.copy(uploadingAvatar = false, errorRes = error.toErrorRes())
                     }

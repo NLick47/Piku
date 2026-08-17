@@ -152,6 +152,12 @@ class TagViewModel @Inject constructor(
                 }
                 .onFailure { error ->
                     if (generation != gen) return@launch
+                    android.util.Log.d(
+                        "PikuDiag",
+                        "tag feed load fail tag=$tag append=$append page=$targetPage " +
+                            "error=${error::class.simpleName}: ${error.message}",
+                        error,
+                    )
                     _uiState.update {
                         if (append) {
                             it.copy(

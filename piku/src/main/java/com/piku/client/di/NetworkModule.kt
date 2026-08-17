@@ -1,6 +1,9 @@
 package com.piku.client.di
 
 import com.piku.client.BuildConfig
+import com.piku.client.data.remote.PoipikuHostnameVerifier
+import com.piku.client.data.remote.SniStrippingSocketFactory
+import com.piku.client.data.remote.DoHDns
 import com.piku.client.data.remote.ApiConfig
 import com.piku.client.data.remote.LenientJsonConverterFactory
 import com.piku.client.data.remote.PoipikuApi
@@ -12,6 +15,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import kotlinx.serialization.json.Json
 import okhttp3.CookieJar
+import okhttp3.Dns
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -32,8 +36,16 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(cookieJar: CookieJar): OkHttpClient {
+    fun provideDns(): Dns = DoHDns()
+
+    @Provides
+    @Singleton
+    fun provideOkHttpClient(cookieJar: CookieJar, dns: Dns): OkHttpClient {
+        val sniFactory = SniStrippingSocketFactory()
         val builder = OkHttpClient.Builder()
+            .dns(dns)
+            .sslSocketFactory(sniFactory, sniFactory.trustManager())
+            .hostnameVerifier(PoipikuHostnameVerifier())
             .cookieJar(cookieJar)
             .addInterceptor(RefererInterceptor())
             .addInterceptor(RetryInterceptor())
@@ -43,13 +55,13 @@ object NetworkModule {
                     .build()
                 chain.proceed(request)
             }
-            .connectTimeout(30, TimeUnit.SECONDS)
+            .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
         if (BuildConfig.DEBUG) {
             builder.addInterceptor(
                 HttpLoggingInterceptor().apply {
-                    level = HttpLoggingInterceptor.Level.BODY
+                    level = HttpLoggingInterceptor.Level.BASIC
                 }
             )
         }

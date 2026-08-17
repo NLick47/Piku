@@ -61,6 +61,11 @@ class LoginViewModel @Inject constructor(
                     loggedIn = true
                 }
                 .onFailure { error ->
+                    android.util.Log.d(
+                        "PikuDiag",
+                        "login fail error=${error::class.simpleName}: ${error.message}",
+                        error,
+                    )
                     _uiState.value = LoginUiState.Error(error.toErrorRes())
                 }
         }

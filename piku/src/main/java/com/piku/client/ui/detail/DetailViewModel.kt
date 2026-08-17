@@ -190,7 +190,12 @@ class DetailViewModel @Inject constructor(
                         loadFullImages(pwd)
                     }
                 }
-                .onFailure {
+                .onFailure { error ->
+                    Log.d(
+                        "PikuDiag",
+                        "unlock fail work=$workId error=${error::class.simpleName}: ${error.message}",
+                        error,
+                    )
                     _uiState.update { it.copy(passwordLoading = false) }
                 }
         }
@@ -256,7 +261,12 @@ class DetailViewModel @Inject constructor(
                 .onSuccess { urls ->
                     _uiState.update { it.copy(fullImageUrls = urls, fullImagesLoading = false) }
                 }
-                .onFailure {
+                .onFailure { error ->
+                    Log.d(
+                        "PikuDiag",
+                        "loadFullImages fail work=$workId error=${error::class.simpleName}: ${error.message}",
+                        error,
+                    )
                     _uiState.update { it.copy(fullImagesLoading = false) }
                 }
         }
@@ -491,6 +501,11 @@ class DetailViewModel @Inject constructor(
                     maybeAutoUnlock(detail)
                 }
                 .onFailure { error ->
+                    Log.d(
+                        "PikuDiag",
+                        "loadDetail fail work=$workId error=${error::class.simpleName}: ${error.message}",
+                        error,
+                    )
                     _uiState.update {
                         it.copy(
                             loading = false,
