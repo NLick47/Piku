@@ -53,6 +53,8 @@ android {
         targetSdk = 37
         versionCode = appVersionCode
         versionName = appVersionName
+        // 仅保留应用支持的语言资源，剪掉依赖库携带的 40+ 种语言，缩小 resources.arsc
+        resConfigs("zh", "en", "ja")
     }
 
     buildTypes {
@@ -97,6 +99,9 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            // 依赖自带的许可证文本（各 ~10KB，压缩后仍占体积）
+            excludes += "/META-INF/**/LICENSE*"
+            excludes += "/META-INF/**/NOTICE*"
         }
     }
 }
@@ -131,12 +136,10 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
 
-    implementation(libs.androidx.datastore.preferences)
-
     implementation(libs.retrofit)
     implementation(libs.retrofit.converter.kotlinx.serialization)
     implementation(libs.okhttp)
-    implementation(libs.okhttp.logging)
+    debugImplementation(libs.okhttp.logging)
     implementation(libs.okhttp.dnsoverhttps)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)

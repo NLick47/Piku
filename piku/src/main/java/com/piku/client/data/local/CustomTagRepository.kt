@@ -1,52 +1,56 @@
 package com.piku.client.data.local
 
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringPreferencesKey
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
+import android.content.SharedPreferences
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
+import javax.inject.Inject
+import javax.inject.Singleton
 
 /**
  * 用户自定义标签存储（用于标签筛选的快捷入口）。
- * 以 JSON 数组形式保存在 DataStore 中，保证插入顺序（最新添加的排在最前）。
+ * 以 JSON 数组形式保存在 SharedPreferences 中，保证插入顺序（最新添加的排在最前）。
+ * 使用 SharedPreferences（而非 DataStore）是为了去掉 DataStore 依赖、缩小 APK；
+ * 与 [LanguageStore]/[SettingsRepository] 同一套模式：内存 StateFlow 为准。
+ * 增删方法无挂起点，调用线程（主线程）上读改写原子完成，不会并发丢失更新。
  */
-class CustomTagRepository(private val dataStore: DataStore<Preferences>) {
+@Singleton
+class CustomTagRepository @Inject constructor(
+    private val prefs: SharedPreferences,
+) {
 
-    val customTags: Flow<List<String>> = dataStore.data.map { prefs ->
-        decode(prefs[KEY_CUSTOM_TAGS])
-    }
+    private val _customTags = MutableStateFlow(load())
+    val customTags: StateFlow<List<String>> = _customTags.asStateFlow()
 
     /** 添加标签（自动去首尾空白、去 # 前缀、去重）。返回是否真正新增了标签。 */
-    suspend fun addCustomTag(tag: String): Boolean {
+    fun addCustomTag(tag: String): Boolean {
         val normalized = normalize(tag) ?: return false
-        var added = false
-        dataStore.edit { prefs ->
-            val current = decode(prefs[KEY_CUSTOM_TAGS])
-            if (normalized !in current) {
-                prefs[KEY_CUSTOM_TAGS] = encode(listOf(normalized) + current)
-                added = true
-            }
-        }
-        return added
+        val current = _customTags.value
+        if (normalized in current) return false
+        val next = listOf(normalized) + current
+        _customTags.value = next
+        prefs.edit().putString(KEY_CUSTOM_TAGS, encode(next)).apply()
+        return true
     }
 
-    suspend fun removeCustomTag(tag: String) {
+    fun removeCustomTag(tag: String) {
         val normalized = normalize(tag) ?: return
-        dataStore.edit { prefs ->
-            val current = decode(prefs[KEY_CUSTOM_TAGS])
-            val next = current.filterNot { it == normalized }
-            if (next.size != current.size) {
-                prefs[KEY_CUSTOM_TAGS] = encode(next)
-            }
-        }
+        val current = _customTags.value
+        val next = current.filterNot { it == normalized }
+        if (next.size == current.size) return
+        _customTags.value = next
+        prefs.edit().putString(KEY_CUSTOM_TAGS, encode(next)).apply()
     }
 
-    private fun decode(raw: String?): List<String> = raw
-        ?.let { runCatching { Json.decodeFromString(ListSerializer(String.serializer()), it) }.getOrNull() }
+    private fun load(): List<String> = prefs.getString(KEY_CUSTOM_TAGS, null)
+        ?.let { raw ->
+            runCatching {
+                Json.decodeFromString(ListSerializer(String.serializer()), raw)
+            }.getOrNull()
+        }
         ?: emptyList()
 
     private fun encode(tags: List<String>): String =
@@ -59,6 +63,6 @@ class CustomTagRepository(private val dataStore: DataStore<Preferences>) {
     }
 
     private companion object {
-        val KEY_CUSTOM_TAGS = stringPreferencesKey("custom_tags")
+        const val KEY_CUSTOM_TAGS = "custom_tags"
     }
 }

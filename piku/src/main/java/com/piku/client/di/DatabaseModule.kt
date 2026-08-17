@@ -2,10 +2,6 @@ package com.piku.client.di
 
 import android.content.Context
 import android.content.SharedPreferences
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.preferencesDataStoreFile
-import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.room.Room
 import com.piku.client.data.local.AppDatabase
 import com.piku.client.data.local.CustomTagRepository
@@ -73,18 +69,11 @@ object DatabaseModule {
 
     @Provides
     @Singleton
-    fun provideDataStore(@ApplicationContext context: Context): DataStore<Preferences> =
-        PreferenceDataStoreFactory.create(
-            produceFile = { context.preferencesDataStoreFile("settings") },
-        )
+    fun provideSettingsRepository(prefs: SharedPreferences): SettingsRepository =
+        SettingsRepository(prefs)
 
     @Provides
     @Singleton
-    fun provideSettingsRepository(dataStore: DataStore<Preferences>): SettingsRepository =
-        SettingsRepository(dataStore)
-
-    @Provides
-    @Singleton
-    fun provideCustomTagRepository(dataStore: DataStore<Preferences>): CustomTagRepository =
-        CustomTagRepository(dataStore)
+    fun provideCustomTagRepository(prefs: SharedPreferences): CustomTagRepository =
+        CustomTagRepository(prefs)
 }
