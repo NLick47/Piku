@@ -28,6 +28,7 @@ import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.DeleteSweep
+import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Logout
@@ -83,6 +84,7 @@ fun UserDrawer(
     onHistoryClick: () -> Unit,
     onCollectionClick: () -> Unit,
     onTagsClick: () -> Unit,
+    onFollowUsersClick: () -> Unit,
     onProfileClick: () -> Unit,
     onLoginClick: () -> Unit,
     onLogout: () -> Unit,
@@ -105,6 +107,7 @@ fun UserDrawer(
                 onHistoryClick = onHistoryClick,
                 onCollectionClick = onCollectionClick,
                 onTagsClick = onTagsClick,
+                onFollowUsersClick = onFollowUsersClick,
                 onProfileClick = onProfileClick,
                 onLoginClick = onLoginClick,
                 onLogout = onLogout,
@@ -130,6 +133,7 @@ private fun DrawerPanel(
     onHistoryClick: () -> Unit,
     onCollectionClick: () -> Unit,
     onTagsClick: () -> Unit,
+    onFollowUsersClick: () -> Unit,
     onProfileClick: () -> Unit,
     onLoginClick: () -> Unit,
     onLogout: () -> Unit,
@@ -220,6 +224,15 @@ private fun DrawerPanel(
                 dark = dark,
                 accent = iconAccent,
             )
+            if (userProfile != null) {
+                DrawerMenuRow(
+                    icon = Icons.Outlined.Group,
+                    label = stringResource(R.string.menu_follow_users),
+                    onClick = onFollowUsersClick,
+                    dark = dark,
+                    accent = iconAccent,
+                )
+            }
             Spacer(Modifier.height(14.dp))
             HorizontalDivider(
                 modifier = Modifier.padding(horizontal = 22.dp),

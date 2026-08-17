@@ -17,9 +17,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.piku.client.domain.model.FollowUser
 import com.piku.client.domain.model.Work
 import com.piku.client.ui.collection.CollectionScreen
 import com.piku.client.ui.detail.DetailScreen
+import com.piku.client.ui.follow.FollowUsersScreen
+import com.piku.client.ui.follow.UserWorksScreen
 import com.piku.client.ui.history.HistoryScreen
 import com.piku.client.ui.home.HomeScreen
 import com.piku.client.ui.login.EmailLoginScreen
@@ -32,9 +35,16 @@ object Routes {
     const val DETAIL = "detail/{authorId}/{workId}?thumb={thumb}"
     const val HISTORY = "history"
     const val TAGS = "tags"
+    const val FOLLOW_USERS = "follow_users"
+    const val USER_WORKS = "user_works/{userId}?userName={userName}"
     const val MAX_DETAIL_DEPTH = 3
 
     fun home() = "home"
+
+    fun followUsers() = FOLLOW_USERS
+
+    fun userWorks(userId: Long, userName: String = "") =
+        "user_works/$userId?userName=${Uri.encode(userName)}"
 
     /**
      * [thumbnailUrl] 为来源页（feed/历史/收藏/相关作品）的缩略图，供详情页在作品
@@ -137,6 +147,30 @@ fun AppNavHost() {
                 onHistoryClick = { navController.navigate(Routes.HISTORY) },
                 onCollectionClick = { navController.navigate(Routes.COLLECTION) },
                 onTagsClick = { navController.navigate(Routes.TAGS) },
+                onFollowUsersClick = { navController.navigate(Routes.followUsers()) },
+            )
+        }
+        composable(Routes.FOLLOW_USERS) {
+            FollowUsersScreen(
+                onBack = { navController.popBackStack() },
+                onLoginClick = { navController.navigate(Routes.LOGIN) },
+                onUserClick = { user: FollowUser ->
+                    navController.navigate(Routes.userWorks(user.userId, user.name))
+                },
+            )
+        }
+        composable(
+            route = Routes.USER_WORKS,
+            arguments = listOf(
+                navArgument("userId") { type = NavType.LongType },
+                navArgument("userName") { type = NavType.StringType; defaultValue = "" },
+            ),
+        ) {
+            UserWorksScreen(
+                onBack = { navController.popBackStack() },
+                onWorkClick = { work: Work ->
+                    navController.navigate(Routes.detail(work.authorId, work.id, work.thumbnailUrl))
+                },
             )
         }
         composable(Routes.TAGS) {

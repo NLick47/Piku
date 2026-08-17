@@ -171,6 +171,7 @@ fun HomeScreen(
     onHistoryClick: () -> Unit,
     onCollectionClick: () -> Unit,
     onTagsClick: () -> Unit,
+    onFollowUsersClick: () -> Unit,
 ) {
     val viewModel: HomeViewModel = hiltViewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -225,6 +226,10 @@ fun HomeScreen(
         onTagsClick = {
             scope.launch { drawerState.close() }
             onTagsClick()
+        },
+        onFollowUsersClick = {
+            scope.launch { drawerState.close() }
+            onFollowUsersClick()
         },
         onProfileClick = {
             scope.launch { drawerState.close() }
@@ -503,14 +508,6 @@ private fun DrawScope.drawHeaderBackdrop(dark: Boolean) {
     drawHomeBackdrop(dark)
 }
 
-/**
- * 液态玻璃衬底，三层叠加：
- * 1. 模糊层：见 drawHeaderBackdrop（亮色干净渐变 / 暗色页面磨砂拷贝）；
- * 2. tint 层：暗色保持深色通透玻璃；亮色接近不透明的暖白（与页面 F5F3F0 同色），
- *    底部略透一点形成下坠感，滚动时短暂"变浓"；
- * 3. 光泽层：玻璃边缘高光 + 缓慢扫过的斜向光带 + 缓缓上浮的气泡 + 底部表面波纹（液态流动感）
- *    + 底部发丝分隔线（保持锐利，不参与模糊）。
- */
 @Composable
 private fun LiquidGlassBackdrop(
     dark: Boolean,

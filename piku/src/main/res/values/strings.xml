@@ -55,6 +55,16 @@
     <string name="menu_section_library">收藏与记录</string>
     <string name="menu_section_general">通用</string>
     <string name="menu_my_tags">我的标签</string>
+    <string name="menu_follow_users">我的关注</string>
+    <string name="follow_users_title">我的关注</string>
+    <string name="follow_users_empty">还没有关注任何创作者\n去关注喜欢的创作者吧</string>
+    <string name="follow_users_login">登录后即可查看关注列表</string>
+    <string name="follow_users_count">共 %1$d 位关注</string>
+    <string name="follow_user_unfollow">取消关注</string>
+    <string name="follow_user_refollow">重新关注</string>
+    <string name="user_works_title">%1$s 的作品</string>
+    <string name="user_works_empty">该用户暂无作品</string>
+    <string name="user_works_count">%1$d 个作品</string>
     <string name="my_tags_add_hint">输入标签名</string>
     <string name="my_tags_add">添加</string>
     <string name="my_tags_empty">暂无自定义标签，添加一个吧</string>

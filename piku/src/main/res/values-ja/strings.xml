@@ -55,6 +55,16 @@
     <string name="menu_section_library">コレクション・履歴</string>
     <string name="menu_section_general">一般</string>
     <string name="menu_my_tags">マイタグ</string>
+    <string name="menu_follow_users">フォロー中</string>
+    <string name="follow_users_title">フォロー中</string>
+    <string name="follow_users_empty">フォロー中のユーザーはいません\n好きなクリエイターをフォローしましょう</string>
+    <string name="follow_users_login">ログインするとフォロー中のユーザーを確認できます</string>
+    <string name="follow_users_count">フォロー %1$d 人</string>
+    <string name="follow_user_unfollow">フォロー解除</string>
+    <string name="follow_user_refollow">再フォロー</string>
+    <string name="user_works_title">%1$s の作品</string>
+    <string name="user_works_empty">このユーザーの作品はまだありません</string>
+    <string name="user_works_count">%1$d 作品</string>
     <string name="my_tags_add_hint">タグ名を入力</string>
     <string name="my_tags_add">追加</string>
     <string name="my_tags_empty">カスタムタグはまだありません</string>

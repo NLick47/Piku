@@ -50,6 +50,26 @@ interface PoipikuApi {
         @Query("PG") page: Int,
     ): ResponseBody
 
+    @GET("MyEditSettingPcV.jsp")
+    suspend fun getFollowSettingPage(
+        @Query("MENUID") menuId: String,
+    ): ResponseBody
+
+    @FormUrlEncoded
+    @POST("f/FollowListF.jsp")
+    suspend fun getFollowList(
+        @Field("MAX") max: Int,
+        @Field("MD") md: Int,
+        @Field("PG") page: Int,
+    ): ResponseBody
+
+    @GET("IllustListPcV.jsp")
+    suspend fun getUserIllusts(
+        @Query("ID") userId: Long,
+        @Query("KWD") keyword: String,
+        @Query("PG") page: Int,
+    ): ResponseBody
+
     @GET("PopularTagListPcV.jsp")
     suspend fun getPopularTags(): ResponseBody
 
@@ -104,11 +124,6 @@ interface PoipikuApi {
         @Field("UID") userId: Long,
     ): SendEmojiResponse
 
-    /**
-     * 关注/取消关注用户（详情页"フォロー"按钮同款接口，Web 端由
-     * UpdateFollowUser(-1, {authorId}) 触发；登录后第一个参数是当前用户 ID）。
-     * result=1 已关注、2 已取消关注、其余失败（err_msg 带原因）。
-     */
     @FormUrlEncoded
     @POST("f/UpdateFollowUserF.jsp")
     suspend fun updateFollowUser(

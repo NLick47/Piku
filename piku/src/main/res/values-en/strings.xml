@@ -55,6 +55,16 @@
     <string name="menu_section_library">Library</string>
     <string name="menu_section_general">General</string>
     <string name="menu_my_tags">My tags</string>
+    <string name="menu_follow_users">Following</string>
+    <string name="follow_users_title">Following</string>
+    <string name="follow_users_empty">Not following anyone yet\nFollow creators you like</string>
+    <string name="follow_users_login">Log in to see the users you follow</string>
+    <string name="follow_users_count">%1$d followed</string>
+    <string name="follow_user_unfollow">Unfollow</string>
+    <string name="follow_user_refollow">Follow again</string>
+    <string name="user_works_title">Works by %1$s</string>
+    <string name="user_works_empty">No works by this user yet</string>
+    <string name="user_works_count">%1$d works</string>
     <string name="my_tags_add_hint">Enter a tag name</string>
     <string name="my_tags_add">Add</string>
     <string name="my_tags_empty">No custom tags yet</string>
