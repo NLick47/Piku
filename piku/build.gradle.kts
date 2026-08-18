@@ -43,6 +43,7 @@ fun versionNameToCode(name: String): Int {
 val appVersionName = resolveVersionName()
 val appVersionCode = versionNameToCode(appVersionName)
 
+@Suppress("UnstableApiUsage")
 android {
     namespace = "com.piku.client"
     compileSdk = 37
@@ -59,8 +60,6 @@ android {
             "DEBUG_VERSION_NAME",
             "\"${signingProps.getProperty("piku.debug.version", "").trim()}\"",
         )
-        // 仅保留应用支持的语言资源，剪掉依赖库携带的 40+ 种语言，缩小 resources.arsc
-        resConfigs("zh", "en", "ja")
     }
 
     buildTypes {
@@ -90,6 +89,17 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+
+    androidResources {
+        localeFilters += listOf(
+            "zh",
+            "zh-rCN",
+            "zh-rTW",
+            "zh-rHK",
+            "en",
+            "ja",
+        )
     }
 
     testOptions {
