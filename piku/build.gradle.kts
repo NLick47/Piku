@@ -53,6 +53,12 @@ android {
         targetSdk = 37
         versionCode = appVersionCode
         versionName = appVersionName
+
+        buildConfigField(
+            "String",
+            "DEBUG_VERSION_NAME",
+            "\"${signingProps.getProperty("piku.debug.version", "").trim()}\"",
+        )
         // 仅保留应用支持的语言资源，剪掉依赖库携带的 40+ 种语言，缩小 resources.arsc
         resConfigs("zh", "en", "ja")
     }
@@ -61,14 +67,6 @@ android {
         debug {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
-            // 测试专用：local.properties 配置 piku.debug.version=0.0.1 可覆盖 debug 构建的
-            // 本地版本号，配合 GitHub Releases 上的版本号即可测出"有新版/已最新"状态。
-            // 留空则回退到 BuildConfig.VERSION_NAME。
-            buildConfigField(
-                "String",
-                "DEBUG_VERSION_NAME",
-                "\"${signingProps.getProperty("piku.debug.version", "").trim()}\"",
-            )
         }
         release {
             isMinifyEnabled = true
@@ -147,7 +145,7 @@ dependencies {
     implementation(libs.retrofit)
     implementation(libs.retrofit.converter.kotlinx.serialization)
     implementation(libs.okhttp)
-    debugImplementation(libs.okhttp.logging)
+    implementation(libs.okhttp.logging)
     implementation(libs.okhttp.dnsoverhttps)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
