@@ -13,6 +13,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import com.piku.client.data.local.LanguageStore
 import com.piku.client.data.local.SettingsRepository
+import com.piku.client.domain.model.AppLanguage
 import com.piku.client.domain.model.ThemeMode
 import com.piku.client.ui.navigation.AppNavHost
 import com.piku.client.ui.theme.PoipikuTheme
@@ -29,7 +30,10 @@ class MainActivity : ComponentActivity() {
     override fun attachBaseContext(newBase: Context) {
         val prefs = newBase.getSharedPreferences(LanguageStore.PREFS_NAME, Context.MODE_PRIVATE)
         val code = prefs.getString(LanguageStore.KEY_LANGUAGE, null)
-        super.attachBaseContext(if (code.isNullOrBlank()) newBase else newBase.withLocale(code))
+        val supportedCode = code?.takeIf { savedCode ->
+            savedCode.isNotBlank() && AppLanguage.entries.any { it.code == savedCode }
+        }
+        super.attachBaseContext(supportedCode?.let { newBase.withLocale(it) } ?: newBase)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
