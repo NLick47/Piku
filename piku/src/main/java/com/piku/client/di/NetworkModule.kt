@@ -1,25 +1,33 @@
 package com.piku.client.di
 
+import android.content.SharedPreferences
 import com.piku.client.BuildConfig
-import com.piku.client.data.remote.PoipikuHostnameVerifier
-import com.piku.client.data.remote.SniStrippingSocketFactory
-import com.piku.client.data.remote.DoHDns
 import com.piku.client.data.remote.ApiConfig
+import com.piku.client.data.remote.DoHDns
 import com.piku.client.data.remote.LenientJsonConverterFactory
+import com.piku.client.data.remote.PoipikuHostnameVerifier
 import com.piku.client.data.remote.PoipikuApi
 import com.piku.client.data.remote.RefererInterceptor
 import com.piku.client.data.remote.RetryInterceptor
+import com.piku.client.data.remote.SniStrippingSocketFactory
 import com.piku.client.data.remote.UpdateApi
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import kotlinx.serialization.json.Json
+import okhttp3.Call
+import okhttp3.Connection
 import okhttp3.CookieJar
 import okhttp3.Dns
+import okhttp3.EventListener
 import okhttp3.OkHttpClient
+import okhttp3.Protocol
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
+import java.io.IOException
+import java.net.InetSocketAddress
+import java.net.Proxy
 import java.util.concurrent.TimeUnit
 import javax.inject.Named
 import javax.inject.Singleton
@@ -38,16 +46,37 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideDns(): Dns = DoHDns()
+    fun provideDns(prefs: SharedPreferences): Dns = DoHDns(prefs)
 
     @Provides
     @Singleton
     fun provideOkHttpClient(cookieJar: CookieJar, dns: Dns): OkHttpClient {
+        val doHDns = dns as DoHDns
         val sniFactory = SniStrippingSocketFactory()
         val builder = OkHttpClient.Builder()
             .dns(dns)
             .sslSocketFactory(sniFactory, sniFactory.trustManager())
             .hostnameVerifier(PoipikuHostnameVerifier())
+            .eventListenerFactory {
+                object : EventListener() {
+                    override fun connectionAcquired(call: Call, connection: Connection) {
+                        doHDns.reportSuccess(
+                            call.request().url.host,
+                            connection.route().socketAddress.address,
+                        )
+                    }
+
+                    override fun connectFailed(
+                        call: Call,
+                        inetSocketAddress: InetSocketAddress,
+                        proxy: Proxy,
+                        protocol: Protocol?,
+                        ioe: IOException,
+                    ) {
+                        doHDns.reportFailure(call.request().url.host, inetSocketAddress.address)
+                    }
+                }
+            }
             .cookieJar(cookieJar)
             .addInterceptor(RefererInterceptor())
             .addInterceptor(RetryInterceptor())
@@ -57,7 +86,7 @@ object NetworkModule {
                     .build()
                 chain.proceed(request)
             }
-            .connectTimeout(10, TimeUnit.SECONDS)
+            .connectTimeout(5, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
         if (BuildConfig.DEBUG) {
