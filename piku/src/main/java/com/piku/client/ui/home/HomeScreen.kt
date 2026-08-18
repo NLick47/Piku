@@ -59,6 +59,7 @@ import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
 import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -66,11 +67,14 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.material.icons.outlined.SystemUpdate
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
@@ -116,7 +120,9 @@ import coil3.SingletonImageLoader
 import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import coil3.size.Size as CoilSize
+import com.piku.client.BuildConfig
 import com.piku.client.R
+import com.piku.client.data.remote.GitHubRelease
 import com.piku.client.domain.model.AppLanguage
 import com.piku.client.domain.model.PoipikuCategory
 import com.piku.client.domain.model.PopularTag
@@ -185,6 +191,7 @@ fun HomeScreen(
     var showThemeSheet by rememberSaveable { mutableStateOf(false) }
     var showRetentionSheet by rememberSaveable { mutableStateOf(false) }
     var showLanguageSheet by rememberSaveable { mutableStateOf(false) }
+    var showLogoutConfirm by rememberSaveable { mutableStateOf(false) }
     var showProfileEdit by rememberSaveable { mutableStateOf(false) }
     val isScrolling = remember { mutableStateOf(false) }
     val gridState = rememberLazyStaggeredGridState()
@@ -205,8 +212,15 @@ fun HomeScreen(
         }
     }
 
-    // 退出登录不关抽屉：抽屉保留并显示未登录态，可在抽屉内直接点头像重新登录
-    val onLogout = viewModel::logout
+    // 退出登录先弹确认框，确认后再登出（抽屉保留并显示未登录态，可在抽屉内直接点头像重新登录）
+    val onLogout = { showLogoutConfirm = true }
+
+    val onOpenUpdate = {
+        state.updateBanner?.let { release ->
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(release.htmlUrl)))
+        }
+        viewModel.dismissUpdateBanner()
+    }
 
     UserDrawer(
         drawerState = drawerState,
@@ -215,7 +229,20 @@ fun HomeScreen(
         themeMode = state.themeMode,
         historyRetentionDays = state.historyRetentionDays,
         language = state.language,
+        autoCheckEnabled = state.autoCheckEnabled,
+        currentVersion = if (BuildConfig.DEBUG && BuildConfig.DEBUG_VERSION_NAME.isNotBlank()) {
+            BuildConfig.DEBUG_VERSION_NAME
+        } else {
+            BuildConfig.VERSION_NAME.substringBefore("-")
+        },
+        updateCheckState = state.updateCheckState,
         onToggleAdult = viewModel::toggleAdultContent,
+        onToggleAutoCheck = { viewModel.setAutoCheckEnabled(!state.autoCheckEnabled) },
+        onCheckUpdateClick = {
+            if (state.updateCheckState !is UpdateCheckState.Checking) {
+                viewModel.checkForUpdateManual()
+            }
+        },
         onThemeClick = { showThemeSheet = true },
         onRetentionClick = { showRetentionSheet = true },
         onLanguageClick = { showLanguageSheet = true },
@@ -311,6 +338,8 @@ fun HomeScreen(
                             onLoginClick = onLoginClick,
                             onDismissRefreshNotice = viewModel::dismissRefreshNotice,
                             onGoTop = { scope.launch { gridState.animateScrollToItem(0) } },
+                            onOpenUpdate = onOpenUpdate,
+                            onDismissUpdateBanner = viewModel::dismissUpdateBanner,
                             dark = dark,
                             isScrolling = isScrolling,
                             gridState = gridState,
@@ -344,6 +373,8 @@ GlassHeader(
                         onLoginClick = onLoginClick,
                         onDismissRefreshNotice = viewModel::dismissRefreshNotice,
                         onGoTop = { scope.launch { gridState.animateScrollToItem(0) } },
+                        onOpenUpdate = onOpenUpdate,
+                        onDismissUpdateBanner = viewModel::dismissUpdateBanner,
                         dark = dark,
                         isScrolling = isScrolling,
                         gridState = gridState,
@@ -443,6 +474,17 @@ if (showCategories) {
                         (context as? Activity)?.recreate()
                     },
                     onDismiss = { showLanguageSheet = false },
+                    dark = dark,
+                )
+            }
+
+            if (showLogoutConfirm) {
+                LogoutConfirmDialog(
+                    onConfirm = {
+                        showLogoutConfirm = false
+                        onLogout()
+                    },
+                    onDismiss = { showLogoutConfirm = false },
                     dark = dark,
                 )
             }
@@ -1225,6 +1267,8 @@ private fun HomeContent(
     onLoginClick: () -> Unit,
     onDismissRefreshNotice: () -> Unit,
     onGoTop: () -> Unit,
+    onOpenUpdate: () -> Unit,
+    onDismissUpdateBanner: () -> Unit,
     dark: Boolean,
     isScrolling: MutableState<Boolean>,
     gridState: LazyStaggeredGridState,
@@ -1237,7 +1281,8 @@ private fun HomeContent(
                 if (scrolling && notice == 0) onDismissRefreshNotice()
             }
     }
-    when {
+    Box(Modifier.fillMaxSize()) {
+        when {
         state.loading && state.works.isEmpty() -> {
             SkeletonGrid(dark = dark)
         }
@@ -1321,7 +1366,124 @@ private fun HomeContent(
                 }
             }
         }
+        }
+        state.updateBanner?.let { release ->
+            UpdateBannerBar(
+                release = release,
+                onOpen = onOpenUpdate,
+                onDismiss = onDismissUpdateBanner,
+                dark = dark,
+                modifier = Modifier.align(Alignment.TopCenter),
+            )
+        }
     }
+}
+
+@Composable
+private fun UpdateBannerBar(
+    release: GitHubRelease,
+    onOpen: () -> Unit,
+    onDismiss: () -> Unit,
+    dark: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
+    val pill = RoundedCornerShape(22.dp)
+    Row(
+        modifier = modifier
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .shadow(10.dp, pill)
+            .clip(pill)
+            .background(if (dark) LoginCardDark else LoginCardLight, pill)
+            .border(
+                BorderStroke(0.5.dp, if (dark) PillBorderDark else PillBorderLight),
+                pill,
+            )
+            .clickable(onClick = onOpen)
+            .padding(start = 16.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.SystemUpdate,
+            contentDescription = null,
+            tint = AccentPurple,
+            modifier = Modifier.size(17.dp),
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = stringResource(R.string.update_available, release.tagName),
+            color = primary,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = stringResource(R.string.update_open),
+            color = AccentPurple,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(Modifier.width(4.dp))
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .clip(CircleShape)
+                .clickable(onClick = onDismiss),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Close,
+                contentDescription = stringResource(R.string.detail_fullscreen_close),
+                tint = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                modifier = Modifier.size(14.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun LogoutConfirmDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    dark: Boolean,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = if (dark) LoginCardDark else Color.White,
+        title = {
+            Text(
+                text = stringResource(R.string.logout),
+                color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        },
+        text = {
+            Text(
+                text = stringResource(R.string.logout_confirm_message),
+                color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                fontSize = 13.sp,
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(
+                    text = stringResource(R.string.logout_confirm),
+                    color = if (dark) Color(0xFFE08A8A) else Color(0xFFC24B4B),
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(
+                    text = stringResource(R.string.detail_favorite_cancel),
+                    color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                )
+            }
+        },
+    )
 }
 
 @Composable

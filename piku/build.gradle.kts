@@ -61,6 +61,14 @@ android {
         debug {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
+            // 测试专用：local.properties 配置 piku.debug.version=0.0.1 可覆盖 debug 构建的
+            // 本地版本号，配合 GitHub Releases 上的版本号即可测出"有新版/已最新"状态。
+            // 留空则回退到 BuildConfig.VERSION_NAME。
+            buildConfigField(
+                "String",
+                "DEBUG_VERSION_NAME",
+                "\"${signingProps.getProperty("piku.debug.version", "").trim()}\"",
+            )
         }
         release {
             isMinifyEnabled = true

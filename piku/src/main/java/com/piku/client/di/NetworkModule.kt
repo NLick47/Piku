@@ -9,6 +9,7 @@ import com.piku.client.data.remote.LenientJsonConverterFactory
 import com.piku.client.data.remote.PoipikuApi
 import com.piku.client.data.remote.RefererInterceptor
 import com.piku.client.data.remote.RetryInterceptor
+import com.piku.client.data.remote.UpdateApi
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -20,6 +21,7 @@ import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import java.util.concurrent.TimeUnit
+import javax.inject.Named
 import javax.inject.Singleton
 
 @Module
@@ -81,5 +83,46 @@ object NetworkModule {
     @Singleton
     fun providePoipikuApi(retrofit: Retrofit): PoipikuApi = retrofit.create(PoipikuApi::class.java)
 
+    @Provides
+    @Singleton
+    @Named("github")
+    fun provideGithubOkHttpClient(dns: Dns): OkHttpClient {
+        val builder = OkHttpClient.Builder()
+            .dns(dns)
+            .addInterceptor { chain ->
+                val request = chain.request().newBuilder()
+                    .header("User-Agent", "$USER_AGENT (GitHub)")
+                    .header("Accept", "application/vnd.github+json")
+                    .build()
+                chain.proceed(request)
+            }
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+        if (BuildConfig.DEBUG) {
+            builder.addInterceptor(
+                HttpLoggingInterceptor().apply {
+                    level = HttpLoggingInterceptor.Level.BASIC
+                }
+            )
+        }
+        return builder.build()
+    }
+
+    @Provides
+    @Singleton
+    @Named("github")
+    fun provideGithubRetrofit(@Named("github") client: OkHttpClient, json: Json): Retrofit =
+        Retrofit.Builder()
+            .baseUrl(GITHUB_API_BASE_URL)
+            .client(client)
+            .addConverterFactory(LenientJsonConverterFactory(json))
+            .build()
+
+    @Provides
+    @Singleton
+    fun provideUpdateApi(@Named("github") retrofit: Retrofit): UpdateApi = retrofit.create(UpdateApi::class.java)
+
+    private const val GITHUB_API_BASE_URL = "https://api.github.com/"
     private const val USER_AGENT = "Piku/0.1.0 (Android)"
 }

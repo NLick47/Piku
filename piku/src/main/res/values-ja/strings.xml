@@ -34,6 +34,15 @@
     <string name="profile_edit_avatar_read_failed">画像を読み込めませんでした。もう一度お試しください</string>
     <string name="profile_edit_error_size">画像サイズが大きすぎます（1MBまで）</string>
     <string name="menu_adult_content">R-18</string>
+    <string name="menu_auto_check_update">更新を自動確認</string>
+    <string name="menu_check_update">アップデートを確認</string>
+    <string name="update_available">新しいバージョン %1$s が利用可能です</string>
+    <string name="update_open">ダウンロード</string>
+    <string name="update_status_latest">最新です</string>
+    <string name="update_status_available">新バージョンあり</string>
+    <string name="update_status_failed">失敗</string>
+    <string name="logout_confirm">ログアウト</string>
+    <string name="logout_confirm_message">アカウントからログアウトしますか？</string>
     <string name="menu_theme">テーマ</string>
     <string name="menu_language">表示言語</string>
     <string name="menu_history_retention">履歴の保持</string>
@@ -173,6 +182,7 @@
     <string name="detail_fullscreen_close">閉じる</string>
 
     <string name="detail_more">その他</string>
+    <string name="detail_reaction">リアクション</string>
     <string name="detail_copy_link">リンクをコピー</string>
     <string name="detail_copy_description">説明文をコピー</string>
     <string name="detail_share_link">リンクを共有</string>

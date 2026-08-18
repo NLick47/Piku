@@ -34,6 +34,15 @@
     <string name="profile_edit_avatar_read_failed">Could not read the selected image, please try again</string>
     <string name="profile_edit_error_size">Image is too large (limit 1 MB)</string>
     <string name="menu_adult_content">R-18</string>
+    <string name="menu_auto_check_update">Auto-check updates</string>
+    <string name="menu_check_update">Check for updates</string>
+    <string name="update_available">New version %1$s available</string>
+    <string name="update_open">Get it</string>
+    <string name="update_status_latest">Up to date</string>
+    <string name="update_status_available">Update!</string>
+    <string name="update_status_failed">Failed</string>
+    <string name="logout_confirm">Log out</string>
+    <string name="logout_confirm_message">Log out of your account?</string>
     <string name="menu_theme">Theme</string>
     <string name="menu_language">Language</string>
     <string name="menu_history_retention">History retention</string>
@@ -173,6 +182,7 @@
     <string name="detail_fullscreen_close">Close</string>
 
     <string name="detail_more">More</string>
+    <string name="detail_reaction">React</string>
     <string name="detail_copy_link">Copy link</string>
     <string name="detail_copy_description">Copy description</string>
     <string name="detail_share_link">Share link</string>

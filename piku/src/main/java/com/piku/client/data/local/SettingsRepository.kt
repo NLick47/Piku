@@ -37,6 +37,18 @@ class SettingsRepository @Inject constructor(
     )
     val historyRetentionDays: StateFlow<Int> = _historyRetentionDays.asStateFlow()
 
+    /** 启动时自动检查更新 */
+    private val _autoCheckEnabled = MutableStateFlow(
+        prefs.getBoolean(KEY_AUTO_CHECK_ENABLED, true),
+    )
+    val autoCheckEnabled: StateFlow<Boolean> = _autoCheckEnabled.asStateFlow()
+
+    /** 上次检查更新时间（epoch millis），0 表示从未检查过 */
+    private val _lastUpdateCheckAt = MutableStateFlow(
+        prefs.getLong(KEY_LAST_UPDATE_CHECK_AT, 0L),
+    )
+    val lastUpdateCheckAt: StateFlow<Long> = _lastUpdateCheckAt.asStateFlow()
+
     fun setShowAdultContent(value: Boolean) {
         prefs.edit().putBoolean(KEY_SHOW_ADULT_CONTENT, value).apply()
         _showAdultContent.value = value
@@ -52,9 +64,21 @@ class SettingsRepository @Inject constructor(
         _historyRetentionDays.value = days
     }
 
+    fun setAutoCheckEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_AUTO_CHECK_ENABLED, enabled).apply()
+        _autoCheckEnabled.value = enabled
+    }
+
+    fun recordUpdateCheck() {
+        prefs.edit().putLong(KEY_LAST_UPDATE_CHECK_AT, System.currentTimeMillis()).apply()
+        _lastUpdateCheckAt.value = System.currentTimeMillis()
+    }
+
     private companion object {
         const val KEY_SHOW_ADULT_CONTENT = "show_adult_content"
         const val KEY_THEME_MODE = "theme_mode"
         const val KEY_HISTORY_RETENTION_DAYS = "history_retention_days"
+        const val KEY_AUTO_CHECK_ENABLED = "auto_check_update_enabled"
+        const val KEY_LAST_UPDATE_CHECK_AT = "last_update_check_at"
     }
 }

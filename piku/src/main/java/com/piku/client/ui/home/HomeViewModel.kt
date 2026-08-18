@@ -3,6 +3,7 @@ package com.piku.client.ui.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.piku.client.data.local.SettingsRepository
+import com.piku.client.data.remote.GitHubRelease
 import com.piku.client.data.repository.AuthRepository
 import com.piku.client.data.repository.ThumbnailResolver
 import com.piku.client.domain.model.AppError
@@ -14,6 +15,7 @@ import com.piku.client.domain.model.ThemeMode
 import com.piku.client.domain.model.UserProfile
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.usecase.AddCustomTagUseCase
+import com.piku.client.domain.usecase.CheckForUpdateUseCase
 import com.piku.client.domain.usecase.LoadFeedUseCase
 import com.piku.client.domain.usecase.LoadFollowFeedUseCase
 import com.piku.client.domain.usecase.LoadKeywordFeedUseCase
@@ -22,6 +24,7 @@ import com.piku.client.domain.usecase.LoadPopularTagsUseCase
 import com.piku.client.domain.usecase.LoadRandomFeedUseCase
 import com.piku.client.domain.usecase.LoadTagFeedUseCase
 import com.piku.client.domain.usecase.ObserveAdultContentUseCase
+import com.piku.client.domain.usecase.ObserveAutoCheckEnabledUseCase
 import com.piku.client.domain.usecase.ObserveCustomTagsUseCase
 import com.piku.client.domain.usecase.ObserveFavoriteIdsUseCase
 import com.piku.client.domain.usecase.ObserveHistoryRetentionUseCase
@@ -30,6 +33,7 @@ import com.piku.client.domain.usecase.ObserveThemeModeUseCase
 import com.piku.client.domain.usecase.RemoveCustomTagUseCase
 import com.piku.client.domain.usecase.RestoreAdultContentUseCase
 import com.piku.client.domain.usecase.SetAdultContentUseCase
+import com.piku.client.domain.usecase.SetAutoCheckEnabledUseCase
 import com.piku.client.domain.usecase.SetHistoryRetentionUseCase
 import com.piku.client.domain.usecase.SetLanguageUseCase
 import com.piku.client.domain.usecase.SetThemeModeUseCase
@@ -45,6 +49,15 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 enum class FeedTab { HOT, LATEST, FOLLOW, RANDOM }
+
+/** 检查更新状态机：弹层内结果区据此渲染 */
+sealed interface UpdateCheckState {
+    data object Idle : UpdateCheckState
+    data object Checking : UpdateCheckState
+    data object Latest : UpdateCheckState
+    data class Available(val release: GitHubRelease) : UpdateCheckState
+    data object Failed : UpdateCheckState
+}
 
 /**
  * 瀑布流列表保留上限（约 10~15 页）。超出后从头部裁剪，保证深滚时内存有界。
@@ -77,6 +90,12 @@ data class HomeUiState(
     val refreshNotice: Int? = null,
     /** 关注页未登录：不发请求，直接展示登录引导 */
     val followNeedLogin: Boolean = false,
+    /** 启动时自动检查更新 */
+    val autoCheckEnabled: Boolean = true,
+    /** 发现的新版本（首页横幅展示），null 表示无 */
+    val updateBanner: GitHubRelease? = null,
+    /** 检查更新状态（弹层结果区渲染） */
+    val updateCheckState: UpdateCheckState = UpdateCheckState.Idle,
 )
 
 @HiltViewModel
@@ -102,6 +121,9 @@ class HomeViewModel @Inject constructor(
     private val setHistoryRetentionUseCase: SetHistoryRetentionUseCase,
     private val observeLanguageUseCase: ObserveLanguageUseCase,
     private val setLanguageUseCase: SetLanguageUseCase,
+    private val checkForUpdateUseCase: CheckForUpdateUseCase,
+    private val observeAutoCheckEnabledUseCase: ObserveAutoCheckEnabledUseCase,
+    private val setAutoCheckEnabledUseCase: SetAutoCheckEnabledUseCase,
     private val settingsRepository: SettingsRepository,
     private val authRepository: AuthRepository,
     private val thumbnailResolver: ThumbnailResolver,
@@ -143,6 +165,13 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             observeLanguageUseCase().collect { language ->
                 _uiState.update { it.copy(language = language) }
+            }
+        }
+        viewModelScope.launch {
+            // 每次启动自动检查一次；手动打开开关时也会触发一次
+            observeAutoCheckEnabledUseCase().collect { enabled ->
+                _uiState.update { it.copy(autoCheckEnabled = enabled) }
+                if (enabled && _uiState.value.updateBanner == null) checkForUpdate(silent = true)
             }
         }
         viewModelScope.launch {
@@ -390,6 +419,43 @@ class HomeViewModel @Inject constructor(
 
     fun setLanguage(language: AppLanguage) {
         setLanguageUseCase(language)
+    }
+
+    /** 弹层内手动检查更新（含失败重试） */
+    fun checkForUpdateManual() = checkForUpdate(silent = false)
+
+    fun dismissUpdateBanner() {
+        _uiState.update { it.copy(updateBanner = null) }
+    }
+
+    fun setAutoCheckEnabled(enabled: Boolean) {
+        setAutoCheckEnabledUseCase(enabled)
+    }
+
+    private fun checkForUpdate(silent: Boolean) {
+        viewModelScope.launch {
+            if (!silent) _uiState.update { it.copy(updateCheckState = UpdateCheckState.Checking) }
+            checkForUpdateUseCase().onSuccess { release ->
+                if (release != null) {
+                    // 手动检查发现新版：弹层内展示 + 关弹层后首页横幅常驻入口
+                    _uiState.update {
+                        it.copy(
+                            updateCheckState = UpdateCheckState.Available(release),
+                            updateBanner = release,
+                        )
+                    }
+                } else {
+                    _uiState.update { it.copy(updateCheckState = UpdateCheckState.Latest) }
+                }
+            }.onFailure {
+                // 自动检查失败静默，不打扰用户（GitHub 限流等场景）
+                _uiState.update {
+                    it.copy(
+                        updateCheckState = if (silent) UpdateCheckState.Idle else UpdateCheckState.Failed,
+                    )
+                }
+            }
+        }
     }
 
     private fun reload() {
