@@ -115,6 +115,16 @@ class DoHDns(
             ?: UnknownHostException("lookup failed for $hostname")
     }
 
+    /** 竞速任务的 get：任务异常/中断一律视为该源无结果，不向 OkHttp 泄漏非 UnknownHostException。 */
+    private fun safeGet(future: Future<InetAddress?>): InetAddress? = try {
+        future.get()
+    } catch (e: InterruptedException) {
+        Thread.currentThread().interrupt()
+        null
+    } catch (e: ExecutionException) {
+        null
+    }
+
     private fun resolveRace(hostname: String, now: Long): List<InetAddress> {
         val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(RESOLUTION_TIMEOUT_MS)
         val completion = ExecutorCompletionService<InetAddress?>(sourceExecutor)
@@ -125,7 +135,7 @@ class DoHDns(
             tasks += completion.submit { probeFirst(hostname, persisted) }
             completion.poll(PERSISTED_HEAD_START_MS, TimeUnit.MILLISECONDS)?.let { completed ->
                 completedTasks++
-                completed.get()?.let { winner ->
+                safeGet(completed)?.let { winner ->
                     acceptWinner(hostname, winner)
                     return listOf(winner)
                 }
@@ -148,7 +158,7 @@ class DoHDns(
                 if (waitNanos <= 0) break
                 val completed = completion.poll(waitNanos, TimeUnit.NANOSECONDS) ?: break
                 remaining--
-                completed.get()?.let { winner ->
+                safeGet(completed)?.let { winner ->
                     tasks.forEach { if (!it.isDone) it.cancel(true) }
                     acceptWinner(hostname, winner)
                     return listOf(winner)
