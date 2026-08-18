@@ -2,6 +2,7 @@ package com.piku.client.ui.common
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
@@ -10,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -27,14 +29,22 @@ fun UserAvatar(
     onClick: () -> Unit,
     dark: Boolean,
     size: Dp = 32.dp,
+    enabled: Boolean = true,
+    showIndication: Boolean = true,
 ) {
     val hasAvatar = !avatarUrl.isNullOrBlank() && !avatarUrl.contains("default_user")
+    val interactionSource = remember { MutableInteractionSource() }
     Box(
         modifier = Modifier
             .size(size)
             .clip(CircleShape)
             .background(if (dark) LoginTextFaintDark else LoginTextFaintLight)
-            .clickable(onClick = onClick),
+            .clickable(
+                enabled = enabled,
+                interactionSource = interactionSource,
+                indication = if (showIndication) androidx.compose.foundation.LocalIndication.current else null,
+                onClick = onClick,
+            ),
         contentAlignment = Alignment.Center,
     ) {
         if (hasAvatar) {

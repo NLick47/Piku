@@ -6,14 +6,9 @@ import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -83,6 +78,7 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -90,9 +86,9 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
@@ -115,7 +111,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.currentStateAsState
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil3.SingletonImageLoader
 import coil3.request.CachePolicy
 import coil3.request.ImageRequest
@@ -197,6 +196,32 @@ fun HomeScreen(
     val gridState = rememberLazyStaggeredGridState()
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val lifecycleState by lifecycleOwner.lifecycle.currentStateAsState()
+    var drawerOpenPending by remember { mutableStateOf(false) }
+    val drawerButtonEnabled = !drawerOpenPending &&
+        lifecycleState.isAtLeast(Lifecycle.State.RESUMED) &&
+        drawerState.currentValue == DrawerValue.Closed &&
+        drawerState.targetValue == DrawerValue.Closed
+
+    val openDrawer = {
+        if (drawerButtonEnabled) {
+            drawerOpenPending = true
+            scope.launch {
+                try {
+                    delay(180)
+                    if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
+                        drawerState.currentValue == DrawerValue.Closed &&
+                        drawerState.targetValue == DrawerValue.Closed
+                    ) {
+                        drawerState.open()
+                    }
+                } finally {
+                    drawerOpenPending = false
+                }
+            }
+        }
+    }
 
     LaunchedEffect(pendingTag) {
         if (pendingTag != null) {
@@ -308,9 +333,10 @@ fun HomeScreen(
                                 modifier = Modifier.matchParentSize(),
                             )
                             Column(Modifier.fillMaxWidth()) {
-                                TabletTopBar(
-                                    avatarUrl = state.userAvatarUrl,
-                                    onMenuClick = { scope.launch { drawerState.open() } },
+                                 TabletTopBar(
+                                     avatarUrl = state.userAvatarUrl,
+                                     onMenuClick = openDrawer,
+                                     menuEnabled = drawerButtonEnabled,
                                     onSearchClick = { showSearch = true },
                                     onMoreTags = { showTags = true },
                                     onDoubleTapTop = { scope.launch { gridState.animateScrollToItem(0) } },
@@ -348,10 +374,11 @@ fun HomeScreen(
                 }
             } else {
                 Column(Modifier.fillMaxSize()) {
-GlassHeader(
-                    state = state,
-                    avatarUrl = state.userAvatarUrl,
-                    onMenuClick = { scope.launch { drawerState.open() } },
+ GlassHeader(
+                     state = state,
+                     avatarUrl = state.userAvatarUrl,
+                     onMenuClick = openDrawer,
+                     menuEnabled = drawerButtonEnabled,
                     onSearchClick = { showSearch = true },
                     onSelectFeedTab = viewModel::selectFeedTab,
                     onMoreTags = { showTags = true },
@@ -506,9 +533,6 @@ if (showCategories) {
     }
 }
 
-/** 头部毛玻璃衬底的模糊半径 */
-private val GlassBlurRadius = 24.dp
-
 /**
  * 页面背景（渐变 + 彩色光斑）：
  * 首页 Canvas 与头部毛玻璃衬底共用同一绘制，保证模糊层与页面背景严格对齐。
@@ -565,27 +589,25 @@ private fun LiquidGlassBackdrop(
     isScrolling: State<Boolean>,
     modifier: Modifier = Modifier,
 ) {
-    val transition = rememberInfiniteTransition(label = "liquidGlass")
-    // 斜向光带：6s 一个来回
-    val sheen by transition.animateFloat(
-        initialValue = -0.5f,
-        targetValue = 1.5f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 6000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "sheenX",
-    )
-    // 液态时钟：12s 一圈，驱动气泡上浮与表面波纹
-    val liquid by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 12000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "liquidT",
-    )
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val lifecycleState by lifecycleOwner.lifecycle.currentStateAsState()
+    val isResumed = lifecycleState.isAtLeast(Lifecycle.State.RESUMED)
+    var acc by rememberSaveable { mutableFloatStateOf(0f) }
+    LaunchedEffect(isResumed) {
+        if (!isResumed) return@LaunchedEffect
+        var lastFrameNanos = 0L
+        while (true) {
+            withFrameNanos { frameNanos ->
+                if (lastFrameNanos != 0L) {
+                    val elapsedSeconds = (frameNanos - lastFrameNanos) / 1_000_000_000f
+                    acc = (acc + elapsedSeconds / 12f) % 1f
+                }
+                lastFrameNanos = frameNanos
+            }
+        }
+    }
+    val liquid = acc
+    val sheen = -0.5f + ((acc * 2f) % 1f) * 2f
     // 滚动时玻璃变浓（短暂动画），模拟液体受扰动后聚拢的质感
     val deepen by animateFloatAsState(
         targetValue = if (isScrolling.value) 1f else 0f,
@@ -603,8 +625,7 @@ private fun LiquidGlassBackdrop(
         Box(
             Modifier
                 .matchParentSize()
-                .drawBehind { drawHeaderBackdrop(dark) }
-                .blur(GlassBlurRadius),
+                .drawBehind { drawHeaderBackdrop(dark) },
         )
         // tint 层
         Box(
@@ -781,6 +802,7 @@ private fun GlassHeader(
     state: HomeUiState,
     avatarUrl: String?,
     onMenuClick: () -> Unit,
+    menuEnabled: Boolean,
     onSearchClick: () -> Unit,
     onSelectFeedTab: (FeedTab) -> Unit,
     onMoreTags: () -> Unit,
@@ -812,6 +834,7 @@ private fun GlassHeader(
                 UserMenuButton(
                     avatarUrl = avatarUrl,
                     onMenuClick = onMenuClick,
+                    enabled = menuEnabled,
                     dark = dark,
                 )
                 Spacer(Modifier.weight(1f))
@@ -847,6 +870,7 @@ private fun GlassHeader(
 private fun TabletTopBar(
     avatarUrl: String?,
     onMenuClick: () -> Unit,
+    menuEnabled: Boolean,
     onSearchClick: () -> Unit,
     onMoreTags: () -> Unit,
     onDoubleTapTop: () -> Unit,
@@ -864,6 +888,7 @@ private fun TabletTopBar(
         UserMenuButton(
             avatarUrl = avatarUrl,
             onMenuClick = onMenuClick,
+            enabled = menuEnabled,
             dark = dark,
         )
         Spacer(Modifier.weight(1f))
@@ -1207,28 +1232,9 @@ private fun TagPill(
 private fun UserMenuButton(
     avatarUrl: String?,
     onMenuClick: () -> Unit,
+    enabled: Boolean,
     dark: Boolean,
 ) {
-    // 头像背后的紫色光晕：缓慢呼吸脉动（明暗 + 半径），让头部有"活"的感觉
-    val haloTransition = rememberInfiniteTransition(label = "avatarHalo")
-    val haloAlpha by haloTransition.animateFloat(
-        initialValue = 0.10f,
-        targetValue = if (dark) 0.34f else 0.24f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2600, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "haloAlpha",
-    )
-    val haloRadius by haloTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.45f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2600, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "haloRadius",
-    )
     Box(
         modifier = Modifier
             .size(46.dp)
@@ -1236,11 +1242,11 @@ private fun UserMenuButton(
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
-                            Color(0xFF9A7FC9).copy(alpha = haloAlpha),
+                            Color(0xFF9A7FC9).copy(alpha = if (dark) 0.24f else 0.18f),
                             Color.Transparent,
                         ),
                     ),
-                    radius = size.minDimension / 2f * haloRadius,
+                    radius = size.minDimension / 2f * 1.25f,
                 )
             },
         contentAlignment = Alignment.Center,
@@ -1250,6 +1256,8 @@ private fun UserMenuButton(
             avatarUrl = avatarUrl,
             onClick = onMenuClick,
             dark = dark,
+            enabled = enabled,
+            showIndication = false,
         )
     }
 }

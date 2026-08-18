@@ -160,7 +160,7 @@ fun AppNavHost() {
         }
         composable(Routes.FOLLOW_USERS) {
             FollowUsersScreen(
-                onBack = { navController.popBackStack() },
+                onBack = safePopBack,
                 onLoginClick = { navController.navigate(Routes.LOGIN) },
                 onUserClick = { user: FollowUser ->
                     navController.navigate(Routes.userWorks(user.userId, user.name))
@@ -174,7 +174,7 @@ fun AppNavHost() {
             ),
         ) {
             UserSearchScreen(
-                onBack = { navController.popBackStack() },
+                onBack = safePopBack,
                 onLoginClick = { navController.navigate(Routes.LOGIN) },
                 onUserClick = { user: FollowUser ->
                     navController.navigate(Routes.userWorks(user.userId, user.name))
@@ -189,7 +189,7 @@ fun AppNavHost() {
             ),
         ) {
             UserWorksScreen(
-                onBack = { navController.popBackStack() },
+                onBack = safePopBack,
                 onWorkClick = { work: Work ->
                     navController.navigate(Routes.detail(work.authorId, work.id, work.thumbnailUrl))
                 },
@@ -197,7 +197,7 @@ fun AppNavHost() {
         }
         composable(Routes.TAGS) {
             TagScreen(
-                onBack = { navController.popBackStack() },
+                onBack = safePopBack,
                 onWorkClick = { work: Work ->
                     navController.navigate(Routes.detail(work.authorId, work.id, work.thumbnailUrl))
                 },
@@ -205,7 +205,7 @@ fun AppNavHost() {
         }
         composable(Routes.COLLECTION) {
             CollectionScreen(
-                onBack = { navController.popBackStack() },
+                onBack = safePopBack,
                 onWorkClick = { work: Work ->
                     navController.navigate(Routes.detail(work.authorId, work.id, work.thumbnailUrl))
                 },
@@ -213,7 +213,7 @@ fun AppNavHost() {
         }
         composable(Routes.HISTORY) {
             HistoryScreen(
-                onBack = { navController.popBackStack() },
+                onBack = safePopBack,
                 onWorkClick = { work: Work ->
                     navController.navigate(Routes.detail(work.authorId, work.id, work.thumbnailUrl))
                 },
