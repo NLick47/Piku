@@ -151,7 +151,10 @@
     <string name="search_clear">清除</string>
     <string name="search_empty">没有找到相关作品</string>
     <string name="search_delete">删除</string>
-    <string name="search_hint">提示：输入 # 可快速搜索标签</string>
+    <string name="search_hint">提示：输入 # 可搜索标签，输入 @ 可搜索作者</string>
+    <string name="search_users_title">搜索作者：%1$s</string>
+    <string name="search_users_login">登录后即可搜索作者</string>
+    <string name="search_users_empty">未找到相关作者</string>
     <string name="category_raku_gaki">涂鸦</string>
     <string name="category_jishuren">自主练习</string>
     <string name="category_dekita">完成品</string>

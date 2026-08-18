@@ -1,4 +1,4 @@
-package com.piku.client.ui.follow
+package com.piku.client.ui.search
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -70,15 +70,15 @@ import com.piku.client.ui.theme.LoginTextSecondaryDark
 import com.piku.client.ui.theme.LoginTextSecondaryLight
 import kotlinx.coroutines.flow.distinctUntilChanged
 
-/** 我的关注列表页：展示关注的创作者，可跳转其作品页或在行内取消关注 */
+/** 作者搜索页：@用户名/ID 前缀进入，展示匹配的用户卡片，可点击进作者主页或行内关注 */
 @Composable
-fun FollowUsersScreen(
+fun UserSearchScreen(
     onBack: () -> Unit,
     onLoginClick: () -> Unit,
     onUserClick: (FollowUser) -> Unit,
     dark: Boolean = LocalDarkTheme.current,
 ) {
-    val viewModel: FollowUsersViewModel = hiltViewModel()
+    val viewModel: UserSearchViewModel = hiltViewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -101,19 +101,16 @@ fun FollowUsersScreen(
             ),
     ) {
         Column(Modifier.fillMaxSize()) {
-            FollowTopBar(
-                title = stringResource(R.string.follow_users_title),
-                count = if (state.total > 0) {
-                    stringResource(R.string.follow_users_count, state.total)
-                } else null,
+            SearchTopBar(
+                title = stringResource(R.string.search_users_title, state.keyword),
                 onBack = onBack,
                 dark = dark,
             )
             when {
-                state.followNeedLogin -> {
+                state.searchNeedLogin -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         LoginPrompt(
-                            message = stringResource(R.string.follow_users_login),
+                            message = stringResource(R.string.search_users_login),
                             onLogin = onLoginClick,
                             dark = dark,
                         )
@@ -126,12 +123,16 @@ fun FollowUsersScreen(
                 }
                 state.errorRes != null && state.users.isEmpty() -> {
                     val errorRes = state.errorRes
-                    FollowErrorState(errorRes = errorRes ?: R.string.home_error_parse, onRetry = viewModel::retry, dark = dark)
+                    SearchErrorState(
+                        errorRes = errorRes ?: R.string.home_error_parse,
+                        onRetry = viewModel::retry,
+                        dark = dark,
+                    )
                 }
                 state.users.isEmpty() -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(
-                            text = stringResource(R.string.follow_users_empty),
+                            text = stringResource(R.string.search_users_empty),
                             color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
                             fontSize = 14.sp,
                             lineHeight = 22.sp,
@@ -139,11 +140,11 @@ fun FollowUsersScreen(
                     }
                 }
                 else -> {
-                    FollowUserList(
+                    SearchUserList(
                         state = state,
                         dark = dark,
                         onUserClick = onUserClick,
-                        onUnfollow = viewModel::unfollow,
+                        onToggleFollow = viewModel::toggleFollow,
                         onLoadMore = viewModel::loadMore,
                         onRetryLoadMore = viewModel::retryLoadMore,
                     )
@@ -161,9 +162,8 @@ fun FollowUsersScreen(
 }
 
 @Composable
-private fun FollowTopBar(
+private fun SearchTopBar(
     title: String,
-    count: String?,
     onBack: () -> Unit,
     dark: Boolean,
 ) {
@@ -183,32 +183,23 @@ private fun FollowTopBar(
                 modifier = Modifier.size(20.dp),
             )
         }
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = title,
-                color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (count != null) {
-                Text(
-                    text = count,
-                    color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
-                    fontSize = 12.sp,
-                )
-            }
-        }
+        Text(
+            text = title,
+            color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
 @Composable
-private fun FollowUserList(
-    state: FollowUsersUiState,
+private fun SearchUserList(
+    state: UserSearchUiState,
     dark: Boolean,
     onUserClick: (FollowUser) -> Unit,
-    onUnfollow: (Long) -> Unit,
+    onToggleFollow: (Long) -> Unit,
     onLoadMore: () -> Unit,
     onRetryLoadMore: () -> Unit,
 ) {
@@ -235,19 +226,20 @@ private fun FollowUserList(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         items(state.users, key = { it.userId }) { user ->
-            FollowUserRow(
+            val followed = state.followOverrides[user.userId] ?: user.followed
+            SearchUserRow(
                 user = user,
-                unfollowing = user.userId in state.unfollowingIds,
-                unfollowed = user.userId in state.unfollowedIds,
+                followed = followed,
+                followSending = user.userId in state.followPendingIds,
                 dark = dark,
                 onClick = { onUserClick(user) },
-                onUnfollow = { onUnfollow(user.userId) },
+                onToggleFollow = { onToggleFollow(user.userId) },
             )
         }
         when {
             state.loadMoreErrorRes != null -> {
                 item {
-                    FollowLoadMoreError(errorRes = state.loadMoreErrorRes, onRetry = onRetryLoadMore, dark = dark)
+                    SearchLoadMoreError(errorRes = state.loadMoreErrorRes, onRetry = onRetryLoadMore, dark = dark)
                 }
             }
             state.loadingMore -> {
@@ -273,13 +265,13 @@ private fun FollowUserList(
 }
 
 @Composable
-private fun FollowUserRow(
+private fun SearchUserRow(
     user: FollowUser,
-    unfollowing: Boolean,
-    unfollowed: Boolean,
+    followed: Boolean,
+    followSending: Boolean,
     dark: Boolean,
     onClick: () -> Unit,
-    onUnfollow: () -> Unit,
+    onToggleFollow: () -> Unit,
 ) {
     val shape = RoundedCornerShape(20.dp)
     GlassCard(
@@ -316,17 +308,17 @@ private fun FollowUserRow(
             }
             Spacer(Modifier.width(10.dp))
             FollowPillButton(
-                unfollowed = unfollowed,
-                sending = unfollowing,
+                unfollowed = !followed,
+                sending = followSending,
                 dark = dark,
-                onClick = onUnfollow,
+                onClick = onToggleFollow,
             )
         }
     }
 }
 
 @Composable
-private fun FollowErrorState(
+private fun SearchErrorState(
     errorRes: Int,
     onRetry: () -> Unit,
     dark: Boolean,
@@ -366,7 +358,7 @@ private fun FollowErrorState(
 }
 
 @Composable
-private fun FollowLoadMoreError(
+private fun SearchLoadMoreError(
     errorRes: Int,
     onRetry: () -> Unit,
     dark: Boolean,

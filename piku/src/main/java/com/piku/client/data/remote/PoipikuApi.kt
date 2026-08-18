@@ -85,6 +85,13 @@ interface PoipikuApi {
         @Query("PG") page: Int,
     ): ResponseBody
 
+    /** 作者搜索（需登录；匿名访问服务端返回 404/登录页，调用前须由业务层先行拦截） */
+    @GET("SearchUserByKeywordPcV.jsp")
+    suspend fun getUserSearch(
+        @Query("KWD") keyword: String,
+        @Query("PG") page: Int,
+    ): ResponseBody
+
     @GET("{userId}/{workId}.html")
     suspend fun getWorkDetail(
         @Path("userId") userId: Long,

@@ -151,7 +151,10 @@
     <string name="search_clear">クリア</string>
     <string name="search_empty">該当する作品が見つかりません</string>
     <string name="search_delete">削除</string>
-    <string name="search_hint">ヒント：# でタグ検索できます</string>
+    <string name="search_hint">ヒント：# でタグ、@ で絵師を検索できます</string>
+    <string name="search_users_title">絵師を検索：%1$s</string>
+    <string name="search_users_login">ログインすると絵師を検索できます</string>
+    <string name="search_users_empty">該当する絵師が見つかりません</string>
     <string name="category_raku_gaki">らくがき</string>
     <string name="category_jishuren">自主練</string>
     <string name="category_dekita">できた</string>

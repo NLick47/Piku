@@ -26,6 +26,7 @@ import com.piku.client.ui.follow.UserWorksScreen
 import com.piku.client.ui.history.HistoryScreen
 import com.piku.client.ui.home.HomeScreen
 import com.piku.client.ui.login.EmailLoginScreen
+import com.piku.client.ui.search.UserSearchScreen
 import com.piku.client.ui.tags.TagScreen
 
 object Routes {
@@ -37,11 +38,15 @@ object Routes {
     const val TAGS = "tags"
     const val FOLLOW_USERS = "follow_users"
     const val USER_WORKS = "user_works/{userId}?userName={userName}"
+    const val USER_SEARCH = "user_search/{keyword}"
     const val MAX_DETAIL_DEPTH = 3
 
     fun home() = "home"
 
     fun followUsers() = FOLLOW_USERS
+
+    /** 作者搜索（@ 前缀）：keyword 保留用户输入的原始串（含 @ 前缀） */
+    fun userSearch(keyword: String) = "user_search/${Uri.encode(keyword)}"
 
     fun userWorks(userId: Long, userName: String = "") =
         "user_works/$userId?userName=${Uri.encode(userName)}"
@@ -148,10 +153,27 @@ fun AppNavHost() {
                 onCollectionClick = { navController.navigate(Routes.COLLECTION) },
                 onTagsClick = { navController.navigate(Routes.TAGS) },
                 onFollowUsersClick = { navController.navigate(Routes.followUsers()) },
+                onUserSearch = { keyword ->
+                    navController.navigate(Routes.userSearch(keyword))
+                },
             )
         }
         composable(Routes.FOLLOW_USERS) {
             FollowUsersScreen(
+                onBack = { navController.popBackStack() },
+                onLoginClick = { navController.navigate(Routes.LOGIN) },
+                onUserClick = { user: FollowUser ->
+                    navController.navigate(Routes.userWorks(user.userId, user.name))
+                },
+            )
+        }
+        composable(
+            route = Routes.USER_SEARCH,
+            arguments = listOf(
+                navArgument("keyword") { type = NavType.StringType },
+            ),
+        ) {
+            UserSearchScreen(
                 onBack = { navController.popBackStack() },
                 onLoginClick = { navController.navigate(Routes.LOGIN) },
                 onUserClick = { user: FollowUser ->

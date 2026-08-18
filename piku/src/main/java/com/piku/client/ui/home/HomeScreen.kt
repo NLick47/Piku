@@ -172,6 +172,7 @@ fun HomeScreen(
     onCollectionClick: () -> Unit,
     onTagsClick: () -> Unit,
     onFollowUsersClick: () -> Unit,
+    onUserSearch: (String) -> Unit,
 ) {
     val viewModel: HomeViewModel = hiltViewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -256,7 +257,6 @@ fun HomeScreen(
         dark = dark,
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            // 背景（渐变 + 光斑）与头部毛玻璃衬底共用 drawHomeBackdrop，保证模糊层与页面背景严格对齐
             Canvas(Modifier.fillMaxSize()) {
                 drawHomeBackdrop(dark)
             }
@@ -389,12 +389,21 @@ if (showCategories) {
                 HomeSearchSheet(
                     onSearch = { keyword ->
                         val tag = keyword.removePrefix("#").trim()
-                        if (keyword.startsWith("#") && tag.isNotEmpty()) {
-                            viewModel.selectTag(tag)
-                        } else {
-                            viewModel.selectKeyword(keyword)
+                        when {
+                            keyword.startsWith("#") && tag.isNotEmpty() -> {
+                                viewModel.selectTag(tag)
+                                showSearch = false
+                            }
+                            // @ 前缀：作者搜索（需登录），进入独立作者搜索结果页
+                            keyword.startsWith("@") && keyword.length > 1 -> {
+                                onUserSearch(keyword)
+                                showSearch = false
+                            }
+                            else -> {
+                                viewModel.selectKeyword(keyword)
+                                showSearch = false
+                            }
                         }
-                        showSearch = false
                     },
                     onDismiss = { showSearch = false },
                 )

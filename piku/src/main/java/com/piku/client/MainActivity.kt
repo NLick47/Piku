@@ -27,7 +27,6 @@ class MainActivity : ComponentActivity() {
     lateinit var settingsRepository: SettingsRepository
 
     override fun attachBaseContext(newBase: Context) {
-        // 语言设置必须同步读取：此方法在 onCreate 之前执行，DataStore 异步拿不到
         val prefs = newBase.getSharedPreferences(LanguageStore.PREFS_NAME, Context.MODE_PRIVATE)
         val code = prefs.getString(LanguageStore.KEY_LANGUAGE, null)
         super.attachBaseContext(if (code.isNullOrBlank()) newBase else newBase.withLocale(code))

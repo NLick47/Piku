@@ -8,7 +8,9 @@ import com.piku.client.data.remote.PoipikuApi
 import com.piku.client.data.remote.PopularTagParser
 import com.piku.client.data.remote.SessionMonitor
 import com.piku.client.data.remote.UserPageParser
+import com.piku.client.data.remote.UserSearchParser
 import com.piku.client.data.remote.apiCall
+import com.piku.client.domain.model.AppError
 import com.piku.client.domain.model.FollowUser
 import com.piku.client.domain.model.FollowUserPage
 import com.piku.client.domain.model.PopularTag
@@ -88,6 +90,20 @@ class FeedRepository @Inject constructor(
     suspend fun getPopularTags(): Result<List<PopularTag>> =
         apiCall {
             PopularTagParser.parse(api.getPopularTags().string())
+        }
+
+    suspend fun getUserSearch(keyword: String, page: Int): Result<List<FollowUser>> =
+        apiCall {
+            val html = api.getUserSearch(keyword, page).string()
+            if (authRepository.isLoggedIn() && UserSearchParser.isLoginPage(html)) {
+                sessionMonitor.notifySessionCleared()
+            }
+            UserSearchParser.parse(html)
+        }.onFailure { error ->
+            // 已登录却 404：会话失效，触发自动重登
+            if (authRepository.isLoggedIn() && (error as? AppError.Http)?.code == 404) {
+                sessionMonitor.notifySessionCleared()
+            }
         }
 
     suspend fun getTagFeed(tag: String, page: Int): Result<List<Work>> =
