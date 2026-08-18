@@ -509,7 +509,7 @@ if (showCategories) {
                 LogoutConfirmDialog(
                     onConfirm = {
                         showLogoutConfirm = false
-                        onLogout()
+                        viewModel.logout()
                     },
                     onDismiss = { showLogoutConfirm = false },
                     dark = dark,
