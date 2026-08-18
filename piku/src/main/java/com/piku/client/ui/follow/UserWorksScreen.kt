@@ -81,6 +81,12 @@ import com.piku.client.ui.theme.LoginTextPrimaryDark
 import com.piku.client.ui.theme.LoginTextPrimaryLight
 import com.piku.client.ui.theme.LoginTextSecondaryDark
 import com.piku.client.ui.theme.LoginTextSecondaryLight
+import com.piku.client.ui.theme.StarSkyBottomDark
+import com.piku.client.ui.theme.StarSkyBottomLight
+import com.piku.client.ui.theme.StarSkyMidDark
+import com.piku.client.ui.theme.StarSkyMidLight
+import com.piku.client.ui.theme.StarSkyTopDark
+import com.piku.client.ui.theme.StarSkyTopLight
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 /** 作者头部卡片完全展开时的高度 */
@@ -129,8 +135,8 @@ fun UserWorksScreen(
     val avatarUrl = state.pageInfo?.avatarUrl ?: state.works.firstOrNull()?.authorAvatarUrl
 
     Box(Modifier.fillMaxSize()) {
-        // 整页背景：作者设置的背景图/色优先，否则默认渐变
-        UserWorksPageBackground(pageInfo = state.pageInfo, dark = dark)
+        // 整页背景：简单渐变（作者背景显示在头部卡片内）
+        UserWorksPageBackground(dark = dark)
         Column(Modifier.fillMaxSize()) {
             UserWorksTopBar(
                 userName = state.userName,
@@ -185,55 +191,18 @@ fun UserWorksScreen(
     }
 }
 
-/** 整页背景：作者背景图/背景色（Poipass 设置）→ 默认渐变降级 */
 @Composable
-private fun UserWorksPageBackground(
-    pageInfo: UserPageInfo?,
-    dark: Boolean,
-) {
-    val bgImageUrl = pageInfo?.bgImageUrl
-    val bgColor = pageInfo?.bgColorHex?.let(::parseHexColor)
-    if (bgImageUrl != null) {
-        Box(Modifier.fillMaxSize()) {
-            AsyncImage(
-                model = bgImageUrl,
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop,
-            )
-            // 暗色遮罩保证内容可读性
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(Color(0x99000000), Color(0x59000000), Color(0x7A000000)),
-                        ),
-                    ),
-            )
-        }
-    } else if (bgColor != null) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        listOf(bgColor, bgColor.copy(alpha = 0.72f)),
-                    ),
+private fun UserWorksPageBackground(dark: Boolean) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    if (dark) listOf(HomeBgTopDark, HomeBgBottomDark)
+                    else listOf(HomeBgTopLight, HomeBgBottomLight),
                 ),
-        )
-    } else {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        if (dark) listOf(HomeBgTopDark, HomeBgBottomDark)
-                        else listOf(HomeBgTopLight, HomeBgBottomLight),
-                    ),
-                ),
-        )
-    }
+            ),
+    )
 }
 
 /** 解析 "#RGB" / "#RRGGBB" / "#AARRGGBB" 十六进制颜色，非法返回 null */
@@ -439,27 +408,49 @@ private fun UserWorksHeaderCard(
                 contentScale = ContentScale.Crop,
             )
         } else {
-            // 无页头图：渐变占位
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .graphicsLayer { alpha = imageAlpha }
-                    .background(
-                        Brush.verticalGradient(
-                            if (dark) listOf(Color(0xFF3A3835), Color(0xFF23211E))
-                            else listOf(Color(0xFFE9E6E2), Color(0xFFD8D4CF)),
+            // 无页头图
+            val bgImageUrl = pageInfo?.bgImageUrl
+            val bgColor = pageInfo?.bgColorHex?.let(::parseHexColor)
+            when {
+                bgImageUrl != null -> AsyncImage(
+                    model = bgImageUrl,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { alpha = imageAlpha },
+                    contentScale = ContentScale.Crop,
+                )
+                bgColor != null -> Box(
+                    Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { alpha = imageAlpha }
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(bgColor, bgColor.copy(alpha = 0.72f)),
+                            ),
                         ),
-                    ),
-            )
+                )
+                else -> Box(
+                    Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { alpha = imageAlpha }
+                        .background(
+                            Brush.verticalGradient(
+                                if (dark) listOf(StarSkyTopDark, StarSkyMidDark, StarSkyBottomDark)
+                                else listOf(StarSkyTopLight, StarSkyMidLight, StarSkyBottomLight),
+                            ),
+                        ),
+                )
+            }
         }
-        // 底部渐变遮罩保证文字可读性
+        // 底部渐变遮罩保证文字可读性（亮色下适当减淡，避免底部发黑）
         Box(
             Modifier
                 .fillMaxSize()
                 .graphicsLayer { alpha = imageAlpha }
                 .background(
                     Brush.verticalGradient(
-                        listOf(Color.Transparent, Color(0xCC000000)),
+                        listOf(Color.Transparent, if (dark) Color(0xCC000000) else Color(0xA6000000)),
                     ),
                 ),
         )

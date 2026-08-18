@@ -67,8 +67,6 @@ import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.OpenInBrowser
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -108,9 +106,13 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import androidx.core.content.ContextCompat
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.ui.text.LinkAnnotation
@@ -158,6 +160,7 @@ import com.piku.client.ui.theme.LoginTextSecondaryLight
 import com.piku.client.ui.theme.PillBorderDark
 import com.piku.client.ui.theme.PillBorderLight
 import com.piku.client.ui.theme.TameWhiteColorFilter
+import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -347,6 +350,13 @@ fun DetailScreen(
             },
             modifier = Modifier.align(Alignment.BottomCenter),
         )
+        if (state.guideVisible && state.detail != null) {
+            BottomBarGuideHint(
+                dark = dark,
+                onDismiss = viewModel::dismissGuide,
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
+        }
         // 全屏查看器放在 SnackbarHost 之前，保证保存结果的 snackbar 能盖在全屏黑底上
         state.detail?.let {
             if (viewerPage >= 0) {
@@ -366,7 +376,7 @@ fun DetailScreen(
             hostState = snackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 80.dp),
+                .padding(bottom = 72.dp),
         )
         if (favoriteSheetVisible && state.detail != null) {
             FavoriteSheet(
@@ -491,7 +501,7 @@ private fun DetailBottomBar(
     modifier: Modifier = Modifier,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
-    val pill = RoundedCornerShape(28.dp)
+    val pill = RoundedCornerShape(24.dp)
     // 收藏时的星标弹跳
     val favoriteScale = remember { Animatable(1f) }
     LaunchedEffect(isFavorite) {
@@ -507,30 +517,28 @@ private fun DetailBottomBar(
         modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = 24.dp, vertical = 10.dp),
+            .padding(horizontal = 20.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center,
     ) {
         Row(
             modifier = Modifier
-                .shadow(12.dp, pill, ambientColor = Color(0x33000000), spotColor = Color(0x40000000))
+                .shadow(10.dp, pill, ambientColor = Color(0x33000000), spotColor = Color(0x40000000))
                 .clip(pill)
                 .background(if (dark) Color(0xE63A3834) else Color(0xE6FFFFFF))
                 .border(
                     BorderStroke(0.5.dp, if (dark) Color(0x59FFFFFF) else Color(0x59C8C2B8)),
                     pill,
                 )
-                .padding(horizontal = 8.dp, vertical = 6.dp),
+                .padding(horizontal = 6.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             DetailBarAction(
                 onClick = onFavoriteClick,
                 onLongPress = onFavoriteLongPress,
-                label = stringResource(
-                    if (isFavorite) R.string.detail_favorited else R.string.detail_favorite
-                ),
                 dark = dark,
                 active = isFavorite,
+                activeTint = if (dark) Color(0x33FFD166) else AccentPurple.copy(alpha = 0.14f),
             ) {
                 Icon(
                     imageVector = if (isFavorite) Icons.Filled.Star else Icons.Outlined.StarBorder,
@@ -541,7 +549,7 @@ private fun DetailBottomBar(
                         if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight
                     },
                     modifier = Modifier
-                        .size(20.dp)
+                        .size(22.dp)
                         .graphicsLayer {
                             scaleX = favoriteScale.value
                             scaleY = favoriteScale.value
@@ -550,13 +558,11 @@ private fun DetailBottomBar(
             }
             DetailBarAction(
                 onClick = onFollowClick,
-                label = stringResource(
-                    if (followed) R.string.detail_followed else R.string.detail_follow
-                ),
                 dark = dark,
                 active = followed,
+                activeTint = AccentPurple.copy(alpha = 0.16f),
             ) {
-                Icon(
+Icon(
                     imageVector = if (followed) Icons.Filled.Person else Icons.Outlined.PersonAdd,
                     contentDescription = stringResource(R.string.detail_follow),
                     tint = if (followed) {
@@ -564,90 +570,50 @@ private fun DetailBottomBar(
                     } else {
                         if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight
                     },
-                    modifier = Modifier.size(20.dp),
+modifier = Modifier.size(22.dp),
                 )
             }
             DetailBarAction(
                 onClick = onReactionClick,
-                label = reactionCount.toString(),
                 dark = dark,
+                badge = formatReactionCount(reactionCount),
             ) {
                 Icon(
                     imageVector = Icons.Filled.Favorite,
                     contentDescription = stringResource(R.string.detail_reaction_title),
                     tint = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
-                    modifier = Modifier.size(20.dp),
+                    modifier = Modifier.size(22.dp),
                 )
             }
             Box {
                 DetailBarAction(
                     onClick = { menuExpanded = true },
-                    label = stringResource(R.string.detail_more),
                     dark = dark,
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.MoreVert,
                         contentDescription = stringResource(R.string.detail_more),
                         tint = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
-                        modifier = Modifier.size(20.dp),
+                        modifier = Modifier.size(22.dp),
                     )
                 }
-                DropdownMenu(
-                    expanded = menuExpanded,
-                    onDismissRequest = { menuExpanded = false },
-                ) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.detail_copy_link)) },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Outlined.ContentCopy,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp),
-                            )
-                        },
-                        onClick = {
+                if (menuExpanded) {
+                    MoreMenuPopup(
+                        dark = dark,
+                        onDismiss = { menuExpanded = false },
+                        onCopyLink = {
                             menuExpanded = false
                             onCopyLink()
                         },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.detail_copy_description)) },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Outlined.ContentCopy,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp),
-                            )
-                        },
-                        onClick = {
+                        onCopyDescription = {
                             menuExpanded = false
                             onCopyDescription()
                         },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.detail_share_link)) },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Outlined.Share,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp),
-                            )
-                        },
-                        onClick = {
+                        onShareLink = {
                             menuExpanded = false
                             onShareLink()
                         },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.detail_open_browser)) },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Outlined.OpenInBrowser,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp),
-                            )
-                        },
-                        onClick = {
+                        onOpenBrowser = {
                             menuExpanded = false
                             onOpenBrowser()
                         },
@@ -661,14 +627,13 @@ private fun DetailBottomBar(
 @Composable
 private fun DetailBarAction(
     onClick: () -> Unit,
-    label: String,
     dark: Boolean,
     active: Boolean = false,
+    activeTint: Color = Color.Transparent,
+    badge: String? = null,
     onLongPress: (() -> Unit)? = null,
     icon: @Composable () -> Unit,
 ) {
-    val primary = if (dark) Color(0xFFE0E0E0) else AccentPurple
-    val idle = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight
     var pressed by remember { mutableStateOf(false) }
     val pressScale by animateFloatAsState(
         targetValue = if (pressed) 0.86f else 1f,
@@ -684,11 +649,12 @@ private fun DetailBarAction(
     } else {
         Modifier.clickable(onClick = onClick)
     }
-    Column(
+    Box(
         modifier = interaction
-            .clip(RoundedCornerShape(18.dp))
-            .padding(horizontal = 14.dp, vertical = 5.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .size(44.dp)
+            .clip(CircleShape)
+            .background(if (active) activeTint else Color.Transparent),
+        contentAlignment = Alignment.Center,
     ) {
         Box(
             contentAlignment = Alignment.Center,
@@ -699,12 +665,150 @@ private fun DetailBarAction(
         ) {
             icon()
         }
-        Spacer(Modifier.height(2.dp))
+        if (badge != null) {
+            Text(
+                text = badge,
+                fontSize = 11.sp,
+                lineHeight = 15.sp,
+                fontWeight = FontWeight.Medium,
+                color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                maxLines = 1,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 1.dp, end = 1.dp)
+                    .clip(RoundedCornerShape(9.dp))
+                    .background(
+                        if (dark) Color(0xCC5C5852) else Color(0xF2FFFFFF),
+                    )
+                    .border(
+                        BorderStroke(0.5.dp, if (dark) Color(0x59FFFFFF) else Color(0x59C8C2B8)),
+                        RoundedCornerShape(9.dp),
+                    )
+                    .padding(horizontal = 5.dp, vertical = 1.5.dp),
+            )
+        }
+    }
+}
+
+/** 反应数紧凑展示：≥1000 缩写为 k 形式，去掉多余的 .0 */
+private fun formatReactionCount(count: Int): String {
+    if (count < 1000) return count.toString()
+    val base = count / 1000f
+    val num = if (base >= 100f) {
+        base.toInt().toString()
+    } else {
+        "%.1f".format(Locale.US, base).trimEnd('0').trimEnd('.')
+    }
+    return "${num}k"
+}
+
+private const val GUIDE_HINT_MILLIS = 6_000L
+
+/** 底部菜单一次性新手引导：首次进入详情页时在菜单上方短暂展示按钮含义 */
+@Composable
+private fun BottomBarGuideHint(
+    dark: Boolean,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var visible by remember { mutableStateOf(false) }
+    val alpha by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = tween(220),
+        label = "guideHintAlpha",
+    )
+    LaunchedEffect(Unit) {
+        visible = true
+        delay(GUIDE_HINT_MILLIS)
+        visible = false
+        delay(220)
+        onDismiss()
+    }
+    val shape = RoundedCornerShape(14.dp)
+    Box(
+        modifier = modifier
+            .navigationBarsPadding()
+            .padding(bottom = 72.dp)
+            .graphicsLayer { this.alpha = alpha }
+            .shadow(6.dp, shape, ambientColor = Color(0x33000000), spotColor = Color(0x40000000))
+            .clip(shape)
+            .background(if (dark) Color(0xE6242321) else Color(0xF2FFFFFF))
+            .border(
+                BorderStroke(0.5.dp, if (dark) Color(0x59FFFFFF) else Color(0x59C8C2B8)),
+                shape,
+            )
+            .clickable(onClick = onDismiss)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            GuideHintItem(
+                icon = {
+                    Icon(
+                        imageVector = Icons.Filled.Star,
+                        contentDescription = null,
+                        tint = if (dark) Color(0xFFFFD166) else AccentPurple,
+                        modifier = Modifier.size(14.dp),
+                    )
+                },
+                label = stringResource(R.string.detail_favorite),
+                dark = dark,
+            )
+            GuideHintItem(
+                icon = {
+                    Icon(
+                        imageVector = Icons.Outlined.PersonAdd,
+                        contentDescription = null,
+                        tint = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                        modifier = Modifier.size(14.dp),
+                    )
+                },
+                label = stringResource(R.string.detail_follow),
+                dark = dark,
+            )
+            GuideHintItem(
+                icon = {
+                    Icon(
+                        imageVector = Icons.Filled.Favorite,
+                        contentDescription = null,
+                        tint = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                        modifier = Modifier.size(14.dp),
+                    )
+                },
+                label = stringResource(R.string.detail_reaction),
+                dark = dark,
+            )
+            GuideHintItem(
+                icon = {
+                    Icon(
+                        imageVector = Icons.Outlined.MoreVert,
+                        contentDescription = null,
+                        tint = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                        modifier = Modifier.size(14.dp),
+                    )
+                },
+                label = stringResource(R.string.detail_more),
+                dark = dark,
+            )
+        }
+    }
+}
+
+@Composable
+private fun GuideHintItem(
+    icon: @Composable () -> Unit,
+    label: String,
+    dark: Boolean,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        icon()
+        Spacer(Modifier.width(3.dp))
         Text(
             text = label,
-            color = if (active) primary else idle,
+            color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
             fontSize = 10.sp,
-            fontWeight = if (active) FontWeight.Medium else FontWeight.Normal,
             maxLines = 1,
         )
     }
@@ -1277,6 +1381,119 @@ private fun linkify(
                 }
             }
         }
+    }
+}
+
+/** 更多操作：锚定在按钮上方的玻璃风格小弹窗，比系统菜单精致、比整页弹层省空间 */
+@Composable
+private fun MoreMenuPopup(
+    dark: Boolean,
+    onDismiss: () -> Unit,
+    onCopyLink: () -> Unit,
+    onCopyDescription: () -> Unit,
+    onShareLink: () -> Unit,
+    onOpenBrowser: () -> Unit,
+) {
+    val density = LocalDensity.current
+    var offsetY by remember { mutableIntStateOf(0) }
+    val shape = RoundedCornerShape(18.dp)
+    Popup(
+        alignment = Alignment.TopEnd,
+        offset = IntOffset(0, offsetY),
+        onDismissRequest = onDismiss,
+        properties = PopupProperties(focusable = true),
+    ) {
+        Column(
+            modifier = Modifier
+                .onSizeChanged { size ->
+                    offsetY = -size.height - with(density) { 8.dp.roundToPx() }
+                }
+                .shadow(14.dp, shape, ambientColor = Color(0x40000000), spotColor = Color(0x55000000))
+                .clip(shape)
+                .background(if (dark) Color(0xF2262421) else Color(0xF7FFFFFF))
+                .border(
+                    BorderStroke(0.5.dp, if (dark) Color(0x59FFFFFF) else Color(0x59C8C2B8)),
+                    shape,
+                )
+                .padding(vertical = 6.dp),
+        ) {
+            MoreMenuRow(
+                icon = {
+                    Icon(
+                        imageVector = Icons.Outlined.ContentCopy,
+                        contentDescription = null,
+                        tint = if (dark) LoginTextPrimaryDark else AccentPurple,
+                        modifier = Modifier.size(16.dp),
+                    )
+                },
+                label = stringResource(R.string.detail_copy_link),
+                dark = dark,
+                onClick = onCopyLink,
+            )
+            MoreMenuRow(
+                icon = {
+                    Icon(
+                        imageVector = Icons.Outlined.ContentCopy,
+                        contentDescription = null,
+                        tint = if (dark) LoginTextPrimaryDark else AccentPurple,
+                        modifier = Modifier.size(16.dp),
+                    )
+                },
+                label = stringResource(R.string.detail_copy_description),
+                dark = dark,
+                onClick = onCopyDescription,
+            )
+            MoreMenuRow(
+                icon = {
+                    Icon(
+                        imageVector = Icons.Outlined.Share,
+                        contentDescription = null,
+                        tint = if (dark) LoginTextPrimaryDark else AccentPurple,
+                        modifier = Modifier.size(16.dp),
+                    )
+                },
+                label = stringResource(R.string.detail_share_link),
+                dark = dark,
+                onClick = onShareLink,
+            )
+            MoreMenuRow(
+                icon = {
+                    Icon(
+                        imageVector = Icons.Outlined.OpenInBrowser,
+                        contentDescription = null,
+                        tint = if (dark) LoginTextPrimaryDark else AccentPurple,
+                        modifier = Modifier.size(16.dp),
+                    )
+                },
+                label = stringResource(R.string.detail_open_browser),
+                dark = dark,
+                onClick = onOpenBrowser,
+            )
+        }
+    }
+}
+
+@Composable
+private fun MoreMenuRow(
+    icon: @Composable () -> Unit,
+    label: String,
+    dark: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        icon()
+        Text(
+            text = label,
+            color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+            fontSize = 13.sp,
+        )
     }
 }
 

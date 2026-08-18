@@ -1,5 +1,6 @@
 package com.piku.client.ui.detail
 
+import android.content.SharedPreferences
 import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -61,6 +62,8 @@ data class DetailUiState(
     /** 个人自定义标签（用于详情页把作品标签收藏进个人标签） */
     val customTags: List<String> = emptyList(),
     val tagFeedbackRes: Int? = null,
+    /** 底部菜单一次性新手引导（仅首次进入详情页显示） */
+    val guideVisible: Boolean = false,
 ) {
     /** 查看器图片对：缩略图 + 原图（未就绪时为 null），长度不等时互相兜底 */
     val viewerImages: List<ViewerImage>
@@ -101,6 +104,7 @@ class DetailViewModel @Inject constructor(
     private val observeCustomTagsUseCase: ObserveCustomTagsUseCase,
     private val addCustomTagUseCase: AddCustomTagUseCase,
     private val removeCustomTagUseCase: RemoveCustomTagUseCase,
+    private val prefs: SharedPreferences,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -121,9 +125,19 @@ class DetailViewModel @Inject constructor(
     )
 
     private val _uiState = MutableStateFlow(
-        DetailUiState(shareUrl = "https://poipiku.com/$authorId/$workId.html"),
+        DetailUiState(
+            shareUrl = "https://poipiku.com/$authorId/$workId.html",
+            guideVisible = !prefs.getBoolean(KEY_BOTTOM_GUIDE_SHOWN, false),
+        ),
     )
     val uiState: StateFlow<DetailUiState> = _uiState.asStateFlow()
+
+    /** 关闭底部菜单新手引导（持久化，只显示一次） */
+    fun dismissGuide() {
+        if (!_uiState.value.guideVisible) return
+        prefs.edit().putBoolean(KEY_BOTTOM_GUIDE_SHOWN, true).apply()
+        _uiState.update { it.copy(guideVisible = false) }
+    }
 
     init {
         viewModelScope.launch {
@@ -517,7 +531,10 @@ class DetailViewModel @Inject constructor(
     }
 
     private companion object {
-        /** 长按保存时等待原图加载的最长时间 */
+        /** 长按保存时等待原图加载的最长时间*/
         const val IMAGE_WAIT_MILLIS = 8_000L
+
+        /** 底部菜单新手引导已展示标记 */
+        const val KEY_BOTTOM_GUIDE_SHOWN = "detail_bottom_guide_shown"
     }
 }

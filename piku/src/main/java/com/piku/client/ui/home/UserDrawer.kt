@@ -6,8 +6,6 @@ import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,7 +32,7 @@ import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.Logout
+import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.Tag
@@ -53,7 +51,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -323,45 +320,16 @@ private fun DrawerPanel(
             color = divider,
         )
         Spacer(Modifier.height(6.dp))
-        // 退出登录：已登录时底部显示全宽低饱和红按钮，未登录时底部留空
+        // 退出登录
         if (userProfile != null) {
-            val logoutRed = if (dark) Color(0xFFE08A8A) else Color(0xFFC24B4B)
-            val logoutSource = remember { MutableInteractionSource() }
-            val logoutPressed by logoutSource.collectIsPressedAsState()
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 6.dp)
-                    .scale(if (logoutPressed) 0.97f else 1f)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(logoutRed.copy(alpha = if (dark) 0.18f else 0.10f))
-                    .border(
-                        BorderStroke(0.5.dp, logoutRed.copy(alpha = if (dark) 0.35f else 0.25f)),
-                        RoundedCornerShape(16.dp),
-                    )
-                    .clickable(
-                        interactionSource = logoutSource,
-                        indication = LocalIndication.current,
-                        onClick = onLogout,
-                    )
-                    .padding(vertical = 13.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Logout,
-                    contentDescription = null,
-                    tint = logoutRed,
-                    modifier = Modifier.size(18.dp),
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = stringResource(R.string.logout),
-                    color = logoutRed,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
+            DrawerMenuRow(
+                icon = Icons.AutoMirrored.Outlined.Logout,
+                label = stringResource(R.string.logout),
+                onClick = onLogout,
+                dark = dark,
+                accent = if (dark) Color(0xFFE08A8A) else Color(0xFFC24B4B),
+                showChevron = false,
+            )
         }
     }
 }
