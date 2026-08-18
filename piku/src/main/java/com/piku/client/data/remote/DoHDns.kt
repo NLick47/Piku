@@ -10,7 +10,9 @@ import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.UnknownHostException
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ExecutionException
 import java.util.concurrent.ExecutorCompletionService
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
@@ -28,19 +30,38 @@ class DoHDns(
     private val prefs: SharedPreferences,
 ) : Dns {
 
-    private val doh: DnsOverHttps = DnsOverHttps.Builder()
-        .client(
-            OkHttpClient.Builder()
-                .connectTimeout(DOH_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-                .readTimeout(DOH_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-                .build(),
-        )
-        .url(DOH_URL.toHttpUrl())
-        .bootstrapDnsHosts(
-            InetAddress.getByName(DOH_IPV4),
-            InetAddress.getByName(DOH_IPV6),
-        )
-        .build()
+    private class DohSource(
+        val url: String,
+        val bootstrap: List<InetAddress>,
+    ) {
+        val client: DnsOverHttps = DnsOverHttps.Builder()
+            .client(
+                OkHttpClient.Builder()
+                    .connectTimeout(DOH_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                    .readTimeout(DOH_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                    .build(),
+            )
+            .url(url.toHttpUrl())
+            .bootstrapDnsHosts(*bootstrap.toTypedArray())
+            .build()
+    }
+
+    private val dohSources: List<DohSource> = listOf(
+        DohSource(
+            url = "https://dns.alidns.com/dns-query",
+            bootstrap = listOf(
+                InetAddress.getByName("223.5.5.5"),
+                InetAddress.getByName("2400:3200::1"),
+            ),
+        ),
+        DohSource(
+            url = "https://cloudflare-dns.com/dns-query",
+            bootstrap = listOf(
+                InetAddress.getByName("1.1.1.1"),
+                InetAddress.getByName("2606:4700:4700::1111"),
+            ),
+        ),
+    )
 
     private val socketFactory = SniStrippingSocketFactory()
     private val hostnameVerifier = PoipikuHostnameVerifier()
@@ -48,8 +69,9 @@ class DoHDns(
     private val dohCache = ConcurrentHashMap<String, AddressCacheEntry>()
     private val winners = ConcurrentHashMap<String, WinnerEntry>()
     private val failures = ConcurrentHashMap<String, FailureEntry>()
+    private val inflight = ConcurrentHashMap<String, CompletableFuture<List<InetAddress>>>()
 
-    private val sourceExecutor = Executors.newFixedThreadPool(3) { runnable ->
+    private val sourceExecutor = Executors.newFixedThreadPool(5) { runnable ->
         Thread(runnable, "piku-dns-source").apply { isDaemon = true }
     }
     private val probeExecutor = Executors.newCachedThreadPool { runnable ->
@@ -63,6 +85,38 @@ class DoHDns(
             ?.takeIf { now < it.expiresAt && !isFailed(hostname, it.address, now) }
             ?.let { return listOf(it.address) }
 
+        // 同一域名并发 miss 时共享同一次竞速，避免首屏等场景重复解析与探测。
+        inflight[hostname]?.let { return awaitRace(it, hostname) }
+        val future = CompletableFuture<List<InetAddress>>()
+        val existing = inflight.putIfAbsent(hostname, future)
+        if (existing != null) return awaitRace(existing, hostname)
+        try {
+            val result = resolveRace(hostname, now)
+            future.complete(result)
+            return result
+        } catch (e: Exception) {
+            future.completeExceptionally(e)
+            throw e
+        } finally {
+            inflight.remove(hostname, future)
+        }
+    }
+
+    private fun awaitRace(
+        future: CompletableFuture<List<InetAddress>>,
+        hostname: String,
+    ): List<InetAddress> = try {
+        future.get()
+    } catch (e: InterruptedException) {
+        Thread.currentThread().interrupt()
+        throw UnknownHostException("lookup interrupted for $hostname")
+    } catch (e: ExecutionException) {
+        throw (e.cause as? UnknownHostException)
+            ?: UnknownHostException("lookup failed for $hostname")
+    }
+
+    private fun resolveRace(hostname: String, now: Long): List<InetAddress> {
+        val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(RESOLUTION_TIMEOUT_MS)
         val completion = ExecutorCompletionService<InetAddress?>(sourceExecutor)
         val tasks = mutableListOf<Future<InetAddress?>>()
         var completedTasks = 0
@@ -81,11 +135,12 @@ class DoHDns(
         tasks += completion.submit {
             probeFirst(hostname, resolveSystem(hostname))
         }
-        tasks += completion.submit {
-            probeFirst(hostname, resolveDoh(hostname))
+        dohSources.forEachIndexed { index, _ ->
+            tasks += completion.submit {
+                probeFirst(hostname, resolveDoh(hostname, index))
+            }
         }
 
-        val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(RESOLUTION_TIMEOUT_MS)
         var remaining = tasks.size - completedTasks
         try {
             while (remaining > 0) {
@@ -112,20 +167,43 @@ class DoHDns(
     }
 
     /** 主客户端连接失败时立即淘汰对应赢家，避免后续请求继续命中。 */
-    fun reportFailure(hostname: String, address: InetAddress) {
+    fun reportFailure(hostname: String, address: InetAddress, type: FailureType) {
         if (!isBusinessDomain(hostname)) return
         winners.computeIfPresent(hostname) { _, winner ->
             if (winner.address == address) null else winner
         }
+        val ttl = ttlFor(type)
         failures[failureKey(hostname, address)] = FailureEntry(
-            type = FailureType.NETWORK,
-            expiresAt = System.currentTimeMillis() + NETWORK_FAILURE_TTL_MS,
+            expiresAt = System.currentTimeMillis() + ttl,
         )
+        if (type == FailureType.TLS) removePersistedAddress(hostname, address)
+    }
+
+    private fun ttlFor(type: FailureType): Long = when (type) {
+        FailureType.TLS -> TLS_FAILURE_TTL_MS
+        FailureType.CONNECT -> CONNECT_FAILURE_TTL_MS
+        FailureType.STREAM -> STREAM_FAILURE_TTL_MS
+    }
+
+    /**
+     * 强制下一次 lookup 跳过赢家缓存，从保留的解析缓存 + 黑名单过滤中换 IP，
+     * 不重新查询 DNS。由重试拦截器在连接失败后调用。
+     *
+     * 解析缓存（systemCache/dohCache）保持有效；仅当缓存内地址全部被封禁时，
+     * [resolveSystem]/[resolveDoh] 才会忽略缓存重新查询。
+     */
+    fun forceReResolve(hostname: String) {
+        winners.remove(hostname)
     }
 
     private fun resolveSystem(hostname: String): List<InetAddress> {
         val now = System.currentTimeMillis()
-        systemCache[hostname]?.takeIf { now < it.expiresAt }?.let { return it.addresses }
+        val cached = systemCache[hostname]
+        if (cached != null && now < cached.expiresAt &&
+            cached.addresses.any { !isFailed(hostname, it, now) }
+        ) {
+            return cached.addresses
+        }
         val addresses = try {
             Dns.SYSTEM.lookup(hostname)
         } catch (_: Exception) {
@@ -137,16 +215,22 @@ class DoHDns(
         return addresses
     }
 
-    private fun resolveDoh(hostname: String): List<InetAddress> {
+    private fun resolveDoh(hostname: String, sourceIndex: Int): List<InetAddress> {
         val now = System.currentTimeMillis()
-        dohCache[hostname]?.takeIf { now < it.expiresAt }?.let { return it.addresses }
+        val cacheKey = "$sourceIndex|$hostname"
+        val cached = dohCache[cacheKey]
+        if (cached != null && now < cached.expiresAt &&
+            cached.addresses.any { !isFailed(hostname, it, now) }
+        ) {
+            return cached.addresses
+        }
         val addresses = try {
-            doh.lookup(hostname)
+            dohSources[sourceIndex].client.lookup(hostname)
         } catch (_: Exception) {
             emptyList()
         }
         if (addresses.isNotEmpty()) {
-            dohCache[hostname] = AddressCacheEntry(addresses, now + DOH_CACHE_TTL_MS)
+            dohCache[cacheKey] = AddressCacheEntry(addresses, now + DOH_CACHE_TTL_MS)
         }
         return addresses
     }
@@ -180,7 +264,7 @@ class DoHDns(
             try {
                 rawSocket.connect(InetSocketAddress(address, HTTPS_PORT), TCP_PROBE_TIMEOUT_MS)
             } catch (e: Exception) {
-                recordProbeFailure(hostname, address, FailureType.NETWORK, startedAt)
+                recordProbeFailure(hostname, address, FailureType.CONNECT, startedAt)
                 return null
             }
 
@@ -198,7 +282,7 @@ class DoHDns(
                 recordProbeFailure(hostname, address, FailureType.TLS, startedAt)
                 return null
             } catch (e: Exception) {
-                recordProbeFailure(hostname, address, FailureType.NETWORK, startedAt)
+                recordProbeFailure(hostname, address, FailureType.CONNECT, startedAt)
                 return null
             }
             return address
@@ -223,8 +307,8 @@ class DoHDns(
     ) {
         val currentWinner = winners[hostname]
         if (currentWinner?.address == address && currentWinner.verifiedAt >= probeStartedAt) return
-        val ttl = if (type == FailureType.TLS) TLS_FAILURE_TTL_MS else NETWORK_FAILURE_TTL_MS
-        failures[failureKey(hostname, address)] = FailureEntry(type, System.currentTimeMillis() + ttl)
+        val ttl = ttlFor(type)
+        failures[failureKey(hostname, address)] = FailureEntry(System.currentTimeMillis() + ttl)
         winners.computeIfPresent(hostname) { _, winner ->
             if (winner.address == address) null else winner
         }
@@ -283,14 +367,11 @@ class DoHDns(
 
     private data class AddressCacheEntry(val addresses: List<InetAddress>, val expiresAt: Long)
     private data class WinnerEntry(val address: InetAddress, val verifiedAt: Long, val expiresAt: Long)
-    private data class FailureEntry(val type: FailureType, val expiresAt: Long)
+    private data class FailureEntry(val expiresAt: Long)
     private data class PersistedAddress(val address: String, val succeededAt: Long)
-    private enum class FailureType { NETWORK, TLS }
+    enum class FailureType { TLS, CONNECT, STREAM }
 
     private companion object {
-        const val DOH_URL = "https://dns.alidns.com/dns-query"
-        const val DOH_IPV4 = "223.5.5.5"
-        const val DOH_IPV6 = "2400:3200::1"
         const val HTTPS_PORT = 443
         const val TCP_PROBE_TIMEOUT_MS = 3_000
         const val TLS_HANDSHAKE_TIMEOUT_MS = 2_000
@@ -299,13 +380,13 @@ class DoHDns(
         const val RESOLUTION_TIMEOUT_MS = 11_000L
         const val SYSTEM_CACHE_TTL_MS = 30_000L
         const val WINNER_TTL_MS = 60_000L
-        const val NETWORK_FAILURE_TTL_MS = 2 * 60_000L
+        const val CONNECT_FAILURE_TTL_MS = 2 * 60_000L
+        const val STREAM_FAILURE_TTL_MS = 15_000L
         const val TLS_FAILURE_TTL_MS = 10 * 60_000L
         const val DOH_CACHE_TTL_MS = 10 * 60_000L
         const val PERSISTED_TTL_MS = 7 * 24 * 60 * 60_000L
         const val PERSIST_WRITE_INTERVAL_MS = 60 * 60_000L
-        const val MAX_PERSISTED_IPS = 2
+        const val MAX_PERSISTED_IPS = 4
         const val PERSIST_PREFIX = "trusted_dns_ip_"
-        val BUSINESS_DOMAINS = listOf("poipiku.com", "cdn.poipiku.com")
     }
 }

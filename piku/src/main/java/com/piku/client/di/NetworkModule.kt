@@ -26,11 +26,13 @@ import okhttp3.Protocol
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import java.io.IOException
+import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Proxy
 import java.util.concurrent.TimeUnit
 import javax.inject.Named
 import javax.inject.Singleton
+import javax.net.ssl.SSLException
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -59,7 +61,10 @@ object NetworkModule {
             .hostnameVerifier(PoipikuHostnameVerifier())
             .eventListenerFactory {
                 object : EventListener() {
+                    private var address: InetAddress? = null
+
                     override fun connectionAcquired(call: Call, connection: Connection) {
+                        address = connection.route().socketAddress.address
                         doHDns.reportSuccess(
                             call.request().url.host,
                             connection.route().socketAddress.address,
@@ -73,13 +78,34 @@ object NetworkModule {
                         protocol: Protocol?,
                         ioe: IOException,
                     ) {
-                        doHDns.reportFailure(call.request().url.host, inetSocketAddress.address)
+                        doHDns.reportFailure(
+                            call.request().url.host,
+                            inetSocketAddress.address,
+                            if (ioe is SSLException) DoHDns.FailureType.TLS
+                            else DoHDns.FailureType.CONNECT,
+                        )
+                    }
+
+                    override fun responseFailed(call: Call, ioe: IOException) {
+                        if (call.isCanceled()) return
+                        val host = call.request().url.host
+                        address?.let {
+                            doHDns.reportFailure(host, it, DoHDns.FailureType.STREAM)
+                        }
+                    }
+
+                    override fun requestFailed(call: Call, ioe: IOException) {
+                        if (call.isCanceled()) return
+                        val host = call.request().url.host
+                        address?.let {
+                            doHDns.reportFailure(host, it, DoHDns.FailureType.STREAM)
+                        }
                     }
                 }
             }
             .cookieJar(cookieJar)
             .addInterceptor(RefererInterceptor())
-            .addInterceptor(RetryInterceptor())
+            .addInterceptor(RetryInterceptor(doHDns))
             .addInterceptor { chain ->
                 val request = chain.request().newBuilder()
                     .header("User-Agent", USER_AGENT)
