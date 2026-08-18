@@ -1397,6 +1397,11 @@ private fun UpdateBannerBar(
 ) {
     val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
     val pill = RoundedCornerShape(22.dp)
+    val currentOnDismiss by rememberUpdatedState(onDismiss)
+    LaunchedEffect(release.tagName) {
+        delay(8_000)
+        currentOnDismiss()
+    }
     Row(
         modifier = modifier
             .padding(horizontal = 16.dp, vertical = 8.dp)
