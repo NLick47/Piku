@@ -1,5 +1,7 @@
 package com.piku.client.ui.follow
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -28,6 +30,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.OpenInBrowser
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -39,7 +44,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,13 +60,20 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
@@ -66,6 +82,7 @@ import com.piku.client.domain.model.UserPageInfo
 import com.piku.client.domain.model.Work
 import com.piku.client.ui.common.LoaderDots
 import com.piku.client.ui.common.WorkCard
+import com.piku.client.ui.theme.AccentPurple
 import com.piku.client.ui.theme.HomeBgBottomDark
 import com.piku.client.ui.theme.HomeBgBottomLight
 import com.piku.client.ui.theme.HomeBgTopDark
@@ -88,6 +105,7 @@ import com.piku.client.ui.theme.StarSkyMidLight
 import com.piku.client.ui.theme.StarSkyTopDark
 import com.piku.client.ui.theme.StarSkyTopLight
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 
 /** 作者头部卡片完全展开时的高度 */
 private val HeaderCardHeight = 172.dp
@@ -110,6 +128,11 @@ fun UserWorksScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val isTablet = LocalConfiguration.current.screenWidthDp >= 600
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
+    val scope = rememberCoroutineScope()
+    val linkCopiedMessage = stringResource(R.string.detail_link_copied)
+    val userPageUrl = "https://poipiku.com/${state.userId}.html"
 
     val followFeedback = state.followFeedbackRes?.let { stringResource(it) }
     LaunchedEffect(followFeedback) {
@@ -144,6 +167,15 @@ fun UserWorksScreen(
                 avatarUrl = avatarUrl,
                 collapseProgress = collapseProgress,
                 onBack = onBack,
+                onCopyLink = {
+                    clipboard.setText(AnnotatedString(userPageUrl))
+                    scope.launch {
+                        snackbarHostState.showSnackbar(linkCopiedMessage)
+                    }
+                },
+                onOpenBrowser = {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(userPageUrl)))
+                },
                 dark = dark,
             )
             when {
@@ -231,8 +263,11 @@ private fun UserWorksTopBar(
     avatarUrl: String?,
     collapseProgress: Float,
     onBack: () -> Unit,
+    onCopyLink: () -> Unit,
+    onOpenBrowser: () -> Unit,
     dark: Boolean,
 ) {
+    var menuExpanded by remember { mutableStateOf(false) }
     // 折叠接管区间内交叉淡入淡出
     val takeover = ((collapseProgress - CollapseTakeoverStart) /
         (CollapseTakeoverEnd - CollapseTakeoverStart)).coerceIn(0f, 1f)
@@ -299,6 +334,34 @@ private fun UserWorksTopBar(
                     )
                 }
             }
+            var anchorHeightPx by remember { mutableIntStateOf(0) }
+            Box(
+                Modifier.onSizeChanged { anchorHeightPx = it.height },
+            ) {
+                IconButton(onClick = { menuExpanded = true }) {
+                    Icon(
+                        imageVector = Icons.Outlined.MoreVert,
+                        contentDescription = stringResource(R.string.detail_more),
+                        tint = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
+                if (menuExpanded) {
+                    UserWorksMoreMenu(
+                        anchorHeightPx = anchorHeightPx,
+                        dark = dark,
+                        onDismiss = { menuExpanded = false },
+                        onCopyLink = {
+                            menuExpanded = false
+                            onCopyLink()
+                        },
+                        onOpenBrowser = {
+                            menuExpanded = false
+                            onOpenBrowser()
+                        },
+                    )
+                }
+            }
         }
         // 玻璃分隔线
         Box(
@@ -307,6 +370,88 @@ private fun UserWorksTopBar(
                 .fillMaxWidth()
                 .height(0.5.dp)
                 .background(if (dark) Color(0x1AFFFFFF) else Color(0x14000000)),
+        )
+    }
+}
+
+/** 更多操作：锚定在顶栏按钮下方的玻璃风格小弹窗，与作品详情页「更多」弹窗同款（弹窗顶缘紧贴按钮底缘 +8dp） */
+@Composable
+private fun UserWorksMoreMenu(
+    anchorHeightPx: Int,
+    dark: Boolean,
+    onDismiss: () -> Unit,
+    onCopyLink: () -> Unit,
+    onOpenBrowser: () -> Unit,
+) {
+    val density = LocalDensity.current
+    val shape = RoundedCornerShape(18.dp)
+    Popup(
+        alignment = Alignment.TopEnd,
+        offset = IntOffset(0, anchorHeightPx + with(density) { 8.dp.roundToPx() }),
+        onDismissRequest = onDismiss,
+        properties = PopupProperties(focusable = true),
+    ) {
+        Column(
+            modifier = Modifier
+                .shadow(14.dp, shape, ambientColor = Color(0x40000000), spotColor = Color(0x55000000))
+                .clip(shape)
+                .background(if (dark) Color(0xF2262421) else Color(0xF7FFFFFF))
+                .border(
+                    BorderStroke(0.5.dp, if (dark) Color(0x59FFFFFF) else Color(0x59C8C2B8)),
+                    shape,
+                )
+                .padding(vertical = 6.dp),
+        ) {
+            UserWorksMoreMenuRow(
+                icon = {
+                    Icon(
+                        imageVector = Icons.Outlined.ContentCopy,
+                        contentDescription = null,
+                        tint = if (dark) LoginTextPrimaryDark else AccentPurple,
+                        modifier = Modifier.size(16.dp),
+                    )
+                },
+                label = stringResource(R.string.detail_copy_link),
+                dark = dark,
+                onClick = onCopyLink,
+            )
+            UserWorksMoreMenuRow(
+                icon = {
+                    Icon(
+                        imageVector = Icons.Outlined.OpenInBrowser,
+                        contentDescription = null,
+                        tint = if (dark) LoginTextPrimaryDark else AccentPurple,
+                        modifier = Modifier.size(16.dp),
+                    )
+                },
+                label = stringResource(R.string.detail_open_browser),
+                dark = dark,
+                onClick = onOpenBrowser,
+            )
+        }
+    }
+}
+
+@Composable
+private fun UserWorksMoreMenuRow(
+    icon: @Composable () -> Unit,
+    label: String,
+    dark: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        icon()
+        Text(
+            text = label,
+            color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+            fontSize = 13.sp,
         )
     }
 }
