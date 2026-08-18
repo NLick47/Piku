@@ -9,13 +9,11 @@ import coil3.disk.directory
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.allowHardware
 import coil3.request.crossfade
-import com.piku.client.data.remote.DoHDns
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.android.HiltAndroidApp
 import dagger.hilt.components.SingletonComponent
-import okhttp3.Dns
 import okhttp3.OkHttpClient
 
 @HiltAndroidApp
@@ -25,8 +23,6 @@ class PoipikuApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         val entryPoint = EntryPointAccessors.fromApplication(this, AppEntryPoint::class.java)
-        val dohDns = entryPoint.doHDns() as DoHDns
-        dohDns.start()
         SingletonImageLoader.setUnsafe { context ->
             ImageLoader.Builder(context)
                 // 与 API 共用同一 OkHttpClient，图片 CDN（cdn.poipiku.com）
@@ -54,6 +50,5 @@ class PoipikuApplication : Application() {
     @InstallIn(SingletonComponent::class)
     interface AppEntryPoint {
         fun okHttpClient(): OkHttpClient
-        fun doHDns(): Dns
     }
 }
