@@ -75,7 +75,9 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.piku.client.R
-import com.piku.client.ui.theme.AccentPurple
+import com.piku.client.ui.theme.AccentDark
+import com.piku.client.ui.theme.ControlAccentDark
+import com.piku.client.ui.theme.ControlAccentLight
 import com.piku.client.ui.theme.HomeBgBottomDark
 import com.piku.client.ui.theme.HomeBgBottomLight
 import com.piku.client.ui.theme.HomeBgTopDark
@@ -268,13 +270,13 @@ private fun LoginGlassCard(
     val fieldColors = OutlinedTextFieldDefaults.colors(
         focusedContainerColor = if (dark) Color(0x14FFFFFF) else Color(0x8CFFFFFF),
         unfocusedContainerColor = if (dark) Color(0x0FFFFFFF) else Color(0x73FFFFFF),
-        focusedBorderColor = if (dark) Color(0xFFE0E0E0) else AccentPurple,
+        focusedBorderColor = if (dark) ControlAccentDark else ControlAccentLight,
         unfocusedBorderColor = if (dark) PillBorderDark else PillBorderLight,
-        focusedLeadingIconColor = if (dark) Color(0xFFE0E0E0) else AccentPurple,
+        focusedLeadingIconColor = if (dark) ControlAccentDark else ControlAccentLight,
         unfocusedLeadingIconColor = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
-        focusedTrailingIconColor = if (dark) Color(0xFFE0E0E0) else AccentPurple,
+        focusedTrailingIconColor = if (dark) ControlAccentDark else ControlAccentLight,
         unfocusedTrailingIconColor = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
-        cursorColor = if (dark) Color(0xFFE0E0E0) else AccentPurple,
+        cursorColor = if (dark) ControlAccentDark else ControlAccentLight,
         focusedTextColor = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
         unfocusedTextColor = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
     )

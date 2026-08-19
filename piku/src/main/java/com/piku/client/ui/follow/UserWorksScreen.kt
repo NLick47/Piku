@@ -82,7 +82,7 @@ import com.piku.client.domain.model.UserPageInfo
 import com.piku.client.domain.model.Work
 import com.piku.client.ui.common.LoaderDots
 import com.piku.client.ui.common.WorkCard
-import com.piku.client.ui.theme.AccentPurple
+import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.HomeBgBottomDark
 import com.piku.client.ui.theme.HomeBgBottomLight
 import com.piku.client.ui.theme.HomeBgTopDark
@@ -407,7 +407,7 @@ private fun UserWorksMoreMenu(
                     Icon(
                         imageVector = Icons.Outlined.ContentCopy,
                         contentDescription = null,
-                        tint = if (dark) LoginTextPrimaryDark else AccentPurple,
+                        tint = if (dark) LoginTextPrimaryDark else AccentDark,
                         modifier = Modifier.size(16.dp),
                     )
                 },
@@ -420,7 +420,7 @@ private fun UserWorksMoreMenu(
                     Icon(
                         imageVector = Icons.Outlined.OpenInBrowser,
                         contentDescription = null,
-                        tint = if (dark) LoginTextPrimaryDark else AccentPurple,
+                        tint = if (dark) LoginTextPrimaryDark else AccentDark,
                         modifier = Modifier.size(16.dp),
                     )
                 },

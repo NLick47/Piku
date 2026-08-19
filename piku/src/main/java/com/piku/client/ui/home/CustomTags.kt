@@ -41,7 +41,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.piku.client.R
-import com.piku.client.ui.theme.AccentPurple
+import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.GlassCardBgDark
 import com.piku.client.ui.theme.LoginBackgroundDark
 import com.piku.client.ui.theme.LoginCardBorderDark
@@ -54,6 +54,8 @@ import com.piku.client.ui.theme.LoginTextSecondaryDark
 import com.piku.client.ui.theme.LoginTextSecondaryLight
 import com.piku.client.ui.theme.PillBorderDark
 import com.piku.client.ui.theme.PillBorderLight
+import com.piku.client.ui.theme.SwitchUncheckedTrackDark
+import com.piku.client.ui.theme.SwitchUncheckedTrackLight
 
 /**
  * 自定义标签区块：内联添加输入框 + 标签 chips（点击筛选、× 删除）。
@@ -91,11 +93,11 @@ fun CustomTagSection(
                 textStyle = TextStyle(fontSize = 13.sp, color = primary),
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = AccentPurple.copy(alpha = 0.8f),
+                    focusedBorderColor = AccentDark.copy(alpha = 0.8f),
                     unfocusedBorderColor = if (dark) LoginCardBorderDark else LoginCardBorderLight,
                     focusedContainerColor = if (dark) Color(0x14FFFFFF) else Color(0x0A000000),
                     unfocusedContainerColor = if (dark) Color(0x14FFFFFF) else Color(0x0A000000),
-                    cursorColor = AccentPurple,
+                    cursorColor = AccentDark,
                     focusedTextColor = primary,
                     unfocusedTextColor = primary,
                 ),
@@ -107,9 +109,9 @@ fun CustomTagSection(
                 modifier = Modifier
                     .size(36.dp)
                     .clip(RoundedCornerShape(11.dp))
-                    .background(
-                        if (addEnabled) AccentPurple
-                        else if (dark) Color(0xFF3A3834) else Color(0xFFE6E2DB),
+.background(
+                        if (addEnabled) AccentDark
+                        else if (dark) SwitchUncheckedTrackDark else SwitchUncheckedTrackLight,
                     )
                     .clickable(enabled = addEnabled, onClick = {
                         val tag = input.trim().removePrefix("#").trim()
@@ -164,20 +166,20 @@ private fun CustomTagChip(
 ) {
     val shape = RoundedCornerShape(14.dp)
     val chipBg = when {
-        active -> if (dark) LoginTextPrimaryDark else Color(0xFF2C2C2C)
+        active -> if (dark) LoginTextPrimaryDark else AccentDark.copy(alpha = 0.10f)
         else -> if (dark) GlassCardBgDark else Color.White
     }
     val chipBorder = when {
-        active -> if (dark) LoginTextPrimaryDark else Color(0xFF2C2C2C)
+        active -> if (dark) LoginTextPrimaryDark else AccentDark.copy(alpha = 0.30f)
         else -> if (dark) PillBorderDark else PillBorderLight
     }
     val textColor = when {
-        active -> if (dark) LoginBackgroundDark else Color.White
+        active -> if (dark) LoginBackgroundDark else AccentDark
         else -> if (dark) LoginTextSecondaryDark else Color(0xFF5A5A5A)
     }
     val faint = if (dark) LoginTextFaintDark else LoginTextFaintLight
     val delTint = when {
-        active -> if (dark) LoginBackgroundDark else Color.White
+        active -> if (dark) LoginBackgroundDark else AccentDark
         else -> faint
     }
     Row(

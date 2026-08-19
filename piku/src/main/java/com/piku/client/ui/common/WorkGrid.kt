@@ -51,7 +51,7 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.piku.client.R
 import com.piku.client.domain.model.Work
-import com.piku.client.ui.theme.AccentPurple
+import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.LoginCardDark
 import com.piku.client.ui.theme.LoginTextFaintDark
 import com.piku.client.ui.theme.LoginTextFaintLight
@@ -161,7 +161,7 @@ fun WorkCard(
                 Icon(
                     imageVector = Icons.Filled.Favorite,
                     contentDescription = null,
-                    tint = if (dark) LoginTextPrimaryDark else AccentPurple,
+                    tint = if (dark) LoginTextPrimaryDark else AccentDark,
                     modifier = Modifier
                         .align(Alignment.Center)
                         .size(40.dp)

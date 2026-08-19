@@ -53,7 +53,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.piku.client.R
 import com.piku.client.domain.model.UserProfile
 import com.piku.client.ui.common.UserAvatar
-import com.piku.client.ui.theme.AccentPurple
+import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.LoginBackgroundDark
 import com.piku.client.ui.theme.LoginCardBorderDark
 import com.piku.client.ui.theme.LoginCardBorderLight
@@ -138,7 +138,7 @@ fun ProfileEditSheet(
                         .border(
                             BorderStroke(
                                 1.5.dp,
-                                if (dark) Color(0x66FFFFFF) else AccentPurple.copy(alpha = 0.5f),
+                                if (dark) Color(0x66FFFFFF) else AccentDark.copy(alpha = 0.5f),
                             ),
                             CircleShape,
                         )
@@ -158,7 +158,7 @@ fun ProfileEditSheet(
                             .clip(CircleShape)
                             .background(if (dark) Color(0xCC2A2A2A) else Color(0xE6FFFFFF))
                             .border(
-                                BorderStroke(1.dp, AccentPurple.copy(alpha = 0.6f)),
+                                BorderStroke(1.dp, AccentDark.copy(alpha = 0.6f)),
                                 CircleShape,
                             ),
                         contentAlignment = Alignment.Center,
@@ -166,7 +166,7 @@ fun ProfileEditSheet(
                         CircularProgressIndicator(
                             modifier = Modifier.size(16.dp),
                             strokeWidth = 2.dp,
-                            color = AccentPurple,
+                            color = AccentDark,
                         )
                     }
                 }
@@ -183,13 +183,13 @@ fun ProfileEditSheet(
                 Icon(
                     imageVector = Icons.Outlined.CameraAlt,
                     contentDescription = null,
-                    tint = AccentPurple,
+                    tint = AccentDark,
                     modifier = Modifier.size(16.dp),
                 )
                 Spacer(Modifier.width(6.dp))
                 Text(
                     text = stringResource(R.string.profile_edit_change_avatar),
-                    color = AccentPurple,
+                    color = AccentDark,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
                 )
@@ -238,7 +238,7 @@ fun ProfileEditSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
-                    .background(if (nameValid && !busy) AccentPurple else AccentPurple.copy(alpha = 0.45f))
+                    .background(if (nameValid && !busy) AccentDark else AccentDark.copy(alpha = 0.45f))
                     .clickable(enabled = !busy && nameValid) {
                         viewModel.updateNickName(name)
                     }

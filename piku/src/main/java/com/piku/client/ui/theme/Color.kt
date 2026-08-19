@@ -28,7 +28,44 @@ val LoginTextSecondaryDark = Color(0xFF9A948C)
 val LoginDividerDark = Color(0xFF46405A)
 val LoginTextFaintDark = Color(0xFF5C5852)
 
-val AccentPurple = Color(0xFF2C2C2C)
+val AccentDark = Color(0xFF5F584F)
+
+val AccentSolid = Color(0xFF7D746A)
+
+
+val SurfaceVariantDark = Color(0xFF3A3834)
+
+val ControlAccentLight = AccentDark
+val ControlAccentDark = Color(0xFFE0E0E0)
+
+val StarLight = Color(0xFFE0A83C)
+val StarDark = Color(0xFFFFD166)
+val StarTintLight = Color(0x2AE0A83C)
+val StarTintDark = Color(0x33FFD166)
+
+val FollowLight = Color(0xFF4CAF50)
+val FollowDark = Color(0xFF81C784)
+val FollowTintLight = Color(0x2A4CAF50)
+val FollowTintDark = Color(0x3381C784)
+
+val SwitchCheckedThumbLight = Color.White
+val SwitchCheckedThumbDark = LoginBackgroundDark
+val SwitchCheckedTrackLight = AccentSolid
+val SwitchCheckedTrackDark = LoginTextPrimaryDark
+val SwitchCheckedIconLight = AccentSolid
+val SwitchCheckedIconDark = LoginTextPrimaryDark
+val SwitchUncheckedThumbLight = Color.White
+val SwitchUncheckedThumbDark = LoginTextSecondaryDark
+val SwitchUncheckedTrackLight = Color(0xFFE6E2DB)
+val SwitchUncheckedTrackDark = SurfaceVariantDark
+
+val SoftBorderLight = Color(0x59C8C2B8)
+val SoftBorderDark = Color(0x59FFFFFF)
+val BadgeBgLight = Color(0xF2FFFFFF)
+val BadgeBgDark = Color(0xCC5C5852)
+
+val LoginButtonLight = Color(0xFF4A453F)
+val LoginButtonDark = LoginTextPrimaryDark
 
 val HomeBgTopLight = Color(0xFFF5F3F0)
 val HomeBgBottomLight = Color(0xFFF0EFED)

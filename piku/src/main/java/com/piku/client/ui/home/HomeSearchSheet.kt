@@ -73,7 +73,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.piku.client.R
-import com.piku.client.ui.theme.AccentPurple
+import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.LoginTextFaintDark
 import com.piku.client.ui.theme.LoginTextFaintLight
 import com.piku.client.ui.theme.LoginTextPrimaryDark
@@ -332,7 +332,7 @@ private fun SearchInputRow(
                 unfocusedContainerColor = if (dark) Color(0x40FFFFFF) else Color(0xD9FFFFFF),
                 focusedBorderColor = if (dark) Color(0x66FFFFFF) else Color(0x59A09A92),
                 unfocusedBorderColor = if (dark) Color(0x40FFFFFF) else Color(0x40A09A92),
-                cursorColor = if (dark) LoginTextPrimaryDark else AccentPurple,
+                cursorColor = if (dark) LoginTextPrimaryDark else AccentDark,
             ),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { onSearch() }),

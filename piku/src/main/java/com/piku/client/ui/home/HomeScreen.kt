@@ -73,7 +73,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -137,7 +136,9 @@ import com.piku.client.ui.common.LoaderDots
 import com.piku.client.ui.common.UserAvatar
 import com.piku.client.ui.common.WorkCard
 import com.piku.client.ui.profile.ProfileEditSheet
-import com.piku.client.ui.theme.AccentPurple
+import com.piku.client.ui.theme.AccentDark
+import com.piku.client.ui.theme.FollowDark
+import com.piku.client.ui.theme.FollowLight
 import com.piku.client.ui.theme.LocalDarkTheme
 import com.piku.client.ui.theme.GlassCardBgDark
 import com.piku.client.ui.theme.GlassIconBgDark
@@ -156,11 +157,14 @@ import com.piku.client.ui.theme.LoginTextPrimaryDark
 import com.piku.client.ui.theme.LoginTextPrimaryLight
 import com.piku.client.ui.theme.LoginTextSecondaryDark
 import com.piku.client.ui.theme.LoginTextSecondaryLight
+import com.piku.client.ui.theme.LoginButtonDark
+import com.piku.client.ui.theme.LoginButtonLight
 import com.piku.client.ui.theme.PillBorderDark
 import com.piku.client.ui.theme.PillBorderLight
 import com.piku.client.ui.theme.WorkCardBgDark
 import com.piku.client.ui.theme.WorkCardBorderDark
 import com.piku.client.ui.theme.WorkCardPlaceholderDark
+import com.piku.client.ui.theme.themedSwitchColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -1002,7 +1006,7 @@ private fun CategoryMenuButton(
             imageVector = Icons.Outlined.GridView,
             contentDescription = stringResource(R.string.home_category_select),
             tint = when {
-                active -> if (dark) LoginTextPrimaryDark else AccentPurple
+                active -> if (dark) LoginTextPrimaryDark else AccentDark
                 // 暗色下未激活用半透明暖白：比灰色更清晰，同时与激活态保持亮度区分
                 dark -> LoginTextPrimaryDark.copy(alpha = 0.55f)
                 else -> Color(0xFF5A5A5A)
@@ -1105,14 +1109,14 @@ private fun FeedTabItem(
     )
     val textColor by animateColorAsState(
         targetValue = when {
-            active -> if (dark) LoginTextPrimaryDark else Color(0xFF2C2C2C)
+            active -> if (dark) LoginTextPrimaryDark else AccentDark
             else -> if (dark) LoginTextSecondaryDark else Color(0xFF8A8A8A)
         },
         animationSpec = tween(durationMillis = 200),
         label = "tabTextColor",
     )
     val underlineColor by animateColorAsState(
-        targetValue = if (dark) LoginTextPrimaryDark else AccentPurple,
+        targetValue = if (dark) LoginTextPrimaryDark else AccentDark,
         animationSpec = tween(durationMillis = 200),
         label = "tabUnderlineColor",
     )
@@ -1195,7 +1199,7 @@ private fun CurrentTagChip(
     ) {
         Text(
             text = "$prefix$tag",
-            color = if (dark) LoginTextPrimaryDark else AccentPurple,
+            color = if (dark) LoginTextPrimaryDark else AccentDark,
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
@@ -1233,7 +1237,7 @@ private fun TagPill(
             .clip(shape)
             .background(
                 when {
-                    active -> if (dark) LoginTextPrimaryDark else Color(0xFF2C2C2C)
+                    active -> if (dark) LoginTextPrimaryDark else AccentDark.copy(alpha = 0.10f)
                     else -> if (dark) GlassCardBgDark else Color.White
                 },
             )
@@ -1241,7 +1245,7 @@ private fun TagPill(
                 BorderStroke(
                     0.5.dp,
                     when {
-                        active -> if (dark) LoginTextPrimaryDark else Color(0xFF2C2C2C)
+                        active -> if (dark) LoginTextPrimaryDark else AccentDark.copy(alpha = 0.30f)
                         else -> if (dark) PillBorderDark else PillBorderLight
                     },
                 ),
@@ -1253,7 +1257,7 @@ private fun TagPill(
         Text(
             text = text,
             color = if (active) {
-                if (dark) LoginBackgroundDark else Color.White
+                if (dark) LoginBackgroundDark else AccentDark
             } else {
                 if (dark) LoginTextSecondaryDark else Color(0xFF5A5A5A)
             },
@@ -1354,13 +1358,13 @@ private fun HomeContent(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(18.dp))
-                                .background(AccentPurple)
+                                .background(if (dark) LoginButtonDark else LoginButtonLight)
                                 .clickable(onClick = onLoginClick)
                                 .padding(horizontal = 24.dp, vertical = 9.dp),
                         ) {
                             Text(
                                 text = stringResource(R.string.login_button),
-                                color = Color.White,
+                                color = if (dark) LoginBackgroundDark else Color.White,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold,
                             )
@@ -1454,7 +1458,7 @@ private fun UpdateBannerBar(
         Icon(
             imageVector = Icons.Outlined.SystemUpdate,
             contentDescription = null,
-            tint = AccentPurple,
+            tint = AccentDark,
             modifier = Modifier.size(17.dp),
         )
         Spacer(Modifier.width(8.dp))
@@ -1469,7 +1473,7 @@ private fun UpdateBannerBar(
         Spacer(Modifier.width(6.dp))
         Text(
             text = stringResource(R.string.update_open),
-            color = AccentPurple,
+            color = AccentDark,
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
         )
@@ -1572,7 +1576,7 @@ private fun RefreshNoticeBar(
         Icon(
             imageVector = if (isNew) Icons.Filled.KeyboardArrowUp else Icons.Filled.Check,
             contentDescription = null,
-            tint = if (isNew) AccentPurple else if (dark) Color(0xFF81C784) else Color(0xFF4CAF50),
+            tint = if (isNew) AccentDark else if (dark) FollowDark else FollowLight,
             modifier = Modifier.size(16.dp),
         )
         Spacer(Modifier.width(6.dp))
@@ -1705,7 +1709,7 @@ private fun TagSheet(
                 )
                 Text(
                     text = stringResource(R.string.my_tags_manage),
-                    color = AccentPurple,
+                    color = AccentDark,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier
@@ -1973,13 +1977,13 @@ private fun AboutUpdateButton(
     onOpenUpdate: () -> Unit,
     dark: Boolean,
 ) {
-    val green = if (dark) Color(0xFF81C784) else Color(0xFF4CAF50)
+    val green = if (dark) FollowDark else FollowLight
     val red = if (dark) Color(0xFFE08A8A) else Color(0xFFC24B4B)
     val (targetBg, targetFg) = when (state) {
-        UpdateCheckState.Checking -> AccentPurple to Color.White
+        UpdateCheckState.Checking -> AccentDark to Color.White
         UpdateCheckState.Latest -> green.copy(alpha = if (dark) 0.22f else 0.12f) to green
         UpdateCheckState.Failed -> red.copy(alpha = if (dark) 0.22f else 0.12f) to red
-        else -> AccentPurple to Color.White
+        else -> AccentDark to Color.White
     }
     val bg by animateColorAsState(targetBg, label = "updateBtnBg")
     val fg by animateColorAsState(targetFg, label = "updateBtnFg")
@@ -2067,13 +2071,7 @@ private fun AboutToggleRow(
         Switch(
             checked = checked,
             onCheckedChange = { onToggle() },
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
-                checkedTrackColor = AccentPurple,
-                uncheckedThumbColor = if (dark) Color(0xFF9A948C) else Color.White,
-                uncheckedTrackColor = if (dark) Color(0xFF3A3834) else Color(0xFFE6E2DB),
-                uncheckedBorderColor = if (dark) Color(0xFF3A3834) else Color(0xFFE6E2DB),
-            ),
+            colors = themedSwitchColors(dark),
         )
     }
 }
@@ -2146,7 +2144,7 @@ private fun SettingsOptionRow(
             Icon(
                 imageVector = Icons.Filled.Check,
                 contentDescription = null,
-                tint = AccentPurple,
+                tint = AccentDark,
                 modifier = Modifier.size(18.dp),
             )
         }
@@ -2593,7 +2591,7 @@ private fun BackToTopButton(onClick: () -> Unit, dark: Boolean) {
         Icon(
             imageVector = Icons.Filled.KeyboardArrowUp,
             contentDescription = stringResource(R.string.home_back_to_top),
-            tint = if (dark) LoginTextPrimaryDark else AccentPurple,
+            tint = if (dark) LoginTextPrimaryDark else AccentDark,
             modifier = Modifier.size(20.dp),
         )
     }
@@ -2627,7 +2625,7 @@ private fun LoadMoreErrorItem(errorRes: Int, onRetry: () -> Unit, dark: Boolean)
         ) {
             Text(
                 text = stringResource(R.string.home_retry),
-                color = if (dark) LoginTextPrimaryDark else AccentPurple,
+                color = if (dark) LoginTextPrimaryDark else AccentDark,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
             )
@@ -2668,7 +2666,7 @@ private fun ShuffleItem(onShuffle: () -> Unit, dark: Boolean) {
         ) {
             Text(
                 text = stringResource(R.string.home_random_more),
-                color = if (dark) LoginTextPrimaryDark else AccentPurple,
+                color = if (dark) LoginTextPrimaryDark else AccentDark,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
             )

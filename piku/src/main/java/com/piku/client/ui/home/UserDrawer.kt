@@ -40,7 +40,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -63,13 +62,14 @@ import com.piku.client.domain.model.AppLanguage
 import com.piku.client.domain.model.ThemeMode
 import com.piku.client.domain.model.UserProfile
 import com.piku.client.ui.common.UserAvatar
-import com.piku.client.ui.theme.AccentPurple
+import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.LoginCardBorderDark
 import com.piku.client.ui.theme.LoginCardBorderLight
 import com.piku.client.ui.theme.LoginTextFaintDark
 import com.piku.client.ui.theme.LoginTextFaintLight
 import com.piku.client.ui.theme.LoginTextPrimaryDark
 import com.piku.client.ui.theme.LoginTextPrimaryLight
+import com.piku.client.ui.theme.themedSwitchColors
 
 @Composable
 fun UserDrawer(
@@ -155,7 +155,7 @@ private fun DrawerPanel(
     val faint = if (dark) LoginTextFaintDark else LoginTextFaintLight
     val divider = if (dark) LoginCardBorderDark else LoginCardBorderLight
     // 图标统一用主题自适应单色：浅色近黑、深色近白，保证两种主题下都清晰可见
-    val iconAccent = if (dark) LoginTextPrimaryDark else AccentPurple
+    val iconAccent = if (dark) LoginTextPrimaryDark else AccentDark
 
     Column(
         modifier = Modifier
@@ -341,7 +341,7 @@ private fun DrawerHeader(
     val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
     val blobPurple = if (dark) Color(0x409A7FC9) else Color(0x4D9A7FC9)
     val blobPink = if (dark) Color(0x30D8A8B8) else Color(0x3DD8A8B8)
-    val ring = if (dark) Color(0x66FFFFFF) else AccentPurple.copy(alpha = 0.5f)
+    val ring = if (dark) Color(0x66FFFFFF) else AccentDark.copy(alpha = 0.5f)
 
     // 已登录：点头部编辑资料；未登录：点头部进入登录
     val loggedIn = userProfile != null
@@ -423,7 +423,7 @@ private fun DrawerHeader(
                     // 未登录提示：引导用户点击头像/此处登录
                     Text(
                         text = stringResource(R.string.drawer_login_hint),
-                        color = if (dark) LoginTextPrimaryDark else AccentPurple,
+                        color = if (dark) LoginTextPrimaryDark else AccentDark,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
@@ -611,13 +611,7 @@ private fun AdultContentRow(
         Switch(
             checked = adultEnabled,
             onCheckedChange = { onToggleAdult() },
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
-                checkedTrackColor = AccentPurple,
-                uncheckedThumbColor = if (dark) Color(0xFF9A948C) else Color.White,
-                uncheckedTrackColor = if (dark) Color(0xFF3A3834) else Color(0xFFE6E2DB),
-                uncheckedBorderColor = if (dark) Color(0xFF3A3834) else Color(0xFFE6E2DB),
-            ),
+            colors = themedSwitchColors(dark),
         )
     }
 }

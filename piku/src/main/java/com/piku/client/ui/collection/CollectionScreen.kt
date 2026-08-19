@@ -79,7 +79,7 @@ import com.piku.client.domain.model.FavoriteFolder
 import com.piku.client.domain.model.Work
 import com.piku.client.ui.common.LoaderDots
 import com.piku.client.ui.common.WorkCard
-import com.piku.client.ui.theme.AccentPurple
+import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.HomeBgBottomDark
 import com.piku.client.ui.theme.HomeBgBottomLight
 import com.piku.client.ui.theme.HomeBgTopDark
@@ -286,7 +286,7 @@ private fun FolderNameDialog(
                     unfocusedContainerColor = if (dark) LoginCardDark else Color(0xFFEAE8E3),
                     focusedBorderColor = if (dark) LoginCardBorderDark else LoginCardBorderLight,
                     unfocusedBorderColor = if (dark) LoginCardBorderDark else LoginCardBorderLight,
-                    cursorColor = AccentPurple,
+                    cursorColor = AccentDark,
                 ),
             )
         },

@@ -57,7 +57,7 @@ import com.piku.client.domain.model.HistoryTimeRange
 import com.piku.client.domain.model.Work
 import com.piku.client.ui.common.LoaderDots
 import com.piku.client.ui.common.WorkCard
-import com.piku.client.ui.theme.AccentPurple
+import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.GlassCardBgDark
 import com.piku.client.ui.theme.HomeBgBottomDark
 import com.piku.client.ui.theme.HomeBgBottomLight
@@ -282,11 +282,11 @@ private fun HistoryRangeChip(
 ) {
     val shape = RoundedCornerShape(16.dp)
     val container = when {
-        active -> if (dark) LoginTextPrimaryDark.copy(alpha = 0.14f) else AccentPurple
+        active -> if (dark) LoginTextPrimaryDark.copy(alpha = 0.14f) else AccentDark
         else -> if (dark) GlassCardBgDark else Color.White
     }
     val borderColor = when {
-        active -> if (dark) LoginTextPrimaryDark else AccentPurple
+        active -> if (dark) LoginTextPrimaryDark else AccentDark
         else -> if (dark) PillBorderDark else PillBorderLight
     }
     val contentColor = when {

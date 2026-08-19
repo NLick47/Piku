@@ -75,6 +75,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -137,7 +138,16 @@ import com.piku.client.domain.model.FavoriteFolder
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkDetail
 import com.piku.client.ui.common.LoaderDots
-import com.piku.client.ui.theme.AccentPurple
+import com.piku.client.ui.theme.AccentDark
+import com.piku.client.ui.theme.AccentSolid
+import com.piku.client.ui.theme.BadgeBgDark
+import com.piku.client.ui.theme.BadgeBgLight
+import com.piku.client.ui.theme.ControlAccentDark
+import com.piku.client.ui.theme.ControlAccentLight
+import com.piku.client.ui.theme.FollowDark
+import com.piku.client.ui.theme.FollowLight
+import com.piku.client.ui.theme.FollowTintDark
+import com.piku.client.ui.theme.FollowTintLight
 import com.piku.client.ui.theme.HomeFrameIcon
 import com.piku.client.ui.theme.GlassHeaderTintDark
 import com.piku.client.ui.theme.GlassHeaderTintLight
@@ -159,6 +169,12 @@ import com.piku.client.ui.theme.LoginTextSecondaryDark
 import com.piku.client.ui.theme.LoginTextSecondaryLight
 import com.piku.client.ui.theme.PillBorderDark
 import com.piku.client.ui.theme.PillBorderLight
+import com.piku.client.ui.theme.SoftBorderDark
+import com.piku.client.ui.theme.SoftBorderLight
+import com.piku.client.ui.theme.StarDark
+import com.piku.client.ui.theme.StarLight
+import com.piku.client.ui.theme.StarTintDark
+import com.piku.client.ui.theme.StarTintLight
 import com.piku.client.ui.theme.TameWhiteColorFilter
 import java.util.Locale
 import kotlinx.coroutines.delay
@@ -425,7 +441,7 @@ fun DetailScreen(
                     }) {
                         Text(
                             text = stringResource(R.string.detail_save_confirm),
-                            color = if (dark) LoginTextPrimaryDark else AccentPurple,
+                            color = if (dark) LoginTextPrimaryDark else AccentDark,
                         )
                     }
                 },
@@ -526,7 +542,7 @@ private fun DetailBottomBar(
                 .clip(pill)
                 .background(if (dark) Color(0xE63A3834) else Color(0xE6FFFFFF))
                 .border(
-                    BorderStroke(0.5.dp, if (dark) Color(0x59FFFFFF) else Color(0x59C8C2B8)),
+                    BorderStroke(0.5.dp, if (dark) SoftBorderDark else SoftBorderLight),
                     pill,
                 )
                 .padding(horizontal = 6.dp, vertical = 6.dp),
@@ -538,13 +554,13 @@ private fun DetailBottomBar(
                 onLongPress = onFavoriteLongPress,
                 dark = dark,
                 active = isFavorite,
-                activeTint = if (dark) Color(0x33FFD166) else AccentPurple.copy(alpha = 0.14f),
+                activeTint = if (dark) StarTintDark else StarTintLight,
             ) {
                 Icon(
                     imageVector = if (isFavorite) Icons.Filled.Star else Icons.Outlined.StarBorder,
                     contentDescription = stringResource(R.string.detail_favorite),
                     tint = if (isFavorite) {
-                        if (dark) Color(0xFFFFD166) else AccentPurple
+                        if (dark) StarDark else StarLight
                     } else {
                         if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight
                     },
@@ -560,17 +576,17 @@ private fun DetailBottomBar(
                 onClick = onFollowClick,
                 dark = dark,
                 active = followed,
-                activeTint = AccentPurple.copy(alpha = 0.16f),
+                activeTint = if (dark) FollowTintDark else FollowTintLight,
             ) {
-Icon(
+                Icon(
                     imageVector = if (followed) Icons.Filled.Person else Icons.Outlined.PersonAdd,
                     contentDescription = stringResource(R.string.detail_follow),
                     tint = if (followed) {
-                        AccentPurple
+                        if (dark) FollowDark else FollowLight
                     } else {
                         if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight
                     },
-modifier = Modifier.size(22.dp),
+                    modifier = Modifier.size(22.dp),
                 )
             }
             DetailBarAction(
@@ -650,18 +666,22 @@ private fun DetailBarAction(
         Modifier.clickable(onClick = onClick)
     }
     Box(
-        modifier = interaction
-            .size(44.dp)
-            .clip(CircleShape)
-            .background(if (active) activeTint else Color.Transparent),
-        contentAlignment = Alignment.Center,
+        modifier = Modifier.size(44.dp),
     ) {
         Box(
+            modifier = interaction
+                .matchParentSize()
+                .clip(CircleShape)
+                .background(if (active) activeTint else Color.Transparent),
+        )
+        Box(
             contentAlignment = Alignment.Center,
-            modifier = Modifier.graphicsLayer {
-                scaleX = pressScale
-                scaleY = pressScale
-            },
+            modifier = Modifier
+                .matchParentSize()
+                .graphicsLayer {
+                    scaleX = pressScale
+                    scaleY = pressScale
+                },
         ) {
             icon()
         }
@@ -678,10 +698,10 @@ private fun DetailBarAction(
                     .padding(top = 1.dp, end = 1.dp)
                     .clip(RoundedCornerShape(9.dp))
                     .background(
-                        if (dark) Color(0xCC5C5852) else Color(0xF2FFFFFF),
+                        if (dark) BadgeBgDark else BadgeBgLight,
                     )
                     .border(
-                        BorderStroke(0.5.dp, if (dark) Color(0x59FFFFFF) else Color(0x59C8C2B8)),
+                        BorderStroke(0.5.dp, if (dark) SoftBorderDark else SoftBorderLight),
                         RoundedCornerShape(9.dp),
                     )
                     .padding(horizontal = 5.dp, vertical = 1.5.dp),
@@ -749,7 +769,7 @@ private fun BottomBarGuideHint(
                     Icon(
                         imageVector = Icons.Filled.Star,
                         contentDescription = null,
-                        tint = if (dark) Color(0xFFFFD166) else AccentPurple,
+                        tint = if (dark) StarDark else StarLight,
                         modifier = Modifier.size(14.dp),
                     )
                 },
@@ -1185,7 +1205,7 @@ private fun PasswordBox(
                 unfocusedContainerColor = if (dark) LoginCardDark else Color(0xFFEAE8E3),
                 focusedBorderColor = if (dark) LoginCardBorderDark else LoginCardBorderLight,
                 unfocusedBorderColor = if (dark) LoginCardBorderDark else LoginCardBorderLight,
-                cursorColor = AccentPurple,
+                cursorColor = AccentDark,
             ),
             modifier = Modifier
                 .fillMaxWidth()
@@ -1195,6 +1215,10 @@ private fun PasswordBox(
         Button(
             onClick = onPasswordSubmit,
             enabled = password.isNotBlank() && !loading,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = if (dark) LoginTextPrimaryDark else AccentSolid,
+                contentColor = if (dark) LoginBackgroundDark else Color.White,
+            ),
         ) {
             if (loading) {
                 CircularProgressIndicator(
@@ -1265,7 +1289,7 @@ private fun TagFlow(
                         BorderStroke(
                             0.5.dp,
                             if (added) {
-                                if (dark) LoginTextPrimaryDark else AccentPurple
+                                if (dark) LoginTextPrimaryDark else AccentDark
                             } else {
                                 if (dark) LoginCardBorderDark else LoginCardBorderLight
                             },
@@ -1278,7 +1302,7 @@ private fun TagFlow(
             ) {
                 Text(
                     text = "#$tag",
-                    color = if (dark) LoginTextSecondaryDark else AccentPurple,
+                    color = if (dark) LoginTextSecondaryDark else AccentDark,
                     fontSize = 11.sp,
                 )
                 Spacer(Modifier.width(2.dp))
@@ -1290,7 +1314,7 @@ private fun TagFlow(
                         .clip(CircleShape)
                         .background(
                             if (added) {
-                                if (dark) LoginTextPrimaryDark.copy(alpha = 0.16f) else AccentPurple.copy(alpha = 0.12f)
+                                if (dark) LoginTextPrimaryDark.copy(alpha = 0.16f) else AccentDark.copy(alpha = 0.12f)
                             } else {
                                 Color.Transparent
                             },
@@ -1305,7 +1329,7 @@ private fun TagFlow(
                             else R.string.detail_tag_add_to_my_tags,
                         ),
                         tint = if (added) {
-                            if (dark) LoginTextPrimaryDark else AccentPurple
+                            if (dark) LoginTextPrimaryDark else AccentDark
                         } else {
                             if (dark) LoginTextFaintDark else LoginTextFaintLight
                         },
@@ -1340,7 +1364,7 @@ private fun linkify(
     val currentOnWorkClick by rememberUpdatedState(onWorkClick)
     return remember(raw, dark) {
         val style = SpanStyle(
-            color = if (dark) Color(0xFFE0E0E0) else AccentPurple,
+            color = if (dark) ControlAccentDark else ControlAccentLight,
             textDecoration = TextDecoration.Underline,
         )
         buildAnnotatedString {
@@ -1422,7 +1446,7 @@ private fun MoreMenuPopup(
                     Icon(
                         imageVector = Icons.Outlined.ContentCopy,
                         contentDescription = null,
-                        tint = if (dark) LoginTextPrimaryDark else AccentPurple,
+                        tint = if (dark) LoginTextPrimaryDark else AccentDark,
                         modifier = Modifier.size(16.dp),
                     )
                 },
@@ -1435,7 +1459,7 @@ private fun MoreMenuPopup(
                     Icon(
                         imageVector = Icons.Outlined.ContentCopy,
                         contentDescription = null,
-                        tint = if (dark) LoginTextPrimaryDark else AccentPurple,
+                        tint = if (dark) LoginTextPrimaryDark else AccentDark,
                         modifier = Modifier.size(16.dp),
                     )
                 },
@@ -1448,7 +1472,7 @@ private fun MoreMenuPopup(
                     Icon(
                         imageVector = Icons.Outlined.Share,
                         contentDescription = null,
-                        tint = if (dark) LoginTextPrimaryDark else AccentPurple,
+                        tint = if (dark) LoginTextPrimaryDark else AccentDark,
                         modifier = Modifier.size(16.dp),
                     )
                 },
@@ -1461,7 +1485,7 @@ private fun MoreMenuPopup(
                     Icon(
                         imageVector = Icons.Outlined.OpenInBrowser,
                         contentDescription = null,
-                        tint = if (dark) LoginTextPrimaryDark else AccentPurple,
+                        tint = if (dark) LoginTextPrimaryDark else AccentDark,
                         modifier = Modifier.size(16.dp),
                     )
                 },
@@ -1562,7 +1586,7 @@ private fun FavoriteSheet(
                         unfocusedContainerColor = if (dark) LoginCardDark else Color(0xFFEAE8E3),
                         focusedBorderColor = if (dark) LoginCardBorderDark else LoginCardBorderLight,
                         unfocusedBorderColor = if (dark) LoginCardBorderDark else LoginCardBorderLight,
-                        cursorColor = AccentPurple,
+                        cursorColor = AccentDark,
                     ),
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -1577,6 +1601,10 @@ private fun FavoriteSheet(
                             }
                         },
                         enabled = newFolderName.isNotBlank(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (dark) LoginTextPrimaryDark else AccentSolid,
+                            contentColor = if (dark) LoginBackgroundDark else Color.White,
+                        ),
                     ) {
                         Text(stringResource(R.string.detail_favorite_create), fontSize = 13.sp)
                     }
@@ -1628,7 +1656,7 @@ private fun FavoriteFolderRow(
                 BorderStroke(
                     1.dp,
                     if (selected) {
-                        if (dark) Color(0xFFE0E0E0) else AccentPurple
+                        if (dark) ControlAccentDark else ControlAccentLight
                     } else {
                         Color.Transparent
                     },
@@ -1643,7 +1671,7 @@ private fun FavoriteFolderRow(
             imageVector = if (selected) Icons.Filled.Star else Icons.Outlined.StarBorder,
             contentDescription = null,
             tint = if (selected) {
-                AccentPurple
+                AccentDark
             } else {
                 if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight
             },
@@ -1844,11 +1872,11 @@ private fun ReactionSendButton(
         modifier = Modifier
             .size(34.dp)
             .clip(CircleShape)
-            .background(AccentPurple.copy(alpha = 0.12f))
+            .background(AccentDark.copy(alpha = 0.12f))
             .border(
                 BorderStroke(
                     width = 1.dp,
-                    color = if (highlighted) AccentPurple.copy(alpha = 0.55f) else Color.Transparent,
+                    color = if (highlighted) AccentDark.copy(alpha = 0.55f) else Color.Transparent,
                 ),
                 CircleShape,
             )
@@ -1927,7 +1955,7 @@ private fun RelatedWorksSection(
                             .clip(CircleShape)
                             .background(
                                 if (page == pagerState.currentPage) {
-                                    AccentPurple
+                                    AccentDark
                                 } else if (dark) {
                                     LoginTextFaintDark
                                 } else {

@@ -23,7 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.piku.client.R
-import com.piku.client.ui.theme.AccentPurple
+import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.LoginCardBorderDark
 import com.piku.client.ui.theme.LoginCardBorderLight
 import com.piku.client.ui.theme.LoginCardDark
@@ -65,7 +65,7 @@ fun LoginPrompt(
         ) {
             Text(
                 text = stringResource(R.string.drawer_login_hint),
-                color = if (dark) LoginTextPrimaryDark else AccentPurple,
+                color = if (dark) LoginTextPrimaryDark else AccentDark,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
             )
