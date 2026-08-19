@@ -63,6 +63,8 @@ import com.piku.client.domain.model.ThemeMode
 import com.piku.client.domain.model.UserProfile
 import com.piku.client.ui.common.UserAvatar
 import com.piku.client.ui.theme.AccentDark
+import com.piku.client.ui.theme.FollowDark
+import com.piku.client.ui.theme.FollowLight
 import com.piku.client.ui.theme.LoginCardBorderDark
 import com.piku.client.ui.theme.LoginCardBorderLight
 import com.piku.client.ui.theme.LoginTextFaintDark
@@ -530,7 +532,7 @@ private fun UpdateChip(
     text: String,
     dark: Boolean,
 ) {
-    val color = if (dark) Color(0xFF9A7FC9) else Color(0xFF5E4B8B)
+    val color = if (dark) FollowDark else FollowLight
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(999.dp))
