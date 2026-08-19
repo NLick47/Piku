@@ -57,6 +57,8 @@ import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridS
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -64,10 +66,14 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -167,6 +173,10 @@ private const val FAB_SHOW_AFTER_ITEMS = 12
 /** 预取视口下方缩略图数量（约 1.5~2 屏），滚动时图片已在缓存，避免首帧解码/加载突发 */
 private const val PREFETCH_IMAGE_COUNT = 12
 
+private const val GITHUB_REPO_URL = "https://github.com/NLick47/Piku"
+
+private const val GITHUB_ISSUES_URL = "https://github.com/NLick47/Piku/issues"
+
 @Composable
 fun HomeScreen(
     pendingTag: String?,
@@ -190,6 +200,7 @@ fun HomeScreen(
     var showThemeSheet by rememberSaveable { mutableStateOf(false) }
     var showRetentionSheet by rememberSaveable { mutableStateOf(false) }
     var showLanguageSheet by rememberSaveable { mutableStateOf(false) }
+    var showAboutSheet by rememberSaveable { mutableStateOf(false) }
     var showLogoutConfirm by rememberSaveable { mutableStateOf(false) }
     var showProfileEdit by rememberSaveable { mutableStateOf(false) }
     val isScrolling = remember { mutableStateOf(false) }
@@ -241,7 +252,10 @@ fun HomeScreen(
     val onLogout = { showLogoutConfirm = true }
 
     val onOpenUpdate = {
-        state.updateBanner?.let { release ->
+        // 横幅可能已被关闭，此时退回使用弹层内检查结果
+        val release = state.updateBanner
+            ?: (state.updateCheckState as? UpdateCheckState.Available)?.release
+        if (release != null) {
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(release.htmlUrl)))
         }
         viewModel.dismissUpdateBanner()
@@ -254,20 +268,14 @@ fun HomeScreen(
         themeMode = state.themeMode,
         historyRetentionDays = state.historyRetentionDays,
         language = state.language,
-        autoCheckEnabled = state.autoCheckEnabled,
         currentVersion = if (BuildConfig.DEBUG && BuildConfig.DEBUG_VERSION_NAME.isNotBlank()) {
             BuildConfig.DEBUG_VERSION_NAME
         } else {
             BuildConfig.VERSION_NAME.substringBefore("-")
         },
-        updateCheckState = state.updateCheckState,
+        updateAvailable = state.updateCheckState is UpdateCheckState.Available,
         onToggleAdult = viewModel::toggleAdultContent,
-        onToggleAutoCheck = { viewModel.setAutoCheckEnabled(!state.autoCheckEnabled) },
-        onCheckUpdateClick = {
-            if (state.updateCheckState !is UpdateCheckState.Checking) {
-                viewModel.checkForUpdateManual()
-            }
-        },
+        onAboutClick = { showAboutSheet = true },
         onThemeClick = { showThemeSheet = true },
         onRetentionClick = { showRetentionSheet = true },
         onLanguageClick = { showLanguageSheet = true },
@@ -512,6 +520,33 @@ if (showCategories) {
                         viewModel.logout()
                     },
                     onDismiss = { showLogoutConfirm = false },
+                    dark = dark,
+                )
+            }
+
+            if (showAboutSheet) {
+                AboutSheet(
+                    currentVersion = if (BuildConfig.DEBUG && BuildConfig.DEBUG_VERSION_NAME.isNotBlank()) {
+                        BuildConfig.DEBUG_VERSION_NAME
+                    } else {
+                        BuildConfig.VERSION_NAME.substringBefore("-")
+                    },
+                    autoCheckEnabled = state.autoCheckEnabled,
+                    updateCheckState = state.updateCheckState,
+                    onToggleAutoCheck = { viewModel.setAutoCheckEnabled(!state.autoCheckEnabled) },
+                    onCheckUpdate = {
+                        if (state.updateCheckState !is UpdateCheckState.Checking) {
+                            viewModel.checkForUpdateManual()
+                        }
+                    },
+                    onOpenUpdate = onOpenUpdate,
+                    onOpenGithub = {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(GITHUB_REPO_URL)))
+                    },
+                    onOpenFeedback = {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(GITHUB_ISSUES_URL)))
+                    },
+                    onDismiss = { showAboutSheet = false },
                     dark = dark,
                 )
             }
@@ -1851,6 +1886,225 @@ private fun LanguageSheet(
                 Spacer(Modifier.height(8.dp))
             }
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AboutSheet(
+    currentVersion: String,
+    autoCheckEnabled: Boolean,
+    updateCheckState: UpdateCheckState,
+    onToggleAutoCheck: () -> Unit,
+    onCheckUpdate: () -> Unit,
+    onOpenUpdate: () -> Unit,
+    onOpenGithub: () -> Unit,
+    onOpenFeedback: () -> Unit,
+    onDismiss: () -> Unit,
+    dark: Boolean,
+) {
+    val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
+    val faint = if (dark) LoginTextFaintDark else LoginTextFaintLight
+    val divider = if (dark) LoginCardBorderDark else LoginCardBorderLight
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = if (dark) LoginBackgroundDark else Color.White,
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(start = 20.dp, end = 20.dp, bottom = 28.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.menu_about),
+                color = primary,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.height(16.dp))
+            // 主操作：检查更新（状态由按钮自身表达，带颜色过渡）
+            AboutUpdateButton(
+                state = updateCheckState,
+                onCheckUpdate = onCheckUpdate,
+                onOpenUpdate = onOpenUpdate,
+                dark = dark,
+            )
+            Spacer(Modifier.height(4.dp))
+            AboutToggleRow(
+                text = stringResource(R.string.menu_auto_check_update),
+                checked = autoCheckEnabled,
+                onToggle = onToggleAutoCheck,
+                dark = dark,
+            )
+            Spacer(Modifier.height(12.dp))
+            HorizontalDivider(color = divider)
+            Spacer(Modifier.height(6.dp))
+            // 当前版本（次级信息）
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(36.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                Text(
+                    text = stringResource(R.string.about_version, "v$currentVersion"),
+                    color = faint,
+                    fontSize = 12.sp,
+                )
+            }
+            AboutLinkRow(
+                text = stringResource(R.string.menu_github),
+                onClick = onOpenGithub,
+                dark = dark,
+            )
+            AboutLinkRow(
+                text = stringResource(R.string.menu_feedback),
+                onClick = onOpenFeedback,
+                dark = dark,
+            )
+        }
+    }
+}
+
+@Composable
+private fun AboutUpdateButton(
+    state: UpdateCheckState,
+    onCheckUpdate: () -> Unit,
+    onOpenUpdate: () -> Unit,
+    dark: Boolean,
+) {
+    val green = if (dark) Color(0xFF81C784) else Color(0xFF4CAF50)
+    val red = if (dark) Color(0xFFE08A8A) else Color(0xFFC24B4B)
+    val (targetBg, targetFg) = when (state) {
+        UpdateCheckState.Checking -> AccentPurple to Color.White
+        UpdateCheckState.Latest -> green.copy(alpha = if (dark) 0.22f else 0.12f) to green
+        UpdateCheckState.Failed -> red.copy(alpha = if (dark) 0.22f else 0.12f) to red
+        else -> AccentPurple to Color.White
+    }
+    val bg by animateColorAsState(targetBg, label = "updateBtnBg")
+    val fg by animateColorAsState(targetFg, label = "updateBtnFg")
+    val shape = RoundedCornerShape(16.dp)
+    // 检查中不可点；有新版时点击直接前往下载；其余状态点击触发（重试）检查
+    val clickable = state !is UpdateCheckState.Checking
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .clip(shape)
+            .background(bg)
+            .clickable(enabled = clickable) {
+                when (state) {
+                    UpdateCheckState.Checking -> Unit
+                    is UpdateCheckState.Available -> onOpenUpdate()
+                    else -> onCheckUpdate()
+                }
+            },
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        when (state) {
+            UpdateCheckState.Checking -> {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    color = Color.White,
+                    strokeWidth = 2.dp,
+                )
+                Spacer(Modifier.width(8.dp))
+            }
+            UpdateCheckState.Latest -> {
+                Icon(
+                    imageVector = Icons.Filled.Check,
+                    contentDescription = null,
+                    tint = fg,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+            }
+            else -> Unit
+        }
+        Text(
+            text = when (val s = state) {
+                UpdateCheckState.Checking -> stringResource(R.string.about_checking)
+                UpdateCheckState.Latest -> stringResource(R.string.about_latest)
+                is UpdateCheckState.Available -> stringResource(
+                    R.string.about_update_download,
+                    s.release.tagName,
+                )
+                UpdateCheckState.Failed -> stringResource(R.string.about_retry)
+                UpdateCheckState.Idle -> stringResource(R.string.menu_check_update)
+            },
+            color = fg,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun AboutToggleRow(
+    text: String,
+    checked: Boolean,
+    onToggle: () -> Unit,
+    dark: Boolean,
+) {
+    val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(44.dp)
+            .clickable(onClick = onToggle),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = text,
+            color = primary,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.weight(1f),
+        )
+        Switch(
+            checked = checked,
+            onCheckedChange = { onToggle() },
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color.White,
+                checkedTrackColor = AccentPurple,
+                uncheckedThumbColor = if (dark) Color(0xFF9A948C) else Color.White,
+                uncheckedTrackColor = if (dark) Color(0xFF3A3834) else Color(0xFFE6E2DB),
+                uncheckedBorderColor = if (dark) Color(0xFF3A3834) else Color(0xFFE6E2DB),
+            ),
+        )
+    }
+}
+
+@Composable
+private fun AboutLinkRow(
+    text: String,
+    onClick: () -> Unit,
+    dark: Boolean,
+) {
+    val faint = if (dark) LoginTextFaintDark else LoginTextFaintLight
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(40.dp)
+            .clickable(onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = text,
+            color = faint,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.weight(1f),
+        )
+        Icon(
+            imageVector = Icons.AutoMirrored.Outlined.OpenInNew,
+            contentDescription = null,
+            tint = faint,
+            modifier = Modifier.size(14.dp),
+        )
     }
 }
 

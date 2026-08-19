@@ -2,11 +2,9 @@ package com.piku.client.ui.home
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,13 +29,12 @@ import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.automirrored.outlined.Logout
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.Tag
 import androidx.compose.material.icons.outlined.Translate
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -82,12 +79,10 @@ fun UserDrawer(
     themeMode: ThemeMode,
     historyRetentionDays: Int,
     language: AppLanguage,
-    autoCheckEnabled: Boolean,
     currentVersion: String,
-    updateCheckState: UpdateCheckState,
+    updateAvailable: Boolean,
     onToggleAdult: () -> Unit,
-    onToggleAutoCheck: () -> Unit,
-    onCheckUpdateClick: () -> Unit,
+    onAboutClick: () -> Unit,
     onThemeClick: () -> Unit,
     onRetentionClick: () -> Unit,
     onLanguageClick: () -> Unit,
@@ -110,12 +105,10 @@ fun UserDrawer(
                 themeMode = themeMode,
                 historyRetentionDays = historyRetentionDays,
                 language = language,
-                autoCheckEnabled = autoCheckEnabled,
                 currentVersion = currentVersion,
-                updateCheckState = updateCheckState,
+                updateAvailable = updateAvailable,
                 onToggleAdult = onToggleAdult,
-                onToggleAutoCheck = onToggleAutoCheck,
-                onCheckUpdateClick = onCheckUpdateClick,
+                onAboutClick = onAboutClick,
                 onThemeClick = onThemeClick,
                 onRetentionClick = onRetentionClick,
                 onLanguageClick = onLanguageClick,
@@ -141,12 +134,10 @@ private fun DrawerPanel(
     themeMode: ThemeMode,
     historyRetentionDays: Int,
     language: AppLanguage,
-    autoCheckEnabled: Boolean,
     currentVersion: String,
-    updateCheckState: UpdateCheckState,
+    updateAvailable: Boolean,
     onToggleAdult: () -> Unit,
-    onToggleAutoCheck: () -> Unit,
-    onCheckUpdateClick: () -> Unit,
+    onAboutClick: () -> Unit,
     onThemeClick: () -> Unit,
     onRetentionClick: () -> Unit,
     onLanguageClick: () -> Unit,
@@ -269,24 +260,29 @@ private fun DrawerPanel(
                 dark = dark,
                 accent = iconAccent,
             )
-            AutoCheckRow(
-                autoCheckEnabled = autoCheckEnabled,
-                onToggleAutoCheck = onToggleAutoCheck,
-                dark = dark,
-                accent = iconAccent,
-            )
             DrawerMenuRow(
-                icon = Icons.Outlined.SystemUpdate,
-                label = stringResource(R.string.menu_check_update),
-                onClick = onCheckUpdateClick,
+                icon = Icons.Outlined.Info,
+                label = stringResource(R.string.menu_about),
+                onClick = onAboutClick,
                 dark = dark,
                 accent = iconAccent,
                 trailingContent = {
-                    UpdateStatusLabel(
-                        currentVersion = currentVersion,
-                        state = updateCheckState,
-                        dark = dark,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (updateAvailable) {
+                            UpdateChip(
+                                text = stringResource(R.string.update_status_available),
+                                dark = dark,
+                            )
+                            Spacer(Modifier.width(7.dp))
+                        }
+                        Text(
+                            text = "v$currentVersion",
+                            color = faint,
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 },
             )
             DrawerMenuRow(
@@ -530,62 +526,11 @@ private fun DrawerMenuRow(
 }
 
 @Composable
-private fun UpdateStatusLabel(
-    currentVersion: String,
-    state: UpdateCheckState,
-    dark: Boolean,
-) {
-    val faint = if (dark) LoginTextFaintDark else LoginTextFaintLight
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            text = currentVersion,
-            color = faint,
-            fontSize = 12.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        when (state) {
-            UpdateCheckState.Checking -> {
-                Spacer(Modifier.width(7.dp))
-                CircularProgressIndicator(
-                    modifier = Modifier.size(14.dp),
-                    color = if (dark) LoginTextPrimaryDark else AccentPurple,
-                    strokeWidth = 2.dp,
-                )
-            }
-            UpdateCheckState.Latest -> {
-                StatusChip(
-                    text = stringResource(R.string.update_status_latest),
-                    color = if (dark) Color(0xFF81C784) else Color(0xFF4CAF50),
-                    dark = dark,
-                )
-            }
-            is UpdateCheckState.Available -> {
-                StatusChip(
-                    text = stringResource(R.string.update_status_available),
-                    color = if (dark) Color(0xFF9A7FC9) else Color(0xFF5E4B8B),
-                    dark = dark,
-                )
-            }
-            UpdateCheckState.Failed -> {
-                StatusChip(
-                    text = stringResource(R.string.update_status_failed),
-                    color = if (dark) Color(0xFFE08A8A) else Color(0xFFC24B4B),
-                    dark = dark,
-                )
-            }
-            UpdateCheckState.Idle -> Unit
-        }
-    }
-}
-
-@Composable
-private fun StatusChip(
+private fun UpdateChip(
     text: String,
-    color: Color,
     dark: Boolean,
 ) {
-    Spacer(Modifier.width(7.dp))
+    val color = if (dark) Color(0xFF9A7FC9) else Color(0xFF5E4B8B)
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(999.dp))
@@ -622,59 +567,6 @@ fun AppLanguage.labelRes(): Int = when (this) {
     AppLanguage.ZH -> R.string.language_zh
     AppLanguage.EN -> R.string.language_en
     AppLanguage.JA -> R.string.language_ja
-}
-
-@Composable
-private fun AutoCheckRow(
-    autoCheckEnabled: Boolean,
-    onToggleAutoCheck: () -> Unit,
-    dark: Boolean,
-    accent: Color,
-) {
-    val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 14.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = onToggleAutoCheck)
-            .padding(horizontal = 8.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .clip(RoundedCornerShape(11.dp))
-                .background(accent.copy(alpha = if (dark) 0.22f else 0.13f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.SystemUpdate,
-                contentDescription = null,
-                tint = accent,
-                modifier = Modifier.size(19.dp),
-            )
-        }
-        Spacer(Modifier.width(13.dp))
-        Text(
-            text = stringResource(R.string.menu_auto_check_update),
-            color = primary,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.weight(1f),
-        )
-        Switch(
-            checked = autoCheckEnabled,
-            onCheckedChange = { onToggleAutoCheck() },
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
-                checkedTrackColor = AccentPurple,
-                uncheckedThumbColor = if (dark) Color(0xFF9A948C) else Color.White,
-                uncheckedTrackColor = if (dark) Color(0xFF3A3834) else Color(0xFFE6E2DB),
-                uncheckedBorderColor = if (dark) Color(0xFF3A3834) else Color(0xFFE6E2DB),
-            ),
-        )
-    }
 }
 
 @Composable

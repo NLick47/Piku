@@ -38,9 +38,15 @@
     <string name="menu_check_update">アップデートを確認</string>
     <string name="update_available">新しいバージョン %1$s が利用可能です</string>
     <string name="update_open">ダウンロード</string>
-    <string name="update_status_latest">最新です</string>
     <string name="update_status_available">新バージョンあり</string>
-    <string name="update_status_failed">失敗</string>
+    <string name="menu_about">アプリ情報と更新</string>
+    <string name="about_checking">確認中…</string>
+    <string name="about_latest">最新バージョンです</string>
+    <string name="about_retry">確認に失敗しました。タップして再試行</string>
+    <string name="about_version">バージョン %1$s</string>
+    <string name="about_update_download">新しいバージョン %1$s · ダウンロード</string>
+    <string name="menu_github">プロジェクトURL</string>
+    <string name="menu_feedback">フィードバック</string>
     <string name="logout_confirm">ログアウト</string>
     <string name="logout_confirm_message">アカウントからログアウトしますか？</string>
     <string name="menu_theme">テーマ</string>

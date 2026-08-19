@@ -38,9 +38,15 @@
     <string name="menu_check_update">检查更新</string>
     <string name="update_available">发现新版本 %1$s</string>
     <string name="update_open">前往下载</string>
-    <string name="update_status_latest">已最新</string>
     <string name="update_status_available">有新版</string>
-    <string name="update_status_failed">失败</string>
+    <string name="menu_about">关于与更新</string>
+    <string name="about_checking">检查中…</string>
+    <string name="about_latest">已是最新版本</string>
+    <string name="about_retry">检查失败，点击重试</string>
+    <string name="about_version">版本 %1$s</string>
+    <string name="about_update_download">发现新版本 %1$s · 前往下载</string>
+    <string name="menu_github">项目地址</string>
+    <string name="menu_feedback">问题反馈</string>
     <string name="logout_confirm">退出登录</string>
     <string name="logout_confirm_message">确定要退出登录吗？</string>
     <string name="menu_theme">主题</string>
