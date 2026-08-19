@@ -38,6 +38,8 @@ data class UserWorksUiState(
     val endReached: Boolean = false,
     /** 当前是否已登录（决定关注按钮显示与可用性） */
     val loggedIn: Boolean = false,
+    /** 是否当前登录用户自己的主页（不显示关注按钮） */
+    val isSelf: Boolean = false,
     /** 是否已关注该作者：本页从关注列表进入，默认已关注 */
     val followed: Boolean = true,
     /** 关注操作进行中（防连点） */
@@ -83,6 +85,11 @@ class UserWorksViewModel @Inject constructor(
                 _uiState.update { it.copy(loggedIn = status == AuthStatus.LOGGED_IN) }
             }
         }
+        viewModelScope.launch {
+            authRepository.userProfile.collect { profile ->
+                _uiState.update { it.copy(isSelf = profile?.uid?.toLongOrNull() == userId) }
+            }
+        }
         loadFirstPage()
     }
 
@@ -90,9 +97,10 @@ class UserWorksViewModel @Inject constructor(
         viewModelScope.launch { toggleFavoriteUseCase(work) }
     }
 
-    /** 关注/取消关注作者：未登录提示登录，操作中防连点 */
+    /** 关注/取消关注作者：未登录提示登录，操作中防连点；自己的主页不显示按钮 */
     fun toggleFollow() {
         val state = _uiState.value
+        if (state.isSelf) return
         if (state.followSending) return
         if (!state.loggedIn) {
             _uiState.update { it.copy(followFeedbackRes = R.string.detail_follow_login_hint) }

@@ -79,6 +79,7 @@
     <string name="follow_user_refollow">重新关注</string>
     <string name="user_works_title">%1$s 的作品</string>
     <string name="user_works_empty">该用户暂无作品</string>
+    <string name="user_works_empty_self">你还没有发布作品</string>
     <string name="user_works_count">%1$d 个作品</string>
     <string name="my_tags_add_hint">输入标签名</string>
     <string name="my_tags_add">添加</string>

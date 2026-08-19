@@ -156,6 +156,9 @@ fun AppNavHost() {
                 onUserSearch = { keyword ->
                     navController.navigate(Routes.userSearch(keyword))
                 },
+                onProfileOpen = { uid, name ->
+                    navController.navigate(Routes.userWorks(uid, name))
+                },
             )
         }
         composable(Routes.FOLLOW_USERS) {

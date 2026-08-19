@@ -79,6 +79,7 @@
     <string name="follow_user_refollow">再フォロー</string>
     <string name="user_works_title">%1$s の作品</string>
     <string name="user_works_empty">このユーザーの作品はまだありません</string>
+    <string name="user_works_empty_self">まだ作品を公開していません</string>
     <string name="user_works_count">%1$d 作品</string>
     <string name="my_tags_add_hint">タグ名を入力</string>
     <string name="my_tags_add">追加</string>

@@ -192,6 +192,8 @@ fun HomeScreen(
     onTagsClick: () -> Unit,
     onFollowUsersClick: () -> Unit,
     onUserSearch: (String) -> Unit,
+    /** 登录后点头像进入自己的个人主页（userId, userName） */
+    onProfileOpen: (Long, String) -> Unit,
 ) {
     val viewModel: HomeViewModel = hiltViewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -299,6 +301,14 @@ fun HomeScreen(
         onProfileClick = {
             scope.launch { drawerState.close() }
             showProfileEdit = true
+        },
+        onProfileOpen = {
+            val profile = state.userProfile
+            val uid = profile?.uid?.toLongOrNull()
+            if (uid != null) {
+                scope.launch { drawerState.close() }
+                onProfileOpen(uid, profile.name.orEmpty())
+            }
         },
         onLoginClick = {
             // 必须先关抽屉再导航：抽屉开着时导航，残留的 scrim/手势层会

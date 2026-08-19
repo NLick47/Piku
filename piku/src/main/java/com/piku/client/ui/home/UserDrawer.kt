@@ -93,6 +93,8 @@ fun UserDrawer(
     onTagsClick: () -> Unit,
     onFollowUsersClick: () -> Unit,
     onProfileClick: () -> Unit,
+    /** 登录后点头像/名字区域进入自己的个人主页 */
+    onProfileOpen: () -> Unit,
     onLoginClick: () -> Unit,
     onLogout: () -> Unit,
     dark: Boolean,
@@ -119,6 +121,7 @@ fun UserDrawer(
                 onTagsClick = onTagsClick,
                 onFollowUsersClick = onFollowUsersClick,
                 onProfileClick = onProfileClick,
+                onProfileOpen = onProfileOpen,
                 onLoginClick = onLoginClick,
                 onLogout = onLogout,
                 dark = dark,
@@ -148,6 +151,7 @@ private fun DrawerPanel(
     onTagsClick: () -> Unit,
     onFollowUsersClick: () -> Unit,
     onProfileClick: () -> Unit,
+    onProfileOpen: () -> Unit,
     onLoginClick: () -> Unit,
     onLogout: () -> Unit,
     dark: Boolean,
@@ -186,7 +190,7 @@ private fun DrawerPanel(
     ) {
         DrawerHeader(
             userProfile = userProfile,
-            onProfileClick = onProfileClick,
+            onProfileOpen = onProfileOpen,
             onLoginClick = onLoginClick,
             dark = dark,
         )
@@ -335,7 +339,7 @@ private fun DrawerPanel(
 @Composable
 private fun DrawerHeader(
     userProfile: UserProfile?,
-    onProfileClick: () -> Unit,
+    onProfileOpen: () -> Unit,
     onLoginClick: () -> Unit,
     dark: Boolean,
 ) {
@@ -345,15 +349,15 @@ private fun DrawerHeader(
     val blobPink = if (dark) Color(0x30D8A8B8) else Color(0x3DD8A8B8)
     val ring = if (dark) Color(0x66FFFFFF) else AccentDark.copy(alpha = 0.5f)
 
-    // 已登录：点头部编辑资料；未登录：点头部进入登录
+    // 已登录：点头部进入自己的个人主页；未登录：点头部进入登录
     val loggedIn = userProfile != null
-    val headerClickable = if (loggedIn) userProfile?.profileUrl != null else true
+    val headerClickable = if (loggedIn) userProfile?.uid != null else true
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(enabled = headerClickable) {
-                if (loggedIn) onProfileClick() else onLoginClick()
+                if (loggedIn) onProfileOpen() else onLoginClick()
             }
             .padding(horizontal = 22.dp, vertical = 22.dp),
     ) {

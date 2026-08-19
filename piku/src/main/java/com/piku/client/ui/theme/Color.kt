@@ -64,13 +64,6 @@ val HomeBgBottomLight = Color(0xFFF0EFED)
 val HomeBgTopDark = Color(0xFF1C1A18)
 val HomeBgBottomDark = Color(0xFF232323)
 
-val StarSkyTopDark = Color(0xFF0E1330)
-val StarSkyMidDark = Color(0xFF1B1B44)
-val StarSkyBottomDark = Color(0xFF29213F)
-val StarSkyTopLight = Color(0xFFE7EDFA)
-val StarSkyMidLight = Color(0xFFECEAF7)
-val StarSkyBottomLight = Color(0xFFF5F1F1)
-
 val GlassHeaderTintLight = Color(0xF2F5F3F0)
 val GlassHeaderTintDark = Color(0xE61C1A18)
 val GlassCardTintLight = Color(0xA6FFFFFF)

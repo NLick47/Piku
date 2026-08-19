@@ -54,7 +54,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
@@ -98,12 +101,6 @@ import com.piku.client.ui.theme.LoginTextPrimaryDark
 import com.piku.client.ui.theme.LoginTextPrimaryLight
 import com.piku.client.ui.theme.LoginTextSecondaryDark
 import com.piku.client.ui.theme.LoginTextSecondaryLight
-import com.piku.client.ui.theme.StarSkyBottomDark
-import com.piku.client.ui.theme.StarSkyBottomLight
-import com.piku.client.ui.theme.StarSkyMidDark
-import com.piku.client.ui.theme.StarSkyMidLight
-import com.piku.client.ui.theme.StarSkyTopDark
-import com.piku.client.ui.theme.StarSkyTopLight
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
@@ -189,12 +186,35 @@ fun UserWorksScreen(
                     UserWorksErrorState(errorRes = errorRes ?: R.string.home_error_parse, onRetry = viewModel::retry, dark = dark)
                 }
                 state.works.isEmpty() -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = stringResource(R.string.user_works_empty),
-                            color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
-                            fontSize = 14.sp,
+                    Column(Modifier.fillMaxSize()) {
+                        UserWorksHeaderCard(
+                            pageInfo = state.pageInfo,
+                            userName = state.userName,
+                            userId = state.userId,
+                            fallbackAvatarUrl = null,
+                            collapseProgress = 0f,
+                            followed = state.followed,
+                            followSending = state.followSending,
+                            loggedIn = state.loggedIn,
+                            isSelf = state.isSelf,
+                            onToggleFollow = viewModel::toggleFollow,
+                            dark = dark,
                         )
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth(),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = stringResource(
+                                    if (state.isSelf) R.string.user_works_empty_self
+                                    else R.string.user_works_empty,
+                                ),
+                                color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                                fontSize = 14.sp,
+                            )
+                        }
                     }
                 }
                 else -> {
@@ -253,6 +273,24 @@ private fun parseHexColor(hex: String): Color? = try {
     }
 } catch (_: Exception) {
     null
+}
+
+/**
+ * 无背景设置时的兜底渐变：梦幻粉紫对角混合（亮/暗共用）——
+ * 左上粉 → 紫罗兰/蓝紫过渡 → 右下暖杏，左上角到右下角的对角方向，
+ * 配合顶部径向柔光呈现小红书式梦幻氛围。
+ */
+private fun dreamyHeaderBrush(size: Size): Brush {
+    return Brush.linearGradient(
+        colors = listOf(
+            Color(0xFFFFA8CC), // 粉
+            Color(0xFFB79BF5), // 紫罗兰
+            Color(0xFF8FB7F7), // 蓝紫
+            Color(0xFFFFD3A8), // 暖杏
+        ),
+        start = Offset.Zero,
+        end = Offset(size.width, size.height),
+    )
 }
 
 /** 顶栏：默认显示「X 的作品 + ID」，头部卡片折叠时渐变为「小头像 + 昵称」紧凑模式 */
@@ -502,6 +540,7 @@ private fun UserWorksHeaderCard(
     followed: Boolean,
     followSending: Boolean,
     loggedIn: Boolean,
+    isSelf: Boolean,
     onToggleFollow: () -> Unit,
     dark: Boolean,
 ) {
@@ -579,13 +618,22 @@ private fun UserWorksHeaderCard(
                     Modifier
                         .fillMaxSize()
                         .graphicsLayer { alpha = imageAlpha }
-                        .background(
-                            Brush.verticalGradient(
-                                if (dark) listOf(StarSkyTopDark, StarSkyMidDark, StarSkyBottomDark)
-                                else listOf(StarSkyTopLight, StarSkyMidLight, StarSkyBottomLight),
+                        .drawBehind { drawRect(dreamyHeaderBrush(size)) },
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .size(440.dp)
+                            .background(
+                                Brush.radialGradient(
+                                    colors = listOf(
+                                        if (dark) Color(0x3AFFFFFF) else Color(0x3DFFFFFF),
+                                        Color.Transparent,
+                                    ),
+                                ),
                             ),
-                        ),
-                )
+                    )
+                }
             }
         }
         // 底部渐变遮罩保证文字可读性（亮色下适当减淡，避免底部发黑）
@@ -672,8 +720,8 @@ private fun UserWorksHeaderCard(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            // 关注按钮（玻璃胶囊）
-            if (loggedIn) {
+            // 关注按钮（玻璃胶囊）：未登录或自己的主页不显示
+            if (loggedIn && !isSelf) {
                 Spacer(Modifier.width(8.dp))
                 FollowGlassButton(
                     followed = followed,
@@ -768,6 +816,7 @@ private fun UserWorksGrid(
                     followed = state.followed,
                     followSending = state.followSending,
                     loggedIn = state.loggedIn,
+                    isSelf = state.isSelf,
                     onToggleFollow = onToggleFollow,
                     dark = dark,
                 )

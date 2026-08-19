@@ -79,6 +79,7 @@
     <string name="follow_user_refollow">Follow again</string>
     <string name="user_works_title">Works by %1$s</string>
     <string name="user_works_empty">No works by this user yet</string>
+    <string name="user_works_empty_self">You haven\'t published any works yet</string>
     <string name="user_works_count">%1$d works</string>
     <string name="my_tags_add_hint">Enter a tag name</string>
     <string name="my_tags_add">Add</string>
