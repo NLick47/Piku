@@ -4,7 +4,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 
-val SurfaceVariantDark = Color(0xFF3A3834)
+val Pink80 = Color(0xFFFFB1C2)
+val PinkGrey80 = Color(0xFFCCC2DC)
+val Purple80 = Color(0xFF9A7FC9)
+
+val Pink40 = Color(0xFF7D1D36)
+val PinkGrey40 = Color(0xFF625B71)
+val Purple40 = Color(0xFF5E4B8B)
 
 val LoginBackgroundLight = Color(0xFFF5F3F0)
 val LoginCardLight = Color(0xFFFFFFFF)
@@ -16,16 +22,18 @@ val LoginTextFaintLight = Color(0xFFC5C0B8)
 
 val LoginBackgroundDark = Color(0xFF1C1A18)
 val LoginCardDark = Color(0xFF262421)
-val LoginCardBorderDark = SurfaceVariantDark
+val LoginCardBorderDark = Color(0xFF46405A)
 val LoginTextPrimaryDark = Color(0xFFE8E4DE)
 val LoginTextSecondaryDark = Color(0xFF9A948C)
-val LoginDividerDark = SurfaceVariantDark
+val LoginDividerDark = Color(0xFF46405A)
 val LoginTextFaintDark = Color(0xFF5C5852)
 
 val AccentDark = Color(0xFF5F584F)
 
 val AccentSolid = Color(0xFF7D746A)
 
+
+val SurfaceVariantDark = Color(0xFF3A3834)
 
 val ControlAccentLight = AccentDark
 val ControlAccentDark = Color(0xFFE0E0E0)
@@ -75,30 +83,20 @@ val GlassCardBgDark = Color(0x8C262421)
 
 val GlassIconBgDark = Color(0xCC262421)
 val PillBorderLight = Color(0xFFE8E4DE)
-val PillBorderDark = SurfaceVariantDark
+val PillBorderDark = Color(0xFF46405A)
+val WorkCardBgDark = Color(0xCC2E2936)
+val WorkCardInfoBgDark = Color(0xF22B2633)
+val WorkCardPlaceholderDark = Color(0xFF2E2936)
+val WorkCardBorderDark = Color(0x8C46405A)
 
-val WorkCardBgDark = LoginCardDark.copy(alpha = 0.8f)
-val WorkCardInfoBgDark = LoginCardDark.copy(alpha = 0.95f)
-val WorkCardPlaceholderDark = LoginCardDark
-val WorkCardBorderDark = SurfaceVariantDark.copy(alpha = 0.33f)
-
-// 暗色下作品图统一后处理：非对称暖调矩阵（亮色不启用）
-//  - 亮度：白底压到 ~67%，对齐暗色 UI 表面层级，消除网格里的"亮块"感
-//  - 色温：R>G>B 非对称，高光偏暖米、暗部偏暖黑，与暖灰 UI（#262421 系）同族
-//  - 保留中间调层次与原始饱和度，作品内容不被篡改
-// 推演（0-255）：白 255→R172 G161 B138；中灰 128→R98 G90 B74；黑 0→R24 G18 B10
-private val DimRGain = 0.58f
-private val DimGGain = 0.56f
-private val DimBGain = 0.50f
-private val DimRLift = 24f
-private val DimGLift = 18f
-private val DimBLift = 10f
+private val WhiteTameGain = 0.86f
+private val WhiteTameOffset = -20f
 val TameWhiteColorFilter = ColorFilter.colorMatrix(
     ColorMatrix(
         floatArrayOf(
-            DimRGain, 0f, 0f, 0f, DimRLift,
-            0f, DimGGain, 0f, 0f, DimGLift,
-            0f, 0f, DimBGain, 0f, DimBLift,
+            WhiteTameGain, 0f, 0f, 0f, WhiteTameOffset,
+            0f, WhiteTameGain, 0f, 0f, WhiteTameOffset,
+            0f, 0f, WhiteTameGain, 0f, WhiteTameOffset,
             0f, 0f, 0f, 1f, 0f,
         ),
     ),
