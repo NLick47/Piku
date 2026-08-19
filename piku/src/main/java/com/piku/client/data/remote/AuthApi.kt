@@ -6,12 +6,16 @@ import retrofit2.Response
 import retrofit2.http.Field
 import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
+import retrofit2.http.Header
 import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
 
 @Serializable
 data class LoginResponse(val result: Int = -1)
+
+@Serializable
+data class RegisterResponse(val result: Int = -1)
 
 @Serializable
 data class UpdateNickNameResponse(val result: Int = -1)
@@ -27,6 +31,25 @@ interface AuthApi {
         @Field("EM") email: String,
         @Field("PW") password: String,
     ): LoginResponse
+
+    /** 注册/邮箱登录表单页，内含每次加载都会轮换的 TK 令牌，必须先 GET 拿新令牌再注册 */
+    @GET("LoginFormEmailV.jsp")
+    suspend fun getRegisterForm(): Response<ResponseBody>
+
+    /**
+     * 注册（官方 App 使用的无验证码接口）。
+     * [token] 必须是刚 GET 到的新 TK；Referer 由全局拦截器补充，X-Requested-With 与官方网页 ajax 一致。
+     * result：>0 成功，-1 参数错误，-6 昵称非法，-7 邮箱非法，-8 邮箱已被注册。
+     */
+    @FormUrlEncoded
+    @POST("api/RegistUserF.jsp")
+    suspend fun register(
+        @Field("NN") nickname: String,
+        @Field("EM") email: String,
+        @Field("PW") password: String,
+        @Field("TK") token: String,
+        @Header("X-Requested-With") xRequestedWith: String,
+    ): RegisterResponse
 
     @GET("MyHomePcV.jsp")
     suspend fun getMyHome(): Response<ResponseBody>

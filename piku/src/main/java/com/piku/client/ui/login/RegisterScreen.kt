@@ -10,7 +10,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -29,9 +28,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.MailOutline
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -71,24 +70,24 @@ import com.piku.client.ui.theme.LoginTextPrimaryLight
 import kotlinx.coroutines.launch
 
 @Composable
-fun EmailLoginScreen(
+fun RegisterScreen(
     onBack: () -> Unit,
     canGoBack: Boolean = true,
     onSuccess: () -> Unit,
-    onRegisterClick: () -> Unit,
+    onLoginClick: () -> Unit,
 ) {
-    val viewModel: LoginViewModel = hiltViewModel()
+    val viewModel: RegisterViewModel = hiltViewModel()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val dark = LocalDarkTheme.current
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
+    val emailFocusRequester = remember { FocusRequester() }
     val passwordFocusRequester = remember { FocusRequester() }
 
-    LaunchedEffect(viewModel.loggedIn) {
-        if (viewModel.loggedIn) onSuccess()
+    LaunchedEffect(viewModel.registered) {
+        if (viewModel.registered) onSuccess()
     }
 
-    // 入场动画：淡入 + 轻微上移
     val cardAlpha = remember { Animatable(0f) }
     val cardTranslate = remember { Animatable(16f) }
     LaunchedEffect(Unit) {
@@ -106,10 +105,8 @@ fun EmailLoginScreen(
                 ),
             ),
     ) {
-        // 装饰光斑
         LoginBlobs(dark)
 
-        // 居中玻璃卡片（键盘弹出时自动让位，内容超高时可滚动）
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -119,25 +116,33 @@ fun EmailLoginScreen(
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            LoginGlassCard(
+            RegisterGlassCard(
                 uiState = uiState,
+                nickname = viewModel.nickname,
+                onNicknameChange = viewModel::onNicknameChange,
                 email = viewModel.email,
                 onEmailChange = viewModel::onEmailChange,
                 password = viewModel.password,
                 onPasswordChange = viewModel::onPasswordChange,
                 passwordVisible = viewModel.passwordVisible,
                 onTogglePassword = viewModel::togglePasswordVisibility,
+                emailFocusRequester = emailFocusRequester,
                 passwordFocusRequester = passwordFocusRequester,
+                onFocusEmail = {
+                    if (!emailFocusRequester.requestFocus()) {
+                        focusManager.moveFocus(FocusDirection.Next)
+                    }
+                },
                 onFocusPassword = {
                     if (!passwordFocusRequester.requestFocus()) {
                         focusManager.moveFocus(FocusDirection.Next)
                     }
                 },
-                onLogin = {
+                onRegister = {
                     keyboardController?.hide()
-                    viewModel.login()
+                    viewModel.register()
                 },
-                onRegisterClick = onRegisterClick,
+                onLoginClick = onLoginClick,
                 dark = dark,
                 modifier = Modifier
                     .widthIn(max = 440.dp)
@@ -148,13 +153,10 @@ fun EmailLoginScreen(
             )
         }
 
-        // 悬浮玻璃返回按钮：必须放在滚动 Column 之后（上层）——
-        // 全屏 verticalScroll 的指针输入层会挡住其下方兄弟节点的点击
-        // （历史 bug：登录页返回按钮点了无效）
         if (canGoBack) {
             GlassBackButton(
                 onClick = {
-                    android.util.Log.d("PikuDiag", "login glass back button clicked")
+                    android.util.Log.d("PikuDiag", "register glass back button clicked")
                     onBack()
                 },
                 dark = dark,
@@ -168,18 +170,22 @@ fun EmailLoginScreen(
 }
 
 @Composable
-private fun LoginGlassCard(
-    uiState: LoginUiState,
+private fun RegisterGlassCard(
+    uiState: RegisterUiState,
+    nickname: String,
+    onNicknameChange: (String) -> Unit,
     email: String,
     onEmailChange: (String) -> Unit,
     password: String,
     onPasswordChange: (String) -> Unit,
     passwordVisible: Boolean,
     onTogglePassword: () -> Unit,
+    emailFocusRequester: FocusRequester,
     passwordFocusRequester: FocusRequester,
+    onFocusEmail: () -> Unit,
     onFocusPassword: () -> Unit,
-    onLogin: () -> Unit,
-    onRegisterClick: () -> Unit,
+    onRegister: () -> Unit,
+    onLoginClick: () -> Unit,
     dark: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -197,7 +203,6 @@ private fun LoginGlassCard(
             .padding(horizontal = 24.dp, vertical = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // 品牌标
         Box(
             modifier = Modifier
                 .size(52.dp)
@@ -220,12 +225,35 @@ private fun LoginGlassCard(
         }
         Spacer(Modifier.height(16.dp))
         Text(
-            text = stringResource(R.string.email_login_title),
+            text = stringResource(R.string.register_title),
             color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
             fontSize = 17.sp,
             fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(30.dp))
+
+        OutlinedTextField(
+            value = nickname,
+            onValueChange = onNicknameChange,
+            placeholder = { Text(stringResource(R.string.register_nickname_label)) },
+            leadingIcon = {
+                Icon(
+                    imageVector = Icons.Outlined.Person,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+            },
+            singleLine = true,
+            keyboardOptions = NicknameKeyboardOptions,
+            keyboardActions = KeyboardActions(onNext = { onFocusEmail() }),
+            shape = fieldShape,
+            colors = fieldColors,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 56.dp),
+        )
+
+        Spacer(Modifier.height(14.dp))
 
         OutlinedTextField(
             value = email,
@@ -244,6 +272,7 @@ private fun LoginGlassCard(
             shape = fieldShape,
             colors = fieldColors,
             modifier = Modifier
+                .focusRequester(emailFocusRequester)
                 .fillMaxWidth()
                 .heightIn(min = 56.dp),
         )
@@ -253,7 +282,7 @@ private fun LoginGlassCard(
         OutlinedTextField(
             value = password,
             onValueChange = onPasswordChange,
-            placeholder = { Text(stringResource(R.string.password_label)) },
+            placeholder = { Text(stringResource(R.string.register_password_label)) },
             leadingIcon = {
                 Icon(
                     imageVector = Icons.Outlined.Lock,
@@ -283,7 +312,7 @@ private fun LoginGlassCard(
                 PasswordVisualTransformation()
             },
             keyboardOptions = PasswordKeyboardOptions,
-            keyboardActions = KeyboardActions(onDone = { onLogin() }),
+            keyboardActions = KeyboardActions(onDone = { onRegister() }),
             shape = fieldShape,
             colors = fieldColors,
             modifier = Modifier
@@ -292,62 +321,32 @@ private fun LoginGlassCard(
                 .heightIn(min = 56.dp),
         )
 
-        if (uiState is LoginUiState.Error) {
+        if (uiState is RegisterUiState.Error) {
             Spacer(Modifier.height(16.dp))
-            LoginErrorBanner(stringResource((uiState as LoginUiState.Error).errorRes), dark)
+            LoginErrorBanner(stringResource((uiState as RegisterUiState.Error).errorRes), dark)
         }
 
         Spacer(Modifier.height(30.dp))
 
         LoginGlassButton(
-            text = stringResource(R.string.login_button),
-            enabled = uiState !is LoginUiState.Loading &&
-                email.isNotBlank() && password.isNotBlank(),
-            loading = uiState is LoginUiState.Loading,
-            onClick = onLogin,
+            text = stringResource(R.string.register_button),
+            enabled = uiState !is RegisterUiState.Loading &&
+                nickname.isNotBlank() && email.isNotBlank() && password.isNotBlank(),
+            loading = uiState is RegisterUiState.Loading,
+            onClick = onRegister,
             dark = dark,
             modifier = Modifier.fillMaxWidth(),
         )
 
         Spacer(Modifier.height(18.dp))
         Text(
-            text = stringResource(R.string.register_link_login),
+            text = stringResource(R.string.register_has_account),
             color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
             fontSize = 13.sp,
             modifier = Modifier
                 .clip(RoundedCornerShape(8.dp))
-                .clickable(onClick = onRegisterClick)
+                .clickable(onClick = onLoginClick)
                 .padding(horizontal = 8.dp, vertical = 6.dp),
-        )
-    }
-}
-
-@Composable
-internal fun LoginErrorBanner(message: String, dark: Boolean) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(LoginErrorRed.copy(alpha = if (dark) 0.16f else 0.10f))
-            .border(
-                BorderStroke(0.5.dp, LoginErrorRed.copy(alpha = 0.35f)),
-                RoundedCornerShape(14.dp),
-            )
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Icon(
-            imageVector = Icons.Outlined.Info,
-            contentDescription = null,
-            tint = LoginErrorRed,
-            modifier = Modifier.size(16.dp),
-        )
-        Text(
-            text = message,
-            color = if (dark) Color(0xFFE8A0A0) else LoginErrorRed,
-            fontSize = 12.sp,
-            lineHeight = 16.sp,
         )
     }
 }

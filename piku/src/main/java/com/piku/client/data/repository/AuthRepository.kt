@@ -10,6 +10,7 @@ import com.piku.client.data.remote.apiCall
 import com.piku.client.domain.model.AppError
 import com.piku.client.domain.model.AuthStatus
 import com.piku.client.domain.model.LoginError
+import com.piku.client.domain.model.RegisterError
 import com.piku.client.domain.model.UserProfile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -99,6 +100,50 @@ class AuthRepository @Inject constructor(
                 Log.d(TAG, "login failure: $error")
                 Result.failure(
                     if (error is AppError.Network) LoginError.Network else LoginError.Unknown,
+                )
+            },
+        )
+    }
+
+    /**
+     * 注册（官方 App 的无验证码接口）：
+     * 1. GET LoginFormEmailV.jsp 拿每次都会轮换的新 TK 令牌；
+     * 2. POST /api/RegistUserF.jsp 提交 NN/EM/PW/TK；
+     * 3. 成功后该请求已下发会话 cookie，再走一次登录补全 uid 与 profile。
+     */
+    suspend fun register(email: String, password: String, nickname: String): Result<Unit> {
+        val token = apiCall {
+            val form = authApi.getRegisterForm()
+            val html = form.body()?.string().orEmpty()
+            parseRegisterToken(html) ?: throw IllegalStateException("register TK not found")
+        }.getOrElse { error ->
+            Log.d(TAG, "register: token fetch failed: $error")
+            return Result.failure(
+                if (error is AppError.Network) RegisterError.Network else RegisterError.Unknown,
+            )
+        }
+        Log.d(TAG, "register: token len=${token.length}")
+        val response = apiCall {
+            authApi.register(nickname, email, password, token, X_REQUESTED_WITH)
+        }
+        return response.fold(
+            onSuccess = { reg ->
+                Log.d(TAG, "register response: result=${reg.result}")
+                when {
+                    reg.result > 0 -> {
+                        Log.d(TAG, "register ok, logging in to complete session")
+                        login(email, password)
+                    }
+                    reg.result == RESULT_EMAIL_USED -> Result.failure(RegisterError.EmailInUse)
+                    reg.result == RESULT_INVALID_NICKNAME -> Result.failure(RegisterError.InvalidNickname)
+                    reg.result == RESULT_INVALID_EMAIL -> Result.failure(RegisterError.InvalidEmail)
+                    else -> Result.failure(RegisterError.Unknown)
+                }
+            },
+            onFailure = { error ->
+                Log.d(TAG, "register failure: $error")
+                Result.failure(
+                    if (error is AppError.Network) RegisterError.Network else RegisterError.Unknown,
                 )
             },
         )
@@ -291,6 +336,10 @@ class AuthRepository @Inject constructor(
     private companion object {
         const val SESSION_COOKIE = "POIPIKU_LK"
         const val RESULT_LOCKED = -21
+        const val RESULT_EMAIL_USED = -8
+        const val RESULT_INVALID_NICKNAME = -6
+        const val RESULT_INVALID_EMAIL = -7
+        const val X_REQUESTED_WITH = "XMLHttpRequest"
         const val RELOGIN_MIN_INTERVAL_MS = 30_000L
         const val MAX_RELOGIN_FAILURES = 3
         const val TAG = "PikuDiag"
@@ -307,3 +356,9 @@ class AuthRepository @Inject constructor(
     /** 头像超出网页端 1MB 限制 */
     data object AvatarTooLarge : Exception("avatar too large")
 }
+
+/** 注册表单页的 TK 令牌：`"TK":"..."`，每次页面加载都会轮换 */
+internal val REGISTER_TOKEN_REGEX = Regex("""\"TK\":\"([^\"]+)\"""")
+
+internal fun parseRegisterToken(html: String): String? =
+    REGISTER_TOKEN_REGEX.find(html)?.groupValues?.get(1)

@@ -26,11 +26,13 @@ import com.piku.client.ui.follow.UserWorksScreen
 import com.piku.client.ui.history.HistoryScreen
 import com.piku.client.ui.home.HomeScreen
 import com.piku.client.ui.login.EmailLoginScreen
+import com.piku.client.ui.login.RegisterScreen
 import com.piku.client.ui.search.UserSearchScreen
 import com.piku.client.ui.tags.TagScreen
 
 object Routes {
     const val LOGIN = "login"
+    const val REGISTER = "register"
     const val HOME = "home"
     const val COLLECTION = "collection"
     const val DETAIL = "detail/{authorId}/{workId}?thumb={thumb}"
@@ -128,6 +130,26 @@ fun AppNavHost() {
                 },
                 canGoBack = canGoBack,
                 onSuccess = safePopBack,
+                onRegisterClick = { navController.navigate(Routes.REGISTER) },
+            )
+        }
+        composable(Routes.REGISTER) {
+            // 注册页从登录页进入：返回键/去登录都弹回登录页
+            val canGoBack = navController.previousBackStackEntry != null
+            RegisterScreen(
+                onBack = {
+                    Log.d(TAG, "register back button tapped")
+                    navController.popBackStack(Routes.LOGIN, inclusive = false)
+                },
+                canGoBack = canGoBack,
+                onSuccess = {
+                    Log.d(TAG, "register success, popping to home")
+                    // 注册成功后已登录，直接回到首页（栈底），弹掉 REGISTER 与 LOGIN
+                    navController.popBackStack(Routes.HOME, inclusive = false)
+                },
+                onLoginClick = {
+                    navController.popBackStack(Routes.LOGIN, inclusive = false)
+                },
             )
         }
         composable(Routes.HOME) { backStackEntry ->
