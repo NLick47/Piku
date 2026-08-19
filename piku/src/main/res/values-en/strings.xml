@@ -254,6 +254,8 @@
     <string name="detail_favorite_create">Create</string>
     <string name="detail_favorite_cancel">Cancel</string>
     <string name="detail_reaction_empty">No reactions yet</string>
+    <string name="detail_reaction_total">%1$d reactions</string>
+    <string name="detail_reaction_more">and %1$d more</string>
     <string name="detail_reaction_title">Reactions</string>
     <string name="detail_reaction_send_title">Send a reaction</string>
     <string name="detail_reaction_sent">Sent!</string>

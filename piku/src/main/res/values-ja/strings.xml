@@ -254,6 +254,8 @@
     <string name="detail_favorite_create">作成</string>
     <string name="detail_favorite_cancel">キャンセル</string>
     <string name="detail_reaction_empty">リアクションはまだありません</string>
+    <string name="detail_reaction_total">合計 %1$d 件</string>
+    <string name="detail_reaction_more">ほか %1$d 種類</string>
     <string name="detail_reaction_title">リアクション</string>
     <string name="detail_reaction_send_title">リアクションを送る</string>
     <string name="detail_reaction_sent">送信しました</string>

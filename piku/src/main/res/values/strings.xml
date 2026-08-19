@@ -254,6 +254,8 @@
     <string name="detail_favorite_create">创建</string>
     <string name="detail_favorite_cancel">取消</string>
     <string name="detail_reaction_empty">还没有收到反应</string>
+    <string name="detail_reaction_total">共 %1$d 个反应</string>
+    <string name="detail_reaction_more">还有 %1$d 种表情</string>
     <string name="detail_reaction_title">收到的反应</string>
     <string name="detail_reaction_send_title">发送反应</string>
     <string name="detail_reaction_sent">已发送</string>

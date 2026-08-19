@@ -264,7 +264,6 @@ private fun SearchTopBar(
 ) {
     val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
     val secondary = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight
-    val faint = if (dark) LoginTextFaintDark else LoginTextFaintLight
 
     Row(
         modifier = Modifier
@@ -288,7 +287,7 @@ private fun SearchTopBar(
             placeholder = {
                 Text(
                     text = stringResource(R.string.search_placeholder),
-                    color = faint,
+                    color = if (dark) LoginTextSecondaryDark else LoginTextFaintLight,
                     fontSize = 14.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -313,7 +312,7 @@ private fun SearchTopBar(
                             Icon(
                                 imageVector = Icons.Filled.Close,
                                 contentDescription = stringResource(R.string.search_clear),
-                                tint = faint,
+                                tint = if (dark) LoginTextSecondaryDark else LoginTextFaintLight,
                                 modifier = Modifier.size(16.dp),
                             )
                         }
@@ -339,7 +338,7 @@ private fun SearchTopBar(
         Spacer(Modifier.width(6.dp))
         Text(
             text = stringResource(R.string.search_action),
-            color = AccentDark,
+            color = if (dark) LoginTextPrimaryDark else AccentDark,
             fontSize = 15.sp,
             fontWeight = FontWeight.Medium,
             modifier = Modifier
@@ -363,7 +362,7 @@ private fun IdleContent(
     onClearHistory: () -> Unit,
     dark: Boolean,
 ) {
-    val faint = if (dark) LoginTextFaintDark else LoginTextFaintLight
+    val label = if (dark) LoginTextSecondaryDark else LoginTextFaintLight
     Column(
         Modifier
             .fillMaxSize()
@@ -385,13 +384,13 @@ private fun IdleContent(
             Icon(
                 imageVector = Icons.Outlined.History,
                 contentDescription = null,
-                tint = faint,
+                tint = label,
                 modifier = Modifier.size(14.dp),
             )
             Spacer(Modifier.width(6.dp))
             Text(
                 text = stringResource(R.string.search_recent),
-                color = faint,
+                color = label,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier.weight(1f),
@@ -401,20 +400,21 @@ private fun IdleContent(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
                         .clickable(onClick = onClearHistory)
-                        .padding(horizontal = 6.dp, vertical = 4.dp),
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.DeleteSweep,
                         contentDescription = null,
-                        tint = faint,
-                        modifier = Modifier.size(14.dp),
+                        tint = label,
+                        modifier = Modifier.size(16.dp),
                     )
-                    Spacer(Modifier.width(3.dp))
+                    Spacer(Modifier.width(4.dp))
                     Text(
                         text = stringResource(R.string.search_clear),
-                        color = faint,
-                        fontSize = 11.sp,
+                        color = label,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
                     )
                 }
             }
@@ -423,7 +423,7 @@ private fun IdleContent(
         if (history.isEmpty()) {
             Text(
                 text = stringResource(R.string.search_history_empty),
-                color = faint,
+                color = label,
                 fontSize = 12.sp,
             )
         } else {
@@ -444,7 +444,7 @@ private fun IdleContent(
         Spacer(Modifier.height(24.dp))
         Text(
             text = stringResource(R.string.search_hot_tags),
-            color = faint,
+            color = label,
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium,
         )
@@ -452,7 +452,7 @@ private fun IdleContent(
         if (popularTags.isEmpty()) {
             Text(
                 text = stringResource(R.string.search_hot_tags_empty),
-                color = faint,
+                color = label,
                 fontSize = 12.sp,
             )
         } else {
@@ -473,7 +473,7 @@ private fun IdleContent(
         Spacer(Modifier.height(24.dp))
         Text(
             text = stringResource(R.string.search_hint),
-            color = faint,
+            color = label,
             fontSize = 11.sp,
         )
     }
@@ -490,7 +490,7 @@ private fun MyTagsRow(
     dark: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val faint = if (dark) LoginTextFaintDark else LoginTextFaintLight
+    val label = if (dark) LoginTextSecondaryDark else LoginTextFaintLight
     Column(modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -499,13 +499,13 @@ private fun MyTagsRow(
             Icon(
                 imageVector = Icons.Outlined.Label,
                 contentDescription = null,
-                tint = faint,
+                tint = label,
                 modifier = Modifier.size(14.dp),
             )
             Spacer(Modifier.width(6.dp))
             Text(
                 text = stringResource(R.string.menu_my_tags),
-                color = faint,
+                color = label,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier.weight(1f),
@@ -514,13 +514,14 @@ private fun MyTagsRow(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
                     .clickable(onClick = onManage)
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
                     text = stringResource(R.string.search_manage_tags),
-                    color = faint,
-                    fontSize = 11.sp,
+                    color = label,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
                 )
             }
         }
@@ -528,7 +529,7 @@ private fun MyTagsRow(
         if (tags.isEmpty()) {
             Text(
                 text = stringResource(R.string.my_tags_empty),
-                color = faint,
+                color = label,
                 fontSize = 12.sp,
             )
         } else {
@@ -700,7 +701,7 @@ private fun SearchKeywordChip(
             Icon(
                 imageVector = Icons.Filled.Close,
                 contentDescription = stringResource(R.string.search_delete),
-                tint = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                tint = if (dark) LoginTextSecondaryDark else LoginTextFaintLight,
                 modifier = Modifier.size(11.dp),
             )
         }

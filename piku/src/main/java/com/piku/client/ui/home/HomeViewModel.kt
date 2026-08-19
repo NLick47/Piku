@@ -459,7 +459,7 @@ class HomeViewModel @Inject constructor(
             result.onSuccess { list ->
                 if (generation != gen) return@launch
                 page = targetPage
-                val notice = if (noticePending && !append && (tab == FeedTab.LATEST || tab == FeedTab.FOLLOW)) {
+                val notice = if (noticePending && !append && (tab == FeedTab.LATEST || tab == FeedTab.FOLLOW || tab == FeedTab.HOT)) {
                     val old = oldFirstId
                     if (old != null) list.takeWhile { it.id != old }.size else 0
                 } else {

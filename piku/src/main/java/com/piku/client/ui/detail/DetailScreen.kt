@@ -724,6 +724,9 @@ private fun formatReactionCount(count: Int): String {
 
 private const val GUIDE_HINT_MILLIS = 6_000L
 
+/** 收到反应面板最多展示的表情种类数，防止表情过多撑满面板 */
+private const val MAX_VISIBLE_REACTION_TYPES = 8
+
 /** 底部菜单一次性新手引导：首次进入详情页时在菜单上方短暂展示按钮含义 */
 @Composable
 private fun BottomBarGuideHint(
@@ -1643,12 +1646,12 @@ private fun FavoriteFolderRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .shadow(if (selected) 4.dp else 0.dp, shape, ambientColor = Color(0x33000000), spotColor = Color(0x40000000))
+            .shadow(if (selected && dark) 4.dp else 0.dp, shape, ambientColor = Color(0x33000000), spotColor = Color(0x40000000))
             .clip(shape)
             .background(
                 when {
                     selected && dark -> Color(0x26E0E0E0)
-                    selected -> Color(0x1A2C2C2C)
+                    selected -> AccentDark.copy(alpha = 0.12f)
                     else -> Color.Transparent
                 },
             )
@@ -1671,7 +1674,7 @@ private fun FavoriteFolderRow(
             imageVector = if (selected) Icons.Filled.Star else Icons.Outlined.StarBorder,
             contentDescription = null,
             tint = if (selected) {
-                AccentDark
+                if (dark) StarDark else StarLight
             } else {
                 if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight
             },
@@ -1737,23 +1740,44 @@ private fun ReactionSheet(
                 .padding(bottom = 28.dp)
                 .verticalScroll(rememberScrollState()),
         ) {
-            Text(
-                text = stringResource(R.string.detail_reaction_title),
-                color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.detail_reaction_title),
+                    color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
+                )
+                if (detail.reactionCount > 0) {
+                    Text(
+                        text = stringResource(R.string.detail_reaction_total, detail.reactionCount),
+                        color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                        fontSize = 12.sp,
+                    )
+                }
+            }
             if (detail.reactionCount > 0) {
                 Spacer(Modifier.height(16.dp))
+                val entries = detail.reactionCounts.entries.sortedByDescending { it.value }
+                val visible = entries.take(MAX_VISIBLE_REACTION_TYPES)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    detail.reactionCounts.entries
-                        .sortedByDescending { it.value }
-                        .forEach { (emoji, count) ->
-                            ReceivedReactionPill(emoji = emoji, count = count, dark = dark)
-                        }
+                    visible.forEach { (emoji, count) ->
+                        ReceivedReactionPill(emoji = emoji, count = count, dark = dark)
+                    }
+                }
+                if (entries.size > visible.size) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.detail_reaction_more, entries.size - visible.size),
+                        color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                        fontSize = 12.sp,
+                    )
                 }
             } else {
                 Spacer(Modifier.height(16.dp))
@@ -1954,12 +1978,11 @@ private fun RelatedWorksSection(
                             .size(6.dp)
                             .clip(CircleShape)
                             .background(
-                                if (page == pagerState.currentPage) {
-                                    AccentDark
-                                } else if (dark) {
-                                    LoginTextFaintDark
-                                } else {
-                                    LoginTextFaintLight
+                                when {
+                                    page == pagerState.currentPage && dark -> ControlAccentDark
+                                    page == pagerState.currentPage -> AccentDark
+                                    dark -> LoginTextFaintDark
+                                    else -> LoginTextFaintLight
                                 },
                             ),
                     )
