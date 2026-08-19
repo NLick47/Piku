@@ -63,7 +63,7 @@
     <string name="logout_confirm_message">确定要退出登录吗？</string>
     <string name="menu_theme">主题</string>
     <string name="menu_language">界面语言</string>
-    <string name="menu_history_retention">历史记录保留</string>
+    <string name="menu_history_retention">浏览记录保留</string>
     <string name="theme_select_title">选择主题</string>
     <string name="theme_mode_system">跟随系统</string>
     <string name="theme_mode_light">浅色</string>
@@ -73,8 +73,8 @@
     <string name="language_zh">简体中文</string>
     <string name="language_en">English</string>
     <string name="language_ja">日本語</string>
-    <string name="retention_select_title">历史记录保留时长</string>
-    <string name="retention_select_hint">超过保留期的记录会被自动清除</string>
+    <string name="retention_select_title">浏览记录保留时长</string>
+    <string name="retention_select_hint">超过保留期的浏览记录会被自动清除</string>
     <string name="retention_7d">保留 7 天</string>
     <string name="retention_30d">保留 30 天</string>
     <string name="retention_90d">保留 90 天</string>

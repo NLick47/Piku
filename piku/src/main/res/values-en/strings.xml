@@ -63,7 +63,7 @@
     <string name="logout_confirm_message">Log out of your account?</string>
     <string name="menu_theme">Theme</string>
     <string name="menu_language">Language</string>
-    <string name="menu_history_retention">History retention</string>
+    <string name="menu_history_retention">Browsing history retention</string>
     <string name="theme_select_title">Choose theme</string>
     <string name="theme_mode_system">Follow system</string>
     <string name="theme_mode_light">Light</string>
@@ -73,8 +73,8 @@
     <string name="language_zh">简体中文</string>
     <string name="language_en">English</string>
     <string name="language_ja">日本語</string>
-    <string name="retention_select_title">History retention period</string>
-    <string name="retention_select_hint">Records older than the period are removed automatically</string>
+    <string name="retention_select_title">Browsing history retention period</string>
+    <string name="retention_select_hint">Browsing records older than the period are removed automatically</string>
     <string name="retention_7d">Keep 7 days</string>
     <string name="retention_30d">Keep 30 days</string>
     <string name="retention_90d">Keep 90 days</string>
