@@ -1,5 +1,6 @@
-package com.piku.client.data.repository
+﻿package com.piku.client.data.repository
 
+import com.piku.client.data.local.PopularTagCacheRepository
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.data.remote.FollowFeedParser
 import com.piku.client.data.remote.FollowUserParser
@@ -7,6 +8,7 @@ import com.piku.client.data.remote.NewArrivalParser
 import com.piku.client.data.remote.PoipikuApi
 import com.piku.client.data.remote.PopularTagParser
 import com.piku.client.data.remote.SessionMonitor
+import com.piku.client.data.remote.TagCardParser
 import com.piku.client.data.remote.UserPageParser
 import com.piku.client.data.remote.UserSearchParser
 import com.piku.client.data.remote.apiCall
@@ -14,11 +16,13 @@ import com.piku.client.domain.model.AppError
 import com.piku.client.domain.model.FollowUser
 import com.piku.client.domain.model.FollowUserPage
 import com.piku.client.domain.model.PopularTag
+import com.piku.client.domain.model.TagCard
 import com.piku.client.domain.model.UserWorksPage
 import com.piku.client.domain.model.Work
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.jvm.Volatile
 
 @Singleton
 class FeedRepository @Inject constructor(
@@ -26,6 +30,7 @@ class FeedRepository @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val authRepository: AuthRepository,
     private val sessionMonitor: SessionMonitor,
+    private val popularTagCacheRepository: PopularTagCacheRepository,
 ) {
 
     suspend fun getNewArrivals(page: Int, categoryCd: Int): Result<List<Work>> =
@@ -53,7 +58,6 @@ class FeedRepository @Inject constructor(
         apiCall {
             val adultEnabled = settingsRepository.showAdultContent.first()
             val html = api.getFollowFeed(page).string()
-            // 登录态下拿到登录页说明会话已失效：通知自动重登（成功后会触发页面刷新）
             if (authRepository.isLoggedIn() && FollowFeedParser.isLoginPage(html)) {
                 sessionMonitor.notifySessionCleared()
             }
@@ -82,15 +86,28 @@ class FeedRepository @Inject constructor(
             val html = api.getUserIllusts(userId, "", page).string()
             val works = NewArrivalParser.parse(html)
                 .let { if (adultEnabled) it else it.filter { !it.warning } }
-            // 页头信息（页头图/头像/作品数/背景规则）只从第一页解析，分页复用第一页结果
             val pageInfo = if (page == 0) UserPageParser.parse(html) else null
             UserWorksPage(works = works, pageInfo = pageInfo)
         }
 
-    suspend fun getPopularTags(): Result<List<PopularTag>> =
-        apiCall {
+    /** 进程内热门标签 memo：每次冷启动失效（下次启动重新拉取） */
+    @Volatile
+    private var popularTagsMemo: List<PopularTag>? = null
+
+    suspend fun getPopularTags(): Result<List<PopularTag>> {
+        popularTagsMemo?.let { return Result.success(it) }
+        val fetched = apiCall {
             PopularTagParser.parse(api.getPopularTags().string())
         }
+        if (fetched.isSuccess) {
+            val tags = fetched.getOrThrow()
+            popularTagsMemo = tags
+            if (tags.isNotEmpty()) popularTagCacheRepository.save(tags)
+            return fetched
+        }
+        // 网络失败时回退到上次缓存的标签
+        return popularTagCacheRepository.load()?.let { Result.success(it) } ?: fetched
+    }
 
     suspend fun getUserSearch(keyword: String, page: Int): Result<List<FollowUser>> =
         apiCall {
@@ -100,17 +117,23 @@ class FeedRepository @Inject constructor(
             }
             UserSearchParser.parse(html)
         }.onFailure { error ->
-            // 已登录却 404：会话失效，触发自动重登
             if (authRepository.isLoggedIn() && (error as? AppError.Http)?.code == 404) {
                 sessionMonitor.notifySessionCleared()
             }
         }
 
+    /** 精确标签下的作品（SearchIllustByTagPcV） */
     suspend fun getTagFeed(tag: String, page: Int): Result<List<Work>> =
         apiCall {
             val adultEnabled = settingsRepository.showAdultContent.first()
             NewArrivalParser.parse(api.getTagSearch(tag, page).string())
                 .let { if (adultEnabled) it else it.filter { !it.warning } }
+        }
+
+    /** 标签建议（SearchTagByKeywordPcV，返回包含关键字的标签卡片） */
+    suspend fun getTagSuggestions(tag: String, page: Int): Result<List<TagCard>> =
+        apiCall {
+            TagCardParser.parse(api.getTagSuggestions(tag, page).string())
         }
 
     suspend fun getKeywordFeed(keyword: String, page: Int): Result<List<Work>> =

@@ -8,6 +8,7 @@ import com.piku.client.data.local.CustomTagRepository
 import com.piku.client.data.local.FavoriteDao
 import com.piku.client.data.local.FavoriteFolderDao
 import com.piku.client.data.local.HistoryDao
+import com.piku.client.data.local.PopularTagCacheRepository
 import com.piku.client.data.local.SearchKeywordDao
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.data.local.WorkPasswordDao
@@ -76,4 +77,9 @@ object DatabaseModule {
     @Singleton
     fun provideCustomTagRepository(prefs: SharedPreferences): CustomTagRepository =
         CustomTagRepository(prefs)
+
+    @Provides
+    @Singleton
+    fun providePopularTagCacheRepository(prefs: SharedPreferences): PopularTagCacheRepository =
+        PopularTagCacheRepository(prefs)
 }

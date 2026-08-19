@@ -129,7 +129,6 @@ import com.piku.client.R
 import com.piku.client.data.remote.GitHubRelease
 import com.piku.client.domain.model.AppLanguage
 import com.piku.client.domain.model.PoipikuCategory
-import com.piku.client.domain.model.PopularTag
 import com.piku.client.domain.model.ThemeMode
 import com.piku.client.domain.model.Work
 import com.piku.client.ui.common.LoaderDots
@@ -191,7 +190,7 @@ fun HomeScreen(
     onCollectionClick: () -> Unit,
     onTagsClick: () -> Unit,
     onFollowUsersClick: () -> Unit,
-    onUserSearch: (String) -> Unit,
+    onSearchClick: () -> Unit,
     /** 登录后点头像进入自己的个人主页（userId, userName） */
     onProfileOpen: (Long, String) -> Unit,
 ) {
@@ -200,9 +199,7 @@ fun HomeScreen(
     val dark = LocalDarkTheme.current
     val isTablet = LocalConfiguration.current.screenWidthDp >= 600
     val context = LocalContext.current
-    var showSearch by rememberSaveable { mutableStateOf(false) }
     var showCategories by rememberSaveable { mutableStateOf(false) }
-    var showTags by rememberSaveable { mutableStateOf(false) }
     var showThemeSheet by rememberSaveable { mutableStateOf(false) }
     var showRetentionSheet by rememberSaveable { mutableStateOf(false) }
     var showLanguageSheet by rememberSaveable { mutableStateOf(false) }
@@ -355,22 +352,19 @@ fun HomeScreen(
                                 modifier = Modifier.matchParentSize(),
                             )
                             Column(Modifier.fillMaxWidth()) {
-                                 TabletTopBar(
-                                     avatarUrl = state.userAvatarUrl,
-                                     onMenuClick = openDrawer,
-                                     menuEnabled = drawerButtonEnabled,
-                                    onSearchClick = { showSearch = true },
-                                    onMoreTags = { showTags = true },
+                                TabletTopBar(
+                                    avatarUrl = state.userAvatarUrl,
+                                    onMenuClick = openDrawer,
+                                    menuEnabled = drawerButtonEnabled,
+                                    onSearchClick = onSearchClick,
                                     onDoubleTapTop = { scope.launch { gridState.animateScrollToItem(0) } },
                                     dark = dark,
                                 )
                                 FeedTabRow(
                                     feedTab = state.feedTab,
                                     currentTag = state.currentTag,
-                                    currentKeyword = state.currentKeyword,
                                     onSelectFeedTab = viewModel::selectFeedTab,
                                     onClearTag = { viewModel.selectTag(null) },
-                                    onClearKeyword = { viewModel.selectKeyword(null) },
                                     dark = dark,
                                 )
                             }
@@ -401,12 +395,10 @@ fun HomeScreen(
                      avatarUrl = state.userAvatarUrl,
                      onMenuClick = openDrawer,
                      menuEnabled = drawerButtonEnabled,
-                    onSearchClick = { showSearch = true },
+                    onSearchClick = onSearchClick,
                     onSelectFeedTab = viewModel::selectFeedTab,
-                    onMoreTags = { showTags = true },
                     onCategoryClick = { showCategories = true },
                     onClearTag = { viewModel.selectTag(null) },
-                    onClearKeyword = { viewModel.selectKeyword(null) },
                     onDoubleTapTop = { scope.launch { gridState.animateScrollToItem(0) } },
                     dark = dark,
                     isScrolling = isScrolling,
@@ -443,53 +435,7 @@ if (showCategories) {
             )
         }
 
-        if (showTags) {
-            TagSheet(
-                tags = state.tags,
-                customTags = state.customTags,
-                currentTag = state.currentTag,
-                onSelect = {
-                    viewModel.selectTag(it)
-                    showTags = false
-                },
-                onSelectCustomTag = { tag ->
-                    viewModel.selectTag(tag)
-                    showTags = false
-                },
-                onManageTags = {
-                    showTags = false
-                    onTagsClick()
-                },
-                onDismiss = { showTags = false },
-                dark = dark,
-            )
-        }
-
-            if (showSearch) {
-                HomeSearchSheet(
-                    onSearch = { keyword ->
-                        val tag = keyword.removePrefix("#").trim()
-                        when {
-                            keyword.startsWith("#") && tag.isNotEmpty() -> {
-                                viewModel.selectTag(tag)
-                                showSearch = false
-                            }
-                            // @ 前缀：作者搜索（需登录），进入独立作者搜索结果页
-                            keyword.startsWith("@") && keyword.length > 1 -> {
-                                onUserSearch(keyword)
-                                showSearch = false
-                            }
-                            else -> {
-                                viewModel.selectKeyword(keyword)
-                                showSearch = false
-                            }
-                        }
-                    },
-                    onDismiss = { showSearch = false },
-                )
-            }
-
-            if (showThemeSheet) {
+        if (showThemeSheet) {
                 ThemeModeSheet(
                     selected = state.themeMode,
                     onSelect = { mode ->
@@ -854,10 +800,8 @@ private fun GlassHeader(
     menuEnabled: Boolean,
     onSearchClick: () -> Unit,
     onSelectFeedTab: (FeedTab) -> Unit,
-    onMoreTags: () -> Unit,
     onCategoryClick: () -> Unit,
     onClearTag: () -> Unit,
-    onClearKeyword: () -> Unit,
     onDoubleTapTop: () -> Unit,
     dark: Boolean,
     isScrolling: State<Boolean>,
@@ -899,16 +843,12 @@ private fun GlassHeader(
                         dark = dark,
                     )
                 }
-                Spacer(Modifier.width(8.dp))
-                TagMenuButton(onClick = onMoreTags, dark = dark)
             }
             FeedTabRow(
                 feedTab = state.feedTab,
                 currentTag = state.currentTag,
-                currentKeyword = state.currentKeyword,
                 onSelectFeedTab = onSelectFeedTab,
                 onClearTag = onClearTag,
-                onClearKeyword = onClearKeyword,
                 dark = dark,
             )
         }
@@ -921,7 +861,6 @@ private fun TabletTopBar(
     onMenuClick: () -> Unit,
     menuEnabled: Boolean,
     onSearchClick: () -> Unit,
-    onMoreTags: () -> Unit,
     onDoubleTapTop: () -> Unit,
     dark: Boolean,
 ) {
@@ -945,8 +884,6 @@ private fun TabletTopBar(
             onClick = onSearchClick,
             dark = dark,
         )
-        Spacer(Modifier.width(8.dp))
-        TagMenuButton(onClick = onMoreTags, dark = dark)
     }
 }
 
@@ -1030,10 +967,8 @@ private fun CategoryMenuButton(
 private fun FeedTabRow(
     feedTab: FeedTab,
     currentTag: String?,
-    currentKeyword: String? = null,
     onSelectFeedTab: (FeedTab) -> Unit,
     onClearTag: () -> Unit,
-    onClearKeyword: () -> Unit = {},
     dark: Boolean,
 ) {
     Column(
@@ -1042,27 +977,18 @@ private fun FeedTabRow(
             .animateContentSize(animationSpec = tween(durationMillis = 250))
             .padding(top = 4.dp, bottom = 6.dp),
     ) {
-        if (currentTag != null || currentKeyword != null) {
+        if (currentTag != null) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(start = 16.dp, end = 16.dp, bottom = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (currentKeyword != null) {
-                    CurrentTagChip(
-                        tag = currentKeyword,
-                        prefix = "",
-                        onClear = onClearKeyword,
-                        dark = dark,
-                    )
-                } else {
-                    CurrentTagChip(
-                        tag = currentTag ?: "",
-                        onClear = onClearTag,
-                        dark = dark,
-                    )
-                }
+                CurrentTagChip(
+                    tag = currentTag,
+                    onClear = onClearTag,
+                    dark = dark,
+                )
             }
         }
         Row(
@@ -1176,19 +1102,6 @@ private fun FeedTabItem(
 }
 
 @Composable
-private fun TagMenuButton(onClick: () -> Unit, dark: Boolean) {
-    GlassIconButton(onClick = onClick, dark = dark) {
-        Text(
-            text = "#",
-            color = if (dark) LoginTextPrimaryDark else Color(0xFF5A5A5A),
-            fontSize = 15.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-        )
-    }
-}
-
-@Composable
 private fun CurrentTagChip(
     tag: String,
     prefix: String = "#",
@@ -1231,49 +1144,6 @@ private fun CurrentTagChip(
                 modifier = Modifier.size(14.dp),
             )
         }
-    }
-}
-
-@Composable
-private fun TagPill(
-    text: String,
-    active: Boolean,
-    onClick: () -> Unit,
-    dark: Boolean,
-) {
-    val shape = RoundedCornerShape(14.dp)
-    Box(
-        modifier = Modifier
-            .clip(shape)
-            .background(
-                when {
-                    active -> if (dark) LoginTextPrimaryDark else AccentDark.copy(alpha = 0.10f)
-                    else -> if (dark) GlassCardBgDark else Color.White
-                },
-            )
-            .border(
-                BorderStroke(
-                    0.5.dp,
-                    when {
-                        active -> if (dark) LoginTextPrimaryDark else AccentDark.copy(alpha = 0.30f)
-                        else -> if (dark) PillBorderDark else PillBorderLight
-                    },
-                ),
-                shape,
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 5.dp),
-    ) {
-        Text(
-            text = text,
-            color = if (active) {
-                if (dark) LoginBackgroundDark else AccentDark
-            } else {
-                if (dark) LoginTextSecondaryDark else Color(0xFF5A5A5A)
-            },
-            fontSize = 12.sp,
-            maxLines = 1,
-        )
     }
 }
 
@@ -1351,7 +1221,6 @@ private fun HomeContent(
                 // 关注页：未登录 → 登录引导；已登录但空 → 无关注内容
                 state.feedTab == FeedTab.FOLLOW && state.followNeedLogin -> R.string.home_follow_login
                 state.feedTab == FeedTab.FOLLOW -> R.string.home_follow_empty
-                state.currentKeyword != null -> R.string.search_empty
                 else -> R.string.home_empty
             }
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -1665,111 +1534,6 @@ private fun CategorySheet(
                     }
                 }
                 Spacer(Modifier.height(16.dp))
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
-@Composable
-private fun TagSheet(
-    tags: List<PopularTag>,
-    customTags: List<String>,
-    currentTag: String?,
-    onSelect: (String?) -> Unit,
-    onSelectCustomTag: (String) -> Unit,
-    onManageTags: () -> Unit,
-    onDismiss: () -> Unit,
-    dark: Boolean,
-) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        containerColor = if (dark) LoginBackgroundDark else Color.White,
-    ) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(start = 20.dp, end = 20.dp, bottom = 32.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.home_tag_select),
-                color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = stringResource(R.string.home_tag_hint),
-                color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
-                fontSize = 12.sp,
-            )
-            Spacer(Modifier.height(16.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = stringResource(R.string.menu_my_tags),
-                    color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Medium,
-                    letterSpacing = 1.sp,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    text = stringResource(R.string.my_tags_manage),
-                    color = AccentDark,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable(onClick = onManageTags)
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-            if (customTags.isEmpty()) {
-                Text(
-                    text = stringResource(R.string.my_tags_empty),
-                    color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
-                    fontSize = 12.sp,
-                )
-            } else {
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    customTags.forEach { tag ->
-                        TagPill(
-                            text = "#$tag",
-                            active = tag == currentTag,
-                            onClick = { onSelectCustomTag(tag) },
-                            dark = dark,
-                        )
-                    }
-                }
-            }
-            Spacer(Modifier.height(16.dp))
-            TagPill(
-                text = stringResource(R.string.home_category_all),
-                active = currentTag == null,
-                onClick = { onSelect(null) },
-                dark = dark,
-            )
-            Spacer(Modifier.height(12.dp))
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                tags.forEach { tag ->
-                    TagPill(
-                        text = "#${tag.name}",
-                        active = tag.name == currentTag,
-                        onClick = { onSelect(tag.name) },
-                        dark = dark,
-                    )
-                }
             }
         }
     }

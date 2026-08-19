@@ -79,6 +79,13 @@ interface PoipikuApi {
         @Query("PG") page: Int,
     ): ResponseBody
 
+    /** 标签建议（需登录；未登录时服务端返回首页壳） */
+    @GET("SearchTagByKeywordPcV.jsp")
+    suspend fun getTagSuggestions(
+        @Query("KWD") keyword: String,
+        @Query("PG") page: Int,
+    ): ResponseBody
+
     @GET("SearchIllustByKeywordPcV.jsp")
     suspend fun getKeywordSearch(
         @Query("KWD") keyword: String,

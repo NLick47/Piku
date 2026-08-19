@@ -10,27 +10,21 @@ import com.piku.client.domain.model.AppError
 import com.piku.client.domain.model.AppLanguage
 import com.piku.client.domain.model.AuthStatus
 import com.piku.client.domain.model.PoipikuCategory
-import com.piku.client.domain.model.PopularTag
 import com.piku.client.domain.model.ThemeMode
 import com.piku.client.domain.model.UserProfile
 import com.piku.client.domain.model.Work
-import com.piku.client.domain.usecase.AddCustomTagUseCase
 import com.piku.client.domain.usecase.CheckForUpdateUseCase
 import com.piku.client.domain.usecase.LoadFeedUseCase
 import com.piku.client.domain.usecase.LoadFollowFeedUseCase
-import com.piku.client.domain.usecase.LoadKeywordFeedUseCase
 import com.piku.client.domain.usecase.LoadPopularFeedUseCase
-import com.piku.client.domain.usecase.LoadPopularTagsUseCase
 import com.piku.client.domain.usecase.LoadRandomFeedUseCase
 import com.piku.client.domain.usecase.LoadTagFeedUseCase
 import com.piku.client.domain.usecase.ObserveAdultContentUseCase
 import com.piku.client.domain.usecase.ObserveAutoCheckEnabledUseCase
-import com.piku.client.domain.usecase.ObserveCustomTagsUseCase
 import com.piku.client.domain.usecase.ObserveFavoriteIdsUseCase
 import com.piku.client.domain.usecase.ObserveHistoryRetentionUseCase
 import com.piku.client.domain.usecase.ObserveLanguageUseCase
 import com.piku.client.domain.usecase.ObserveThemeModeUseCase
-import com.piku.client.domain.usecase.RemoveCustomTagUseCase
 import com.piku.client.domain.usecase.RestoreAdultContentUseCase
 import com.piku.client.domain.usecase.SetAdultContentUseCase
 import com.piku.client.domain.usecase.SetAutoCheckEnabledUseCase
@@ -83,10 +77,7 @@ data class HomeUiState(
     val errorRes: Int? = null,
     val loadMoreErrorRes: Int? = null,
     val endReached: Boolean = false,
-    val tags: List<PopularTag> = emptyList(),
-    val customTags: List<String> = emptyList(),
     val currentTag: String? = null,
-    val currentKeyword: String? = null,
     val refreshNotice: Int? = null,
     /** 关注页未登录：不发请求，直接展示登录引导 */
     val followNeedLogin: Boolean = false,
@@ -104,12 +95,7 @@ class HomeViewModel @Inject constructor(
     private val loadPopularFeedUseCase: LoadPopularFeedUseCase,
     private val loadFollowFeedUseCase: LoadFollowFeedUseCase,
     private val loadRandomFeedUseCase: LoadRandomFeedUseCase,
-    private val loadPopularTagsUseCase: LoadPopularTagsUseCase,
     private val loadTagFeedUseCase: LoadTagFeedUseCase,
-    private val loadKeywordFeedUseCase: LoadKeywordFeedUseCase,
-    private val observeCustomTagsUseCase: ObserveCustomTagsUseCase,
-    private val addCustomTagUseCase: AddCustomTagUseCase,
-    private val removeCustomTagUseCase: RemoveCustomTagUseCase,
     private val observeFavoriteIdsUseCase: ObserveFavoriteIdsUseCase,
     private val toggleFavoriteUseCase: ToggleFavoriteUseCase,
     private val observeAdultContentUseCase: ObserveAdultContentUseCase,
@@ -228,16 +214,6 @@ class HomeViewModel @Inject constructor(
                 }
             }
         }
-        viewModelScope.launch {
-            loadPopularTagsUseCase().onSuccess { tags ->
-                _uiState.update { it.copy(tags = tags) }
-            }
-        }
-        viewModelScope.launch {
-            observeCustomTagsUseCase().collect { tags ->
-                _uiState.update { it.copy(customTags = tags) }
-            }
-        }
         loadFirstPage()
     }
 
@@ -252,7 +228,6 @@ class HomeViewModel @Inject constructor(
                 feedTab = tab,
                 category = if (tab == FeedTab.LATEST) it.category else PoipikuCategory.ALL,
                 currentTag = null,
-                currentKeyword = null,
                 works = emptyList(),
                 errorRes = null,
                 loadMoreErrorRes = null,
@@ -264,7 +239,7 @@ class HomeViewModel @Inject constructor(
     }
 
     fun selectCategory(category: PoipikuCategory) {
-        if (category == _uiState.value.category && _uiState.value.currentTag == null && _uiState.value.currentKeyword == null) return
+        if (category == _uiState.value.category && _uiState.value.currentTag == null) return
         generation++
         page = 0
         noticePending = false
@@ -273,7 +248,6 @@ class HomeViewModel @Inject constructor(
             it.copy(
                 category = category,
                 currentTag = null,
-                currentKeyword = null,
                 works = emptyList(),
                 errorRes = null,
                 loadMoreErrorRes = null,
@@ -294,7 +268,6 @@ class HomeViewModel @Inject constructor(
             it.copy(
                 feedTab = FeedTab.LATEST,
                 currentTag = tag,
-                currentKeyword = null,
                 category = PoipikuCategory.ALL,
                 works = emptyList(),
                 errorRes = null,
@@ -304,40 +277,6 @@ class HomeViewModel @Inject constructor(
             )
         }
         loadPage(append = false)
-    }
-
-    fun selectKeyword(keyword: String?) {
-        if (keyword == _uiState.value.currentKeyword) return
-        generation++
-        page = 0
-        noticePending = false
-        oldFirstId = null
-        _uiState.update {
-            it.copy(
-                feedTab = FeedTab.LATEST,
-                currentKeyword = keyword,
-                currentTag = null,
-                category = PoipikuCategory.ALL,
-                works = emptyList(),
-                errorRes = null,
-                loadMoreErrorRes = null,
-                endReached = false,
-                refreshNotice = null,
-            )
-        }
-        loadPage(append = false)
-    }
-
-    fun addCustomTag(tag: String) {
-        viewModelScope.launch { addCustomTagUseCase(tag) }
-    }
-
-    fun removeCustomTag(tag: String) {
-        viewModelScope.launch {
-            removeCustomTagUseCase(tag)
-            // 若删除的正是当前筛选标签，则清空筛选
-            if (_uiState.value.currentTag == tag) selectTag(null)
-        }
     }
 
     fun retry() {
@@ -484,7 +423,6 @@ class HomeViewModel @Inject constructor(
         val tab = _uiState.value.feedTab
         val category = _uiState.value.category
         val tag = _uiState.value.currentTag
-        val keyword = _uiState.value.currentKeyword
         val gen = generation
         val targetPage = if (append) page + 1 else 0
         prefetchJob?.cancel()
@@ -512,7 +450,6 @@ class HomeViewModel @Inject constructor(
         }
         loadJob = viewModelScope.launch {
             val result = when {
-                keyword != null -> loadKeywordFeedUseCase(keyword, targetPage)
                 tag != null -> loadTagFeedUseCase(tag, targetPage)
                 tab == FeedTab.HOT -> loadPopularFeedUseCase(targetPage)
                 tab == FeedTab.FOLLOW -> loadFollowFeedUseCase(targetPage)
@@ -550,7 +487,7 @@ class HomeViewModel @Inject constructor(
                     if (generation != gen) return@launch
                     android.util.Log.d(
                         "PikuDiag",
-                        "loadPage fail append=$append tab=$tab tag=$tag keyword=$keyword " +
+                        "loadPage fail append=$append tab=$tab tag=$tag " +
                             "category=$category page=$targetPage error=${error::class.simpleName}: ${error.message}",
                         error,
                     )
@@ -588,12 +525,10 @@ class HomeViewModel @Inject constructor(
         prefetchJob = viewModelScope.launch {
             val tab = _uiState.value.feedTab
             val tag = _uiState.value.currentTag
-            val keyword = _uiState.value.currentKeyword
             val category = _uiState.value.category
-            if (tab == FeedTab.RANDOM && tag == null && keyword == null) return@launch
+            if (tab == FeedTab.RANDOM && tag == null) return@launch
             if (tab == FeedTab.FOLLOW && !authRepository.isLoggedIn()) return@launch
             val result = when {
-                keyword != null -> loadKeywordFeedUseCase(keyword, nextPage)
                 tag != null -> loadTagFeedUseCase(tag, nextPage)
                 tab == FeedTab.HOT -> loadPopularFeedUseCase(nextPage)
                 tab == FeedTab.FOLLOW -> loadFollowFeedUseCase(nextPage)
