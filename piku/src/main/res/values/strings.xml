@@ -179,7 +179,7 @@
     <string name="search_clear">清除</string>
     <string name="search_empty">没有找到相关作品</string>
     <string name="search_delete">删除</string>
-    <string name="search_hint">提示：输入 # 可搜索标签，输入 @ 可搜索作者</string>
+    <string name="search_hint">提示：输入 # 可搜索标签，输入 @ 可搜索作者，粘贴 poipiku 链接可直达作品或画师</string>
     <string name="search_users_login">登录后即可搜索作者</string>
     <string name="search_works_login">登录后即可搜索作品</string>
     <string name="search_tags_login">登录后即可搜索标签</string>
@@ -193,6 +193,7 @@
     <string name="search_hot_tags">热门标签</string>
     <string name="search_hot_tags_empty">暂无热门标签</string>
     <string name="search_action">搜索</string>
+    <string name="search_open_link">打开</string>
     <string name="search_manage_tags">管理</string>
     <string name="category_raku_gaki">涂鸦</string>
     <string name="category_jishuren">自主练习</string>

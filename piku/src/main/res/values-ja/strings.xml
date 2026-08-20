@@ -179,7 +179,7 @@
     <string name="search_clear">クリア</string>
     <string name="search_empty">該当する作品が見つかりません</string>
     <string name="search_delete">削除</string>
-    <string name="search_hint">ヒント：# でタグ、@ で絵師を検索できます</string>
+    <string name="search_hint">ヒント：# でタグ、@ で絵師を検索できます。poipiku のリンクを貼ると作品や絵師を直接開けます</string>
     <string name="search_users_login">ログインすると絵師を検索できます</string>
     <string name="search_works_login">ログインすると作品を検索できます</string>
     <string name="search_tags_login">ログインするとタグを検索できます</string>
@@ -193,6 +193,7 @@
     <string name="search_hot_tags">人気タグ</string>
     <string name="search_hot_tags_empty">人気タグはまだありません</string>
     <string name="search_action">検索</string>
+    <string name="search_open_link">開く</string>
     <string name="search_manage_tags">タグ管理</string>
     <string name="category_raku_gaki">らくがき</string>
     <string name="category_jishuren">自主練</string>

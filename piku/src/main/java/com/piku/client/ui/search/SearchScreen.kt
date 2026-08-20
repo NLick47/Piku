@@ -116,7 +116,7 @@ import com.piku.client.ui.theme.WorkCardPlaceholderDark
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 
-/** 与站点输入框一致的关键词长度上限 */
+/** 与站点输入框一致的关键词长度上限（仅普通搜索；链接识别不受此限） */
 private const val MAX_KEYWORD_LENGTH = 20
 
 /** 待机态自动聚焦延迟，避免键盘与页面转场动画互相挤压 */
@@ -129,6 +129,7 @@ fun SearchScreen(
     onSearch: (String) -> Unit,
     onWorkClick: (Work) -> Unit,
     onUserClick: (FollowUser) -> Unit,
+    onOpenLink: (PoipikuLink) -> Unit,
     onLoginClick: () -> Unit,
     onManageTags: () -> Unit,
     dark: Boolean = LocalDarkTheme.current,
@@ -144,6 +145,9 @@ fun SearchScreen(
     // 去除 #/@ 前缀后的真实搜索词；空串表示待机态（历史 + 热门标签）
     val searchTerm = state.keyword.removePrefix("#").removePrefix("@").trim()
     val hasQuery = searchTerm.isNotEmpty()
+
+    // 实时识别 poipiku 链接：命中后操作按钮切换为"打开链接"，提交时直接跳转不写历史
+    val link = remember(query) { parsePoipikuLink(query) }
 
     LaunchedEffect(Unit) {
         if (!hasQuery) {
@@ -164,8 +168,14 @@ fun SearchScreen(
         val keyword = raw.trim()
         if (keyword.isEmpty()) return
         keyboardController?.hide()
+        val target = parsePoipikuLink(keyword)
+        if (target != null) {
+            // 链接直达：导航到作品/作者页，不写入搜索历史
+            onOpenLink(target)
+            return
+        }
         viewModel.record(keyword)
-        onSearch(keyword)
+        onSearch(keyword.take(MAX_KEYWORD_LENGTH))
     }
 
     Box(
@@ -181,8 +191,9 @@ fun SearchScreen(
         Column(Modifier.fillMaxSize()) {
             SearchTopBar(
                 query = query,
-                onQueryChange = { query = it.take(MAX_KEYWORD_LENGTH) },
+                onQueryChange = { query = it },
                 onSubmit = { submit(query) },
+                isLink = link != null,
                 onBack = onBack,
                 focusRequester = focusRequester,
                 dark = dark,
@@ -258,6 +269,7 @@ private fun SearchTopBar(
     query: String,
     onQueryChange: (String) -> Unit,
     onSubmit: () -> Unit,
+    isLink: Boolean,
     onBack: () -> Unit,
     focusRequester: FocusRequester,
     dark: Boolean,
@@ -337,7 +349,7 @@ private fun SearchTopBar(
         )
         Spacer(Modifier.width(6.dp))
         Text(
-            text = stringResource(R.string.search_action),
+            text = stringResource(if (isLink) R.string.search_open_link else R.string.search_action),
             color = if (dark) LoginTextPrimaryDark else AccentDark,
             fontSize = 15.sp,
             fontWeight = FontWeight.Medium,

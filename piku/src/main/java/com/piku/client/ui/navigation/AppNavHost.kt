@@ -27,6 +27,7 @@ import com.piku.client.ui.history.HistoryScreen
 import com.piku.client.ui.home.HomeScreen
 import com.piku.client.ui.login.EmailLoginScreen
 import com.piku.client.ui.login.RegisterScreen
+import com.piku.client.ui.search.PoipikuLink
 import com.piku.client.ui.search.SearchScreen
 import com.piku.client.ui.tags.TagScreen
 
@@ -210,6 +211,14 @@ fun AppNavHost() {
                 },
                 onUserClick = { user: FollowUser ->
                     navController.navigate(Routes.userWorks(user.userId, user.name))
+                },
+                onOpenLink = { link ->
+                    when (link) {
+                        is PoipikuLink.Work ->
+                            navController.navigate(Routes.detail(link.authorId, link.workId))
+                        is PoipikuLink.User ->
+                            navController.navigate(Routes.userWorks(link.userId))
+                    }
                 },
             )
         }

@@ -179,7 +179,7 @@
     <string name="search_clear">Clear</string>
     <string name="search_empty">No works found</string>
     <string name="search_delete">Remove</string>
-    <string name="search_hint">Tip: start with # for tags, @ for artists</string>
+    <string name="search_hint">Tip: start with # for tags, @ for artists; paste a poipiku link to open a work or artist</string>
     <string name="search_users_login">Log in to search artists</string>
     <string name="search_works_login">Log in to search works</string>
     <string name="search_tags_login">Log in to search tags</string>
@@ -193,6 +193,7 @@
     <string name="search_hot_tags">Popular tags</string>
     <string name="search_hot_tags_empty">No popular tags yet</string>
     <string name="search_action">Search</string>
+    <string name="search_open_link">Open</string>
     <string name="search_manage_tags">Manage</string>
     <string name="category_raku_gaki">Doodle</string>
     <string name="category_jishuren">Practice</string>
