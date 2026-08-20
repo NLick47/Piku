@@ -77,7 +77,7 @@ object WorkDetailParser {
 
     fun extractNovelText(html: String): String =
         REGEX_NOVEL.find(html)?.groupValues?.get(1)
-            ?.let { LinkText.convert(it) }?.cleanText() ?: ""
+            ?.let { LinkText.convert(it) }?.cleanNovelText() ?: ""
 
     /**
      * 提取 append 解锁被拒（result_num=-4）时服务器返回的提示文本
@@ -123,6 +123,17 @@ object WorkDetailParser {
 
     private fun String.cleanText(): String = LinkText.decodeEntities(
         this.replace("<br />", "\n").replace("<br/>", "\n").replace("<br>", "\n"),
+    ).trim()
+
+    /**
+     * 小说正文清洗：换行标签先转为 \n，再剥离其余残留标签（<span class="NovelTitle">、
+     * <b>、<strong> 等），最后解码实体。与 [cleanText] 不同，正文允许剔除所有标签；
+     * 顺序保证字面量 &lt; 转义在剥标签之后，不会被误删。
+     * <a> 已在 LinkText.convert 阶段转为 [url] 标记，此处无尖括号，不会被误删。
+     */
+    private fun String.cleanNovelText(): String = LinkText.decodeEntities(
+        this.replace("<br />", "\n").replace("<br/>", "\n").replace("<br>", "\n")
+            .replace(REGEX_ANY_TAG, ""),
     ).trim()
 
     private val REGEX_TITLE =

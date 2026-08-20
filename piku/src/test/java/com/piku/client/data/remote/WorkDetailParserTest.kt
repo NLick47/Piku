@@ -233,6 +233,18 @@ class WorkDetailParserTest {
         assertTrue("novel text should be extracted, got '$novel'", novel.contains("这到底是怎么回事？"))
         assertTrue(novel.contains("DAY1"))
         assertTrue(novel.contains("END"))
+        assertTrue("NovelTitle text should be kept: '$novel'", novel.contains("交頸"))
+        assertTrue("novel must not contain any tag: '$novel'", !novel.contains("<"))
+    }
+
+    @Test
+    fun extractNovelTextStripsAllResidualTags() {
+        // NovelSection 内的 span/b/strong/嵌套标签全部剥离，正文与换行完好
+        val appendHtml = """
+            <a class="IllustItemText" href="/IllustDetailPcV.jsp?ID=1&amp;TD=2"><span class="IllustItemThumbText "><div class="NovelSection"><span class="NovelTitle">标题</span><b>加粗</b>正文<strong>重点</strong><br />第二行<span>内联</span>END</div></span></a>
+        """.trimIndent()
+        val novel = WorkDetailParser.extractNovelText(appendHtml)
+        assertEquals("标题加粗正文重点\n第二行内联END", novel)
     }
 
     @Test

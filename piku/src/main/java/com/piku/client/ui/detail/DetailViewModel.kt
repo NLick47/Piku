@@ -13,6 +13,7 @@ import com.piku.client.data.repository.FavoriteRepository
 import com.piku.client.data.repository.FollowResult
 import com.piku.client.data.repository.ReactionResult
 import com.piku.client.data.repository.ThumbnailResolver
+import com.piku.client.data.local.SettingsRepository
 import com.piku.client.domain.model.AppError
 import com.piku.client.domain.model.AuthStatus
 import com.piku.client.domain.model.FavoriteFolder
@@ -64,6 +65,14 @@ data class DetailUiState(
     val tagFeedbackRes: Int? = null,
     /** 底部菜单一次性新手引导（仅首次进入详情页显示） */
     val guideVisible: Boolean = false,
+    /** 全屏小说阅读器：当前是否打开 */
+    val novelReaderOpen: Boolean = false,
+    /** 全屏小说阅读器：字号（sp） */
+    val novelFontSize: Float = NOVEL_FONT_DEFAULT,
+    /** 全屏小说阅读器：浅色模式（米色纸），独立于系统主题 */
+    val novelReaderLight: Boolean = true,
+    /** 全屏小说阅读器：该作品已保存的阅读进度（百分比 0~100） */
+    val novelProgressPercent: Int = 0,
 ) {
     /** 查看器图片对：缩略图 + 原图（未就绪时为 null），长度不等时互相兜底 */
     val viewerImages: List<ViewerImage>
@@ -104,12 +113,13 @@ class DetailViewModel @Inject constructor(
     private val observeCustomTagsUseCase: ObserveCustomTagsUseCase,
     private val addCustomTagUseCase: AddCustomTagUseCase,
     private val removeCustomTagUseCase: RemoveCustomTagUseCase,
+    private val settingsRepository: SettingsRepository,
     private val prefs: SharedPreferences,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
     val authorId: Long = savedStateHandle["authorId"] ?: -1L
-    private val workId: Long = savedStateHandle["workId"] ?: -1L
+    val workId: Long = savedStateHandle["workId"] ?: -1L
     private val work = Work(
         id = workId,
         authorId = authorId,
@@ -128,6 +138,7 @@ class DetailViewModel @Inject constructor(
         DetailUiState(
             shareUrl = "https://poipiku.com/$authorId/$workId.html",
             guideVisible = !prefs.getBoolean(KEY_BOTTOM_GUIDE_SHOWN, false),
+            novelProgressPercent = settingsRepository.getNovelProgress(workId),
         ),
     )
     val uiState: StateFlow<DetailUiState> = _uiState.asStateFlow()
@@ -137,6 +148,26 @@ class DetailViewModel @Inject constructor(
         if (!_uiState.value.guideVisible) return
         prefs.edit().putBoolean(KEY_BOTTOM_GUIDE_SHOWN, true).apply()
         _uiState.update { it.copy(guideVisible = false) }
+    }
+
+    /** 打开/关闭全屏小说阅读器 */
+    fun setNovelReaderOpen(open: Boolean) {
+        _uiState.update { it.copy(novelReaderOpen = open) }
+    }
+
+    /** 保存该作品的阅读进度（百分比 0~100） */
+    fun saveNovelProgress(percent: Int) {
+        settingsRepository.setNovelProgress(workId, percent)
+    }
+
+    /** 调整阅读器字号（持久化） */
+    fun setNovelFontSize(size: Float) {
+        settingsRepository.setNovelFontSize(size)
+    }
+
+    /** 切换阅读器配色（浅米底深字 / 深底浅字，独立于系统主题，持久化） */
+    fun setNovelReaderLight(light: Boolean) {
+        settingsRepository.setNovelReaderLight(light)
     }
 
     init {
@@ -153,6 +184,16 @@ class DetailViewModel @Inject constructor(
         viewModelScope.launch {
             favoriteRepository.observeWorkFolderIds(workId).collect { folderIds ->
                 _uiState.update { it.copy(workFavoriteFolderIds = folderIds) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.novelFontSize.collect { size ->
+                _uiState.update { it.copy(novelFontSize = size) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.novelReaderLight.collect { light ->
+                _uiState.update { it.copy(novelReaderLight = light) }
             }
         }
         viewModelScope.launch {

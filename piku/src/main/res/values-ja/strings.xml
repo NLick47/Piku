@@ -212,6 +212,12 @@
 
     <string name="detail_fullscreen_close">閉じる</string>
 
+    <string name="detail_novel_font_size">文字サイズ %1$d</string>
+    <string name="detail_novel_progress">読了 %1$d%%</string>
+    <string name="detail_novel_theme_dark">ダーク読書</string>
+    <string name="detail_novel_theme_light">ライト読書</string>
+    <string name="detail_novel_fullscreen">全画面</string>
+
     <string name="detail_more">その他</string>
     <string name="detail_reaction">リアクション</string>
     <string name="detail_copy_link">リンクをコピー</string>

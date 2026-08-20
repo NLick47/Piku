@@ -212,6 +212,12 @@
 
     <string name="detail_fullscreen_close">Close</string>
 
+    <string name="detail_novel_font_size">Size %1$d</string>
+    <string name="detail_novel_progress">Read %1$d%%</string>
+    <string name="detail_novel_theme_dark">Dark reading</string>
+    <string name="detail_novel_theme_light">Light reading</string>
+    <string name="detail_novel_fullscreen">Fullscreen</string>
+
     <string name="detail_more">More</string>
     <string name="detail_reaction">React</string>
     <string name="detail_copy_link">Copy link</string>

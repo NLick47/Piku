@@ -69,16 +69,60 @@ class SettingsRepository @Inject constructor(
         _autoCheckEnabled.value = enabled
     }
 
+    private val _novelFontSize = MutableStateFlow(
+        prefs.getFloat(KEY_NOVEL_FONT_SIZE, NOVEL_FONT_DEFAULT),
+    )
+    val novelFontSize: StateFlow<Float> = _novelFontSize.asStateFlow()
+
+    /** 小说阅读器浅色模式（米色纸），独立于系统主题，由用户显式切换 */
+    private val _novelReaderLight = MutableStateFlow(
+        prefs.getBoolean(KEY_NOVEL_READER_LIGHT, true),
+    )
+    val novelReaderLight: StateFlow<Boolean> = _novelReaderLight.asStateFlow()
+
+    fun setNovelFontSize(size: Float) {
+        val clamped = size.coerceIn(NOVEL_FONT_MIN, NOVEL_FONT_MAX)
+        prefs.edit().putFloat(KEY_NOVEL_FONT_SIZE, clamped).apply()
+        _novelFontSize.value = clamped
+    }
+
+    fun setNovelReaderLight(light: Boolean) {
+        prefs.edit().putBoolean(KEY_NOVEL_READER_LIGHT, light).apply()
+        _novelReaderLight.value = light
+    }
+
+    /**
+     * 读取某作品的阅读进度（百分比 0~100，0 表示无进度）。
+     * 用百分比而非像素偏移存储，避免字号调整后滚动位置错位。
+     */
+    fun getNovelProgress(workId: Long): Int =
+        prefs.getInt(novelProgressKey(workId), 0).coerceIn(0, 100)
+
+    /** 保存某作品的阅读进度（百分比 0~100） */
+    fun setNovelProgress(workId: Long, percent: Int) {
+        prefs.edit().putInt(novelProgressKey(workId), percent.coerceIn(0, 100)).apply()
+    }
+
+    private fun novelProgressKey(workId: Long): String = "$KEY_NOVEL_PROGRESS_PREFIX$workId"
+
     fun recordUpdateCheck() {
         prefs.edit().putLong(KEY_LAST_UPDATE_CHECK_AT, System.currentTimeMillis()).apply()
         _lastUpdateCheckAt.value = System.currentTimeMillis()
     }
 
-    private companion object {
+    companion object {
         const val KEY_SHOW_ADULT_CONTENT = "show_adult_content"
         const val KEY_THEME_MODE = "theme_mode"
         const val KEY_HISTORY_RETENTION_DAYS = "history_retention_days"
         const val KEY_AUTO_CHECK_ENABLED = "auto_check_update_enabled"
         const val KEY_LAST_UPDATE_CHECK_AT = "last_update_check_at"
+        const val KEY_NOVEL_FONT_SIZE = "novel_font_size"
+        const val KEY_NOVEL_READER_LIGHT = "novel_reader_light"
+        const val KEY_NOVEL_PROGRESS_PREFIX = "novel_progress_"
+
+        /** 小说阅读器字号范围与默认值（sp） */
+        const val NOVEL_FONT_MIN = 13f
+        const val NOVEL_FONT_MAX = 24f
+        const val NOVEL_FONT_DEFAULT = 16f
     }
 }

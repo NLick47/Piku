@@ -212,6 +212,12 @@
 
     <string name="detail_fullscreen_close">关闭</string>
 
+    <string name="detail_novel_font_size">字号 %1$d</string>
+    <string name="detail_novel_progress">已读 %1$d%%</string>
+    <string name="detail_novel_theme_dark">深色阅读</string>
+    <string name="detail_novel_theme_light">浅色阅读</string>
+    <string name="detail_novel_fullscreen">全屏阅读</string>
+
     <string name="detail_more">更多</string>
     <string name="detail_reaction">反应</string>
     <string name="detail_copy_link">复制链接</string>

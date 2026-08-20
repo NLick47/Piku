@@ -53,6 +53,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.text.selection.SelectionState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -325,6 +326,7 @@ fun DetailScreen(
                         },
                         customTags = state.customTags.toSet(),
                         onToggleCustomTag = viewModel::toggleCustomTag,
+                        onOpenNovelReader = { viewModel.setNovelReaderOpen(true) },
                     )
                 }
             }
@@ -386,6 +388,20 @@ fun DetailScreen(
                         dark = dark,
                     )
                 }
+            }
+            if (state.novelReaderOpen && it.novelText.isNotBlank()) {
+                FullNovelViewer(
+                    text = it.novelText,
+                    title = it.title,
+                    fontSize = state.novelFontSize,
+                    light = state.novelReaderLight,
+                    initialPercent = state.novelProgressPercent,
+                    onProgressSave = viewModel::saveNovelProgress,
+                    onFontSizeChange = viewModel::setNovelFontSize,
+                    onLightChange = viewModel::setNovelReaderLight,
+                    onClose = { viewModel.setNovelReaderOpen(false) },
+                    onWorkClick = onRelatedWorkClick,
+                )
             }
         }
         SnackbarHost(
@@ -889,6 +905,7 @@ private fun DetailContent(
     onAuthorClick: () -> Unit,
     customTags: Set<String>,
     onToggleCustomTag: (String) -> Unit,
+    onOpenNovelReader: () -> Unit,
 ) {
     var descriptionExpanded by remember { mutableStateOf(false) }
     Column(
@@ -917,6 +934,7 @@ private fun DetailContent(
             onPasswordChange = onPasswordChange,
             onPasswordSubmit = onPasswordSubmit,
             passwordLoading = passwordLoading,
+            onOpenNovelReader = onOpenNovelReader,
         )
         Spacer(Modifier.height(14.dp))
         if (detail.title.isNotBlank()) {
@@ -1065,6 +1083,7 @@ private fun ImagePager(
     onPasswordChange: (String) -> Unit,
     onPasswordSubmit: () -> Unit,
     passwordLoading: Boolean,
+    onOpenNovelReader: () -> Unit,
 ) {
     val pagerState = rememberPagerState(pageCount = { detail.imageUrls.size })
 
@@ -1088,6 +1107,13 @@ private fun ImagePager(
                 }
                 detail.novelText.isNotBlank() -> {
                     NovelView(detail = detail, dark = dark, onWorkClick = onWorkClick)
+                    NovelReaderEntryButton(
+                        dark = dark,
+                        onOpen = onOpenNovelReader,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(8.dp),
+                    )
                 }
                 detail.passwordProtected -> {
                     PasswordBox(
@@ -1163,6 +1189,36 @@ private fun NovelView(detail: WorkDetail, dark: Boolean, onWorkClick: (Long, Lon
             color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
             fontSize = 13.sp,
             lineHeight = 22.sp,
+        )
+    }
+}
+
+/** 全屏阅读入口按钮：纯文字作品的图区右上角 */
+@Composable
+private fun NovelReaderEntryButton(
+    dark: Boolean,
+    onOpen: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (dark) Color(0xCC141312) else Color(0xCCFFFFFF))
+            .clickable(onClick = onOpen)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.Article,
+            contentDescription = null,
+            tint = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+            modifier = Modifier.size(14.dp),
+        )
+        Spacer(Modifier.width(4.dp))
+        Text(
+            text = stringResource(R.string.detail_novel_fullscreen),
+            color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+            fontSize = 12.sp,
         )
     }
 }

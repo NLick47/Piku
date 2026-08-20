@@ -57,4 +57,31 @@ class SettingsRepositoryTest {
 
         assertEquals(ThemeMode.DARK, repo.themeMode.value)
     }
+
+    @Test
+    fun novelProgressIsPerWorkAndPersists() {
+        val prefs = InMemorySharedPreferences()
+        val repo = SettingsRepository(prefs)
+
+        assertEquals("no progress means 0 percent", 0, repo.getNovelProgress(13367054L))
+
+        repo.setNovelProgress(13367054L, 42)
+        assertEquals(42, repo.getNovelProgress(13367054L))
+
+        assertEquals("other works have no progress", 0, repo.getNovelProgress(13368368L))
+
+        val reloaded = SettingsRepository(prefs)
+        assertEquals(42, reloaded.getNovelProgress(13367054L))
+    }
+
+    @Test
+    fun novelProgressClampsToPercentRange() {
+        val repo = SettingsRepository(InMemorySharedPreferences())
+
+        repo.setNovelProgress(1L, 500)
+        assertEquals(100, repo.getNovelProgress(1L))
+
+        repo.setNovelProgress(1L, -50)
+        assertEquals(0, repo.getNovelProgress(1L))
+    }
 }
