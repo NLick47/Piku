@@ -91,7 +91,9 @@ class DetailRepository @Inject constructor(
                 val passwordError = appendResp.result_num == -2
                 val unlockBlocked = appendResp.result_num == -4
                 val fullUrls = fullD?.await().orEmpty()
-                val urls = if (loggedIn) fullUrls.ifEmpty { appendUrls } else appendUrls
+                val textOnly = novelText.isNotBlank() && appendUrls.isEmpty()
+                val urls = if (textOnly) emptyList()
+                else if (loggedIn) fullUrls.ifEmpty { appendUrls } else appendUrls
                 Log.d(TAG, "detail warning urls=${urls.size} novel=${novelText.length} pwError=$passwordError blocked=$unlockBlocked work=${work.authorId}/${work.id} loggedIn=$loggedIn")
                 rememberWorkPassword(work, password, appendResp.result_num)
                 if (unlockBlocked) {
@@ -135,7 +137,10 @@ class DetailRepository @Inject constructor(
         )
         // 详情页 HTML 提供第 1 张（主图），append 返回第 2 张起的追加图；
         // 合并时过滤 sign in/R-18 等占位图，只保留真实图
+        val textOnly = novelText.isNotBlank() && appendUrls.isEmpty()
         val urls = when {
+            // 纯文本作品：append 只返回 NovelSection 正文、不含任何图片，清空图片仅渲染正文
+            textOnly -> emptyList()
             // 密码作品解锁失败（密码错误 -2 / 账号受限 -4）：保持锁页，
             // 避免显示 HTML 主图造成"已解锁"假象（追加图实际未解锁）
             detail.passwordProtected && (passwordError || unlockBlocked) -> emptyList()

@@ -31,6 +31,13 @@ object WorkDetailParser {
         val currentWorkId = REGEX_CANONICAL.find(html)?.groupValues?.get(2)?.toLongOrNull() ?: 0L
         val relatedWorks = parseRelatedWorks(html, currentWorkId)
         val mainImage = extractImageUrls(mainBlock).firstOrNull() ?: ""
+        // 文字作品无真实图片，主图是 publish_pass/poipiku_icon/R-18 等占位图；
+        // 不放入 imageUrls，否则 UI 显示占位图而非小说正文（NovelView 仅在 imageUrls 为空时渲染）。
+        // 判定依据：IllustItem 区块 class 含 "Text" 标记（登录/匿名/锁页均恒在），
+        // 并保留 NovelSection 检测兜底（正文区在首屏 HTML 直接可见时）。
+        // 注意：mainBlock 已剔除 <div class="IllustItem 前缀，class 检测需基于完整 html。
+        val isTextWork = REGEX_ILLUST_TEXT_CLASS.find(html) != null ||
+            REGEX_NOVEL.find(mainBlock) != null
         val passwordProtected = REGEX_PASSWORD_PASS.find(mainBlock) != null
         // 关注按钮状态：作者行 span 的 class 含 Selected 表示当前用户已关注该作者。
         // 匿名/未关注时服务端渲染无 Selected（客户端切换成功也是增删这个类）。
@@ -46,7 +53,7 @@ object WorkDetailParser {
             authorProfile = authorProfile,
             categoryCd = categoryCd,
             categoryName = categoryName,
-            imageUrls = listOf(mainImage).filter { it.isNotEmpty() },
+            imageUrls = if (isTextWork) emptyList() else listOf(mainImage).filter { it.isNotEmpty() },
             tags = tags,
             reactions = rawReactions.distinct(),
             reactionCounts = rawReactions.groupingBy { it }.eachCount(),
@@ -134,6 +141,7 @@ object WorkDetailParser {
     private val REGEX_ANY_TAG = Regex("<[^>]*>")
     private val REGEX_FOLLOW_BTN = Regex("""class="([^"]*UserInfoCmdFollow[^"]*)"""")
     private val REGEX_NOVEL = Regex("""<div class="NovelSection">(.*?)</div>""", RegexOption.DOT_MATCHES_ALL)
+    private val REGEX_ILLUST_TEXT_CLASS = Regex("""<div class="IllustItem[^"]*\bText\b""")
     private val REGEX_REACTION =
         Regex("""<span class="ResEmoji"><img class="Twemoji"[^>]*alt="([^"]+)"[^>]*/>""")
     private val REGEX_PROFILE =

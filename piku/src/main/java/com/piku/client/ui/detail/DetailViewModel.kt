@@ -228,7 +228,7 @@ class DetailViewModel @Inject constructor(
                 "typedPw=${state.password.isNotBlank()} loading=${state.loading} pwLoading=${state.passwordLoading}",
         )
         if (!detail.passwordProtected) return
-        if (detail.imageUrls.isNotEmpty()) return // 已解锁
+        if (detail.imageUrls.isNotEmpty() || detail.novelText.isNotBlank()) return // 已解锁（图片作品看图列表，文字作品看正文）
         if (state.password.isNotBlank()) return // 用户正在输入，不打扰
         if (state.passwordLoading || state.loading) return
         viewModelScope.launch {

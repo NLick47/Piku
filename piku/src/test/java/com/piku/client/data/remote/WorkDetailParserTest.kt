@@ -142,6 +142,100 @@ class WorkDetailParserTest {
     }
 
     @Test
+    fun textWorkHasNoPlaceholderMainImage() {
+        val textHtml = """
+            <html><head>
+            <link rel="canonical" href="https://poipiku.com/13616726/13367054.html" />
+            </head><body>
+            <div class="IllustItem  Text" id="IllustItem_13367054">
+            <h1 id="IllustItemDesc_13367054" class="IllustItemDesc">説明文</h1>
+            <h2 class="IllustItemUserName"><a href="/13616726/">kpress</a></h2>
+            <a class="IllustItemThumb" href="javascript:void(0)"><img class="IllustItemThumbImg" src="https://cdn.poipiku.com/img/publish_pass.png_640.jpg"/></a>
+            <div class="IllustItemThubExpand"><a class="IllustItemText" href="/IllustDetailPcV.jsp?ID=13616726&amp;TD=13367054"><span class="IllustItemThumbText "><div class="NovelSection"><span class="NovelTitle">交頸</span>正文内容<br />第二行</div></span></a></div>
+            </div>
+            </body></html>
+        """.trimIndent()
+        val detail = WorkDetailParser.parse(textHtml)
+        // 文字作品主图是占位图，不能当作真实图片，否则 UI 显示占位图而非正文
+        assertTrue("text work must not carry placeholder image, got ${detail.imageUrls}", detail.imageUrls.isEmpty())
+        assertTrue(detail.title.isNotBlank())
+        assertTrue(detail.authorName == "kpress")
+    }
+
+    @Test
+    fun lockedTextWorkWithoutNovelSectionHasNoPlaceholderImage() {
+        // 锁页/未解锁时首屏无 NovelSection，仅凭 IllustItem class 的 Text 标记识别文字作品
+        val textHtml = """
+            <html><head>
+            <link rel="canonical" href="https://poipiku.com/13616726/13367054.html" />
+            </head><body>
+            <div class="IllustItem  Text" id="IllustItem_13367054">
+            <h1 id="IllustItemDesc_13367054" class="IllustItemDesc">説明文</h1>
+            <h2 class="IllustItemUserName"><a href="/13616726/">kpress</a></h2>
+            <a class="IllustItemThumb" href="javascript:void(0)"><img class="IllustItemThumbImg" src="https://cdn.poipiku.com/img/publish_pass.png_640.jpg"/></a>
+            <input type="password" class="IllustItemExpandPass" name="PAS">
+            </div>
+            </body></html>
+        """.trimIndent()
+        val detail = WorkDetailParser.parse(textHtml)
+        assertTrue(
+            "locked text work must have empty imageUrls, got ${detail.imageUrls}",
+            detail.imageUrls.isEmpty(),
+        )
+        assertTrue(detail.passwordProtected)
+    }
+
+    @Test
+    fun r18TextWorkHasNoPlaceholderImage() {
+        // R18 文字作品：IllustItem class 为 "R18 Text"，主图可能是 poipiku logo 占位
+        val textHtml = """
+            <html><head>
+            <link rel="canonical" href="https://poipiku.com/14035669/13368368.html" />
+            </head><body>
+            <div class="IllustItem  R18 Text" id="IllustItem_13368368">
+            <h1 id="IllustItemDesc_13368368" class="IllustItemDesc">説明文</h1>
+            <h2 class="IllustItemUserName"><a href="/14035669/">作者</a></h2>
+            <a class="IllustItemThumb" href="javascript:void(0)"><img class="IllustItemThumbImg" src="https://cdn.poipiku.com/assets/img/poipiku_icon_512x512_2.png"/></a>
+            </div>
+            </body></html>
+        """.trimIndent()
+        val detail = WorkDetailParser.parse(textHtml)
+        assertTrue(
+            "r18 text work must have empty imageUrls, got ${detail.imageUrls}",
+            detail.imageUrls.isEmpty(),
+        )
+    }
+
+    @Test
+    fun imageWorkStillKeepsMainImage() {
+        // 图片作品（IllustItem class 无 Text）不受影响，仍保留主图
+        val textHtml = """
+            <html><head>
+            <link rel="canonical" href="https://poipiku.com/13240156/13349246.html" />
+            </head><body>
+            <div class="IllustItem  R18" id="IllustItem_13349246">
+            <h1 id="IllustItemDesc_13349246" class="IllustItemDesc">画像</h1>
+            <h2 class="IllustItemUserName"><a href="/13240156/">作者名</a></h2>
+            <a class="IllustItemThumb" href="javascript:void(0)"><img class="IllustItemThumbImg" src="https://cdn.poipiku.com/013240156/a.jpg_640.jpg"/></a>
+            </div>
+            </body></html>
+        """.trimIndent()
+        val detail = WorkDetailParser.parse(textHtml)
+        assertEquals(listOf("https://cdn.poipiku.com/013240156/a.jpg_640.jpg"), detail.imageUrls)
+    }
+
+    @Test
+    fun extractNovelTextFromAppendResponse() {
+        val appendHtml = """
+            <a class="IllustItemText" style="max-height:470px; overflow: scroll;" href="/IllustDetailPcV.jsp?ID=13616726&amp;TD=13367054"><span class="IllustItemThumbText "><div class="NovelSection"><span class="NovelTitle">交頸</span>这到底是怎么回事？<br />DAY1<br />END</div></span></a>
+        """.trimIndent()
+        val novel = WorkDetailParser.extractNovelText(appendHtml)
+        assertTrue("novel text should be extracted, got '$novel'", novel.contains("这到底是怎么回事？"))
+        assertTrue(novel.contains("DAY1"))
+        assertTrue(novel.contains("END"))
+    }
+
+    @Test
     fun extractUnlockBlockedMessageStripsHtmlAndEntities() {
         val msg = WorkDetailParser.extractUnlockBlockedMessage(
             "右上のログインボタンをクリックして、<b>ポイピク</b>とTwitterアカウントを連携してください。&amp;詳細",

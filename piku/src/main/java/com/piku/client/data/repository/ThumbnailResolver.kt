@@ -86,12 +86,13 @@ class ThumbnailResolver @Inject constructor(
         const val RESULT_LOGIN_REQUIRED = -3
         private const val KEY_THUMBS = "work_thumb_urls"
 
-        /** 是否为网站占位图（登录墙/R-18/警告），真实图 URL 均为作品文件路径 */
+        /** 是否为网站占位图（登录墙/R-18/警告/文字作品 logo），真实图 URL 均为作品文件路径 */
         fun isPlaceholderImage(url: String): Boolean =
             url.contains("/img/publish_login") ||
                 url.contains("/img/publish_pass") ||
                 url.contains("/img/warning") ||
-                url.contains("/img/R-18")
+                url.contains("/img/R-18") ||
+                url.contains("/assets/img/poipiku_icon")
 
         /**
          * 合并详情页主图与追加图为完整图片列表：
