@@ -52,9 +52,16 @@ class DetailRepository @Inject constructor(
         existing: WorkDetail? = null,
     ): Result<WorkDetail> = apiCall {
         val loggedIn = authRepository.isLoggedIn()
-        val detail = existing ?: run {
+        // 锁页 detail 的 imageUrls 已被下方 passwordProtected 分支清空（为显示密码框）
+        // 直接复用会导致解锁合并（mergeWorkImages）丢失详情页主图，需重新解析 HTML 取回
+        val detail = if (existing != null && existing.imageUrls.isEmpty()) {
             val html = api.getWorkDetail(work.authorId, work.id).string()
             WorkDetailParser.parse(html)
+        } else {
+            existing ?: run {
+                val html = api.getWorkDetail(work.authorId, work.id).string()
+                WorkDetailParser.parse(html)
+            }
         }
         if (detail.warning && !settingsRepository.showAdultContent.first()) {
             return@apiCall detail.copy(imageUrls = emptyList(), adultLocked = true)
