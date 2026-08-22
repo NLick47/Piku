@@ -2,6 +2,7 @@ package com.piku.client.ui.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.piku.client.R
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.data.remote.GitHubRelease
 import com.piku.client.data.repository.AuthRepository
@@ -21,6 +22,8 @@ import com.piku.client.domain.usecase.LoadRandomFeedUseCase
 import com.piku.client.domain.usecase.LoadTagFeedUseCase
 import com.piku.client.domain.usecase.ObserveAdultContentUseCase
 import com.piku.client.domain.usecase.ObserveAutoCheckEnabledUseCase
+import com.piku.client.domain.usecase.ObserveBackgroundDimUseCase
+import com.piku.client.domain.usecase.ObserveCustomBackgroundUseCase
 import com.piku.client.domain.usecase.ObserveFavoriteIdsUseCase
 import com.piku.client.domain.usecase.ObserveHistoryRetentionUseCase
 import com.piku.client.domain.usecase.ObserveLanguageUseCase
@@ -28,6 +31,8 @@ import com.piku.client.domain.usecase.ObserveThemeModeUseCase
 import com.piku.client.domain.usecase.RestoreAdultContentUseCase
 import com.piku.client.domain.usecase.SetAdultContentUseCase
 import com.piku.client.domain.usecase.SetAutoCheckEnabledUseCase
+import com.piku.client.domain.usecase.SetBackgroundDimUseCase
+import com.piku.client.domain.usecase.SetCustomBackgroundUseCase
 import com.piku.client.domain.usecase.SetHistoryRetentionUseCase
 import com.piku.client.domain.usecase.SetLanguageUseCase
 import com.piku.client.domain.usecase.SetThemeModeUseCase
@@ -81,12 +86,32 @@ data class HomeUiState(
     val refreshNotice: Int? = null,
     /** 关注页未登录：不发请求，直接展示登录引导 */
     val followNeedLogin: Boolean = false,
-    /** 启动时自动检查更新 */
     val autoCheckEnabled: Boolean = true,
     /** 发现的新版本（首页横幅展示），null 表示无 */
     val updateBanner: GitHubRelease? = null,
     /** 检查更新状态（弹层结果区渲染） */
     val updateCheckState: UpdateCheckState = UpdateCheckState.Idle,
+    val customBackgroundPath: String? = null,
+    val backgroundDim: Float = SettingsRepository.BACKGROUND_DIM_DEFAULT,
+    val backgroundErrorRes: Int? = null,
+    val backgroundScrimDark: Int? = null,
+    val backgroundScrimLight: Int? = null,
+    val backgroundOffsetX: Float = 0f,
+    val backgroundOffsetY: Float = 0f,
+    val backgroundScale: Float = SettingsRepository.BACKGROUND_SCALE_DEFAULT,
+    val backgroundBlur: Float = SettingsRepository.BACKGROUND_BLUR_DEFAULT,
+    val backgroundHeroFraction: Float = SettingsRepository.BACKGROUND_HERO_DEFAULT,
+    val backgroundImgWidth: Int? = null,
+    val backgroundImgHeight: Int? = null,
+    /** 独立背景层图片路径，null 表示跟随头部图（背景层复用头部图与头部取景） */
+    val backdropPath: String? = null,
+    val heroOffsetX: Float = 0f,
+    val heroOffsetY: Float = 0f,
+    val heroScale: Float = SettingsRepository.HERO_SCALE_DEFAULT,
+    /** 独立背景图原始宽度（像素），null 表示未分离或未知 */
+    val backdropImgWidth: Int? = null,
+    /** 独立背景图原始高度（像素），null 表示未分离或未知 */
+    val backdropImgHeight: Int? = null,
 )
 
 @HiltViewModel
@@ -110,6 +135,10 @@ class HomeViewModel @Inject constructor(
     private val checkForUpdateUseCase: CheckForUpdateUseCase,
     private val observeAutoCheckEnabledUseCase: ObserveAutoCheckEnabledUseCase,
     private val setAutoCheckEnabledUseCase: SetAutoCheckEnabledUseCase,
+    private val observeCustomBackgroundUseCase: ObserveCustomBackgroundUseCase,
+    private val setCustomBackgroundUseCase: SetCustomBackgroundUseCase,
+    private val observeBackgroundDimUseCase: ObserveBackgroundDimUseCase,
+    private val setBackgroundDimUseCase: SetBackgroundDimUseCase,
     private val settingsRepository: SettingsRepository,
     private val authRepository: AuthRepository,
     private val thumbnailResolver: ThumbnailResolver,
@@ -161,6 +190,91 @@ class HomeViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
+            observeCustomBackgroundUseCase().collect { path ->
+                _uiState.update { it.copy(customBackgroundPath = path) }
+            }
+        }
+        viewModelScope.launch {
+            observeBackgroundDimUseCase().collect { dim ->
+                _uiState.update { it.copy(backgroundDim = dim) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.backgroundScrimDark.collect { scrim ->
+                _uiState.update { it.copy(backgroundScrimDark = scrim) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.backgroundScrimLight.collect { scrim ->
+                _uiState.update { it.copy(backgroundScrimLight = scrim) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.backgroundOffsetX.collect { offset ->
+                _uiState.update { it.copy(backgroundOffsetX = offset) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.backgroundOffsetY.collect { offset ->
+                _uiState.update { it.copy(backgroundOffsetY = offset) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.backgroundScale.collect { scale ->
+                _uiState.update { it.copy(backgroundScale = scale) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.backgroundBlur.collect { blur ->
+                _uiState.update { it.copy(backgroundBlur = blur) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.backgroundHeroFraction.collect { fraction ->
+                _uiState.update { it.copy(backgroundHeroFraction = fraction) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.backgroundImgWidth.collect { width ->
+                _uiState.update { it.copy(backgroundImgWidth = width) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.backgroundImgHeight.collect { height ->
+                _uiState.update { it.copy(backgroundImgHeight = height) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.backdropPath.collect { path ->
+                _uiState.update { it.copy(backdropPath = path) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.heroOffsetX.collect { offset ->
+                _uiState.update { it.copy(heroOffsetX = offset) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.heroOffsetY.collect { offset ->
+                _uiState.update { it.copy(heroOffsetY = offset) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.heroScale.collect { scale ->
+                _uiState.update { it.copy(heroScale = scale) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.backdropImgWidth.collect { width ->
+                _uiState.update { it.copy(backdropImgWidth = width) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.backdropImgHeight.collect { height ->
+                _uiState.update { it.copy(backdropImgHeight = height) }
+            }
+        }
+        viewModelScope.launch {
             // 自动重登成功后登录态未变化，但数据已过期（登录墙作品缩略图等），需重新加载
             authRepository.sessionRefreshed.collect {
                 android.util.Log.d("PikuDiag", "session refreshed, reloading feed")
@@ -168,7 +282,6 @@ class HomeViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            // 详情页解析到真实图后回填缓存，列表卡片局部更新为真实图。
             // 只替换缩略图字段：事件里的 work 可能是详情页传入的瘦对象（title 等为空），
             // 整体替换会把卡片标题/作者等字段清空（历史 bug：密码作品解锁后回退，标题消失）
             thumbnailResolver.thumbUpdated.collect { updated ->
@@ -200,7 +313,6 @@ class HomeViewModel @Inject constructor(
                         } else null,
                     )
                 }
-                // 登录态变化（含自动重登成功）后刷新列表，登录墙作品缩略图随之变为真实图
                 if (prevLoggedIn != null && loggedIn != prevLoggedIn) reload()
                 prevLoggedIn = loggedIn
                 if (loggedIn) authRepository.refreshUserProfile()
@@ -350,6 +462,66 @@ class HomeViewModel @Inject constructor(
 
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch { setThemeModeUseCase(mode) }
+    }
+
+    fun setCustomBackground(uri: android.net.Uri) {
+        viewModelScope.launch {
+            val ok = setCustomBackgroundUseCase(uri)
+            if (!ok) {
+                _uiState.update { it.copy(backgroundErrorRes = R.string.background_read_failed) }
+            }
+        }
+    }
+
+    fun clearCustomBackground() {
+        viewModelScope.launch { setCustomBackgroundUseCase.clear() }
+    }
+
+    fun setBackgroundDim(value: Float) {
+        setBackgroundDimUseCase(value)
+    }
+
+    fun setBackgroundScale(value: Float) {
+        settingsRepository.setBackgroundScale(value)
+    }
+
+    fun setBackgroundBlur(value: Float) {
+        settingsRepository.setBackgroundBlur(value)
+    }
+
+    fun setBackgroundHeroFraction(value: Float) {
+        settingsRepository.setBackgroundHeroFraction(value)
+    }
+
+    fun setBackgroundOffset(x: Float, y: Float, persist: Boolean = false) {
+        settingsRepository.setBackgroundOffset(x, y, persist)
+    }
+
+    fun setHeroScale(value: Float) {
+        settingsRepository.setHeroScale(value)
+    }
+
+    fun setHeroOffset(x: Float, y: Float, persist: Boolean = false) {
+        settingsRepository.setHeroOffset(x, y, persist)
+    }
+
+    /** 保存相册图片为独立背景层；失败时置错误提示（弹层内展示） */
+    fun setCustomBackdrop(uri: android.net.Uri) {
+        viewModelScope.launch {
+            val ok = setCustomBackgroundUseCase.saveBackdrop(uri)
+            if (!ok) {
+                _uiState.update { it.copy(backgroundErrorRes = R.string.background_read_failed) }
+            }
+        }
+    }
+
+    /** 清除独立背景层，回到跟随头部模式（无缝过渡） */
+    fun restoreFollowBackground() {
+        viewModelScope.launch { setCustomBackgroundUseCase.clearBackdrop() }
+    }
+
+    fun consumeBackgroundError() {
+        _uiState.update { it.copy(backgroundErrorRes = null) }
     }
 
     fun setHistoryRetentionDays(days: Int) {

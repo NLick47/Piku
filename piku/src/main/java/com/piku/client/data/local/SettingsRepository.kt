@@ -5,6 +5,7 @@ import com.piku.client.domain.model.ThemeMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -18,6 +19,22 @@ import javax.inject.Singleton
 class SettingsRepository @Inject constructor(
     private val prefs: SharedPreferences,
 ) {
+
+    init {
+        // 双图层一次性迁移：引入头部层独立取景前只有一套背景取景参数，
+        // 把它复制为头部层初值，老用户升级后跟随模式渲染与旧版完全一致。
+        if (!prefs.getBoolean(KEY_DUAL_LAYER_MIGRATED, false)) {
+            prefs.edit()
+                .putFloat(KEY_HERO_OFFSET_X, prefs.getFloat(KEY_BACKGROUND_OFFSET_X, 0f))
+                .putFloat(KEY_HERO_OFFSET_Y, prefs.getFloat(KEY_BACKGROUND_OFFSET_Y, 0f))
+                .putFloat(
+                    KEY_HERO_SCALE,
+                    prefs.getFloat(KEY_BACKGROUND_SCALE, BACKGROUND_SCALE_DEFAULT),
+                )
+                .putBoolean(KEY_DUAL_LAYER_MIGRATED, true)
+                .apply()
+        }
+    }
 
     private val _showAdultContent = MutableStateFlow(
         prefs.getBoolean(KEY_SHOW_ADULT_CONTENT, false),
@@ -49,6 +66,105 @@ class SettingsRepository @Inject constructor(
     )
     val lastUpdateCheckAt: StateFlow<Long> = _lastUpdateCheckAt.asStateFlow()
 
+    /** 首页自定义背景图片路径（应用私有目录），null 表示使用默认背景 */
+    private val _customBackgroundPath = MutableStateFlow(
+        prefs.getString(KEY_CUSTOM_BACKGROUND_PATH, null)?.takeIf { File(it).exists() },
+    )
+    val customBackgroundPath: StateFlow<String?> = _customBackgroundPath.asStateFlow()
+
+    /** 自定义背景压暗程度 0~1，0 表示不压暗 */
+    private val _backgroundDim = MutableStateFlow(
+        prefs.getFloat(KEY_BACKGROUND_DIM, BACKGROUND_DIM_DEFAULT),
+    )
+    val backgroundDim: StateFlow<Float> = _backgroundDim.asStateFlow()
+
+    /** 自定义背景暗色遮罩色（ARGB，取自图片主色），null 表示未提取，回退纯黑 */
+    private val _backgroundScrimDark = MutableStateFlow(
+        prefs.getInt(KEY_BACKGROUND_SCRIM_DARK, Int.MIN_VALUE)
+            .takeIf { it != Int.MIN_VALUE },
+    )
+    val backgroundScrimDark: StateFlow<Int?> = _backgroundScrimDark.asStateFlow()
+
+    /** 自定义背景亮色遮罩色（ARGB，取自图片主色），null 表示未提取，回退纯白 */
+    private val _backgroundScrimLight = MutableStateFlow(
+        prefs.getInt(KEY_BACKGROUND_SCRIM_LIGHT, Int.MIN_VALUE)
+            .takeIf { it != Int.MIN_VALUE },
+    )
+    val backgroundScrimLight: StateFlow<Int?> = _backgroundScrimLight.asStateFlow()
+
+    /** 独立背景图在首页的水平/垂直归一化偏移（-1~1，Alignment.Offset 空间）。
+     * -1 表示左/上边缘，0 表示居中，1 表示右/下边缘。
+     * 双图层引入后仅作用于独立背景图的取景；跟随模式由头部层偏移驱动。 */
+    private val _backgroundOffsetX = MutableStateFlow(
+        prefs.getFloat(KEY_BACKGROUND_OFFSET_X, 0f)
+    )
+    val backgroundOffsetX: StateFlow<Float> = _backgroundOffsetX.asStateFlow()
+    private val _backgroundOffsetY = MutableStateFlow(
+        prefs.getFloat(KEY_BACKGROUND_OFFSET_Y, 0f)
+    )
+    val backgroundOffsetY: StateFlow<Float> = _backgroundOffsetY.asStateFlow()
+
+    /** 保存的背景图片原始宽/高（像素），用于拖动手势计算溢出量。
+     * 由 saveFromUri 成功后顺手写入，若为 null 则退回使用容器尺寸估算。 */
+    private val _backgroundImgWidth = MutableStateFlow(
+        prefs.getInt(KEY_BACKGROUND_IMG_WIDTH, 0).takeIf { it > 0 }
+    )
+    val backgroundImgWidth: StateFlow<Int?> = _backgroundImgWidth.asStateFlow()
+    private val _backgroundImgHeight = MutableStateFlow(
+        prefs.getInt(KEY_BACKGROUND_IMG_HEIGHT, 0).takeIf { it > 0 }
+    )
+    val backgroundImgHeight: StateFlow<Int?> = _backgroundImgHeight.asStateFlow()
+
+    private val _backgroundScale = MutableStateFlow(
+        prefs.getFloat(KEY_BACKGROUND_SCALE, BACKGROUND_SCALE_DEFAULT)
+            .coerceIn(BACKGROUND_SCALE_MIN, BACKGROUND_SCALE_MAX),
+    )
+    val backgroundScale: StateFlow<Float> = _backgroundScale.asStateFlow()
+
+    /** 内容区背景模糊强度（dp），0 表示不模糊 */
+    private val _backgroundBlur = MutableStateFlow(
+        prefs.getFloat(KEY_BACKGROUND_BLUR, BACKGROUND_BLUR_DEFAULT)
+            .coerceIn(BACKGROUND_BLUR_MIN, BACKGROUND_BLUR_MAX),
+    )
+    val backgroundBlur: StateFlow<Float> = _backgroundBlur.asStateFlow()
+
+    /** 头部清晰区占屏幕高度比例（0.22~0.45） */
+    private val _backgroundHeroFraction = MutableStateFlow(
+        prefs.getFloat(KEY_BACKGROUND_HERO, BACKGROUND_HERO_DEFAULT)
+            .coerceIn(BACKGROUND_HERO_MIN, BACKGROUND_HERO_MAX),
+    )
+    val backgroundHeroFraction: StateFlow<Float> = _backgroundHeroFraction.asStateFlow()
+
+    /** 头部层水平/垂直归一化偏移（-1~1），独立于背景层；缩放 <1（画框式）时不生效 */
+    private val _heroOffsetX = MutableStateFlow(prefs.getFloat(KEY_HERO_OFFSET_X, 0f))
+    val heroOffsetX: StateFlow<Float> = _heroOffsetX.asStateFlow()
+    private val _heroOffsetY = MutableStateFlow(prefs.getFloat(KEY_HERO_OFFSET_Y, 0f))
+    val heroOffsetY: StateFlow<Float> = _heroOffsetY.asStateFlow()
+
+    /** 头部层缩放：0.5~1.5。≥1 满铺裁切取景，<1 整幅缩小为画框式呈现 */
+    private val _heroScale = MutableStateFlow(
+        prefs.getFloat(KEY_HERO_SCALE, HERO_SCALE_DEFAULT)
+            .coerceIn(HERO_SCALE_MIN, HERO_SCALE_MAX),
+    )
+    val heroScale: StateFlow<Float> = _heroScale.asStateFlow()
+
+    /** 独立背景层图片路径（应用私有目录），null 表示跟随头部图（无缝过渡）。
+     * 引入后 backgroundOffsetX/Y/Scale 仅作为该独立背景图的取景参数。 */
+    private val _backdropPath = MutableStateFlow(
+        prefs.getString(KEY_BACKDROP_PATH, null)?.takeIf { File(it).exists() },
+    )
+    val backdropPath: StateFlow<String?> = _backdropPath.asStateFlow()
+
+    /** 独立背景图原始宽/高（像素），用于分离模式下拖动溢出计算 */
+    private val _backdropImgWidth = MutableStateFlow(
+        prefs.getInt(KEY_BACKDROP_IMG_WIDTH, 0).takeIf { it > 0 }
+    )
+    val backdropImgWidth: StateFlow<Int?> = _backdropImgWidth.asStateFlow()
+    private val _backdropImgHeight = MutableStateFlow(
+        prefs.getInt(KEY_BACKDROP_IMG_HEIGHT, 0).takeIf { it > 0 }
+    )
+    val backdropImgHeight: StateFlow<Int?> = _backdropImgHeight.asStateFlow()
+
     fun setShowAdultContent(value: Boolean) {
         prefs.edit().putBoolean(KEY_SHOW_ADULT_CONTENT, value).apply()
         _showAdultContent.value = value
@@ -67,6 +183,154 @@ class SettingsRepository @Inject constructor(
     fun setAutoCheckEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_AUTO_CHECK_ENABLED, enabled).apply()
         _autoCheckEnabled.value = enabled
+    }
+
+    fun setCustomBackgroundPath(path: String?) {
+        if (path == null) {
+            prefs.edit().remove(KEY_CUSTOM_BACKGROUND_PATH).apply()
+        } else {
+            prefs.edit().putString(KEY_CUSTOM_BACKGROUND_PATH, path).apply()
+        }
+        _customBackgroundPath.value = path
+    }
+
+    /** 使用原始图片尺寸更新背景路径，并把偏移重置居中。
+     * [imgWidth] 和 [imgHeight] 为像素单位，用于后续拖动手势的溢出计算。 */
+    fun setCustomBackgroundPath(path: String?, imgWidth: Int?, imgHeight: Int?) {
+        if (path == null) {
+            prefs.edit().remove(KEY_CUSTOM_BACKGROUND_PATH).apply()
+        } else {
+            prefs.edit().putString(KEY_CUSTOM_BACKGROUND_PATH, path).apply()
+        }
+        // 写入原始图片尺寸（用于后续拖动溢出计算）
+        prefs.edit()
+            .putInt(KEY_BACKGROUND_IMG_WIDTH, imgWidth ?: 0)
+            .putInt(KEY_BACKGROUND_IMG_HEIGHT, imgHeight ?: 0)
+            .apply()
+        // 换图时把偏移和缩放重置为默认
+        _backgroundOffsetX.value = 0f
+        _backgroundOffsetY.value = 0f
+        _backgroundScale.value = BACKGROUND_SCALE_DEFAULT
+        // 持久化重置
+        prefs.edit()
+            .putFloat(KEY_BACKGROUND_OFFSET_X, 0f)
+            .putFloat(KEY_BACKGROUND_OFFSET_Y, 0f)
+            .putFloat(KEY_BACKGROUND_SCALE, BACKGROUND_SCALE_DEFAULT)
+            .apply()
+        _customBackgroundPath.value = path
+    }
+
+    fun setBackgroundScale(value: Float) {
+        val clamped = value.coerceIn(BACKGROUND_SCALE_MIN, BACKGROUND_SCALE_MAX)
+        prefs.edit().putFloat(KEY_BACKGROUND_SCALE, clamped).apply()
+        _backgroundScale.value = clamped
+    }
+
+    fun setBackgroundDim(value: Float) {
+        val clamped = value.coerceIn(BACKGROUND_DIM_MIN, BACKGROUND_DIM_MAX)
+        prefs.edit().putFloat(KEY_BACKGROUND_DIM, clamped).apply()
+        _backgroundDim.value = clamped
+    }
+
+    fun setBackgroundBlur(value: Float) {
+        val clamped = value.coerceIn(BACKGROUND_BLUR_MIN, BACKGROUND_BLUR_MAX)
+        prefs.edit().putFloat(KEY_BACKGROUND_BLUR, clamped).apply()
+        _backgroundBlur.value = clamped
+    }
+
+    fun setBackgroundHeroFraction(value: Float) {
+        val clamped = value.coerceIn(BACKGROUND_HERO_MIN, BACKGROUND_HERO_MAX)
+        prefs.edit().putFloat(KEY_BACKGROUND_HERO, clamped).apply()
+        _backgroundHeroFraction.value = clamped
+    }
+
+    /** 头部层缩放（0.5~1.5） */
+    fun setHeroScale(value: Float) {
+        val clamped = value.coerceIn(HERO_SCALE_MIN, HERO_SCALE_MAX)
+        prefs.edit().putFloat(KEY_HERO_SCALE, clamped).apply()
+        _heroScale.value = clamped
+    }
+
+    /** 头部层归一化偏移（内存即时更新，[persist] 为 true 时同步落盘） */
+    fun setHeroOffset(x: Float, y: Float, persist: Boolean = false) {
+        val nx = x.coerceIn(-1f, 1f)
+        val ny = y.coerceIn(-1f, 1f)
+        if (persist) {
+            prefs.edit()
+                .putFloat(KEY_HERO_OFFSET_X, nx)
+                .putFloat(KEY_HERO_OFFSET_Y, ny)
+                .apply()
+        }
+        _heroOffsetX.value = nx
+        _heroOffsetY.value = ny
+    }
+
+    /** 保存独立背景图路径与尺寸，取景参数重置为默认 */
+    fun setBackdropPath(path: String?, imgWidth: Int?, imgHeight: Int?) {
+        prefs.edit()
+            .applyPath(KEY_BACKDROP_PATH, path)
+            .putInt(KEY_BACKDROP_IMG_WIDTH, imgWidth ?: 0)
+            .putInt(KEY_BACKDROP_IMG_HEIGHT, imgHeight ?: 0)
+            .putFloat(KEY_BACKGROUND_OFFSET_X, 0f)
+            .putFloat(KEY_BACKGROUND_OFFSET_Y, 0f)
+            .putFloat(KEY_BACKGROUND_SCALE, BACKGROUND_SCALE_DEFAULT)
+            .apply()
+        _backdropImgWidth.value = imgWidth?.takeIf { it > 0 }
+        _backdropImgHeight.value = imgHeight?.takeIf { it > 0 }
+        _backgroundOffsetX.value = 0f
+        _backgroundOffsetY.value = 0f
+        _backgroundScale.value = BACKGROUND_SCALE_DEFAULT
+        _backdropPath.value = path
+    }
+
+    /** 清除独立背景图，回到跟随头部模式（背景层重新使用头部图 + 头部取景） */
+    fun clearBackdropPath() {
+        prefs.edit()
+            .remove(KEY_BACKDROP_PATH)
+            .remove(KEY_BACKDROP_IMG_WIDTH)
+            .remove(KEY_BACKDROP_IMG_HEIGHT)
+            .apply()
+        _backdropPath.value = null
+        _backdropImgWidth.value = null
+        _backdropImgHeight.value = null
+    }
+
+    fun setBackgroundScrims(scrimDark: Int?, scrimLight: Int?) {
+        prefs.edit()
+            .applyScrim(KEY_BACKGROUND_SCRIM_DARK, scrimDark)
+            .applyScrim(KEY_BACKGROUND_SCRIM_LIGHT, scrimLight)
+            .apply()
+        _backgroundScrimDark.value = scrimDark
+        _backgroundScrimLight.value = scrimLight
+    }
+
+    private fun SharedPreferences.Editor.applyScrim(key: String, value: Int?): SharedPreferences.Editor =
+        if (value == null) remove(key) else putInt(key, value)
+
+    private fun SharedPreferences.Editor.applyPath(key: String, value: String?): SharedPreferences.Editor =
+        if (value == null) remove(key) else putString(key, value)
+
+    /** 归一化偏移持久化（拖动结束时调用） */
+    fun persistBackgroundOffset() {
+        prefs.edit()
+            .putFloat(KEY_BACKGROUND_OFFSET_X, _backgroundOffsetX.value)
+            .putFloat(KEY_BACKGROUND_OFFSET_Y, _backgroundOffsetY.value)
+            .apply()
+    }
+
+    /** 设置归一化偏移（内存即时更新，[persist] 为 true 时同步落盘）。
+     * [x], [y] 均在 -1~1 的 Alignment.Offset 空间。 */
+    fun setBackgroundOffset(x: Float, y: Float, persist: Boolean = false) {
+        val nx = x.coerceIn(-1f, 1f)
+        val ny = y.coerceIn(-1f, 1f)
+        if (persist) {
+            prefs.edit()
+                .putFloat(KEY_BACKGROUND_OFFSET_X, nx)
+                .putFloat(KEY_BACKGROUND_OFFSET_Y, ny)
+                .apply()
+        }
+        _backgroundOffsetX.value = nx
+        _backgroundOffsetY.value = ny
     }
 
     private val _novelFontSize = MutableStateFlow(
@@ -119,10 +383,63 @@ class SettingsRepository @Inject constructor(
         const val KEY_NOVEL_FONT_SIZE = "novel_font_size"
         const val KEY_NOVEL_READER_LIGHT = "novel_reader_light"
         const val KEY_NOVEL_PROGRESS_PREFIX = "novel_progress_"
+        const val KEY_CUSTOM_BACKGROUND_PATH = "custom_background_path"
+        const val KEY_BACKGROUND_DIM = "background_dim"
+        const val KEY_BACKGROUND_SCRIM_DARK = "background_scrim_dark"
+        const val KEY_BACKGROUND_SCRIM_LIGHT = "background_scrim_light"
+        /** 首页背景水平/垂直归一化偏移与缩放：双图层引入后仅作为
+         * 独立背景图（backdrop）的取景参数；跟随模式下由头部层参数驱动。 */
+        const val KEY_BACKGROUND_OFFSET_X = "background_offset_x"
+        const val KEY_BACKGROUND_OFFSET_Y = "background_offset_y"
+        const val KEY_BACKGROUND_IMG_WIDTH = "background_img_width"
+        const val KEY_BACKGROUND_IMG_HEIGHT = "background_img_height"
+        const val KEY_BACKGROUND_SCALE = "background_scale"
+        const val KEY_BACKGROUND_BLUR = "background_blur"
+        const val KEY_BACKGROUND_HERO = "background_hero"
+
+        /** 头部层独立取景参数 */
+        const val KEY_HERO_OFFSET_X = "hero_offset_x"
+        const val KEY_HERO_OFFSET_Y = "hero_offset_y"
+        const val KEY_HERO_SCALE = "hero_scale"
+
+        /** 独立背景图（null = 跟随头部图） */
+        const val KEY_BACKDROP_PATH = "backdrop_path"
+        const val KEY_BACKDROP_IMG_WIDTH = "backdrop_img_width"
+        const val KEY_BACKDROP_IMG_HEIGHT = "backdrop_img_height"
+
+        /** 双图层迁移标记：老版本只有一套取景参数，首次启动复制为头部层初值 */
+        const val KEY_DUAL_LAYER_MIGRATED = "dual_layer_migrated"
 
         /** 小说阅读器字号范围与默认值（sp） */
         const val NOVEL_FONT_MIN = 13f
         const val NOVEL_FONT_MAX = 24f
         const val NOVEL_FONT_DEFAULT = 16f
+
+        /** 自定义背景压暗范围与默认值（0~1） */
+        const val BACKGROUND_DIM_MIN = 0f
+        const val BACKGROUND_DIM_MAX = 0.8f
+        const val BACKGROUND_DIM_DEFAULT = 0.35f
+
+        /** 自定义背景缩放范围与默认值（1~1.5）。
+         * 下限 1.0：缩放只负责放大取景，铺满由 Crop 保证，避免缩小露边。
+         * 仅作用于独立背景图；头部层用 HERO_SCALE_*（允许 <1 画框式）。 */
+        const val BACKGROUND_SCALE_MIN = 1.0f
+        const val BACKGROUND_SCALE_MAX = 1.5f
+        const val BACKGROUND_SCALE_DEFAULT = 1.0f
+
+        /** 头部层缩放范围与默认值：≥1 满铺裁切，<1 整幅缩小为画框式 */
+        const val HERO_SCALE_MIN = 0.5f
+        const val HERO_SCALE_MAX = BACKGROUND_SCALE_MAX
+        const val HERO_SCALE_DEFAULT = 1.0f
+
+        /** 内容区背景模糊强度范围与默认值（dp） */
+        const val BACKGROUND_BLUR_MIN = 0f
+        const val BACKGROUND_BLUR_MAX = 48f
+        const val BACKGROUND_BLUR_DEFAULT = 32f
+
+        /** 头部清晰区高度比例范围与默认值（占屏幕高度） */
+        const val BACKGROUND_HERO_MIN = 0.22f
+        const val BACKGROUND_HERO_MAX = 0.45f
+        const val BACKGROUND_HERO_DEFAULT = 0.34f
     }
 }

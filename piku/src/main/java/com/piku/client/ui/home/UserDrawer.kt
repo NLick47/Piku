@@ -35,6 +35,7 @@ import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Tag
 import androidx.compose.material.icons.outlined.Translate
+import androidx.compose.material.icons.outlined.Wallpaper
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -77,6 +78,7 @@ fun UserDrawer(
     userProfile: UserProfile?,
     adultEnabled: Boolean,
     themeMode: ThemeMode,
+    customBackgroundPath: String?,
     historyRetentionDays: Int,
     language: AppLanguage,
     currentVersion: String,
@@ -84,6 +86,7 @@ fun UserDrawer(
     onToggleAdult: () -> Unit,
     onAboutClick: () -> Unit,
     onThemeClick: () -> Unit,
+    onBackgroundClick: () -> Unit,
     onRetentionClick: () -> Unit,
     onLanguageClick: () -> Unit,
     onHistoryClick: () -> Unit,
@@ -105,6 +108,7 @@ fun UserDrawer(
                 userProfile = userProfile,
                 adultEnabled = adultEnabled,
                 themeMode = themeMode,
+                customBackgroundPath = customBackgroundPath,
                 historyRetentionDays = historyRetentionDays,
                 language = language,
                 currentVersion = currentVersion,
@@ -112,6 +116,7 @@ fun UserDrawer(
                 onToggleAdult = onToggleAdult,
                 onAboutClick = onAboutClick,
                 onThemeClick = onThemeClick,
+                onBackgroundClick = onBackgroundClick,
                 onRetentionClick = onRetentionClick,
                 onLanguageClick = onLanguageClick,
                 onHistoryClick = onHistoryClick,
@@ -135,6 +140,7 @@ private fun DrawerPanel(
     userProfile: UserProfile?,
     adultEnabled: Boolean,
     themeMode: ThemeMode,
+    customBackgroundPath: String?,
     historyRetentionDays: Int,
     language: AppLanguage,
     currentVersion: String,
@@ -142,6 +148,7 @@ private fun DrawerPanel(
     onToggleAdult: () -> Unit,
     onAboutClick: () -> Unit,
     onThemeClick: () -> Unit,
+    onBackgroundClick: () -> Unit,
     onRetentionClick: () -> Unit,
     onLanguageClick: () -> Unit,
     onHistoryClick: () -> Unit,
@@ -294,6 +301,20 @@ private fun DrawerPanel(
                 label = stringResource(R.string.menu_theme),
                 trailing = stringResource(themeMode.labelRes()),
                 onClick = onThemeClick,
+                dark = dark,
+                accent = iconAccent,
+            )
+            DrawerMenuRow(
+                icon = Icons.Outlined.Wallpaper,
+                label = stringResource(R.string.menu_background),
+                trailing = stringResource(
+                    if (customBackgroundPath != null) {
+                        R.string.background_state_custom
+                    } else {
+                        R.string.background_state_default
+                    },
+                ),
+                onClick = onBackgroundClick,
                 dark = dark,
                 accent = iconAccent,
             )
