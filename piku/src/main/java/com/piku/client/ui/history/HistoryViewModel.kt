@@ -21,7 +21,7 @@ import javax.inject.Inject
 
 data class HistoryUiState(
     val works: List<Work> = emptyList(),
-    val favoriteIds: Set<String> = emptySet(),
+    val favoriteIds: Set<Long> = emptySet(),
     val selectedRange: HistoryTimeRange = HistoryTimeRange.ALL,
     val loaded: Boolean = false,
 )

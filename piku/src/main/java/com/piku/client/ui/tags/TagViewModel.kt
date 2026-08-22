@@ -24,7 +24,7 @@ data class TagsUiState(
     val loaded: Boolean = false,
     val selectedTag: String? = null,
     val works: List<Work> = emptyList(),
-    val favoriteIds: Set<String> = emptySet(),
+    val favoriteIds: Set<Long> = emptySet(),
     val loading: Boolean = false,
     val loadingMore: Boolean = false,
     val errorRes: Int? = null,

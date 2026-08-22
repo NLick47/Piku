@@ -64,7 +64,7 @@ data class HomeUiState(
     val feedTab: FeedTab = FeedTab.LATEST,
     val category: PoipikuCategory = PoipikuCategory.ALL,
     val works: List<Work> = emptyList(),
-    val favoriteIds: Set<String> = emptySet(),
+    val favoriteIds: Set<Long> = emptySet(),
     val adultEnabled: Boolean = false,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val historyRetentionDays: Int = 0,

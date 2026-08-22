@@ -483,7 +483,6 @@ private fun DetailTopBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            // 方案 B：去掉实时模糊，用接近不透明的纯色模拟玻璃质感
             .background(if (dark) GlassHeaderTintDark else GlassHeaderTintLight)
             .drawBehind {
                 drawLine(

@@ -325,7 +325,6 @@ private fun FolderListContent(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                // 方案 B：去掉实时模糊，用接近不透明的纯色模拟玻璃质感
                 .background(if (dark) Color(0xF2262421) else Color(0xF7FFFFFF))
                 .statusBarsPadding()
                 .padding(horizontal = 20.dp, vertical = 14.dp),
@@ -439,7 +438,6 @@ private fun FolderCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .shadow(10.dp, shape, ambientColor = Color(0x33000000), spotColor = Color(0x40000000))
-                // 方案 B：去掉实时模糊，用接近不透明的纯色模拟玻璃质感
                 .background(if (dark) Color(0xF2262421) else Color(0xF7FFFFFF))
                 .clip(shape)
                 .border(
@@ -645,7 +643,6 @@ private fun FolderDetailContent(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                // 方案 B：去掉实时模糊，用接近不透明的纯色模拟玻璃质感
                 .background(if (dark) Color(0xF2262421) else Color(0xF7FFFFFF))
                 .statusBarsPadding()
                 .padding(horizontal = 8.dp, vertical = 8.dp),

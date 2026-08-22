@@ -7,5 +7,5 @@ import javax.inject.Inject
 class ObserveFavoriteIdsUseCase @Inject constructor(
     private val favoriteRepository: FavoriteRepository,
 ) {
-    operator fun invoke(): Flow<Set<String>> = favoriteRepository.observeFavoriteIds()
+    operator fun invoke(): Flow<Set<Long>> = favoriteRepository.observeFavoriteIds()
 }

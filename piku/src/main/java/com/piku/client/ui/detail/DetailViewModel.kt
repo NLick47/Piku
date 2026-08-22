@@ -173,7 +173,7 @@ class DetailViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             observeFavoriteIdsUseCase().collect { ids ->
-                _uiState.update { it.copy(isFavorite = workId.toString() in ids) }
+                _uiState.update { it.copy(isFavorite = workId in ids) }
             }
         }
         viewModelScope.launch {

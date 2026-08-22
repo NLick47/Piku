@@ -41,7 +41,6 @@ enum class SearchTab { WORKS, USERS, TAGS }
  * - 作品 tab：关键词搜索作品（SearchIllustByKeywordPcV）
  * - 用户 tab：作者搜索（SearchUserByKeywordPcV，需登录）
  * - 标签 tab：标签建议（SearchTagByKeywordPcV，标签卡片）+ 选中标签的作品（SearchIllustByTagPcV）
- * 三个 tab 各自维护分页状态；标签 tab 内建议/作品两模式各维护自己的分页。
  */
 data class SearchUiState(
     /** 路由传入的原始关键词（可为空串表示未搜索） */
@@ -55,7 +54,6 @@ data class SearchUiState(
     val worksErrorRes: Int? = null,
     val worksLoadMoreErrorRes: Int? = null,
     val worksEndReached: Boolean = false,
-    /** 作品搜索需登录：未登录不发请求，直接展示登录引导 */
     val worksNeedLogin: Boolean = false,
     val users: List<FollowUser> = emptyList(),
     val usersLoading: Boolean = false,
@@ -63,7 +61,6 @@ data class SearchUiState(
     val usersErrorRes: Int? = null,
     val usersLoadMoreErrorRes: Int? = null,
     val usersEndReached: Boolean = false,
-    /** 作者搜索需登录：未登录不发请求，直接展示登录引导 */
     val usersNeedLogin: Boolean = false,
     /** 标签建议（包含关键字的标签卡片，SearchTagByKeywordPcV） */
     val tagSuggestions: List<TagCard> = emptyList(),
@@ -81,11 +78,9 @@ data class SearchUiState(
     val tagWorksErrorRes: Int? = null,
     val tagWorksLoadMoreErrorRes: Int? = null,
     val tagWorksEndReached: Boolean = false,
-    /** 标签搜索需登录：未登录不发请求，直接展示登录引导 */
     val tagNeedLogin: Boolean = false,
-    /** 自定义标签（本地管理，搜索时可增删与直达） */
     val customTags: List<String> = emptyList(),
-    val favoriteIds: Set<String> = emptySet(),
+    val favoriteIds: Set<Long> = emptySet(),
     /** 正在切换关注状态的用户 ID 集合，防止连点 */
     val followPendingIds: Set<Long> = emptySet(),
     /** 本地乐观覆盖：userId -> 目标关注态，服务端确认后以服务端结果为准 */
@@ -175,7 +170,6 @@ class SearchViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            // 自动重登成功后会话刷新，重新拉取三个 tab 的结果
             authRepository.sessionRefreshed.collect {
                 loadUsers(append = false)
                 loadWorks(append = false)
@@ -186,7 +180,6 @@ class SearchViewModel @Inject constructor(
             // 作品 tab 始终预载（关键词搜索，切 tab 免等待）
             loadWorks(append = false)
             when (initialTab) {
-                // 标签 tab：加载标签建议（原站先给标签卡片，点击后才加载该标签作品）
                 SearchTab.TAGS -> loadTagSuggestions(append = false)
                 // 用户 tab：无条件调用，内部处理未登录态（usersNeedLogin）
                 SearchTab.USERS -> loadUsers(append = false)
@@ -213,7 +206,6 @@ class SearchViewModel @Inject constructor(
         if (tab == state.tab || base.isEmpty()) return
         _uiState.update { it.copy(tab = tab) }
         when (tab) {
-            // xxxEndReached 区分"已加载过的空结果"与"未加载"，避免切回空结果 tab 时重复请求
             SearchTab.WORKS -> if (state.works.isEmpty() && !state.worksLoading && !state.worksEndReached) loadWorks(append = false)
             SearchTab.USERS -> if (state.users.isEmpty() && !state.usersLoading && !state.usersEndReached) loadUsers(append = false)
             SearchTab.TAGS -> {
@@ -292,7 +284,6 @@ class SearchViewModel @Inject constructor(
         if (selected) loadTagWorks(append = true) else loadTagSuggestions(append = true)
     }
 
-    /** 点击标签卡片：进入该精确标签的作品模式（就地切换，可返回标签建议） */
     fun selectTagCard(name: String) {
         if (name.isEmpty() || _uiState.value.selectedTagName == name) return
         tagWorksPage = 0
@@ -331,7 +322,6 @@ class SearchViewModel @Inject constructor(
         viewModelScope.launch { toggleFavoriteUseCase(work) }
     }
 
-    /** 关注/取消关注：乐观更新 + 服务端结果回滚/校正 */
     fun toggleFollow(userId: Long) {
         val state = _uiState.value
         if (userId in state.followPendingIds) return
@@ -599,7 +589,6 @@ class SearchViewModel @Inject constructor(
         viewModelScope.launch {
             loadTagFeedUseCase(tag, targetPage)
                 .onSuccess { list ->
-                    // 期间用户可能已切换标签/返回建议模式，丢弃过期响应避免覆盖新标签内容
                     if (_uiState.value.selectedTagName != tag) return@launch
                     tagWorksPage = targetPage
                     _uiState.update {

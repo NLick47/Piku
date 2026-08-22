@@ -27,10 +27,9 @@ data class UserWorksUiState(
     val userId: Long = -1L,
     /** 用户昵称：来自来源页（关注列表）传入，或从作品首条解析回填 */
     val userName: String = "",
-    /** 用户主页头部信息（页头图/头像/作品数/背景规则），第一页加载后填充 */
     val pageInfo: UserPageInfo? = null,
     val works: List<Work> = emptyList(),
-    val favoriteIds: Set<String> = emptySet(),
+    val favoriteIds: Set<Long> = emptySet(),
     val loading: Boolean = false,
     val loadingMore: Boolean = false,
     val errorRes: Int? = null,
@@ -40,7 +39,6 @@ data class UserWorksUiState(
     val loggedIn: Boolean = false,
     /** 是否当前登录用户自己的主页（不显示关注按钮） */
     val isSelf: Boolean = false,
-    /** 是否已关注该作者：本页从关注列表进入，默认已关注 */
     val followed: Boolean = true,
     /** 关注操作进行中（防连点） */
     val followSending: Boolean = false,
@@ -190,7 +188,6 @@ class UserWorksViewModel @Inject constructor(
                             loadMoreErrorRes = null,
                             userName = name,
                             // 页头信息只在第一页刷新，避免分页响应覆盖（分页 pageInfo 为 null）；
-                            // 关注状态同样取自页面 Selected 标记（与关注列表一致）
                             pageInfo = result.pageInfo ?: it.pageInfo,
                             followed = result.pageInfo?.followed ?: it.followed,
                             works = if (append) it.works + list else list,

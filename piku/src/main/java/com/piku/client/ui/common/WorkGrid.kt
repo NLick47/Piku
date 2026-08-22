@@ -66,15 +66,18 @@ import com.piku.client.ui.theme.WorkCardInfoBgDark
 import com.piku.client.ui.theme.WorkCardPlaceholderDark
 import kotlinx.coroutines.delay
 
+internal fun feedThumbUrl(url: String): String =
+    if ("_640.jpg" in url) url.replace("_640.jpg", "_360.jpg") else url
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun WorkCard(
     work: Work,
     isFavorite: Boolean,
-    onToggleFavorite: () -> Unit,
-    onClick: () -> Unit,
+    onToggleFavorite: (Work) -> Unit,
+    onClick: (Work) -> Unit,
     dark: Boolean,
-    onLongClick: (() -> Unit)? = null,
+    onLongClick: ((Work) -> Unit)? = null,
 ) {
     val shape = RoundedCornerShape(12.dp)
     var heartVisible by remember { mutableStateOf(false) }
@@ -101,10 +104,19 @@ fun WorkCard(
             .clip(shape)
             .background(if (dark) WorkCardBgDark else Color(0xCCFFFFFF))
             .border(
-                BorderStroke(1.dp, if (dark) WorkCardBorderDark else Color(0x59C8C2B8)),
+                BorderStroke(
+                    1.dp,
+                    if (dark) WorkCardBorderDark else Color(0x59C8C2B8),
+                ),
                 shape,
             )
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick, onDoubleClick = onToggleFavorite),
+            .combinedClickable(
+                // 回调直接透传 work：调用方无需在 item lambda 里包装闭包，
+                // 参数稳定时 Compose 可跳过未变化卡片的重组
+                onClick = { onClick(work) },
+                onLongClick = onLongClick?.let { handler -> { handler(work) } },
+                onDoubleClick = { onToggleFavorite(work) },
+            ),
     ) {
         Box(
             Modifier
@@ -130,7 +142,7 @@ fun WorkCard(
                 }
             } else {
                 AsyncImage(
-                    model = work.thumbnailUrl,
+                    model = feedThumbUrl(work.thumbnailUrl),
                     contentDescription = work.title,
                     // 暗色模式下压暗白底缩略图，避免网格里出现刺眼的"亮块"
                     colorFilter = if (dark) TameWhiteColorFilter else null,
@@ -175,8 +187,6 @@ fun WorkCard(
         Column(
             Modifier
                 .fillMaxWidth()
-                // 方案 B：去掉实时模糊（Haze），用接近不透明的纯色模拟玻璃质感，
-                // 避免滚动时每帧的全屏源捕获与模糊渲染开销
                 .background(if (dark) WorkCardInfoBgDark else Color(0xF2FFFFFF))
                 .padding(horizontal = 10.dp, vertical = 8.dp),
         ) {

@@ -1077,7 +1077,7 @@ private fun TagCardItem(
 @Composable
 private fun SearchWorkGrid(
     works: List<Work>,
-    favoriteIds: Set<String>,
+    favoriteIds: Set<Long>,
     isTablet: Boolean,
     loadingMore: Boolean,
     loadMoreErrorRes: Int?,
@@ -1118,9 +1118,9 @@ private fun SearchWorkGrid(
         items(works, key = { it.id }) { work ->
             WorkCard(
                 work = work,
-                isFavorite = work.id.toString() in favoriteIds,
-                onToggleFavorite = { onToggleFavorite(work) },
-                onClick = { onWorkClick(work) },
+                isFavorite = work.id in favoriteIds,
+                onToggleFavorite = onToggleFavorite,
+                onClick = onWorkClick,
                 dark = dark,
             )
         }

@@ -954,7 +954,6 @@ private fun CategoryMenuButton(
             contentDescription = stringResource(R.string.home_category_select),
             tint = when {
                 active -> if (dark) LoginTextPrimaryDark else AccentDark
-                // 暗色下未激活用半透明暖白：比灰色更清晰，同时与激活态保持亮度区分
                 dark -> LoginTextPrimaryDark.copy(alpha = 0.55f)
                 else -> Color(0xFF5A5A5A)
             },
@@ -1170,7 +1169,6 @@ private fun UserMenuButton(
             },
         contentAlignment = Alignment.Center,
     ) {
-        // 无论是否登录都打开抽屉：未登录时抽屉内可点击头像登录
         UserAvatar(
             avatarUrl = avatarUrl,
             onClick = onMenuClick,
@@ -1218,7 +1216,6 @@ private fun HomeContent(
         }
         state.works.isEmpty() && !state.loading -> {
             val emptyRes = when {
-                // 关注页：未登录 → 登录引导；已登录但空 → 无关注内容
                 state.feedTab == FeedTab.FOLLOW && state.followNeedLogin -> R.string.home_follow_login
                 state.feedTab == FeedTab.FOLLOW -> R.string.home_follow_empty
                 else -> R.string.home_empty
@@ -1700,7 +1697,6 @@ private fun AboutSheet(
                 fontWeight = FontWeight.SemiBold,
             )
             Spacer(Modifier.height(16.dp))
-            // 主操作：检查更新（状态由按钮自身表达，带颜色过渡）
             AboutUpdateButton(
                 state = updateCheckState,
                 onCheckUpdate = onCheckUpdate,
@@ -1762,7 +1758,6 @@ private fun AboutUpdateButton(
     val bg by animateColorAsState(targetBg, label = "updateBtnBg")
     val fg by animateColorAsState(targetFg, label = "updateBtnFg")
     val shape = RoundedCornerShape(16.dp)
-    // 检查中不可点；有新版时点击直接前往下载；其余状态点击触发（重试）检查
     val clickable = state !is UpdateCheckState.Checking
     Row(
         modifier = Modifier
@@ -2174,7 +2169,7 @@ private fun SidebarItem(
 @Composable
 private fun WorkWaterfall(
     works: List<Work>,
-    favoriteIds: Set<String>,
+    favoriteIds: Set<Long>,
     loadingMore: Boolean,
     loadMoreErrorRes: Int?,
     endReached: Boolean,
@@ -2208,9 +2203,6 @@ private fun WorkWaterfall(
     }
 
     LaunchedEffect(gridState) {
-        // A+ 方案：毛玻璃常开，不做 blur 开关翻转（避免每帧边界上的 effect 重建与重绘）；
-        // blur 每帧成本由 glassInfo/glassHeader 的 inputScale=0.5 摊薄。
-        // isScrolling 仅用于 FAB 显隐与"已是最新"提示自动消失。
         snapshotFlow { gridState.isScrollInProgress }
             .distinctUntilChanged()
             .collect { isScrolling.value = it }
@@ -2230,21 +2222,32 @@ private fun WorkWaterfall(
             }
     }
 
-    LaunchedEffect(works, gridState) {
+    val density = LocalDensity.current
+    val screenWidthDp = LocalConfiguration.current.screenWidthDp
+    val prefetchSidePx = remember(isTablet, screenWidthDp) {
+        if (isTablet) {
+            512
+        } else {
+            (((screenWidthDp - 44) / 2f) * density.density).roundToInt().coerceIn(256, 512)
+        }
+    }
+
+    LaunchedEffect(works.lastOrNull()?.id, gridState) {
         // 预取视口下方一屏的缩略图（与 AsyncImage 共用 SingletonImageLoader 磁盘缓存），
-        // 滚动时新进入视口的卡片图片直接读磁盘，不触发网络请求，消除滚动首帧的加载突发。
-        // 预取只暖磁盘缓存：按小尺寸解码且不入内存缓存，避免原图尺寸位图积压内存
         // （内存缓存 key 含尺寸，显示时按视图尺寸请求本来也命中不了原图条目）。
+        // key 用末元素 id：追加页触发；thumbUpdated 重建同内容列表不会误触发整段重跑
         val loader = SingletonImageLoader.get(prefetchContext)
         val lastVisible = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
         works
             .drop(lastVisible + 1)
             .take(PREFETCH_IMAGE_COUNT)
             .forEach { work ->
+                val url = feedThumbUrl(work.thumbnailUrl)
+                if (url.isBlank()) return@forEach
                 loader.enqueue(
                     ImageRequest.Builder(prefetchContext)
-                        .data(work.thumbnailUrl)
-                        .size(CoilSize(512, 512))
+                        .data(url)
+                        .size(CoilSize(prefetchSidePx, prefetchSidePx))
                         .memoryCachePolicy(CachePolicy.DISABLED)
                         .build(),
                 )
@@ -2263,9 +2266,9 @@ private fun WorkWaterfall(
             items(works, key = { it.id }) { work ->
                 WorkCard(
                     work = work,
-                    isFavorite = work.id.toString() in favoriteIds,
-                    onToggleFavorite = { onToggleFavorite(work) },
-                    onClick = { onWorkClick(work) },
+                    isFavorite = work.id in favoriteIds,
+                    onToggleFavorite = onToggleFavorite,
+                    onClick = onWorkClick,
                     dark = dark,
                 )
             }

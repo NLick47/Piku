@@ -825,9 +825,9 @@ private fun UserWorksGrid(
         items(state.works, key = { it.id }) { work ->
             WorkCard(
                 work = work,
-                isFavorite = work.id.toString() in state.favoriteIds,
-                onToggleFavorite = { onToggleFavorite(work) },
-                onClick = { onWorkClick(work) },
+                isFavorite = work.id in state.favoriteIds,
+                onToggleFavorite = onToggleFavorite,
+                onClick = onWorkClick,
                 dark = dark,
             )
         }

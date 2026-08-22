@@ -22,9 +22,10 @@ class FavoriteRepository @Inject constructor(
     private val favoriteDao: FavoriteDao,
     private val favoriteFolderDao: FavoriteFolderDao,
 ) {
-
-    fun observeFavoriteIds(): Flow<Set<String>> =
-        favoriteFolderDao.observeAllFavoriteIds().map { it.toSet() }
+    fun observeFavoriteIds(): Flow<Set<Long>> =
+        favoriteFolderDao.observeAllFavoriteIds().map { ids ->
+            ids.mapNotNull { it.toLongOrNull() }.toSet()
+        }
 
     fun observeFavorites(): Flow<List<Work>> =
         favoriteDao.observeAll().map { list -> list.map { it.toWork() } }
