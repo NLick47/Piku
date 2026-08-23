@@ -357,10 +357,15 @@ fun HomeScreen(
         }
     }
 
-    // 内容换血（tab/分类/标签切换、缓存恢复、重载、洗牌）后回到顶部；
-    // 追加加载不递增 feedEpoch，不打断浏览位置
+    // 注意：LaunchedEffect 在组合重建（如从详情页返回）时会无条件重跑，与 key 值无关，
+    // 会把 rememberSaveable 恢复的滚动位置清零。因此用本组合实例已消费的 epoch 做守卫：
+    // 仅 epoch 真正变化才回顶，从详情页返回时 epoch 不变，浏览位置得以保留
+    var seenFeedEpoch by remember { mutableIntStateOf(state.feedEpoch) }
     LaunchedEffect(state.feedEpoch) {
-        gridState.scrollToItem(0)
+        if (state.feedEpoch != seenFeedEpoch) {
+            gridState.scrollToItem(0)
+            seenFeedEpoch = state.feedEpoch
+        }
     }
 
     // 退出登录先弹确认框，确认后再登出（抽屉保留并显示未登录态，可在抽屉内直接点头像重新登录）
