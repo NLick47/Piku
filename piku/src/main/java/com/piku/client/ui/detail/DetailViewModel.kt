@@ -134,19 +134,20 @@ class DetailViewModel @Inject constructor(
         r18 = false,
     )
 
+    private val showBottomGuide = !prefs.getBoolean(KEY_BOTTOM_GUIDE_SHOWN, false)
+
     private val _uiState = MutableStateFlow(
         DetailUiState(
             shareUrl = "https://poipiku.com/$authorId/$workId.html",
-            guideVisible = !prefs.getBoolean(KEY_BOTTOM_GUIDE_SHOWN, false),
+            guideVisible = showBottomGuide,
             novelProgressPercent = settingsRepository.getNovelProgress(workId),
         ),
     )
     val uiState: StateFlow<DetailUiState> = _uiState.asStateFlow()
 
-    /** 关闭底部菜单新手引导（持久化，只显示一次） */
+    /** 关闭底部菜单新手引导 */
     fun dismissGuide() {
         if (!_uiState.value.guideVisible) return
-        prefs.edit().putBoolean(KEY_BOTTOM_GUIDE_SHOWN, true).apply()
         _uiState.update { it.copy(guideVisible = false) }
     }
 
@@ -171,6 +172,9 @@ class DetailViewModel @Inject constructor(
     }
 
     init {
+        // “已显示”标记在展示前就写入：之前是自动隐藏完成才写，用户提前离开详情页
+        // 或进程被杀（如卡死后强杀）会导致标记永远存不上，每篇详情页都重复弹（历史 bug）
+        if (showBottomGuide) prefs.edit().putBoolean(KEY_BOTTOM_GUIDE_SHOWN, true).apply()
         viewModelScope.launch {
             observeFavoriteIdsUseCase().collect { ids ->
                 _uiState.update { it.copy(isFavorite = workId in ids) }
