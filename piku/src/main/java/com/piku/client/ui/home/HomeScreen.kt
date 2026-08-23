@@ -357,11 +357,10 @@ fun HomeScreen(
         }
     }
 
-    // Whenever the feed is cleared (tab/category/tag switch, shuffle, reload), reset the grid to top.
-    LaunchedEffect(state.works.isEmpty()) {
-        if (state.works.isEmpty()) {
-            gridState.scrollToItem(0)
-        }
+    // 内容换血（tab/分类/标签切换、缓存恢复、重载、洗牌）后回到顶部；
+    // 追加加载不递增 feedEpoch，不打断浏览位置
+    LaunchedEffect(state.feedEpoch) {
+        gridState.scrollToItem(0)
     }
 
     // 退出登录先弹确认框，确认后再登出（抽屉保留并显示未登录态，可在抽屉内直接点头像重新登录）

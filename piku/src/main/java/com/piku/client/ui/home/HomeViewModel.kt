@@ -68,6 +68,8 @@ private const val MAX_WORKS = 600
 data class HomeUiState(
     val feedTab: FeedTab = FeedTab.LATEST,
     val category: PoipikuCategory = PoipikuCategory.ALL,
+    /** 内容换血计数：tab/分类/标签切换、缓存恢复、重载、洗牌时 +1，UI 据此回顶 */
+    val feedEpoch: Int = 0,
     val works: List<Work> = emptyList(),
     val favoriteIds: Set<Long> = emptySet(),
     val adultEnabled: Boolean = false,
@@ -154,6 +156,9 @@ class HomeViewModel @Inject constructor(
     private var prefetched: List<Work>? = null
     private var noticePending = false
     private var oldFirstId: Long? = null
+
+    /** 各 tab/分类/标签的列表快照缓存；登录态/adult 开关/session 刷新时整体失效 */
+    private val feedCache = FeedSnapshotCache()
 
     init {
         viewModelScope.launch {
@@ -298,6 +303,8 @@ class HomeViewModel @Inject constructor(
                         })
                     }
                 }
+                // 缓存快照同步替换缩略图，避免切回该 tab 后又显示旧图
+                feedCache.updateThumbnail(updated.id, updated.thumbnailUrl)
             }
         }
         viewModelScope.launch {
@@ -331,64 +338,71 @@ class HomeViewModel @Inject constructor(
 
     fun selectFeedTab(tab: FeedTab) {
         if (tab == _uiState.value.feedTab) return
-        generation++
-        page = 0
-        noticePending = false
-        oldFirstId = null
-        _uiState.update {
-            it.copy(
-                feedTab = tab,
-                category = if (tab == FeedTab.LATEST) it.category else PoipikuCategory.ALL,
-                currentTag = null,
-                works = emptyList(),
-                errorRes = null,
-                loadMoreErrorRes = null,
-                endReached = false,
-                refreshNotice = null,
-            )
-        }
-        loadPage(append = false)
+        switchFeed(targetTab = tab, targetCategory = null, targetTag = null)
     }
 
     fun selectCategory(category: PoipikuCategory) {
         if (category == _uiState.value.category && _uiState.value.currentTag == null) return
-        generation++
-        page = 0
-        noticePending = false
-        oldFirstId = null
-        _uiState.update {
-            it.copy(
-                category = category,
-                currentTag = null,
-                works = emptyList(),
-                errorRes = null,
-                loadMoreErrorRes = null,
-                endReached = false,
-                refreshNotice = null,
-            )
-        }
-        loadPage(append = false)
+        switchFeed(targetTab = null, targetCategory = category, targetTag = null)
     }
 
     fun selectTag(tag: String?) {
         if (tag == _uiState.value.currentTag) return
+        switchFeed(targetTab = FeedTab.LATEST, targetCategory = PoipikuCategory.ALL, targetTag = tag)
+    }
+
+    /**
+     * 数据源切换（tab/分类/标签）统一入口：
+     * 先把当前列表存入缓存，命中目标缓存则直接恢复（秒开），否则清空走正常网络加载。
+     */
+    private fun switchFeed(targetTab: FeedTab?, targetCategory: PoipikuCategory?, targetTag: String?) {
+        cacheCurrentFeed()
         generation++
+        loadJob?.cancel()
+        prefetchJob?.cancel()
+        prefetched = null
         page = 0
         noticePending = false
         oldFirstId = null
+        val cur = _uiState.value
+        val newTab = targetTab ?: cur.feedTab
+        val newCategory = when {
+            targetCategory != null -> targetCategory
+            newTab == FeedTab.LATEST -> cur.category
+            else -> PoipikuCategory.ALL
+        }
+        val key = FeedKey(newTab, newCategory, targetTag)
+        val cached = if (newTab == FeedTab.RANDOM) null else feedCache[key]
         _uiState.update {
             it.copy(
-                feedTab = FeedTab.LATEST,
-                currentTag = tag,
-                category = PoipikuCategory.ALL,
-                works = emptyList(),
+                feedTab = newTab,
+                category = newCategory,
+                currentTag = targetTag,
+                works = cached?.works ?: emptyList(),
                 errorRes = null,
                 loadMoreErrorRes = null,
-                endReached = false,
+                endReached = cached?.endReached ?: false,
                 refreshNotice = null,
+                followNeedLogin = false,
+                loading = false,
+                loadingMore = false,
+                feedEpoch = it.feedEpoch + 1,
             )
         }
-        loadPage(append = false)
+        if (cached != null) {
+            page = cached.page
+            if (!cached.endReached) prefetchNextPage()
+        } else {
+            loadPage(append = false)
+        }
+    }
+
+    /** 把当前列表快照写入缓存（RANDOM 是随机语义不缓存；空列表无缓存价值） */
+    private fun cacheCurrentFeed() {
+        val s = _uiState.value
+        if (s.feedTab == FeedTab.RANDOM || s.works.isEmpty()) return
+        feedCache[FeedKey(s.feedTab, s.category, s.currentTag)] =
+            FeedSnapshot(s.works, page, s.endReached)
     }
 
     fun retry() {
@@ -412,6 +426,7 @@ class HomeViewModel @Inject constructor(
             page += 1
             updateWorks(state.works + cached)
             _uiState.update { it.copy(endReached = cached.isEmpty()) }
+            cacheCurrentFeed()
             prefetchNextPage()
         } else {
             loadPage(append = true)
@@ -438,6 +453,7 @@ class HomeViewModel @Inject constructor(
                 loadMoreErrorRes = null,
                 endReached = false,
                 refreshNotice = null,
+                feedEpoch = it.feedEpoch + 1,
             )
         }
         loadFirstPage()
@@ -574,6 +590,8 @@ class HomeViewModel @Inject constructor(
         page = 0
         noticePending = false
         oldFirstId = null
+        // 登录态/adult 开关/session 刷新都会走到这里：过滤条件变了，全部快照作废
+        feedCache.clear()
         _uiState.update {
             it.copy(
                 works = emptyList(),
@@ -581,6 +599,7 @@ class HomeViewModel @Inject constructor(
                 loadMoreErrorRes = null,
                 endReached = false,
                 refreshNotice = null,
+                feedEpoch = it.feedEpoch + 1,
             )
         }
         loadFirstPage()
@@ -653,6 +672,7 @@ class HomeViewModel @Inject constructor(
                         refreshNotice = notice,
                     )
                 }
+                cacheCurrentFeed()
                 prefetchNextPage()
             }
                 .onFailure { error ->
