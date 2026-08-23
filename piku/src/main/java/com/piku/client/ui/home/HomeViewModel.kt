@@ -58,12 +58,8 @@ sealed interface UpdateCheckState {
     data object Failed : UpdateCheckState
 }
 
-/**
- * 瀑布流列表保留上限（约 10~15 页）。超出后从头部裁剪，保证深滚时内存有界。
- * 裁剪时 Compose 会按 item key 自动保持当前浏览位置
- * （LazyStaggeredGridScrollPosition.updateScrollPositionIfTheFirstItemWasMoved），无需额外补偿。
- */
-private const val MAX_WORKS = 600
+/** 同时驻留的 FeedLoader 上限：每个 loader 兼作该 feed 的内存缓存 */
+private const val MAX_LOADERS = 12
 
 data class HomeUiState(
     val feedTab: FeedTab = FeedTab.LATEST,
@@ -149,16 +145,19 @@ class HomeViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
-    private var page = 0
-    private var generation = 0
-    private var loadJob: Job? = null
-    private var prefetchJob: Job? = null
-    private var prefetched: List<Work>? = null
-    private var noticePending = false
-    private var oldFirstId: Long? = null
-
-    /** 各 tab/分类/标签的列表快照缓存；登录态/adult 开关/session 刷新时整体失效 */
-    private val feedCache = FeedSnapshotCache()
+    /**
+     * 各 tab/分类/标签的自治加载器（兼内存缓存）：LRU 限容，逐出非当前项并停其后台任务。
+     * 切换 tab 只换渲染的 loader，不取消在途请求——刷新后台飞完自动落位。
+     */
+    private val loaders = object : LinkedHashMap<FeedKey, FeedLoader>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<FeedKey, FeedLoader>): Boolean {
+            if (size <= MAX_LOADERS || eldest.key == currentKey) return false
+            eldest.value.dispose()
+            return true
+        }
+    }
+    private var currentKey: FeedKey? = null
+    private var currentCollectJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -283,7 +282,7 @@ class HomeViewModel @Inject constructor(
             // 自动重登成功后登录态未变化，但数据已过期（登录墙作品缩略图等），需重新加载
             authRepository.sessionRefreshed.collect {
                 android.util.Log.d("PikuDiag", "session refreshed, reloading feed")
-                reload()
+                reloadAllFeeds()
             }
         }
         viewModelScope.launch {
@@ -303,8 +302,10 @@ class HomeViewModel @Inject constructor(
                         })
                     }
                 }
-                // 缓存快照同步替换缩略图，避免切回该 tab 后又显示旧图
-                feedCache.updateThumbnail(updated.id, updated.thumbnailUrl)
+                // 所有 loader 的快照同步替换缩略图（loader 即缓存，无需另套同步逻辑）
+                for (loader in loaders.values.toList()) {
+                    loader.updateThumbnail(updated.id, updated.thumbnailUrl)
+                }
             }
         }
         viewModelScope.launch {
@@ -320,7 +321,7 @@ class HomeViewModel @Inject constructor(
                         } else null,
                     )
                 }
-                if (prevLoggedIn != null && loggedIn != prevLoggedIn) reload()
+                if (prevLoggedIn != null && loggedIn != prevLoggedIn) reloadAllFeeds()
                 prevLoggedIn = loggedIn
                 if (loggedIn) authRepository.refreshUserProfile()
             }
@@ -333,130 +334,126 @@ class HomeViewModel @Inject constructor(
                 }
             }
         }
-        loadFirstPage()
+        select(FeedKey(FeedTab.LATEST, PoipikuCategory.ALL, null))
     }
 
     fun selectFeedTab(tab: FeedTab) {
-        if (tab == _uiState.value.feedTab) return
-        switchFeed(targetTab = tab, targetCategory = null, targetTag = null)
+        val key = resolveKey(targetTab = tab, targetCategory = null, targetTag = null)
+        if (key == currentKey) return
+        select(key)
     }
 
     fun selectCategory(category: PoipikuCategory) {
-        if (category == _uiState.value.category && _uiState.value.currentTag == null) return
-        switchFeed(targetTab = null, targetCategory = category, targetTag = null)
+        val cur = _uiState.value
+        if (category == cur.category && cur.currentTag == null) return
+        select(resolveKey(targetTab = null, targetCategory = category, targetTag = null))
     }
 
     fun selectTag(tag: String?) {
-        if (tag == _uiState.value.currentTag) return
-        switchFeed(targetTab = FeedTab.LATEST, targetCategory = PoipikuCategory.ALL, targetTag = tag)
+        val key = resolveKey(targetTab = FeedTab.LATEST, targetCategory = PoipikuCategory.ALL, targetTag = tag)
+        if (key == currentKey) return
+        select(key)
     }
 
-    /**
-     * 数据源切换（tab/分类/标签）统一入口：
-     * 先把当前列表存入缓存，命中目标缓存则直接恢复（秒开），否则清空走正常网络加载。
-     */
-    private fun switchFeed(targetTab: FeedTab?, targetCategory: PoipikuCategory?, targetTag: String?) {
-        cacheCurrentFeed()
-        generation++
-        loadJob?.cancel()
-        prefetchJob?.cancel()
-        prefetched = null
-        page = 0
-        noticePending = false
-        oldFirstId = null
+    /** 解析目标 FeedKey：未显式指定时沿用当前值；非 LATEST tab 分类强制回 ALL */
+    private fun resolveKey(
+        targetTab: FeedTab?,
+        targetCategory: PoipikuCategory?,
+        targetTag: String?,
+    ): FeedKey {
         val cur = _uiState.value
-        val newTab = targetTab ?: cur.feedTab
-        val newCategory = when {
+        val tab = targetTab ?: cur.feedTab
+        val category = when {
             targetCategory != null -> targetCategory
-            newTab == FeedTab.LATEST -> cur.category
+            tab == FeedTab.LATEST -> cur.category
             else -> PoipikuCategory.ALL
         }
-        val key = FeedKey(newTab, newCategory, targetTag)
-        val cached = if (newTab == FeedTab.RANDOM) null else feedCache[key]
-        _uiState.update {
-            it.copy(
-                feedTab = newTab,
-                category = newCategory,
-                currentTag = targetTag,
-                works = cached?.works ?: emptyList(),
-                errorRes = null,
-                loadMoreErrorRes = null,
-                endReached = cached?.endReached ?: false,
-                refreshNotice = null,
-                followNeedLogin = false,
-                loading = false,
-                loadingMore = false,
-                feedEpoch = it.feedEpoch + 1,
-            )
-        }
-        if (cached != null) {
-            page = cached.page
-            if (!cached.endReached) prefetchNextPage()
-        } else {
-            loadPage(append = false)
+        return FeedKey(tab, category, targetTag)
+    }
+
+    /** 切换当前渲染的 loader：同步合并一次快照（零帧延迟），再持续收集后续更新 */
+    private fun select(key: FeedKey) {
+        currentKey = key
+        val loader = obtainLoader(key)
+        currentCollectJob?.cancel()
+        // 提示条是一次性事件，不跨切换存活（历史 bug：随快照持久化导致每次切回都复现）
+        loader.clearNotice()
+        applySnapshot(loader.state.value)
+        _uiState.update { it.copy(feedEpoch = it.feedEpoch + 1) }
+        currentCollectJob = viewModelScope.launch {
+            // 守卫：已派发的旧回调可能在切换后才执行，只允许渲染订阅时的这份 feed
+            loader.state.collect { if (currentKey == key) applySnapshot(it) }
         }
     }
 
-    /** 把当前列表快照写入缓存（RANDOM 是随机语义不缓存；空列表无缓存价值） */
-    private fun cacheCurrentFeed() {
-        val s = _uiState.value
-        if (s.feedTab == FeedTab.RANDOM || s.works.isEmpty()) return
-        feedCache[FeedKey(s.feedTab, s.category, s.currentTag)] =
-            FeedSnapshot(s.works, page, s.endReached)
+    private fun obtainLoader(key: FeedKey): FeedLoader =
+        loaders.getOrPut(key) { createLoader(key) }
+
+    private fun createLoader(key: FeedKey): FeedLoader {
+        val loader = FeedLoader(
+            key = key,
+            scope = viewModelScope,
+            fetchPage = { page -> fetchPageFor(key, page) },
+            isLoggedIn = authRepository::isLoggedIn,
+        )
+        // 新建即加载首屏（等价旧版“缓存未命中走网络”路径）
+        loader.refresh(countNotice = false)
+        return loader
+    }
+
+    private suspend fun fetchPageFor(key: FeedKey, page: Int): Result<List<Work>> = when {
+        key.tag != null -> loadTagFeedUseCase(key.tag, page)
+        key.tab == FeedTab.HOT -> loadPopularFeedUseCase(page)
+        key.tab == FeedTab.FOLLOW -> loadFollowFeedUseCase(page)
+        key.tab == FeedTab.RANDOM -> loadRandomFeedUseCase()
+        else -> loadFeedUseCase(page, key.category.cd)
+    }
+
+    /** 把当前 loader 的快照合并进对外 UI 状态（错误在此处映射成文案资源） */
+    private fun applySnapshot(snap: FeedSnapshot) {
+        val key = currentKey ?: return
+        _uiState.update {
+            it.copy(
+                feedTab = key.tab,
+                category = key.category,
+                currentTag = key.tag,
+                works = snap.works,
+                loading = snap.loading,
+                loadingMore = snap.loadingMore,
+                endReached = snap.endReached,
+                errorRes = snap.error?.toFeedErrorRes(),
+                loadMoreErrorRes = snap.loadMoreError?.toFeedErrorRes(),
+                followNeedLogin = snap.followNeedLogin,
+                refreshNotice = snap.refreshNotice,
+            )
+        }
     }
 
     fun retry() {
-        generation++
-        noticePending = true
-        oldFirstId = _uiState.value.works.firstOrNull()?.id
-        android.util.Log.d("PikuDiag", "retry refresh notice pending, oldFirstId=$oldFirstId")
-        loadFirstPage()
+        val loader = currentLoader() ?: return
+        android.util.Log.d("PikuDiag", "retry tab=${loader.key.tab}")
+        // 下拉刷新：按当前首条 id 计算新增提示；刷新归属 loader 本身，
+        // 切走不取消，回来数据已就位
+        loader.refresh(countNotice = true)
     }
 
     fun dismissRefreshNotice() {
-        _uiState.update { it.copy(refreshNotice = null) }
+        currentLoader()?.clearNotice()
     }
 
     fun loadMore() {
-        val state = _uiState.value
-        if (state.loading || state.loadingMore || state.endReached || state.errorRes != null || state.loadMoreErrorRes != null) return
-        val cached = prefetched
-        if (cached != null) {
-            prefetched = null
-            page += 1
-            updateWorks(state.works + cached)
-            _uiState.update { it.copy(endReached = cached.isEmpty()) }
-            cacheCurrentFeed()
-            prefetchNextPage()
-        } else {
-            loadPage(append = true)
-        }
+        currentLoader()?.loadMore()
     }
 
     fun retryLoadMore() {
-        val state = _uiState.value
-        if (state.loading || state.loadingMore || state.endReached || state.errorRes != null || state.loadMoreErrorRes == null) return
-        _uiState.update { it.copy(loadMoreErrorRes = null) }
-        loadPage(append = true)
+        currentLoader()?.retryLoadMore()
     }
 
     fun shuffleRandom() {
         if (_uiState.value.feedTab != FeedTab.RANDOM) return
-        generation++
-        page = 0
-        noticePending = false
-        oldFirstId = null
-        _uiState.update {
-            it.copy(
-                works = emptyList(),
-                errorRes = null,
-                loadMoreErrorRes = null,
-                endReached = false,
-                refreshNotice = null,
-                feedEpoch = it.feedEpoch + 1,
-            )
-        }
-        loadFirstPage()
+        // 随机流重新洗牌：loader 复用（切走再回仍保留上次内容），仅显式洗牌才重拉
+        _uiState.update { it.copy(feedEpoch = it.feedEpoch + 1) }
+        currentLoader()?.refresh(countNotice = false)
     }
 
     fun toggleFavorite(work: Work) {
@@ -472,7 +469,7 @@ class HomeViewModel @Inject constructor(
         val old = _uiState.value.adultEnabled
         viewModelScope.launch {
             val changed = setAdultContentUseCase(target)
-            if (changed && old != target) reload()
+            if (changed && old != target) reloadAllFeeds()
         }
     }
 
@@ -585,151 +582,19 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    private fun reload() {
-        generation++
-        page = 0
-        noticePending = false
-        oldFirstId = null
-        // 登录态/adult 开关/session 刷新都会走到这里：过滤条件变了，全部快照作废
-        feedCache.clear()
-        _uiState.update {
-            it.copy(
-                works = emptyList(),
-                errorRes = null,
-                loadMoreErrorRes = null,
-                endReached = false,
-                refreshNotice = null,
-                feedEpoch = it.feedEpoch + 1,
-            )
-        }
-        loadFirstPage()
-    }
+    private fun currentLoader(): FeedLoader? = currentKey?.let { loaders[it] }
 
-    private fun loadFirstPage() {
-        if (_uiState.value.loading) return
-        loadPage(append = false)
-    }
-
-    private fun loadPage(append: Boolean) {
-        val tab = _uiState.value.feedTab
-        val category = _uiState.value.category
-        val tag = _uiState.value.currentTag
-        val gen = generation
-        val targetPage = if (append) page + 1 else 0
-        prefetchJob?.cancel()
-        prefetched = null
-        loadJob?.cancel()
-        // 关注流需要登录：未登录时不发请求（服务端会返回登录页），直接展示登录引导
-        if (tab == FeedTab.FOLLOW && !authRepository.isLoggedIn()) {
-            _uiState.update {
-                it.copy(
-                    loading = false,
-                    loadingMore = false,
-                    errorRes = null,
-                    loadMoreErrorRes = null,
-                    endReached = true,
-                    followNeedLogin = true,
-                    refreshNotice = null,
-                    works = if (append) it.works else emptyList(),
-                )
-            }
-            return
-        }
-        _uiState.update {
-            if (append) it.copy(loadingMore = true, loadMoreErrorRes = null)
-            else it.copy(loading = true, errorRes = null, loadMoreErrorRes = null, followNeedLogin = false)
-        }
-        loadJob = viewModelScope.launch {
-            val result = when {
-                tag != null -> loadTagFeedUseCase(tag, targetPage)
-                tab == FeedTab.HOT -> loadPopularFeedUseCase(targetPage)
-                tab == FeedTab.FOLLOW -> loadFollowFeedUseCase(targetPage)
-                tab == FeedTab.RANDOM -> loadRandomFeedUseCase()
-                else -> loadFeedUseCase(targetPage, category.cd)
-            }
-            result.onSuccess { list ->
-                if (generation != gen) return@launch
-                page = targetPage
-                val notice = if (noticePending && !append && (tab == FeedTab.LATEST || tab == FeedTab.FOLLOW || tab == FeedTab.HOT)) {
-                    val old = oldFirstId
-                    if (old != null) list.takeWhile { it.id != old }.size else 0
-                } else {
-                    null
-                }
-                android.util.Log.d(
-                    "PikuDiag",
-                    "loadPage success append=$append tab=$tab listFirst=${list.firstOrNull()?.id} oldFirst=$oldFirstId notice=$notice",
-                )
-                noticePending = false
-                oldFirstId = null
-                updateWorks(if (append) _uiState.value.works + list else list)
-                _uiState.update {
-                    it.copy(
-                        loading = false,
-                        loadingMore = false,
-                        loadMoreErrorRes = null,
-                        endReached = if (tab == FeedTab.RANDOM) true else list.isEmpty(),
-                        refreshNotice = notice,
-                    )
-                }
-                cacheCurrentFeed()
-                prefetchNextPage()
-            }
-                .onFailure { error ->
-                    if (generation != gen) return@launch
-                    android.util.Log.d(
-                        "PikuDiag",
-                        "loadPage fail append=$append tab=$tab tag=$tag " +
-                            "category=$category page=$targetPage error=${error::class.simpleName}: ${error.message}",
-                        error,
-                    )
-                    noticePending = false
-                    oldFirstId = null
-                    _uiState.update {
-                        if (append) {
-                            it.copy(
-                                loading = false,
-                                loadingMore = false,
-                                loadMoreErrorRes = (error as? AppError)?.toFeedErrorRes(),
-                            )
-                        } else {
-                            it.copy(
-                                loading = false,
-                                loadingMore = false,
-                                errorRes = (error as? AppError)?.toFeedErrorRes(),
-                            )
-                        }
-                    }
-                }
-        }
-    }
-
-    private fun updateWorks(newWorks: List<Work>) {
-        val unique = newWorks.distinctBy { w -> w.id }
-        val capped = if (unique.size > MAX_WORKS) unique.takeLast(MAX_WORKS) else unique
-        _uiState.update { it.copy(works = capped) }
-    }
-
-    private fun prefetchNextPage() {
-        val gen = generation
-        val nextPage = page + 1
-        prefetchJob?.cancel()
-        prefetchJob = viewModelScope.launch {
-            val tab = _uiState.value.feedTab
-            val tag = _uiState.value.currentTag
-            val category = _uiState.value.category
-            if (tab == FeedTab.RANDOM && tag == null) return@launch
-            if (tab == FeedTab.FOLLOW && !authRepository.isLoggedIn()) return@launch
-            val result = when {
-                tag != null -> loadTagFeedUseCase(tag, nextPage)
-                tab == FeedTab.HOT -> loadPopularFeedUseCase(nextPage)
-                tab == FeedTab.FOLLOW -> loadFollowFeedUseCase(nextPage)
-                else -> loadFeedUseCase(nextPage, category.cd)
-            }
-            result.onSuccess { list ->
-                if (generation != gen) return@launch
-                prefetched = list
-            }
-        }
+    /**
+     * 全量失效：登录态变化 / adult 开关 / session 刷新都会改变所有 feed 的过滤条件。
+     * 逐个停掉后台任务再清表，重建当前 loader 立即加载——不存在守卫吞加载的窗口。
+     */
+    private fun reloadAllFeeds() {
+        currentCollectJob?.cancel()
+        for (loader in loaders.values.toList()) loader.dispose()
+        loaders.clear()
+        val key = currentKey
+            ?: resolveKey(targetTab = null, targetCategory = null, targetTag = null)
+        currentKey = null
+        select(key)
     }
 }
