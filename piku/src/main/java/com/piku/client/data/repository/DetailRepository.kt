@@ -111,9 +111,13 @@ class DetailRepository @Inject constructor(
             return@apiCall result
         }
         val adultEnabled = settingsRepository.showAdultContent.first()
-        val appendResp = if (detail.r18 && !adultEnabled) {
-            null
-        } else {
+        if (detail.r18 && !adultEnabled) {
+            // R18 且未开启显示：与 warning 分支一致返回锁定态。
+            // 此前静默跳过 append，导致纯文本等无首屏图作品落到"暂无图片"占位。
+            Log.d(TAG, "detail adult-locked work=${work.authorId}/${work.id}")
+            return@apiCall detail.copy(imageUrls = emptyList(), adultLocked = true)
+        }
+        val appendResp = run {
             thumbnailResolver.throttleAppend(force = password.isNotBlank())
             runCatching {
                 api.showAppendFile(work.authorId, work.id, password, 0, -1)

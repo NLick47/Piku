@@ -263,7 +263,7 @@
     <string name="detail_password_submit">View</string>
     <string name="detail_password_error">Wrong password</string>
     <string name="detail_unlock_blocked">This work requires Twitter account linking (or similar) to unlock. Please link it on the web first</string>
-    <string name="detail_adult_locked">R-18 content display is disabled</string>
+    <string name="detail_adult_locked">R-18 display is off.\nEnable it in the drawer and reopen this page.</string>
     <string name="nav_browse">Browse</string>
     <string name="nav_collection">Saved</string>
     <string name="nav_profile">Me</string>

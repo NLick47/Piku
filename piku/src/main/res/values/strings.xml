@@ -263,7 +263,7 @@
     <string name="detail_password_submit">查看</string>
     <string name="detail_password_error">密码错误</string>
     <string name="detail_unlock_blocked">该作品需关联 Twitter 等账号后才能解锁，请先在网页端完成关联</string>
-    <string name="detail_adult_locked">R-18 内容显示已关闭</string>
+    <string name="detail_adult_locked">R-18 内容显示已关闭\n请在侧边栏开启后重新进入本页</string>
     <string name="nav_browse">浏览</string>
     <string name="nav_collection">收藏</string>
     <string name="nav_profile">我的</string>

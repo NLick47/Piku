@@ -263,7 +263,7 @@
     <string name="detail_password_submit">表示</string>
     <string name="detail_password_error">パスワードが違います</string>
     <string name="detail_unlock_blocked">この作品を表示するにはTwitterアカウント連携などが必要です。Web版で連携してください</string>
-    <string name="detail_adult_locked">R-18 表示はオフです</string>
+    <string name="detail_adult_locked">R-18 表示はオフです\nサイドバーで有効にして、再度開いてください</string>
     <string name="nav_browse">閲覧</string>
     <string name="nav_collection">コレクション</string>
     <string name="nav_profile">マイページ</string>

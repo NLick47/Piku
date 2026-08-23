@@ -1101,6 +1101,8 @@ private fun ImagePager(
                             text = stringResource(R.string.detail_adult_locked),
                             color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
                             fontSize = 12.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 24.dp),
                         )
                     }
                 }
