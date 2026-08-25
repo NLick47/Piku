@@ -60,15 +60,9 @@ class FileCookieStore(private val file: File) : CookieStore {
     private fun matches(cookie: HttpCookie, uri: URI?): Boolean {
         if (uri == null) return true
         val host = uri.host ?: return false
-        val domain = cookie.domain
-        if (domain.isNullOrEmpty()) return host == uri.host
-        val hostMatches =
-            if (domain.startsWith(".")) host.endsWith(domain)
-            else host == domain || host.endsWith(".$domain")
-        if (!hostMatches) return false
-        val path = cookie.path ?: "/"
-        val uriPath = uri.path ?: "/"
-        return uriPath.startsWith(path)
+        val domain = cookie.domain?.removePrefix(".") ?: return host == uri.host
+        val hostMatches = host == domain || host.endsWith(".$domain")
+        return hostMatches && (uri.path ?: "/").startsWith(cookie.path ?: "/")
     }
 
     private fun key(cookie: HttpCookie): String =
@@ -79,35 +73,50 @@ class FileCookieStore(private val file: File) : CookieStore {
     }
 
     private fun save() {
-        val props = Properties()
-        cookies.forEach { (k, cookie) ->
-            props[k] = listOf(
-                cookie.value,
-                cookie.maxAge.toString(),
-                cookie.secure.toString(),
-                cookie.isHttpOnly.toString(),
-            ).joinToString("\u0001")
+        try {
+            val props = Properties()
+            cookies.forEach { (k, cookie) ->
+                props[k] = listOf(
+                    cookie.value,
+                    cookie.maxAge.toString(),
+                    cookie.secure.toString(),
+                    cookie.isHttpOnly.toString(),
+                ).joinToString("\u0001")
+            }
+            val tmp = File(file.parentFile, file.name + ".tmp")
+            tmp.outputStream().use { props.store(it, null) }
+            if (!tmp.renameTo(file)) {
+                file.delete()
+                if (!tmp.renameTo(file)) error("cookie store replace failed: ${file.name}")
+            }
+        } catch (e: Exception) {
+            android.util.Log.w(TAG, "cookie save failed: ${file.name}", e)
         }
-        file.outputStream().use { props.store(it, null) }
     }
 
     private fun load() {
         if (!file.exists()) return
-        val props = Properties()
-        file.inputStream().use { props.load(it) }
-        props.forEach { (k, v) ->
-            val fields = (v as String).split("\u0001")
-            val parts = (k as String).split("\u0000")
-            if (fields.size == 4 && parts.size == 3) {
-                val cookie = HttpCookie(parts[0], fields[0])
-                cookie.domain = parts[1]
-                cookie.path = parts[2]
-                cookie.maxAge = fields[1].toLongOrNull() ?: -1L
-                cookie.secure = fields[2].toBoolean()
-                cookie.isHttpOnly = fields[3].toBoolean()
-                cookies[k] = cookie
+        try {
+            val props = Properties()
+            file.inputStream().use { props.load(it) }
+            props.forEach { (k, v) ->
+                val fields = (v as String).split("\u0001")
+                val parts = (k as String).split("\u0000")
+                if (fields.size == 4 && parts.size == 3) {
+                    val cookie = HttpCookie(parts[0], fields[0])
+                    cookie.domain = parts[1]
+                    cookie.path = parts[2]
+                    cookie.maxAge = fields[1].toLongOrNull() ?: -1L
+                    cookie.secure = fields[2].toBoolean()
+                    cookie.isHttpOnly = fields[3].toBoolean()
+                    cookies[k] = cookie
+                }
             }
+            android.util.Log.d(TAG, "load: file=${file.absolutePath} -> ${cookies.map { it.value.name }}")
+        } catch (e: Exception) {
+            android.util.Log.w(TAG, "cookie store corrupt, resetting: ${file.name}", e)
+            cookies.clear()
+            runCatching { file.delete() }
         }
-        android.util.Log.d(TAG, "load: file=${file.absolutePath} -> ${cookies.map { it.value.name }}")
     }
 }

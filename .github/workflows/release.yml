@@ -51,6 +51,8 @@ jobs:
           EOF
 
       - name: Build release APK
+        env:
+          PIKU_CATALOG_ENC_KEY: ${{ secrets.CATALOG_ENC_KEY }}
         run: ./gradlew :piku:assembleRelease
 
       - name: Verify APK signature

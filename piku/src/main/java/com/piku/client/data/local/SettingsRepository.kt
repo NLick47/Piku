@@ -374,6 +374,92 @@ class SettingsRepository @Inject constructor(
         _lastUpdateCheckAt.value = System.currentTimeMillis()
     }
 
+    // ---------------- AI 翻译 ----------------
+
+    /**
+     * AI 翻译总开关：关闭时不发任何翻译请求，UI 也不显示译文入口。
+     * 新装默认开启（内置免费模型零配置可用）；老用户已保存的值不受影响。
+     */
+    private val _aiTranslateEnabled = MutableStateFlow(
+        prefs.getBoolean(KEY_AI_TRANSLATE_ENABLED, true),
+    )
+    val aiTranslateEnabled: StateFlow<Boolean> = _aiTranslateEnabled.asStateFlow()
+
+    /** LLM 服务地址（OpenAI 兼容，不含 /chat/completions 段） */
+    private val _llmBaseUrl = MutableStateFlow(
+        prefs.getString(KEY_LLM_BASE_URL, null)?.takeIf { it.isNotBlank() } ?: LLM_BASE_URL_DEFAULT,
+    )
+    val llmBaseUrl: StateFlow<String> = _llmBaseUrl.asStateFlow()
+
+    /** 模型 id（对应 ModelCatalog 里的条目，也允许用户自填未收录的模型） */
+    private val _llmModel = MutableStateFlow(
+        prefs.getString(KEY_LLM_MODEL, null)?.takeIf { it.isNotBlank() } ?: LLM_MODEL_DEFAULT,
+    )
+    val llmModel: StateFlow<String> = _llmModel.asStateFlow()
+
+    /**
+     * 小说正文专用模型地址：空串表示跟随文本翻译模型（[llmBaseUrl]）。
+     * 仅长篇正文走此模型，短文本字段仍用 [llmBaseUrl]/[llmModel]。
+     */
+    private val _llmNovelBaseUrl = MutableStateFlow(
+        prefs.getString(KEY_LLM_NOVEL_BASE_URL, null)?.takeIf { it.isNotBlank() } ?: "",
+    )
+    val llmNovelBaseUrl: StateFlow<String> = _llmNovelBaseUrl.asStateFlow()
+
+    /** 小说正文专用模型 id：空串表示跟随文本翻译模型（[llmModel]） */
+    private val _llmNovelModel = MutableStateFlow(
+        prefs.getString(KEY_LLM_NOVEL_MODEL, null)?.takeIf { it.isNotBlank() } ?: "",
+    )
+    val llmNovelModel: StateFlow<String> = _llmNovelModel.asStateFlow()
+
+    /**
+     * 远程模型目录地址：默认即内置加密目录（jsDelivr 分发，见 [CATALOG_URL_DEFAULT]），
+     * 启动时自动拉取以获得内置免费模型的共享 key 与模型修正；
+     * 用户清空则不发任何请求、只用编译期内置列表。
+     */
+    private val _catalogRemoteUrl = MutableStateFlow(
+        prefs.getString(KEY_CATALOG_REMOTE_URL, null)?.takeIf { it.isNotBlank() } ?: CATALOG_URL_DEFAULT,
+    )
+    val catalogRemoteUrl: StateFlow<String> = _catalogRemoteUrl.asStateFlow()
+
+    fun setAiTranslateEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_AI_TRANSLATE_ENABLED, enabled).apply()
+        _aiTranslateEnabled.value = enabled
+    }
+
+    /** 空值回退默认地址，避免用户清空后无法发请求 */
+    fun setLlmBaseUrl(url: String) {
+        val value = url.trim().ifBlank { LLM_BASE_URL_DEFAULT }
+        prefs.edit().putString(KEY_LLM_BASE_URL, value).apply()
+        _llmBaseUrl.value = value
+    }
+
+    fun setLlmModel(model: String) {
+        val value = model.trim().ifBlank { LLM_MODEL_DEFAULT }
+        prefs.edit().putString(KEY_LLM_MODEL, value).apply()
+        _llmModel.value = value
+    }
+
+    /** 空串回退为「跟随文本翻译」（不持久化默认空串以外的回退值） */
+    fun setLlmNovelBaseUrl(url: String) {
+        val value = url.trim()
+        prefs.edit().putString(KEY_LLM_NOVEL_BASE_URL, value).apply()
+        _llmNovelBaseUrl.value = value
+    }
+
+    /** 空串表示跟随文本翻译模型 */
+    fun setLlmNovelModel(model: String) {
+        val value = model.trim()
+        prefs.edit().putString(KEY_LLM_NOVEL_MODEL, value).apply()
+        _llmNovelModel.value = value
+    }
+
+    fun setCatalogRemoteUrl(url: String) {
+        val value = url.trim()
+        prefs.edit().putString(KEY_CATALOG_REMOTE_URL, value).apply()
+        _catalogRemoteUrl.value = value
+    }
+
     companion object {
         const val KEY_SHOW_ADULT_CONTENT = "show_adult_content"
         const val KEY_THEME_MODE = "theme_mode"
@@ -441,5 +527,24 @@ class SettingsRepository @Inject constructor(
         const val BACKGROUND_HERO_MIN = 0.22f
         const val BACKGROUND_HERO_MAX = 0.45f
         const val BACKGROUND_HERO_DEFAULT = 0.34f
+
+        /** AI 翻译设置 */
+        const val KEY_AI_TRANSLATE_ENABLED = "ai_translate_enabled"
+        const val KEY_LLM_BASE_URL = "llm_base_url"
+        const val KEY_LLM_MODEL = "llm_model"
+        const val KEY_LLM_NOVEL_BASE_URL = "llm_novel_base_url"
+        const val KEY_LLM_NOVEL_MODEL = "llm_novel_model"
+        const val KEY_CATALOG_REMOTE_URL = "llm_catalog_remote_url"
+
+        /** 默认走智谱 GLM 的 OpenAI 兼容端点，glm-4-flash 为免费模型 */
+        const val LLM_BASE_URL_DEFAULT = "https://open.bigmodel.cn/api/paas/v4"
+        const val LLM_MODEL_DEFAULT = "Qwen/Qwen3-8B"
+
+        /**
+         * 内置远程模型目录：AES-256-GCM 密文由 piku-models 仓库的 CI 发布到
+         * catalog 分支，jsDelivr 主用（国内可达），GitHub raw 作为被墙时的直连回退。
+         */
+        const val CATALOG_URL_DEFAULT = "https://cdn.jsdelivr.net/gh/NLick47/piku-models@catalog/models.enc.json"
+        const val CATALOG_URL_FALLBACK = "https://raw.githubusercontent.com/NLick47/piku-models/catalog/models.enc.json"
     }
 }

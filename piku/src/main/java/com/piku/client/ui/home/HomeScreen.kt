@@ -20,6 +20,8 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
@@ -49,6 +51,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -79,6 +82,7 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.GTranslate
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.Wallpaper
@@ -93,13 +97,16 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberDrawerState
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
@@ -119,6 +126,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
@@ -135,16 +143,21 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp
@@ -163,6 +176,7 @@ import com.piku.client.BuildConfig
 import com.piku.client.R
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.data.remote.GitHubRelease
+import com.piku.client.data.remote.translation.ModelEntry
 import com.piku.client.domain.model.AppLanguage
 import com.piku.client.domain.model.PoipikuCategory
 import com.piku.client.domain.model.ThemeMode
@@ -175,6 +189,7 @@ import com.piku.client.ui.common.WorkCard
 import com.piku.client.ui.common.feedThumbUrl
 import com.piku.client.ui.profile.ProfileEditSheet
 import com.piku.client.ui.theme.AccentDark
+import com.piku.client.ui.theme.ControlAccentDark
 import com.piku.client.ui.theme.FollowDark
 import com.piku.client.ui.theme.FollowLight
 import com.piku.client.ui.theme.LocalDarkTheme
@@ -316,6 +331,7 @@ fun HomeScreen(
     var originalHeroScale by remember { mutableFloatStateOf(SettingsRepository.HERO_SCALE_DEFAULT) }
     var showRetentionSheet by rememberSaveable { mutableStateOf(false) }
     var showLanguageSheet by rememberSaveable { mutableStateOf(false) }
+    var showAiTranslateSheet by rememberSaveable { mutableStateOf(false) }
     var showAboutSheet by rememberSaveable { mutableStateOf(false) }
     var showLogoutConfirm by rememberSaveable { mutableStateOf(false) }
     var showProfileEdit by rememberSaveable { mutableStateOf(false) }
@@ -388,6 +404,7 @@ fun HomeScreen(
         customBackgroundPath = state.customBackgroundPath,
         historyRetentionDays = state.historyRetentionDays,
         language = state.language,
+        aiTranslateEnabled = state.aiTranslateEnabled,
         currentVersion = if (BuildConfig.DEBUG && BuildConfig.DEBUG_VERSION_NAME.isNotBlank()) {
             BuildConfig.DEBUG_VERSION_NAME
         } else {
@@ -411,6 +428,7 @@ fun HomeScreen(
         },
         onRetentionClick = { showRetentionSheet = true },
         onLanguageClick = { showLanguageSheet = true },
+        onAiTranslateClick = { showAiTranslateSheet = true },
         onHistoryClick = onHistoryClick,
         onCollectionClick = {
             scope.launch { drawerState.close() }
@@ -1209,6 +1227,17 @@ if (showCategories) {
                         (context as? Activity)?.recreate()
                     },
                     onDismiss = { showLanguageSheet = false },
+                    dark = dark,
+                )
+            }
+
+            if (showAiTranslateSheet) {
+                AiTranslateSheet(
+                    state = state,
+                    onToggleEnabled = viewModel::setAiTranslateEnabled,
+                    onSelectModel = viewModel::selectTranslateModel,
+                    onSelectNovelModel = viewModel::selectTranslateNovelModel,
+                    onDismiss = { showAiTranslateSheet = false },
                     dark = dark,
                 )
             }
@@ -2571,6 +2600,260 @@ private fun LanguageSheet(
                 )
                 Spacer(Modifier.height(8.dp))
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AiTranslateSheet(
+    state: HomeUiState,
+    onToggleEnabled: (Boolean) -> Unit,
+    onSelectModel: (ModelEntry) -> Unit,
+    onSelectNovelModel: (ModelEntry?) -> Unit,
+    onDismiss: () -> Unit,
+    dark: Boolean,
+) {
+    val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
+    val faint = if (dark) LoginTextFaintDark else LoginTextFaintLight
+    val accent = if (dark) ControlAccentDark else AccentDark
+
+    // 打开即完全展开：无半展开中间锚点，内容滚动手势不再与面板拖拽互相争夺（滚动抖动主因）
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    // 内容区吞掉全部剩余滚动量与惯性速度：面板本体不再被内容手势拖动/甩动，
+    // 顶部 overscroll 只剩平台自带的拉伸回弹，不再与面板位移、弹簧 settle 叠加抽搐。
+    val blockSheetDragScroll = remember {
+        object : NestedScrollConnection {
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource,
+            ): Offset = available
+
+            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity =
+                available
+        }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = if (dark) LoginBackgroundDark else Color.White,
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                // 高度封顶：小说模型列表展开/收起发生在视口内部，面板本体不再随内容逐帧位移
+                .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.85f)
+                .nestedScroll(blockSheetDragScroll)
+                .verticalScroll(rememberScrollState())
+                .padding(start = 20.dp, end = 20.dp, bottom = 32.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.menu_ai_translate),
+                color = primary,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.height(14.dp))
+
+            // 总开关卡片：图标 + 标题/副文案 + Switch，与设置页卡片语言统一
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .border(
+                        BorderStroke(0.5.dp, if (dark) LoginCardBorderDark else LoginCardBorderLight),
+                        RoundedCornerShape(14.dp),
+                    )
+                    .clickable { onToggleEnabled(!state.aiTranslateEnabled) }
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(accent.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.GTranslate,
+                        contentDescription = null,
+                        tint = accent,
+                        modifier = Modifier.size(19.dp),
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.ai_translate_enable),
+                        color = primary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = stringResource(R.string.ai_translate_auto_subtitle),
+                        color = faint,
+                        fontSize = 11.sp,
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                Switch(
+                    checked = state.aiTranslateEnabled,
+                    onCheckedChange = onToggleEnabled,
+                    colors = themedSwitchColors(dark),
+                )
+            }
+
+            Spacer(Modifier.height(18.dp))
+            SheetSectionLabel(stringResource(R.string.ai_translate_model), faint)
+            Spacer(Modifier.height(8.dp))
+
+            // 全部可用模型（含赞助付费模型）：内置共享 key，点选即用，无需配置。
+            // 未显式选择时按模型 defaultText 标记高亮（文本翻译默认）。
+            val usableModels = state.translateModels.filter { it.available && !it.apiKey.isNullOrBlank() }
+            ModelListCard(
+                entries = usableModels,
+                isSelected = { entry ->
+                    (entry.model == state.llmModel && entry.baseUrl == state.llmBaseUrl) ||
+                        (state.llmModel.isEmpty() && entry.defaultText)
+                },
+                onSelect = onSelectModel,
+                dark = dark,
+            )
+
+            Spacer(Modifier.height(18.dp))
+            SheetSectionLabel(stringResource(R.string.ai_translate_novel_model), faint)
+            Spacer(Modifier.height(8.dp))
+
+            // 小说正文模型：未显式选择时按 defaultNovel 标记走默认（赞助付费模型），
+            // 不再提供"跟随文本"开关——小说永远用具体模型，保证不被静默降级到文本翻译。
+            // 选择器同样列出全部可用模型（含付费/文本模型），灵活可选，fork 加模型也能用。
+            ModelListCard(
+                entries = usableModels,
+                isSelected = { entry ->
+                    (entry.model == state.llmNovelModel && entry.baseUrl == state.llmNovelBaseUrl) ||
+                        (state.llmNovelModel.isEmpty() && entry.defaultNovel)
+                },
+                onSelect = onSelectNovelModel,
+                dark = dark,
+            )
+        }
+    }
+}
+
+/** 弹窗内的分区小标题 */
+@Composable
+private fun SheetSectionLabel(text: String, color: Color) {
+    Text(
+        text = text,
+        color = color,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.Medium,
+        modifier = Modifier.padding(start = 4.dp),
+    )
+}
+
+/**
+ * 模型选择卡片：单容器多行，行间细分割线。
+ * 行内容为模型名 + hint 副文本 + 选中勾；不可用条目整行降透明度并挂小徽章。
+ */
+@Composable
+private fun ModelListCard(
+    entries: List<ModelEntry>,
+    isSelected: (ModelEntry) -> Boolean,
+    onSelect: (ModelEntry) -> Unit,
+    dark: Boolean,
+) {
+    if (entries.isEmpty()) return
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .border(
+                BorderStroke(0.5.dp, if (dark) LoginCardBorderDark else LoginCardBorderLight),
+                RoundedCornerShape(14.dp),
+            ),
+    ) {
+        entries.forEachIndexed { index, entry ->
+            ModelOptionRow(
+                entry = entry,
+                selected = isSelected(entry),
+                onClick = { onSelect(entry) },
+                dark = dark,
+            )
+            if (index < entries.lastIndex) {
+                HorizontalDivider(
+                    color = if (dark) LoginCardBorderDark else LoginCardBorderLight,
+                    thickness = 0.5.dp,
+                    modifier = Modifier.padding(start = 14.dp),
+                )
+            }
+        }
+    }
+}
+
+/** 模型行：左列名称(+不可用徽章)+hint 副文本，右列选中勾 */
+@Composable
+private fun ModelOptionRow(
+    entry: ModelEntry,
+    selected: Boolean,
+    onClick: () -> Unit,
+    dark: Boolean,
+) {
+    val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
+    val faint = if (dark) LoginTextFaintDark else LoginTextFaintLight
+    val accent = if (dark) ControlAccentDark else AccentDark
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .alpha(if (entry.available) 1f else 0.45f)
+            .background(if (selected) accent.copy(alpha = 0.08f) else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = entry.label,
+                    color = primary,
+                    fontSize = 14.sp,
+                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                )
+                if (!entry.available) {
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = stringResource(R.string.ai_translate_unavailable_badge),
+                        color = faint,
+                        fontSize = 9.sp,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(faint.copy(alpha = 0.1f))
+                            .padding(horizontal = 5.dp, vertical = 2.dp),
+                    )
+                }
+            }
+            if (entry.hint.isNotBlank()) {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = entry.hint,
+                    color = faint,
+                    fontSize = 11.sp,
+                )
+            }
+        }
+        if (selected) {
+            Spacer(Modifier.width(8.dp))
+            Icon(
+                imageVector = Icons.Filled.Check,
+                contentDescription = null,
+                tint = accent,
+                modifier = Modifier.size(18.dp),
+            )
         }
     }
 }

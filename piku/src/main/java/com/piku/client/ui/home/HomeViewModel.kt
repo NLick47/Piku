@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.piku.client.R
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.data.remote.GitHubRelease
+import com.piku.client.data.remote.translation.ModelCatalogRepository
+import com.piku.client.data.remote.translation.ModelEntry
 import com.piku.client.data.repository.AuthRepository
 import com.piku.client.data.repository.ThumbnailResolver
 import com.piku.client.domain.model.AppError
@@ -29,7 +31,10 @@ import com.piku.client.domain.usecase.ObserveHistoryRetentionUseCase
 import com.piku.client.domain.usecase.ObserveLanguageUseCase
 import com.piku.client.domain.usecase.ObserveThemeModeUseCase
 import com.piku.client.domain.usecase.RestoreAdultContentUseCase
+import com.piku.client.domain.usecase.SelectTranslateModelUseCase
+import com.piku.client.domain.usecase.SelectTranslateNovelModelUseCase
 import com.piku.client.domain.usecase.SetAdultContentUseCase
+import com.piku.client.domain.usecase.SetAiTranslateEnabledUseCase
 import com.piku.client.domain.usecase.SetAutoCheckEnabledUseCase
 import com.piku.client.domain.usecase.SetBackgroundDimUseCase
 import com.piku.client.domain.usecase.SetCustomBackgroundUseCase
@@ -110,6 +115,15 @@ data class HomeUiState(
     val backdropImgWidth: Int? = null,
     /** 独立背景图原始高度（像素），null 表示未分离或未知 */
     val backdropImgHeight: Int? = null,
+    // ---------------- AI 翻译 ----------------
+    val aiTranslateEnabled: Boolean = false,
+    val llmBaseUrl: String = SettingsRepository.LLM_BASE_URL_DEFAULT,
+    val llmModel: String = SettingsRepository.LLM_MODEL_DEFAULT,
+    /** 小说正文专用模型（空串表示跟随文本翻译模型） */
+    val llmNovelBaseUrl: String = "",
+    val llmNovelModel: String = "",
+    /** 可选模型列表（内置默认 + 远程覆盖） */
+    val translateModels: List<ModelEntry> = emptyList(),
 )
 
 @HiltViewModel
@@ -138,6 +152,10 @@ class HomeViewModel @Inject constructor(
     private val observeBackgroundDimUseCase: ObserveBackgroundDimUseCase,
     private val setBackgroundDimUseCase: SetBackgroundDimUseCase,
     private val settingsRepository: SettingsRepository,
+    private val modelCatalogRepository: ModelCatalogRepository,
+    private val selectTranslateModelUseCase: SelectTranslateModelUseCase,
+    private val selectTranslateNovelModelUseCase: SelectTranslateNovelModelUseCase,
+    private val setAiTranslateEnabledUseCase: SetAiTranslateEnabledUseCase,
     private val authRepository: AuthRepository,
     private val thumbnailResolver: ThumbnailResolver,
 ) : ViewModel() {
@@ -276,6 +294,36 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             settingsRepository.backdropImgHeight.collect { height ->
                 _uiState.update { it.copy(backdropImgHeight = height) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.aiTranslateEnabled.collect { enabled ->
+                _uiState.update { it.copy(aiTranslateEnabled = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.llmBaseUrl.collect { url ->
+                _uiState.update { it.copy(llmBaseUrl = url) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.llmModel.collect { model ->
+                _uiState.update { it.copy(llmModel = model) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.llmNovelBaseUrl.collect { url ->
+                _uiState.update { it.copy(llmNovelBaseUrl = url) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.llmNovelModel.collect { model ->
+                _uiState.update { it.copy(llmNovelModel = model) }
+            }
+        }
+        viewModelScope.launch {
+            modelCatalogRepository.models.collect { models ->
+                _uiState.update { it.copy(translateModels = models) }
             }
         }
         viewModelScope.launch {
@@ -543,6 +591,21 @@ class HomeViewModel @Inject constructor(
 
     fun setLanguage(language: AppLanguage) {
         setLanguageUseCase(language)
+    }
+
+    // ---------------- AI 翻译设置 ----------------
+
+    fun setAiTranslateEnabled(enabled: Boolean) {
+        setAiTranslateEnabledUseCase(enabled)
+    }
+
+    fun selectTranslateModel(entry: ModelEntry) {
+        selectTranslateModelUseCase(entry)
+    }
+
+    /** 小说正文模型：传 null 表示跟随文本翻译模型 */
+    fun selectTranslateNovelModel(entry: ModelEntry?) {
+        selectTranslateNovelModelUseCase(entry)
     }
 
     /** 弹层内手动检查更新（含失败重试） */

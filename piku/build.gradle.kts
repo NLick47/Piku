@@ -43,6 +43,18 @@ fun versionNameToCode(name: String): Int {
 val appVersionName = resolveVersionName()
 val appVersionCode = versionNameToCode(appVersionName)
 
+fun resolveDebugLlmKey(): String {
+    val fromEnv = System.getenv("PIKU_LLM_API_KEY")
+    if (!fromEnv.isNullOrBlank()) return fromEnv.trim()
+    return signingProps.getProperty("piku.debug.llmApiKey", "").trim()
+}
+
+fun resolveCatalogEncKey(): String {
+    val fromEnv = System.getenv("PIKU_CATALOG_ENC_KEY")
+    if (!fromEnv.isNullOrBlank()) return fromEnv.trim()
+    return signingProps.getProperty("piku.catalog.encKey", "").trim()
+}
+
 @Suppress("UnstableApiUsage")
 android {
     namespace = "com.piku.client"
@@ -60,12 +72,17 @@ android {
             "DEBUG_VERSION_NAME",
             "\"${signingProps.getProperty("piku.debug.version", "").trim()}\"",
         )
+
+        buildConfigField("String", "DEBUG_LLM_API_KEY", "\"\"")
+
+        buildConfigField("String", "CATALOG_ENC_KEY", "\"${resolveCatalogEncKey()}\"")
     }
 
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
+            buildConfigField("String", "DEBUG_LLM_API_KEY", "\"${resolveDebugLlmKey()}\"")
         }
         release {
             isMinifyEnabled = true

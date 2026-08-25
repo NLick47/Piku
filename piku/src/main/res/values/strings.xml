@@ -308,4 +308,28 @@
     <string name="detail_follow_failed">关注操作失败</string>
     <string name="detail_author_home">查看作者主页</string>
     <string name="tab_wip">功能开发中</string>
+
+    <!-- AI 翻译 -->
+    <string name="menu_ai_translate">AI 翻译</string>
+    <string name="ai_translate_state_on">已开启</string>
+    <string name="ai_translate_state_off">已关闭</string>
+    <string name="ai_translate_enable">自动翻译</string>
+    <string name="ai_translate_auto_subtitle">打开作品时自动翻译</string>
+    <string name="ai_translate_model">免费模型</string>
+    <string name="ai_translate_novel_model">小说正文模型</string>
+    <string name="ai_translate_novel_follow">与文本翻译相同</string>
+    <string name="ai_translate_unavailable_badge">可能不可用</string>
+    <string name="detail_show_translation">显示译文</string>
+    <string name="detail_show_original">显示原文</string>
+    <string name="detail_chip_translate">译</string>
+    <string name="detail_chip_original">原</string>
+    <string name="detail_translating">翻译中…</string>
+    <string name="detail_translate_failed">翻译失败，请稍后重试</string>
+    <string name="detail_translate_retry">重试</string>
+    <string name="detail_retry_with_model">换模型重翻…</string>
+    <string name="detail_retry_with_model_short">换模型</string>
+    <string name="detail_retry_with_model_title">选择翻译模型（仅本次重翻）</string>
+    <string name="detail_model_kind_text">文本</string>
+    <string name="detail_model_kind_novel">小说</string>
+    <string name="detail_model_kind_image">图片</string>
 </resources>

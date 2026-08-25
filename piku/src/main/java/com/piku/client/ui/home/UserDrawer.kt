@@ -27,6 +27,7 @@ import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.DeleteSweep
+import androidx.compose.material.icons.outlined.GTranslate
 import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Info
@@ -81,6 +82,7 @@ fun UserDrawer(
     customBackgroundPath: String?,
     historyRetentionDays: Int,
     language: AppLanguage,
+    aiTranslateEnabled: Boolean,
     currentVersion: String,
     updateAvailable: Boolean,
     onToggleAdult: () -> Unit,
@@ -89,6 +91,7 @@ fun UserDrawer(
     onBackgroundClick: () -> Unit,
     onRetentionClick: () -> Unit,
     onLanguageClick: () -> Unit,
+    onAiTranslateClick: () -> Unit,
     onHistoryClick: () -> Unit,
     onCollectionClick: () -> Unit,
     onTagsClick: () -> Unit,
@@ -111,6 +114,7 @@ fun UserDrawer(
                 customBackgroundPath = customBackgroundPath,
                 historyRetentionDays = historyRetentionDays,
                 language = language,
+                aiTranslateEnabled = aiTranslateEnabled,
                 currentVersion = currentVersion,
                 updateAvailable = updateAvailable,
                 onToggleAdult = onToggleAdult,
@@ -119,6 +123,7 @@ fun UserDrawer(
                 onBackgroundClick = onBackgroundClick,
                 onRetentionClick = onRetentionClick,
                 onLanguageClick = onLanguageClick,
+                onAiTranslateClick = onAiTranslateClick,
                 onHistoryClick = onHistoryClick,
                 onCollectionClick = onCollectionClick,
                 onTagsClick = onTagsClick,
@@ -143,6 +148,7 @@ private fun DrawerPanel(
     customBackgroundPath: String?,
     historyRetentionDays: Int,
     language: AppLanguage,
+    aiTranslateEnabled: Boolean,
     currentVersion: String,
     updateAvailable: Boolean,
     onToggleAdult: () -> Unit,
@@ -151,6 +157,7 @@ private fun DrawerPanel(
     onBackgroundClick: () -> Unit,
     onRetentionClick: () -> Unit,
     onLanguageClick: () -> Unit,
+    onAiTranslateClick: () -> Unit,
     onHistoryClick: () -> Unit,
     onCollectionClick: () -> Unit,
     onTagsClick: () -> Unit,
@@ -323,6 +330,20 @@ private fun DrawerPanel(
                 label = stringResource(R.string.menu_language),
                 trailing = stringResource(language.labelRes()),
                 onClick = onLanguageClick,
+                dark = dark,
+                accent = iconAccent,
+            )
+            DrawerMenuRow(
+                icon = Icons.Outlined.GTranslate,
+                label = stringResource(R.string.menu_ai_translate),
+                trailing = stringResource(
+                    if (aiTranslateEnabled) {
+                        R.string.ai_translate_state_on
+                    } else {
+                        R.string.ai_translate_state_off
+                    },
+                ),
+                onClick = onAiTranslateClick,
                 dark = dark,
                 accent = iconAccent,
             )

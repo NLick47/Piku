@@ -100,6 +100,16 @@ fun FullNovelViewer(
     onLightChange: (Boolean) -> Unit,
     onClose: () -> Unit,
     onWorkClick: (Long, Long, String) -> Unit,
+    /** 正文有原文时显示原/译切换；未翻译时点击触发拉取 */
+    translationAvailable: Boolean = false,
+    showTranslation: Boolean = false,
+    /** 拉取中：切换钮禁用并显示进行中，防连点重复扣额度 */
+    translating: Boolean = false,
+    /** 任何翻译请求在途（含元数据）时禁用点击，避免触发被吞 */
+    busy: Boolean = false,
+    onToggleTranslation: () -> Unit = {},
+    /** 打开"换模型重翻"弹窗（与详情页共用同一选择器） */
+    onOpenModelPicker: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val currentOnWorkClick by rememberUpdatedState(onWorkClick)
@@ -211,7 +221,7 @@ fun FullNovelViewer(
             }
         }
 
-        // 底部设置栏：字号 A− / 配色切换 / 字号 A+
+        // 底部设置栏：字号 A− / 配色切换 / 译/原切换 / 字号 A+
         if (controlsVisible) {
             Row(
                 modifier = Modifier
@@ -262,6 +272,21 @@ fun FullNovelViewer(
                         modifier = Modifier.size(20.dp),
                     )
                 }
+                ReaderTranslateChip(
+                    translationAvailable = translationAvailable,
+                    translating = translating,
+                    busy = busy,
+                    showTranslation = showTranslation,
+                    fg = fg,
+                    accent = linkColor,
+                    onClick = onToggleTranslation,
+                )
+                ReaderFontButton(
+                    label = stringResource(R.string.detail_retry_with_model_short),
+                    enabled = !busy,
+                    onClick = onOpenModelPicker,
+                    fg = fg,
+                )
                 ReaderFontButton(
                     label = "A+",
                     enabled = fontSize < NOVEL_FONT_MAX,
@@ -296,6 +321,40 @@ private fun ReaderFontButton(
             .clip(RoundedCornerShape(8.dp))
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 6.dp),
+    )
+}
+
+/** 底部栏译/原切换chip：无正文不渲染；翻译中禁点防连点重复扣额度 */
+@Composable
+private fun ReaderTranslateChip(
+    translationAvailable: Boolean,
+    translating: Boolean,
+    busy: Boolean,
+    showTranslation: Boolean,
+    fg: Color,
+    accent: Color,
+    onClick: () -> Unit,
+) {
+    if (!translationAvailable) return
+    Text(
+        text = stringResource(
+            when {
+                translating && !showTranslation -> R.string.detail_translating
+                showTranslation -> R.string.detail_chip_original
+                else -> R.string.detail_chip_translate
+            },
+        ),
+        color = if (showTranslation) accent else fg.copy(alpha = 0.7f),
+        fontSize = 14.sp,
+        modifier = Modifier
+            .padding(start = 4.dp)
+            .clip(RoundedCornerShape(999.dp))
+            .background(
+                if (showTranslation) accent.copy(alpha = 0.15f)
+                else Color.Transparent,
+            )
+            .clickable(enabled = !busy, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 5.dp),
     )
 }
 

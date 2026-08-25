@@ -166,6 +166,19 @@ class RetryInterceptorTest {
     }
 
     @Test
+    fun plainIOExceptionFollowedByTimeoutStillGetsTimeoutRetry() {
+        val chain = FakeChain(
+            request, FakeCall(request),
+            arrayOf(IOException("net"), SocketTimeoutException("timeout"), response(200)),
+        )
+
+        val result = interceptor.intercept(chain)
+
+        assertEquals(200, result.code)
+        assertEquals(3, chain.proceedCount)
+    }
+
+    @Test
     fun throwsAfterMaxAttempts() {
         val chain = FakeChain(
             request, FakeCall(request),

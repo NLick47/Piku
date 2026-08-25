@@ -11,6 +11,7 @@ import com.piku.client.data.local.HistoryDao
 import com.piku.client.data.local.PopularTagCacheRepository
 import com.piku.client.data.local.SearchKeywordDao
 import com.piku.client.data.local.SettingsRepository
+import com.piku.client.data.local.TranslationDao
 import com.piku.client.data.local.WorkPasswordDao
 import com.piku.client.data.local.WorkPasswordRepository
 import com.piku.client.data.local.CredentialCipher
@@ -40,6 +41,7 @@ object DatabaseModule {
                 AppDatabase.MIGRATION_3_4,
                 AppDatabase.MIGRATION_4_5,
                 AppDatabase.MIGRATION_5_6,
+                AppDatabase.MIGRATION_6_7,
             )
             .build()
 
@@ -60,6 +62,10 @@ object DatabaseModule {
     @Provides
     fun provideWorkPasswordDao(database: AppDatabase): WorkPasswordDao =
         database.workPasswordDao()
+
+    @Provides
+    fun provideTranslationDao(database: AppDatabase): TranslationDao =
+        database.translationDao()
 
     @Provides
     @Singleton

@@ -308,4 +308,22 @@
     <string name="detail_follow_failed">フォローに失敗しました</string>
     <string name="detail_author_home">作者のページを見る</string>
     <string name="tab_wip">準備中</string>
+
+    <!-- AI翻訳 -->
+    <string name="menu_ai_translate">AI 翻訳</string>
+    <string name="ai_translate_state_on">オン</string>
+    <string name="ai_translate_state_off">オフ</string>
+    <string name="ai_translate_enable">自動翻訳</string>
+    <string name="ai_translate_auto_subtitle">作品を開いたときに自動翻訳します</string>
+    <string name="ai_translate_model">無料モデル</string>
+    <string name="ai_translate_novel_model">小説本文モデル</string>
+    <string name="ai_translate_novel_follow">テキスト翻訳と同じ</string>
+    <string name="ai_translate_unavailable_badge">利用不可の可能性</string>
+    <string name="detail_show_translation">翻訳を表示</string>
+    <string name="detail_show_original">原文を表示</string>
+    <string name="detail_chip_translate">訳</string>
+    <string name="detail_chip_original">原</string>
+    <string name="detail_translating">翻訳中…</string>
+    <string name="detail_translate_failed">翻訳に失敗しました。しばらくしてからもう一度お試しください。</string>
+    <string name="detail_translate_retry">再試行</string>
 </resources>

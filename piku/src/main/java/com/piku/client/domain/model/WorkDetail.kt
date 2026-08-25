@@ -29,4 +29,9 @@ data class WorkDetail(
     val adultLocked: Boolean = false,
     /** 当前登录用户是否已关注该作者（详情页 HTML 中 UserInfoCmdFollow 的 Selected 类） */
     val followed: Boolean = false,
+    /**
+     * AI 译文（原文字段保持不变）。null 表示未翻译；
+     * 展示由 UI 的原文/译文开关控制，复制与历史记录始终用原文。
+     */
+    val translated: TranslatedFields? = null,
 )
