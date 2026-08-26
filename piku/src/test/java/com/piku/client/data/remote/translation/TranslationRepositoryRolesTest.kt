@@ -103,8 +103,8 @@ class TranslationRepositoryRolesTest {
     @Test
     fun `stored selection resolves by id or bare model name`() {
         val models = listOf(model("qwen", Role.TEXT).copy(model = "Qwen/Qwen3-8B"))
-        assertEquals("qwen", ModelCatalog.resolveStoredSelection("qwen", models)?.id)
-        assertEquals("qwen", ModelCatalog.resolveStoredSelection("Qwen/Qwen3-8B", models)?.id)
+        assertEquals("qwen", ModelCatalog.resolveStoredSelection("qwen", models, Role.TEXT)?.id)
+        assertEquals("qwen", ModelCatalog.resolveStoredSelection("Qwen/Qwen3-8B", models, Role.TEXT)?.id)
     }
 
     @Test
@@ -114,9 +114,28 @@ class TranslationRepositoryRolesTest {
             model("down", Role.TEXT, available = false),
             model("nokey", Role.TEXT, apiKey = null),
         )
-        assertNull(ModelCatalog.resolveStoredSelection("down", models))
-        assertNull(ModelCatalog.resolveStoredSelection("nokey", models))
-        assertNull(ModelCatalog.resolveStoredSelection("ghost", models))
-        assertNull(ModelCatalog.resolveStoredSelection("  ", models))
+        assertNull(ModelCatalog.resolveStoredSelection("down", models, Role.TEXT))
+        assertNull(ModelCatalog.resolveStoredSelection("nokey", models, Role.TEXT))
+        assertNull(ModelCatalog.resolveStoredSelection("ghost", models, Role.TEXT))
+        assertNull(ModelCatalog.resolveStoredSelection("  ", models, Role.TEXT))
+    }
+
+    @Test
+    fun `bare model name collision resolves within the requested role`() {
+        // 文本与小说条目的裸模型名撞车（或同模型声明多场景）时，两条通道各解析各的
+        val models = listOf(
+            model("text-x", Role.TEXT).copy(model = "Shared-Model"),
+            model("novel-x", Role.NOVEL).copy(model = "Shared-Model"),
+        )
+        assertEquals("text-x", ModelCatalog.resolveStoredSelection("Shared-Model", models, Role.TEXT)?.id)
+        assertEquals("novel-x", ModelCatalog.resolveStoredSelection("Shared-Model", models, Role.NOVEL)?.id)
+    }
+
+    @Test
+    fun `stored value of foreign role entry never leaks across channels`() {
+        // 文本通道存的旧选中值指向小说专属条目：按 role 过滤后视为未选择，
+        // 由调用方回落到文本场景默认，绝不把正文模型借给短字段
+        val models = listOf(model("novel-a", Role.NOVEL))
+        assertNull(ModelCatalog.resolveStoredSelection("novel-a", models, Role.TEXT))
     }
 }

@@ -20,7 +20,8 @@ data class ChunkContext(
 interface TranslationEngine {
 
     /**
-     * 引擎标识，用于译文缓存键（模型不同则缓存不同），形如 "llm:glm-4-flash"。
+     * 引擎标识，用于译文缓存键。含场景 + 模型 + 地址三元组
+     * （形如 "llm:novel:glm-4-flash:https://…"），任一不同则缓存互不污染。
      */
     val engineId: String
 

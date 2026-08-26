@@ -211,15 +211,17 @@ class TranslationRepository @Inject constructor(
         if (source.isBlank()) return@flow
         val entry = forcedEntry ?: effectiveNovelEntry()
         val engine = entry?.let {
-            engineFactory.create(apiKeyFor(it), it, modelCatalogRepository.catalogDefaults.value)
+            engineFactory.create(apiKeyFor(it), Role.NOVEL, it, modelCatalogRepository.catalogDefaults.value)
         }
         if (engine == null) {
             emit(NovelStreamEvent.Completed(translatedSoFar = "", failedCount = 0, totalChunks = 0))
             return@flow
         }
         val targetLang = targetLangName(language)
-        val engineId = engine.engineId
         val glossary = tagGlossaryBlock(detail)
+        // 缓存键追加对照表指纹：glossary 影响译文（人名锚定）却不改变原文哈希，
+        // 不入键则同一块正文在不同作品（不同标签译名表）间会共享错误缓存
+        val engineId = engine.engineId + (glossary?.let { "#g:" + hash(it).take(8) }.orEmpty())
         val chunks = NovelChunker.split(source)
         val total = chunks.size
 
@@ -342,7 +344,7 @@ class TranslationRepository @Inject constructor(
         mutex.withLock {
             val entry = entryOverride ?: effectiveTextEntry()
             var activeEngine = engineFactory.create(
-                apiKeyFor(entry), entry, modelCatalogRepository.catalogDefaults.value,
+                apiKeyFor(entry), role, entry, modelCatalogRepository.catalogDefaults.value,
             ) ?: return null
             val primaryEngineId = activeEngine.engineId
             var engineId = activeEngine.engineId
@@ -408,7 +410,9 @@ class TranslationRepository @Inject constructor(
                         entry, role, modelCatalogRepository.models.value,
                     )
                     val fallbackEngine = alternative?.let {
-                        engineFactory.create(it.apiKey.orEmpty(), it, modelCatalogRepository.catalogDefaults.value)
+                        engineFactory.create(
+                            it.apiKey.orEmpty(), role, it, modelCatalogRepository.catalogDefaults.value,
+                        )
                     }
                     if (fallbackEngine != null) {
                         delay(Random.nextLong(FAILOVER_JITTER_MIN_MS, FAILOVER_JITTER_MAX_MS))
@@ -527,11 +531,13 @@ class TranslationRepository @Inject constructor(
      * 设置里存的是目录 id 或裸模型名（如默认 glm-4-flash），两种都做匹配。
      * 目录权威高于历史选中：指向已下架/被撤 key 条目的旧值视为未选择，
      * 回落到场景默认（见 [ModelCatalog.resolveStoredSelection]）。
+     * role 过滤保证文本通道的旧选中值不会命中小说条目（反之亦然）。
      */
     private fun selectedEntry(): ModelEntry? =
         ModelCatalog.resolveStoredSelection(
             settingsRepository.llmModel.value,
             modelCatalogRepository.models.value,
+            Role.TEXT,
         )
 
     /** 小说专用模型同规则匹配；空串或失效值表示未选择（走目录小说默认，不跟随文本） */
@@ -539,6 +545,7 @@ class TranslationRepository @Inject constructor(
         ModelCatalog.resolveStoredSelection(
             settingsRepository.llmNovelModel.value,
             modelCatalogRepository.models.value,
+            Role.NOVEL,
         )
 
     companion object {

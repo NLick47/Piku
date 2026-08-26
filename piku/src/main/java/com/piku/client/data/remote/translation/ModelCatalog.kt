@@ -168,20 +168,26 @@ object ModelCatalog {
     }.randomOrNull()
 
     /**
-     * 解析存储的历史选中值（设置里的 id 或裸模型名）。
+     * 解析存储的历史选中值（设置里的 id 或裸模型名），限 [role] 场景内匹配。
      *
-     * 目录权威高于历史选择：命中条目必须可用且带内置 key，否则视为未选择返回 null，
-     * 由调用方回落到场景默认——下架/撤 key 的模型不会因旧选中值而继续生效。
-     * 惰性失效不写回设置：目录哪天恢复该模型，选中自动复活。
+     * role 过滤是两条通道的选中值隔离：不同条目的裸模型名撞车（或同一模型
+     * 声明多个场景）时，文本通道与小说通道各解析各的，绝不跨场景命中。
+     *
+     * 目录权威高于历史选择：命中条目必须属于该 [role]、可用且带内置 key，
+     * 否则视为未选择返回 null，由调用方回落到场景默认——下架/撤 key 的模型
+     * 不会因旧选中值而继续生效。惰性失效不写回设置：目录哪天恢复该模型，
+     * 选中自动复活。
      */
     fun resolveStoredSelection(
         stored: String,
         models: List<ModelEntry>,
+        role: String,
     ): ModelEntry? {
         val value = stored.trim()
         if (value.isEmpty()) return null
         return models.firstOrNull {
             (it.id == value || it.model == value) &&
+                role in it.roles &&
                 it.available && !it.apiKey.isNullOrBlank()
         }
     }

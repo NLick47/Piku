@@ -8,17 +8,6 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 
-/**
- * 走 OpenAI 兼容 /chat/completions 的 LLM 翻译引擎（默认智谱 GLM-4-Flash）。
- *
- * 几个实测出来的坑决定了这里的设计：
- * 1. 免费小模型偶发"把原文原样返回"或输出解释性废话 —— 所以有
- *    [looksUntranslated] 校验 + 一次重试，仍失败则返回空串让调用方回退原文；
- * 2. 一次请求约 0.8~1s —— 所以短字段合并成一条带序号的请求批量翻译，
- *    避免逐字段串行等待；长正文单独发，防止超长 prompt 与串行错位；
- * 3. 小模型会自作主张把 [[n]] 规范成 [n] —— 批量提示词里必须带
- *    "DOUBLE square brackets" 的完整示例（few-shot 比规则描述有效得多）。
- */
 class LlmTranslateEngine(
     private val api: LlmChatApi,
     private val config: () -> LlmConfig,
@@ -28,6 +17,8 @@ class LlmTranslateEngine(
         val baseUrl: String,
         val apiKey: String,
         val model: String,
+        /** 服务场景（[Role.TEXT]/[Role.NOVEL]）：单条路径按它选提示词组，也进缓存键 */
+        val role: String = Role.TEXT,
         /** 合并后的请求参数（基础 + 目录默认 + 单模型覆盖），由引擎原样拼进请求体 */
         val params: JsonObject = JsonObject(emptyMap()),
         /** 模型级提示词（models[].prompts，如小模型的精简版）；null 时逐组回退目录默认 */
@@ -36,8 +27,16 @@ class LlmTranslateEngine(
         val defaultPrompts: PromptSet? = null,
     )
 
+    /**
+     * 缓存引擎标识：role + 模型 + 地址三元组。
+     * role 隔离是关键——文本批量与小说正文即便共用同一模型名也绝不互串缓存；
+     * baseUrl 隔离避免两家服务商同名模型共享命名空间。
+     */
     override val engineId: String
-        get() = "llm:${config().model}"
+        get() {
+            val cfg = config()
+            return "llm:${cfg.role}:${cfg.model}:${cfg.baseUrl.trimEnd('/')}"
+        }
 
     override suspend fun translate(
         texts: List<String>,
@@ -77,10 +76,18 @@ class LlmTranslateEngine(
         targetLang: String,
         context: ChunkContext? = null,
     ): String {
+        // 提示词组按场景路由：只有小说通道（role=NOVEL 或显式带上下文）才用 novel 组；
+        // 文本通道的单条路径（批量仅剩 1 条、>600 长简介、批量失败逐条回退）
+        // 一律走 single 组——小说条款（上下文标记/同人设定）绝不窜进小文本模型
+        val system = if (config().role == Role.NOVEL || context != null) {
+            novelSystemPrompt(targetLang, context)
+        } else {
+            systemPrompt(targetLang, isBatch = false)
+        }
         val user = context?.let { contextUserPrefix(it) + text } ?: text
         repeat(MAX_ATTEMPTS) { attempt ->
             val output = request(
-                system = novelSystemPrompt(targetLang, context),
+                system = system,
                 user = user,
             ) ?: return@repeat
             val cleaned = stripEcho(output.trim(), context)

@@ -14,7 +14,7 @@ import androidx.room.Entity
 data class TranslationEntity(
     val srcHash: String,
     val targetLang: String,
-    /** 引擎标识，形如 "llm:glm-4-flash"，模型不同则缓存不同 */
+    /** 引擎标识，形如 "llm:novel:model:https://…"，场景/模型/地址任一不同则缓存不同 */
     val engineId: String,
     val translated: String,
     val updatedAt: Long,
