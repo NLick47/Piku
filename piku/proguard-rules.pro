@@ -11,7 +11,6 @@
 
 # Hilt
 -dontwarn dagger.hilt.**
--keep class dagger.hilt.** { *; }
 
 # Strip debug logs from release builds (calls and string building are removed)
 -assumenosideeffects class android.util.Log {

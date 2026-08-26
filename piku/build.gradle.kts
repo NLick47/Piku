@@ -76,6 +76,10 @@ android {
         buildConfigField("String", "DEBUG_LLM_API_KEY", "\"\"")
 
         buildConfigField("String", "CATALOG_ENC_KEY", "\"${resolveCatalogEncKey()}\"")
+
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
     }
 
     buildTypes {
@@ -135,7 +139,13 @@ android {
             // 依赖自带的许可证文本（各 ~10KB，压缩后仍占体积）
             excludes += "/META-INF/**/LICENSE*"
             excludes += "/META-INF/**/NOTICE*"
+            excludes += "DebugProbesKt.bin"
+            excludes += "**/*.kotlin_builtins"
         }
+    }
+
+    dependenciesInfo {
+        includeInApk = false
     }
 }
 
