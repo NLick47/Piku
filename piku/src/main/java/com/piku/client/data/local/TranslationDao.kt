@@ -15,4 +15,14 @@ interface TranslationDao {
 
     @Upsert
     suspend fun upsertAll(entities: List<TranslationEntity>)
+
+    @Query("SELECT COUNT(*) FROM translations")
+    suspend fun count(): Int
+
+    /** 按 updatedAt 最旧优先删除 [count] 行（FIFO 淘汰；表含隐式 rowid，Room 默认非 WITHOUT ROWID） */
+    @Query(
+        "DELETE FROM translations WHERE rowid IN " +
+            "(SELECT rowid FROM translations ORDER BY updatedAt ASC LIMIT :count)",
+    )
+    suspend fun deleteOldest(count: Int)
 }

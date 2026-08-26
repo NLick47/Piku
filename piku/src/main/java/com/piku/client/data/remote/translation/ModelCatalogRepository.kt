@@ -99,13 +99,18 @@ class ModelCatalogRepository @Inject constructor(
         }.onFailure { Log.d(TAG, "jsdelivr purge skipped: ${it.message}") }
     }
 
-    /** 加密信封优先解密；否则按用户自定义的明文 JSON 解析（保持旧用法兼容） */
+    /**
+     * 加密信封优先解密；否则按用户自定义的明文 JSON 解析（保持旧用法兼容）。
+     * 解密密钥：用户为第三方加密目录填入的自定义密钥优先，空则回退编译期内置密钥
+     * （官方列表）。两者都解不开时返回 null，refresh 沿用当前列表。
+     */
     private fun decode(body: String): ModelCatalogDto? = runCatching {
         val envelope = runCatching { json.decodeFromString<CryptoHelper.Envelope>(body) }.getOrNull()
             ?.takeIf { it.alg.isNotBlank() && it.iv.isNotBlank() && it.data.isNotBlank() }
         val plain = if (envelope != null) {
-            val key = BuildConfig.CATALOG_ENC_KEY
-            if (key.isBlank()) error("缺少 BuildConfig.CATALOG_ENC_KEY")
+            val key = settingsRepository.catalogEncKey.value.trim()
+                .ifBlank { BuildConfig.CATALOG_ENC_KEY }
+            if (key.isBlank()) error("缺少解密密钥（内置为空且未自定义）")
             CryptoHelper.decrypt(envelope, key)
         } else {
             body

@@ -7,9 +7,12 @@ import com.piku.client.data.local.TranslationEntity
 import com.piku.client.domain.model.AppLanguage
 import com.piku.client.domain.model.TranslatedFields
 import com.piku.client.domain.model.WorkDetail
+import com.piku.client.domain.translation.ChunkContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -33,6 +36,39 @@ data class TranslationOutcome(
 )
 
 /**
+ * 小说分块流式翻译的事件流。
+ *
+ * - [Progress]：一块完成即发；[translatedSoFar] 为已译部分拼接，
+ *   [remainingOriginal] 为尚未处理的原文尾部——UI 拼成
+ *   "已译前缀 + 剩余原文"实现边翻边读；
+ * - [Completed]：全部块处理完。[failedCount] > 0 表示有块失败（已回退原文展示），
+ *   调用方可提示重试——重试重启流，已成功块全部缓存秒过，只有失败块真正上网。
+ */
+sealed interface NovelStreamEvent {
+    data class Progress(
+        val translatedSoFar: String,
+        val remainingOriginal: String,
+        val doneChunks: Int,
+        val totalChunks: Int,
+    ) : NovelStreamEvent
+
+    data class Completed(
+        val translatedSoFar: String,
+        val failedCount: Int,
+        val totalChunks: Int,
+    ) : NovelStreamEvent
+}
+
+/**
+ * 各场景当前生效的默认模型 id（已按可用 + 带内置 key 过滤）。
+ * 模型选择器用它高亮"未手动选择时的默认项"，与实际翻译走同一套解析语义。
+ */
+data class RoleDefaultIds(
+    val text: String? = null,
+    val novel: String? = null,
+)
+
+/**
  * 译文编排：缓存优先 → 批量请求 → 回写缓存。
  *
  * - 缓存键为 (原文 SHA-256, 目标语言, 引擎 id)，换模型/换语言互不污染；
@@ -50,6 +86,20 @@ class TranslationRepository @Inject constructor(
 
     private val mutex = Mutex()
 
+    /**
+     * 写缓存并按容量 FIFO 淘汰：超过 [CACHE_MAX_ROWS] 时删除最旧的行，
+     * 防止重度用户缓存表无限膨胀。命中不续期（真 LRU 需要读时写时间戳）——
+     * 收藏作品长期后被挤出只会重新翻译一次，可接受。
+     */
+    private suspend fun persist(rows: List<TranslationEntity>) {
+        if (rows.isEmpty()) return
+        withContext(Dispatchers.IO) {
+            dao.upsertAll(rows)
+            val total = dao.count()
+            if (total > CACHE_MAX_ROWS) dao.deleteOldest(total - CACHE_MAX_ROWS)
+        }
+    }
+
     /** 只看 key 是否可用（手动翻译入口的显示条件，不依赖自动开关）。
      *  文本模型或小说正文模型（含默认小说模型）任一有可用 key 即视为可翻译。 */
     fun hasKey(): Boolean {
@@ -62,6 +112,21 @@ class TranslationRepository @Inject constructor(
      * 冷启动时目录晚于首个详情页到达，UI 靠它同步手动入口并对被跳过的作品补翻。
      */
     val hasKeyFlow: Flow<Boolean> = modelCatalogRepository.models.map { hasKey() }
+
+    /**
+     * 各场景默认模型 id 流：目录列表或 defaults.roles 变化时重算。
+     * 供抽屉模型选择器高亮默认项（用户未手动选择时实际会走的那个模型）。
+     */
+    val roleDefaultIds: Flow<RoleDefaultIds> = combine(
+        modelCatalogRepository.models,
+        modelCatalogRepository.catalogDefaults,
+    ) { models, defaults ->
+        val roleDefaults = defaults?.roles ?: emptyMap()
+        RoleDefaultIds(
+            text = ModelCatalog.resolveRoleDefault(Role.TEXT, models, roleDefaults)?.id,
+            novel = ModelCatalog.resolveRoleDefault(Role.NOVEL, models, roleDefaults)?.id,
+        )
+    }
 
     /**
      * 翻译作品的可见文本字段。任一字段失败则该字段为 null（UI 回退原文），
@@ -91,18 +156,22 @@ class TranslationRepository @Inject constructor(
             addAll(detail.tags)
         }
         val shortTranslated = translateAll(shortSources, targetLang, forcedEntry)
-        // 小说正文单独走小说专用模型（默认走赞助小说模型）；正文不按行拆分，
-        // 散文跨行句必须保持上下文，行内罕见链接走摘除+行尾拼回兜底。
+        // 小说正文单独走小说专用通道；解析不出可用小说模型时正文保留原文（宁缺毋滥），
+        // 绝不静默借用文本模型——两条通道彻底隔离。正文整条单单元送翻，
+        // 散文跨行句保持上下文，行内罕见链接走摘除+末尾拼回兜底。
         // 一次性重翻时，短字段已用 forcedEntry，小说正文同样强制用它以保证一致。
-        val novelTranslated = if (novelSource != null) {
-            translateAll(
-                listOf(novelSource),
-                targetLang,
-                forcedEntry ?: effectiveNovelEntry(),
-                splitLines = false,
-            )?.firstOrNull()
-        } else {
+        val novelTranslated = if (novelSource == null) {
             null
+        } else {
+            val novelEntry = forcedEntry ?: effectiveNovelEntry()
+            novelEntry?.let {
+                translateAll(
+                    listOf(novelSource),
+                    targetLang,
+                    entryOverride = it,
+                    role = Role.NOVEL,
+                )?.firstOrNull()
+            }
         }
         // 两段都缺席（网络/限速导致整批失败）才判真失败；
         // 仅一段失败则保留另一段成果，不阻塞展示。
@@ -122,6 +191,126 @@ class TranslationRepository @Inject constructor(
     }
 
     /**
+     * 小说正文分块流式翻译（阅读器"译"入口专用）：
+     * 切分 → 逐块顺序翻译，每块完成即发射事件并独立落缓存。
+     *
+     * - 每块携带跨块上下文（上块尾部原文+译文 + 标签译名对照表），保人名与腔调连贯；
+     * - 预检透传 / 缓存命中 / 失败回退原文续流，语义与 [translateAll] 对齐；
+     * - 缓存键 = (摘链后原文 SHA-256, 目标语言, 引擎 id)：断点续翻、二次打开全免费；
+     * - 不抢全局 [mutex]：块本身顺序执行已足够温和，短字段翻译可与之并行
+     *   （免费 key 的瞬时并发碰撞概率极低，v1 接受）；
+     * - 解析不出可用小说模型时发空 [NovelStreamEvent.Completed]——宁缺毋滥，
+     *   绝不向文本通道借模型。
+     */
+    fun translateNovelStreaming(
+        detail: WorkDetail,
+        language: AppLanguage,
+        forcedEntry: ModelEntry? = null,
+    ): Flow<NovelStreamEvent> = flow {
+        val source = detail.novelText
+        if (source.isBlank()) return@flow
+        val entry = forcedEntry ?: effectiveNovelEntry()
+        val engine = entry?.let {
+            engineFactory.create(apiKeyFor(it), it, modelCatalogRepository.catalogDefaults.value)
+        }
+        if (engine == null) {
+            emit(NovelStreamEvent.Completed(translatedSoFar = "", failedCount = 0, totalChunks = 0))
+            return@flow
+        }
+        val targetLang = targetLangName(language)
+        val engineId = engine.engineId
+        val glossary = tagGlossaryBlock(detail)
+        val chunks = NovelChunker.split(source)
+        val total = chunks.size
+
+        val translated = StringBuilder()
+        var consumed = 0
+        var failedCount = 0
+        var tailOriginal = ""
+        var tailTranslated = ""
+
+        for ((index, chunk) in chunks.withIndex()) {
+            val context = if (index == 0) {
+                null
+            } else {
+                ChunkContext(
+                    originalTail = tailOriginal,
+                    translatedTail = tailTranslated,
+                    glossaryBlock = glossary,
+                )
+            }
+            // 块级透传契约（勿上提到作品级、勿删除）：整块已是目标语言 → 跳过不花请求；
+            // 掺杂任何其他语言（假名/英文句/其他字系，含半角片假名）→ 必须送翻。
+            // 中日混排块在 ja 目标下由 hanDominantOverKana 保证中文为主时仍送翻，
+            // zh 目标下"汉字≥英文词×2"仅容忍点缀性英文词。逐条语义见 isAlreadyInTarget 测试矩阵。
+            val value: String? = when {
+                LlmTranslateEngine.isAlreadyInTarget(chunk.text, targetLang) -> chunk.text
+                else -> {
+                    // 缓存键与主通道一致：摘链接后的纯文字哈希；命中值含拼回的链接
+                    val (stripped, links) = LlmTranslateEngine.extractLinks(chunk.text)
+                    if (stripped.isBlank()) {
+                        // 整块都是链接/空白（如正文里单独成行的 URL）：无翻内容，
+                        // 原样保留且不计入失败——否则会产生假"N 段未译出"警报
+                        chunk.text
+                    } else {
+                        val cached = withContext(Dispatchers.IO) {
+                            dao.get(hash(stripped), targetLang, engineId)
+                        }
+                        cached ?: run {
+                            val out = engine.translate(listOf(stripped), targetLang, context)
+                                .firstOrNull().orEmpty()
+                            if (out.isBlank()) {
+                                failedCount++
+                                null
+                            } else {
+                                val full = if (links.isEmpty()) {
+                                    out
+                                } else {
+                                    out.trimEnd() + links.joinToString("") { " $it" }
+                                }
+                                // persist 内部自带 IO 调度，写完按容量 FIFO 淘汰
+                                persist(
+                                    listOf(
+                                        TranslationEntity(
+                                            srcHash = hash(stripped),
+                                            targetLang = targetLang,
+                                            engineId = engineId,
+                                            translated = full,
+                                            updatedAt = System.currentTimeMillis(),
+                                        ),
+                                    ),
+                                )
+                                full
+                            }
+                        }
+                    }
+                }
+            }
+            // 失败块回退原文继续流：局部失败不整体放弃（与主通道哲学一致）
+            val piece = value ?: chunk.text
+            translated.append(piece)
+            consumed += chunk.text.length + chunk.separatorAfter.length
+            emit(
+                NovelStreamEvent.Progress(
+                    translatedSoFar = translated.toString(),
+                    remainingOriginal = source.substring(consumed.coerceAtMost(source.length)),
+                    doneChunks = index + 1,
+                    totalChunks = total,
+                ),
+            )
+            tailOriginal = NovelChunker.tail(chunk.text, NovelChunker.TAIL_ORIGINAL_CHARS)
+            tailTranslated = NovelChunker.tail(piece, NovelChunker.TAIL_TRANSLATED_CHARS)
+        }
+        emit(
+            NovelStreamEvent.Completed(
+                translatedSoFar = translated.toString(),
+                failedCount = failedCount,
+                totalChunks = total,
+            ),
+        )
+    }
+
+    /**
      * 一条原文的行分解结果。
      * - [Keep]：链接行/空行——原样回填，永不送模型；
      * - [Translate]：待翻文字行——[stripped] 为摘除链接后的送翻文字，
@@ -136,19 +325,19 @@ class TranslationRepository @Inject constructor(
      * 批量翻译任意文本列表，返回与入参等长的结果（失败项为空串）。
      * 缓存命中的不产生网络请求。
      *
-     * 链接处理：含链接的文本先按行拆分，链接行原样保留不进模型；行内混排的
-     * 残余链接在引擎边界摘除、译文回来后拼回行尾——
-     * URL 既不拖慢批量请求，也不会被小模型改坏。
+     * 链接处理：每条文本整条摘除链接后作为单一单元送翻（段数不随行数膨胀，
+     * 小模型友好），纯链接文本整体跳过；译文回来后链接原样拼在末尾——
+     * URL 既不进 prompt 拖慢请求，也不会被小模型改坏。
      *
      * 整批失败（网络错/限速/模型抽风导致全部空返回）时做一次故障转移：
-     * 随机换一个带内置 key 的其他免费模型，加全抖动短延迟后重试——
+     * 随机换一个同场景（[role]）带内置 key 的其他免费模型，加全抖动短延迟后重试——
      * 时间与模型两个维度同时打散，多用户不会同步挤兑同一把 key。
      */
     suspend fun translateAll(
         texts: List<String>,
         targetLang: String,
         entryOverride: ModelEntry? = null,
-        splitLines: Boolean = true,
+        role: String = Role.TEXT,
     ): List<String>? =
         mutex.withLock {
             val entry = entryOverride ?: effectiveTextEntry()
@@ -167,7 +356,7 @@ class TranslationRepository @Inject constructor(
             val units = mutableListOf<Unit>()
             texts.forEachIndexed { index, text ->
                 if (text.isBlank()) return@forEachIndexed
-                val parts = decomposeLines(text, splitLines)
+                val parts = decomposeLines(text)
                 partsByIndex[index] = parts
                 val ids = mutableListOf<Int>()
                 parts.forEach { part ->
@@ -215,7 +404,9 @@ class TranslationRepository @Inject constructor(
                 var fresh = activeEngine.translate(strippedPending, targetLang)
                 var failedOver = false
                 if (fresh.all { it.isBlank() }) {
-                    val alternative = randomAlternativeEntry(entry)
+                    val alternative = ModelCatalog.failoverCandidate(
+                        entry, role, modelCatalogRepository.models.value,
+                    )
                     val fallbackEngine = alternative?.let {
                         engineFactory.create(it.apiKey.orEmpty(), it, modelCatalogRepository.catalogDefaults.value)
                     }
@@ -260,7 +451,7 @@ class TranslationRepository @Inject constructor(
                     }
                 }
                 if (rows.isNotEmpty()) {
-                    withContext(Dispatchers.IO) { dao.upsertAll(rows) }
+                    persist(rows)
                 }
             }
 
@@ -283,63 +474,43 @@ class TranslationRepository @Inject constructor(
         }
 
     /**
-     * 故障转移候选：其他带内置共享 key 的可用免费模型，随机挑一个。
-     * 注意必须用候选自带的内置 key 去打它对应的端点，key/地址/模型名保持同源。
-     */
-    private fun randomAlternativeEntry(current: ModelEntry?): ModelEntry? =
-        modelCatalogRepository.models.value
-            .filter { it.free && it.available && !it.apiKey.isNullOrBlank() && it.id != current?.id }
-            .randomOrNull()
-
-    /**
      * 文本翻译当前生效的模型条目：地址、模型名、key 三者必须同源，所以降级是整条切换。
      * key 只来自加密远程目录（debug 构建回退注入的调试 key）：
      * - 选中项带内置共享 key 就用它；
-     * - 否则（如历史遗留的自选模型没有内置 key）降级到默认文本模型，再降级到任一带 key 的可用模型，
-     *   避免整段翻译静默不可用。
+     * - 否则（如历史遗留的自选模型没有内置 key）降级到文本场景默认，
+     *   再降级到任一带 key 的可用模型，避免整段翻译静默不可用。
      */
     internal fun effectiveTextEntry(): ModelEntry? {
         val selected = selectedEntry()
         if (selected != null && !selected.apiKey.isNullOrBlank()) return selected
-        return defaultTextEntry()
+        return defaultRoleEntry(Role.TEXT)
             ?: modelCatalogRepository.models.value.firstOrNull {
                 it.available && !it.apiKey.isNullOrBlank()
             }
     }
 
-    /** 文本翻译默认模型：目录里标记 [ModelEntry.defaultText] 的优先，否则首个文本类可用模型 */
-    internal fun defaultTextEntry(): ModelEntry? {
-        val models = modelCatalogRepository.models.value
-        return models.firstOrNull { it.defaultText && it.available && !it.apiKey.isNullOrBlank() }
-            ?: models.firstOrNull {
-                (it.kind == null || it.kind == "text") && it.available && !it.apiKey.isNullOrBlank()
-            }
-    }
-
     /**
      * 小说正文当前生效的模型条目：
-     * - 单独选了小说模型（非空）则走它，无内置 key 时同样降级到默认小说模型，再降级到任一带 key 的可用模型；
-     * - 未单独选（空串，默认）则走默认小说模型（目录标记 [ModelEntry.defaultNovel]，即赞助付费模型），
-     *   仍无则降级到文本翻译默认模型，保证小说永远能翻而不静默跟随文本。
+     * - 单独选了小说模型（非空）则走它，无内置 key 时降级到小说场景默认；
+     * - 未单独选（空串，默认）则直接走小说场景默认
+     *   （目录 [CatalogDefaults.roles] 里 novel 指向的赞助付费模型）。
+     *
+     * 与文本通道的唯一交叉点是没有：解析不出可用小说模型时返回 null，
+     * 调用方按宁缺毋滥让正文保留原文——绝不向文本通道借模型。
      */
     internal fun effectiveNovelEntry(): ModelEntry? {
         val novelSelected = selectedNovelEntry()
-        if (novelSelected != null) {
-            if (!novelSelected.apiKey.isNullOrBlank()) return novelSelected
-            return defaultNovelEntry()
-                ?: modelCatalogRepository.models.value.firstOrNull { it.available && !it.apiKey.isNullOrBlank() }
-        }
-        return defaultNovelEntry() ?: effectiveTextEntry()
+        if (novelSelected != null && !novelSelected.apiKey.isNullOrBlank()) return novelSelected
+        return defaultRoleEntry(Role.NOVEL)
     }
 
-    /** 小说正文默认模型：目录里标记 [ModelEntry.defaultNovel] 的优先，否则首个小说类可用模型 */
-    internal fun defaultNovelEntry(): ModelEntry? {
-        val models = modelCatalogRepository.models.value
-        return models.firstOrNull { it.defaultNovel && it.available && !it.apiKey.isNullOrBlank() }
-            ?: models.firstOrNull {
-                it.kind == "novel" && it.available && !it.apiKey.isNullOrBlank()
-            }
-    }
+    /** 场景默认模型：目录 defaults.roles[role] 优先，退到首个该 role 的可用带 key 条目 */
+    private fun defaultRoleEntry(role: String): ModelEntry? =
+        ModelCatalog.resolveRoleDefault(
+            role,
+            modelCatalogRepository.models.value,
+            modelCatalogRepository.catalogDefaults.value?.roles ?: emptyMap(),
+        )
 
     /**
      * 生效 key：选中模型自带的内置共享 key（来自加密远程目录，零配置可用）；
@@ -352,28 +523,38 @@ class TranslationRepository @Inject constructor(
         return ""
     }
 
-    /** 设置里存的是目录 id 或裸模型名（如默认 glm-4-flash），两种都做匹配 */
-    private fun selectedEntry(): ModelEntry? {
-        val selected = settingsRepository.llmModel.value.trim()
-        if (selected.isEmpty()) return null
-        val models = modelCatalogRepository.models.value
-        return models.firstOrNull { it.id == selected }
-            ?: models.firstOrNull { it.model == selected }
-    }
+    /**
+     * 设置里存的是目录 id 或裸模型名（如默认 glm-4-flash），两种都做匹配。
+     * 目录权威高于历史选中：指向已下架/被撤 key 条目的旧值视为未选择，
+     * 回落到场景默认（见 [ModelCatalog.resolveStoredSelection]）。
+     */
+    private fun selectedEntry(): ModelEntry? =
+        ModelCatalog.resolveStoredSelection(
+            settingsRepository.llmModel.value,
+            modelCatalogRepository.models.value,
+        )
 
-    /** 小说专用模型同规则匹配；空串表示未单独选（走默认小说模型，不跟随文本） */
-    private fun selectedNovelEntry(): ModelEntry? {
-        val selected = settingsRepository.llmNovelModel.value.trim()
-        if (selected.isEmpty()) return null
-        val models = modelCatalogRepository.models.value
-        return models.firstOrNull { it.id == selected }
-            ?: models.firstOrNull { it.model == selected }
-    }
+    /** 小说专用模型同规则匹配；空串或失效值表示未选择（走目录小说默认，不跟随文本） */
+    private fun selectedNovelEntry(): ModelEntry? =
+        ModelCatalog.resolveStoredSelection(
+            settingsRepository.llmNovelModel.value,
+            modelCatalogRepository.models.value,
+        )
 
     companion object {
 
         /** 自动/顶栏路径允许翻译的正文长度上限；更长的正文只在阅读器内显式触发 */
         const val AUTO_NOVEL_MAX_CHARS = 200
+
+        /** 标签对照表最多注入的条数（防超长标签列表撑爆提示词） */
+        private const val GLOSSARY_MAX_ENTRIES = 15
+
+        /**
+         * 译文缓存容量上限（行数）。每行约几十字节到 1KB 不等，
+         * 2 万行 ≈ 几十 MB 以内，重度用户（数千作品）也够用；
+         * 超出后按写入时间 FIFO 淘汰最旧行。
+         */
+        private const val CACHE_MAX_ROWS = 20_000
 
         /** 故障转移前的全抖动延迟范围：把同时失败的重试在时间维度打散 */
         private const val FAILOVER_JITTER_MIN_MS = 800L
@@ -425,34 +606,46 @@ class TranslationRepository @Inject constructor(
             else -> "Simplified Chinese"
         }
 
+        /**
+         * 标签译名对照表（同人场景的术语锚定）：
+         * 作品 tags 原文 × 已有译文按位配对——原作角色/CP 名的圈子惯例译法
+         * 由文本通道产出，直接复用，零额外请求。无标签或未翻完时返回 null，
+         * 小说分块退化为纯尾部窗口模式。
+         */
+        internal fun tagGlossaryBlock(detail: WorkDetail): String? {
+            val srcTags = detail.tags.map { it.trim() }.filter { it.isNotEmpty() }
+            if (srcTags.isEmpty()) return null
+            val translated = detail.translated?.tags ?: return null
+            val pairs = srcTags.take(GLOSSARY_MAX_ENTRIES).mapIndexedNotNull { i, src ->
+                val dst = translated.getOrNull(i)?.trim()?.takeIf { it.isNotEmpty() && it != src }
+                    ?: return@mapIndexedNotNull null
+                "$src→$dst"
+            }
+            if (pairs.isEmpty()) return null
+            return "【本作标签对照 · 人名等专名严格照此翻译】\n" + pairs.joinToString("\n")
+        }
+
         internal fun hash(text: String): String {
             val digest = MessageDigest.getInstance("SHA-256").digest(text.toByteArray())
             return digest.joinToString("") { "%02x".format(it) }
         }
 
         /**
-         * 行分解：含链接的文本按行拆分（链接行提取为 [Keep]，文字行各自成翻译单元）；
-         * 不含链接或 [splitLines] = false（小说正文，避免切碎散文上下文）时整条一个单元，
-         * 缓存键与历史行为保持一致。
+         * 行分解：整条文本作为单一处理单元——
+         * - 整条是链接（或摘除后不剩文字）→ [Keep] 原样回填，永不送模型；
+         * - 否则 → [Translate]：[stripped] 为摘除链接后的送翻文字，
+         *   [links] 是按出现顺序的原链接片段，译文末尾原样拼回。
+         *
+         * 历史：曾对含链接文本按行拆分（链接行 Keep、文字行各成单元），让纯链接行
+         * 零成本跳过——代价是批量段数随行数膨胀，小模型逐段输出显著变慢。
+         * 现改为整条摘链单单元：段数恒定，速度优先；链接位置从"各行尾"退为"整条末尾"。
          */
-        internal fun decomposeLines(text: String, splitLines: Boolean): List<LinePart> {
+        internal fun decomposeLines(text: String): List<LinePart> {
             if (LlmTranslateEngine.isPureLink(text)) return listOf(LinePart.Keep(text))
-            if (!splitLines || !LlmTranslateEngine.containsLink(text)) {
-                val (stripped, links) = LlmTranslateEngine.extractLinks(text)
-                return listOf(LinePart.Translate(stripped, links, text))
-            }
-            return text.split('\n').map { line ->
-                when {
-                    line.isBlank() -> LinePart.Keep(line)
-                    LlmTranslateEngine.isPureLink(line) -> LinePart.Keep(line)
-                    else -> {
-                        val (stripped, links) = LlmTranslateEngine.extractLinks(line)
-                        // 摘除后不剩文字（极端边角）按原样保留，避免为空行浪费请求
-                        if (stripped.isBlank()) LinePart.Keep(line)
-                        else LinePart.Translate(stripped, links, line)
-                    }
-                }
-            }
+            val (stripped, links) = LlmTranslateEngine.extractLinks(text)
+            // 摘除后不剩文字：整条都是链接/空白，原样保留不为空内容浪费请求
+            if (stripped.isBlank()) return listOf(LinePart.Keep(text))
+            return listOf(LinePart.Translate(stripped, links, text))
         }
     }
 }

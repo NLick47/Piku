@@ -6,8 +6,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+
+/** 目录源条目的新 id（SettingsRepository 与 ViewModel 共用的生成规则） */
+internal fun newCatalogSourceId(): String = UUID.randomUUID().toString()
 
 /**
  * 应用设置存储。
@@ -391,9 +395,13 @@ class SettingsRepository @Inject constructor(
     )
     val llmBaseUrl: StateFlow<String> = _llmBaseUrl.asStateFlow()
 
-    /** 模型 id（对应 ModelCatalog 里的条目，也允许用户自填未收录的模型） */
+    /**
+     * 模型 id（对应目录条目，也允许自填未收录的模型）。
+     * 空串 = 未显式选择，走目录 defaults.roles 解析出的场景默认；
+     * 高亮与实际翻译共用同一套解析，避免"存了个对不上目录的旧默认值导致无高亮"。
+     */
     private val _llmModel = MutableStateFlow(
-        prefs.getString(KEY_LLM_MODEL, null)?.takeIf { it.isNotBlank() } ?: LLM_MODEL_DEFAULT,
+        prefs.getString(KEY_LLM_MODEL, null)?.trim() ?: LLM_MODEL_DEFAULT,
     )
     val llmModel: StateFlow<String> = _llmModel.asStateFlow()
 
@@ -422,6 +430,59 @@ class SettingsRepository @Inject constructor(
     )
     val catalogRemoteUrl: StateFlow<String> = _catalogRemoteUrl.asStateFlow()
 
+    /**
+     * 自定义加密目录的解密密钥（64 位 hex，空串 = 使用编译期内置密钥）。
+     * 与 [catalogRemoteUrl] 配套：第三方列表作者把地址和密钥一起分发，
+     * 使用者在此成对填入；恢复默认地址时一并清空。
+     */
+    private val _catalogEncKey = MutableStateFlow(
+        prefs.getString(KEY_CATALOG_ENC_KEY, null)?.trim()?.lowercase() ?: "",
+    )
+    val catalogEncKey: StateFlow<String> = _catalogEncKey.asStateFlow()
+
+    /**
+     * 已保存的自定义目录源列表（官方默认不入库，UI 固定首行渲染）。
+     * 激活态即上面 [catalogRemoteUrl]/[catalogEncKey] 两键，切换 = 写入这两键。
+     */
+    private val _catalogSources = MutableStateFlow(loadCatalogSources())
+    val catalogSources: StateFlow<List<CatalogSource>> = _catalogSources.asStateFlow()
+
+    /** 首次读取时迁移：旧版单源自定义（非默认地址）自动种为列表第一条 */
+    private fun loadCatalogSources(): List<CatalogSource> {
+        val raw = prefs.getString(KEY_CATALOG_SOURCES, null)?.takeIf { it.isNotBlank() }
+        if (raw != null) return CatalogSourceCodec.decode(raw)
+        val legacyUrl = prefs.getString(KEY_CATALOG_REMOTE_URL, null)?.trim().orEmpty()
+        if (legacyUrl.isEmpty() || legacyUrl == CATALOG_URL_DEFAULT) return emptyList()
+        val seeded = listOf(
+            CatalogSource(
+                id = newCatalogSourceId(),
+                name = CatalogSourceCodec.autoName(legacyUrl),
+                url = legacyUrl,
+                encKey = prefs.getString(KEY_CATALOG_ENC_KEY, null)?.trim()?.lowercase().orEmpty(),
+            ),
+        )
+        prefs.edit().putString(KEY_CATALOG_SOURCES, CatalogSourceCodec.encode(seeded)).apply()
+        return seeded
+    }
+
+    private fun persistCatalogSources(sources: List<CatalogSource>) {
+        prefs.edit().putString(KEY_CATALOG_SOURCES, CatalogSourceCodec.encode(sources)).apply()
+        _catalogSources.value = sources
+    }
+
+    /** 按 id upsert；同 id 已存在则整体替换 */
+    fun saveCatalogSource(source: CatalogSource) {
+        persistCatalogSources(_catalogSources.value.filterNot { it.id == source.id } + source)
+    }
+
+    fun renameCatalogSource(id: String, name: String) {
+        persistCatalogSources(_catalogSources.value.map { if (it.id == id) it.copy(name = name) else it })
+    }
+
+    fun deleteCatalogSource(id: String) {
+        persistCatalogSources(_catalogSources.value.filterNot { it.id == id })
+    }
+
     fun setAiTranslateEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_AI_TRANSLATE_ENABLED, enabled).apply()
         _aiTranslateEnabled.value = enabled
@@ -434,8 +495,9 @@ class SettingsRepository @Inject constructor(
         _llmBaseUrl.value = value
     }
 
+    /** 空串恢复「未显式选择」状态（跟随目录场景默认）；不做非空兜底以免伪造出假选中态 */
     fun setLlmModel(model: String) {
-        val value = model.trim().ifBlank { LLM_MODEL_DEFAULT }
+        val value = model.trim()
         prefs.edit().putString(KEY_LLM_MODEL, value).apply()
         _llmModel.value = value
     }
@@ -458,6 +520,13 @@ class SettingsRepository @Inject constructor(
         val value = url.trim()
         prefs.edit().putString(KEY_CATALOG_REMOTE_URL, value).apply()
         _catalogRemoteUrl.value = value
+    }
+
+    /** 空串表示清除自定义密钥（回退编译期内置密钥）；格式校验由 UI 层负责 */
+    fun setCatalogEncKey(key: String) {
+        val value = key.trim().lowercase()
+        prefs.edit().putString(KEY_CATALOG_ENC_KEY, value).apply()
+        _catalogEncKey.value = value
     }
 
     companion object {
@@ -535,10 +604,15 @@ class SettingsRepository @Inject constructor(
         const val KEY_LLM_NOVEL_BASE_URL = "llm_novel_base_url"
         const val KEY_LLM_NOVEL_MODEL = "llm_novel_model"
         const val KEY_CATALOG_REMOTE_URL = "llm_catalog_remote_url"
+        const val KEY_CATALOG_ENC_KEY = "llm_catalog_enc_key"
+        const val KEY_CATALOG_SOURCES = "llm_catalog_sources"
 
-        /** 默认走智谱 GLM 的 OpenAI 兼容端点，glm-4-flash 为免费模型 */
+        /**
+         * 列表外自定义模型的兜底端点；文本模型 id 默认空串 = 未显式选择，
+         * 实际默认由远程目录 defaults.roles 声明（官方目录 text → Qwen3-8B，novel → DeepSeek）。
+         */
         const val LLM_BASE_URL_DEFAULT = "https://open.bigmodel.cn/api/paas/v4"
-        const val LLM_MODEL_DEFAULT = "Qwen/Qwen3-8B"
+        const val LLM_MODEL_DEFAULT = ""
 
         /**
          * 内置远程模型目录：AES-256-GCM 密文由 piku-models 仓库的 CI 发布到

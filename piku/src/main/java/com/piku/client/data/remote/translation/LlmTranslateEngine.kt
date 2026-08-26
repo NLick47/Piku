@@ -1,6 +1,7 @@
 package com.piku.client.data.remote.translation
 
 import android.util.Log
+import com.piku.client.domain.translation.ChunkContext
 import com.piku.client.domain.translation.TranslationEngine
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -29,25 +30,37 @@ class LlmTranslateEngine(
         val model: String,
         /** 合并后的请求参数（基础 + 目录默认 + 单模型覆盖），由引擎原样拼进请求体 */
         val params: JsonObject = JsonObject(emptyMap()),
-        /** 目录下发的提示词（单条/批量 × 语言）；null 时回退内置 */
+        /** 模型级提示词（models[].prompts，如小模型的精简版）；null 时逐组回退目录默认 */
         val prompts: PromptSet? = null,
+        /** 目录级提示词（defaults.prompts，富规则版），模型级未覆盖的组用它 */
+        val defaultPrompts: PromptSet? = null,
     )
 
     override val engineId: String
         get() = "llm:${config().model}"
 
-    override suspend fun translate(texts: List<String>, targetLang: String): List<String> {
+    override suspend fun translate(
+        texts: List<String>,
+        targetLang: String,
+        context: ChunkContext?,
+    ): List<String> {
         if (texts.isEmpty()) return emptyList()
         // 空白项不发请求，直接占位返回，保证下标与入参严格对齐
         val indexed = texts.withIndex().filter { it.value.isNotBlank() }
         if (indexed.isEmpty()) return texts.map { "" }
 
         val result = MutableList(texts.size) { "" }
-        // 长文本（小说正文）单独一条请求：混进批量会撑爆 prompt 且易错位
-        val (long, short) = indexed.partition { it.value.length > LONG_TEXT_THRESHOLD }
+        // 长文本（小说正文）单独一条请求：混进批量会撑爆 prompt 且易错位。
+        // 带 context 即小说分块模式：所有条目都走单条+novel 路径，
+        // 否则末尾不足阈值的块会被误入批量分支，丢上下文和 novel 提示词
+        val (long, short) = if (context != null) {
+            indexed to emptyList()
+        } else {
+            indexed.partition { it.value.length > LONG_TEXT_THRESHOLD }
+        }
 
         for ((index, text) in long) {
-            result[index] = translateSingle(text, targetLang)
+            result[index] = translateSingle(text, targetLang, context)
         }
         if (short.isNotEmpty()) {
             val batched = translateBatch(short.map { it.value }, targetLang)
@@ -58,14 +71,19 @@ class LlmTranslateEngine(
         return result
     }
 
-    /** 单条翻译：整个回复就是译文 */
-    private suspend fun translateSingle(text: String, targetLang: String): String {
+    /** 单条翻译：整个回复就是译文；[context] 非空时按小说分块模式注入上下文 */
+    private suspend fun translateSingle(
+        text: String,
+        targetLang: String,
+        context: ChunkContext? = null,
+    ): String {
+        val user = context?.let { contextUserPrefix(it) + text } ?: text
         repeat(MAX_ATTEMPTS) { attempt ->
             val output = request(
-                system = systemPrompt(targetLang, false),
-                user = text,
+                system = novelSystemPrompt(targetLang, context),
+                user = user,
             ) ?: return@repeat
-            val cleaned = output.trim()
+            val cleaned = stripEcho(output.trim(), context)
             if (!looksUntranslated(text, cleaned)) return cleaned
             Log.d(TAG, "translateSingle attempt=${attempt + 1} looks untranslated, retrying")
         }
@@ -128,18 +146,42 @@ class LlmTranslateEngine(
     }
 
     /**
-     * 解析系统提示词：优先用目录下发的 prompts（单条/批量 × 语言），
-     * 缺省回退到内置 [TranslationPrompts]，实现提示词远程热更新。
+     * 解析系统提示词，两级远程 + 一级内置：
+     * 1. 模型级 [LlmConfig.prompts]（models[].prompts，小模型在此挂精简版）；
+     * 2. 目录级 [LlmConfig.defaultPrompts]（defaults.prompts，富规则版）；
+     * 3. 内置 [TranslationPrompts] 兜底。
+     * 每类（单条/批量/小说 × 语言）独立逐级回退：模型只覆盖自己想改的组，
+     * 未覆盖的组自然落到目录默认，不会误跳到别的组。
      */
-    private fun systemPrompt(targetLang: String, isBatch: Boolean): String {
-        val set = config().prompts
-        if (set != null) {
-            val map = if (isBatch) set.batch else set.single
-            map[langKey(targetLang)]?.let { return it }
+    private fun systemPrompt(targetLang: String, isBatch: Boolean, isNovel: Boolean = false): String {
+        val key = langKey(targetLang)
+        fun PromptSet.group(): Map<String, String> = when {
+            isNovel -> novel
+            isBatch -> batch
+            else -> single
         }
-        return if (isBatch) TranslationPrompts.batchSystemPrompt(targetLang)
-        else TranslationPrompts.singleSystemPrompt(targetLang)
+        config().prompts?.group()?.get(key)?.let { return it }
+        config().defaultPrompts?.group()?.get(key)?.let { return it }
+        return when {
+            isNovel -> TranslationPrompts.novelSystemPrompt(targetLang)
+            isBatch -> TranslationPrompts.batchSystemPrompt(targetLang)
+            else -> TranslationPrompts.singleSystemPrompt(targetLang)
+        }
     }
+
+    /** 小说分块模式的系统提示词：novel 组 + 可选的标签译名对照表拼尾 */
+    private fun novelSystemPrompt(targetLang: String, context: ChunkContext?): String {
+        val base = systemPrompt(targetLang, isBatch = false, isNovel = true)
+        val glossary = context?.glossaryBlock?.takeIf { it.isNotBlank() } ?: return base
+        return "$base\n\n$glossary"
+    }
+
+    /**
+     * 上下文注入的用户消息前缀。标记串是 app 写死的结构性契约：
+     * 回声剥离按精确字符串匹配，目录提示词可调措辞但不可改这些标记。
+     */
+    private fun contextUserPrefix(context: ChunkContext): String =
+        "⟦上文原句⟧\n${context.originalTail}\n⟦上文译文⟧\n${context.translatedTail}\n⟦待翻正文⟧\n"
 
     private fun langKey(targetLang: String): String = when (targetLang) {
         TARGET_EN -> "en"
@@ -152,6 +194,44 @@ class LlmTranslateEngine(
 
         /** 校验失败后最多再试一次（免费模型偶发抽风） */
         private const val MAX_ATTEMPTS = 2
+
+        /** 回声判定中 ⟦待翻正文⟧ 标记允许出现的最大偏移（相对注入前缀长度的富余量） */
+        private const val ECHO_SLACK = 32
+
+        /**
+         * 确定性回声剥离：小模型可能不听话地把注入的前缀复读出来。
+         * 注入串精确已知，逐级匹配剥掉——污染从"静默损坏"变成"可修复"：
+         * 1. 整块复读（含全部标记）→ 按 ⟦待翻正文⟧ 标记截断；
+         * 2. 只复读原文尾 / 译文尾（标记被丢弃）→ 按已知尾部串剥前缀。
+         * 都不命中则原样返回，绝不误删真实译文。
+         */
+        internal fun stripEcho(output: String, context: ChunkContext?): String {
+            if (context == null) return output
+            var out = output
+            val bodyMarker = "⟦待翻正文⟧"
+            val markerIdx = out.indexOf(bodyMarker)
+            if (markerIdx >= 0 && markerIdx <= contextPrefixLength(context) + ECHO_SLACK) {
+                out = out.substring(markerIdx + bodyMarker.length).trimStart()
+            }
+            if (out.startsWith("⟦上文原句⟧")) {
+                out = out.removePrefix("⟦上文原句⟧").trimStart()
+            }
+            if (out.startsWith(context.originalTail)) {
+                out = out.removePrefix(context.originalTail).trimStart()
+            }
+            if (out.startsWith("⟦上文译文⟧")) {
+                out = out.removePrefix("⟦上文译文⟧").trimStart()
+            }
+            if (out.startsWith(context.translatedTail)) {
+                out = out.removePrefix(context.translatedTail).trimStart()
+            }
+            return out.trim()
+        }
+
+        private fun contextPrefixLength(context: ChunkContext): Int =
+            "⟦上文原句⟧\n".length + context.originalTail.length +
+                "\n⟦上文译文⟧\n".length + context.translatedTail.length +
+                "\n⟦待翻正文⟧\n".length
 
         /** 结构性保留字段：由引擎自己拼，目录 params 不可覆盖（尤其 stream 必须非流式） */
         private val RESERVED_PARAM_KEYS = setOf("model", "messages", "stream", "n")
@@ -174,18 +254,49 @@ class LlmTranslateEngine(
         /**
          * 目标语言预检：确定"文本已是目标语言"才返回 true，调用方据此透传原文，
          * 一分钱额度都不花。判定靠文字系统而非语义，三个目标各有一条规则：
-         * - 英文目标：完全无 CJK 字符（汉字/假名）即视为已英文；
-         * - 日语目标：含假名即是日文（跳过）；无假名（很可能是中文）必须送翻——
-         *   这正是"日本用户读中文作品"场景的正确行为；
-         * - 简中目标：正常日文必含假名，故「无假名且无英文单词」按已中文处理；
+         * - 英文目标：完全无 CJK 字符（汉字/假名）且无其他外语字系即视为已英文；
+         * - 日语目标：含假名且汉字未占压倒性多数（见 [hanDominantOverKana]）即按日文
+         *   跳过；纯中文或中文为主的混排必须送翻——日本用户读不懂夹在里面的中文；
+         * - 简中目标：正常日文必含假名，故「无假名、无英文单词、无其他字系」按已中文处理；
          *   纯汉字串（異世界転生等）中日互读无碍，跳过最省额度。
+         *   中英混排但汉字明显占优的口语（"今天天气不错 nice day"）也按已中文透传：
+         *   为一个点缀性英文词送翻整段纯属浪费，还可能被小模型改坏；
+         *   判定用"汉字数 ≥ 英文单词数×2"，英文为主的句子不会被误透传。
+         * 韩文/西里尔等字系既非英文也非中文汉字，任何目标下都不得透传，否则
+         * 会被误判为"已是目标语言"而静默跳过（如韩文在简中/英文目标下）。
          */
         internal fun isAlreadyInTarget(text: String, targetLang: String): Boolean =
             when (targetLang) {
-                TARGET_EN -> !containsCjk(text)
-                TARGET_JA -> containsKana(text)
-                else -> !containsKana(text) && !LATIN_WORD.containsMatchIn(text)
+                TARGET_EN -> !containsCjk(text) && !containsOtherScript(text)
+                TARGET_JA -> containsKana(text) && !hanDominantOverKana(text)
+                else -> !containsKana(text) && !containsOtherScript(text) &&
+                    (!LATIN_WORD.containsMatchIn(text) || hanDominant(text))
             }
+
+        /** 中文为主的混排判定：汉字存在且数量达到英文单词数的两倍 */
+        private fun hanDominant(text: String): Boolean =
+            hanCount(text) > 0 && hanCount(text) >= LATIN_WORD.findAll(text).count() * 2
+
+        /**
+         * 日语目标下的"中文为主混排"判定：汉字数量超过假名的 3 倍视为中文占优。
+         * 正常日文汉字:假名约 1:1~2:1（転生したらスライムだった件 ≈ 13:12），
+         * 3 倍阈值留足余量不误伤；而"今天天气很好、今日はいい天気"这类中文为主体、
+         * 只掺一句日文的混排会被正确送翻，日本用户不再看到整段未翻中文。
+         */
+        private fun hanDominantOverKana(text: String): Boolean {
+            val kana = kanaCount(text)
+            if (kana == 0) return false // 无假名本就不会透传，保持送翻语义
+            return hanCount(text) > kana * 3
+        }
+
+        private fun hanCount(text: String): Int = text.count { ch ->
+            ch in '\u3400'..'\u9FFF' || ch in '\uF900'..'\uFAFF'
+        }
+
+        /** 假名计数：平/片假名主区段 + 半角片假名（U+FF66-FF9F，老式日文网页偶见） */
+        internal fun kanaCount(text: String): Int = text.count { ch ->
+            ch in '\u3040'..'\u30FF' || ch in '\u31F0'..'\u31FF' || ch in '\uFF66'..'\uFF9F'
+        }
 
         internal fun containsKana(text: String): Boolean = kanaCount(text) > 0
 
@@ -208,10 +319,6 @@ class LlmTranslateEngine(
 
         /** 摘除链接后残留的连续空白（不含换行） */
         private val RUN_OF_SPACES = Regex("""[ \t]{2,}""")
-
-        /** 是否含任何链接（锚标记块或裸 URL） */
-        internal fun containsLink(text: String): Boolean =
-            MARKER_LINK_BLOCK.containsMatchIn(text) || BARE_URL.containsMatchIn(text)
 
         /**
          * 摘除行内混排的链接（锚标记块含显示文本、裸 URL），返回摘除后的文字与
@@ -256,11 +363,27 @@ class LlmTranslateEngine(
             return PURE_LINK.matches(unwrapped)
         }
 
-        private fun containsHan(text: String): Boolean = text.any {
-            it in '\u3400'..'\u9FFF' || it in '\uF900'..'\uFAFF'
-        }
+        private fun containsHan(text: String): Boolean = hanCount(text) > 0
 
         private fun containsCjk(text: String): Boolean = containsKana(text) || containsHan(text)
+
+        /**
+         * 拉丁字母与 CJK 之外的主要字系：希腊/西里尔/希伯来/阿拉伯/天城文/泰文/韩文。
+         * 这些语言不可能是英文，也不是中日通读的汉字——出现即说明文本是相应外语，
+         * 预检必须放行送翻。误放行（多花一次请求）远好于误透传（读者看不懂）。
+         */
+        private fun containsOtherScript(text: String): Boolean = text.any { ch ->
+            ch in '\u0370'..'\u03FF' ||   // Greek
+                ch in '\u0400'..'\u052F' ||   // Cyrillic + Supplement
+                ch in '\u0590'..'\u05FF' ||   // Hebrew
+                ch in '\u0600'..'\u06FF' ||   // Arabic
+                ch in '\u0750'..'\u077F' ||   // Arabic Supplement
+                ch in '\u0900'..'\u097F' ||   // Devanagari
+                ch in '\u0E00'..'\u0E7F' ||   // Thai
+                ch in '\u1100'..'\u11FF' ||   // Hangul Jamo
+                ch in '\u3130'..'\u318F' ||   // Hangul Compatibility Jamo
+                ch in '\uAC00'..'\uD7AF'      // Hangul Syllables
+        }
 
         // ---- 提示词已抽取到 [TranslationPrompts]，与 [[n]] 批量格式/parseBatch 契约强耦合 ----
 
@@ -283,20 +406,21 @@ class LlmTranslateEngine(
         }
 
         /**
-         * 判定"没真翻译"：空、与原文相同、或原文含日文假名而译文仍大量残留假名。
-         * 假名（而非汉字）是可靠信号——中文译文里不应出现平/片假名。
+         * 判定"没真翻译"：空、与原文相同、或译文残留过半源假名。
+         * 方向性保护：假名不减反增说明必然发生了翻译——典型是译入日语，
+         * 正确译文比中文原文的假名多得多，旧逻辑会把它误杀成"没翻译"
+         * 导致混排块整段回退原文。
          */
         internal fun looksUntranslated(source: String, output: String): Boolean {
             if (output.isBlank()) return true
             if (output.trim() == source.trim()) return true
             val sourceKana = kanaCount(source)
             if (sourceKana == 0) return false
+            val outputKana = kanaCount(output)
+            // 假名不减反增：必然发生了翻译（如中文为主混排 → 日语全文）
+            if (outputKana >= sourceKana) return false
             // 残留假名超过原文的一半，说明基本没译（允许少量保留的拟声词/专名）
-            return kanaCount(output) * 2 > sourceKana
-        }
-
-        private fun kanaCount(text: String): Int = text.count { ch ->
-            ch in '\u3040'..'\u309F' || ch in '\u30A0'..'\u30FF'
+            return outputKana * 2 > sourceKana
         }
     }
 }

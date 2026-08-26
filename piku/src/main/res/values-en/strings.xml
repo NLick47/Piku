@@ -242,8 +242,7 @@
 
     <string name="detail_fullscreen_close">Close</string>
 
-    <string name="detail_novel_font_size">Size %1$d</string>
-    <string name="detail_novel_progress">Read %1$d%%</string>
+    <string name="detail_novel_status">Size %1$d · Read %2$d%%</string>
     <string name="detail_novel_theme_dark">Dark reading</string>
     <string name="detail_novel_theme_light">Light reading</string>
     <string name="detail_novel_fullscreen">Fullscreen</string>
@@ -315,15 +314,37 @@
     <string name="ai_translate_state_off">Off</string>
     <string name="ai_translate_enable">Auto translate</string>
     <string name="ai_translate_auto_subtitle">Translate works automatically when opened</string>
-    <string name="ai_translate_model">Free models</string>
-    <string name="ai_translate_novel_model">Novel model</string>
+    <string name="ai_translate_model">Short-text models</string>
+    <string name="ai_translate_novel_model">Novel body model</string>
+    <string name="ai_translate_novel_model_empty">No novel model in this list; novel text stays untranslated</string>
+    <string name="ai_translate_catalog_source">Model list source</string>
+    <string name="ai_translate_catalog_default">Official default</string>
+    <string name="ai_translate_catalog_custom">Custom</string>
+    <string name="ai_translate_catalog_desc">Tap a source to switch. Custom encrypted catalogs also need their decryption key.</string>
+    <string name="ai_translate_catalog_url_label">List URL</string>
+    <string name="ai_translate_catalog_key_label">Decryption key</string>
+    <string name="ai_translate_catalog_saved">Saved sources</string>
+    <string name="ai_translate_catalog_official_caption">Built-in encrypted list, maintained officially</string>
+    <string name="ai_translate_catalog_save_as_new">Save as new source</string>
+    <string name="ai_translate_catalog_manage_title">Manage source</string>
+    <string name="ai_translate_catalog_name_hint">Source name (auto if empty)</string>
+    <string name="ai_translate_catalog_rename">Rename</string>
+    <string name="ai_translate_catalog_delete">Delete</string>
+    <string name="ai_translate_catalog_key_hint">Leave empty for the built-in key</string>
+    <string name="ai_translate_catalog_key_invalid">Must be 64 hex characters</string>
+    <string name="ai_translate_catalog_save">Save and refresh</string>
+    <string name="ai_translate_catalog_reset">Reset to default</string>
+    <string name="ai_translate_catalog_loading">Refreshing…</string>
+    <string name="ai_translate_catalog_success">Loaded %1$d models</string>
+    <string name="ai_translate_catalog_failed">Fetch failed; keeping the current list</string>
     <string name="ai_translate_novel_follow">Same as text</string>
-    <string name="ai_translate_unavailable_badge">may be unavailable</string>
     <string name="detail_show_translation">Show translation</string>
     <string name="detail_show_original">Show original</string>
     <string name="detail_chip_translate">TR</string>
     <string name="detail_chip_original">ORI</string>
     <string name="detail_translating">Translating…</string>
+    <string name="detail_translating_progress">Translating %1$d%%</string>
+    <string name="detail_novel_partial_failed">Some paragraphs failed. Tap to retry (finished parts are cached)</string>
     <string name="detail_translate_failed">Translation failed. Try again later.</string>
     <string name="detail_translate_retry">Retry</string>
 </resources>

@@ -242,8 +242,7 @@
 
     <string name="detail_fullscreen_close">閉じる</string>
 
-    <string name="detail_novel_font_size">文字サイズ %1$d</string>
-    <string name="detail_novel_progress">読了 %1$d%%</string>
+    <string name="detail_novel_status">文字サイズ %1$d · 読了 %2$d%%</string>
     <string name="detail_novel_theme_dark">ダーク読書</string>
     <string name="detail_novel_theme_light">ライト読書</string>
     <string name="detail_novel_fullscreen">全画面</string>
@@ -315,15 +314,37 @@
     <string name="ai_translate_state_off">オフ</string>
     <string name="ai_translate_enable">自動翻訳</string>
     <string name="ai_translate_auto_subtitle">作品を開いたときに自動翻訳します</string>
-    <string name="ai_translate_model">無料モデル</string>
+    <string name="ai_translate_model">短文テキストモデル</string>
     <string name="ai_translate_novel_model">小説本文モデル</string>
+    <string name="ai_translate_novel_model_empty">このリストに小説本文モデルがなく、本文は原文のままになります</string>
+    <string name="ai_translate_catalog_source">モデルリストソース</string>
+    <string name="ai_translate_catalog_default">公式デフォルト</string>
+    <string name="ai_translate_catalog_custom">カスタム</string>
+    <string name="ai_translate_catalog_desc">タップでソースを切り替え。カスタム暗号化カタログは復号鍵も入力してください。</string>
+    <string name="ai_translate_catalog_url_label">リスト URL</string>
+    <string name="ai_translate_catalog_key_label">復号鍵</string>
+    <string name="ai_translate_catalog_saved">保存済みソース</string>
+    <string name="ai_translate_catalog_official_caption">内蔵の暗号化リスト（公式メンテ）</string>
+    <string name="ai_translate_catalog_save_as_new">新規ソースとして保存</string>
+    <string name="ai_translate_catalog_manage_title">ソースを管理</string>
+    <string name="ai_translate_catalog_name_hint">ソース名（空欄で自動生成）</string>
+    <string name="ai_translate_catalog_rename">名前を変更</string>
+    <string name="ai_translate_catalog_delete">削除</string>
+    <string name="ai_translate_catalog_key_hint">空欄で内蔵の鍵を使用</string>
+    <string name="ai_translate_catalog_key_invalid">64桁の16進数で入力してください</string>
+    <string name="ai_translate_catalog_save">保存して更新</string>
+    <string name="ai_translate_catalog_reset">デフォルトに戻す</string>
+    <string name="ai_translate_catalog_loading">更新中…</string>
+    <string name="ai_translate_catalog_success">%1$d 個のモデルを読み込みました</string>
+    <string name="ai_translate_catalog_failed">取得に失敗しました。現在のリストを維持します</string>
     <string name="ai_translate_novel_follow">テキスト翻訳と同じ</string>
-    <string name="ai_translate_unavailable_badge">利用不可の可能性</string>
     <string name="detail_show_translation">翻訳を表示</string>
     <string name="detail_show_original">原文を表示</string>
     <string name="detail_chip_translate">訳</string>
     <string name="detail_chip_original">原</string>
     <string name="detail_translating">翻訳中…</string>
+    <string name="detail_translating_progress">翻訳中 %1$d%%</string>
+    <string name="detail_novel_partial_failed">一部の段落を翻訳できませんでした。タップで再試行（済み部分は再翻訳されません）</string>
     <string name="detail_translate_failed">翻訳に失敗しました。しばらくしてからもう一度お試しください。</string>
     <string name="detail_translate_retry">再試行</string>
 </resources>

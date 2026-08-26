@@ -90,6 +90,36 @@ class LlmTranslateEngineTest {
         assertFalse(LlmTranslateEngine.looksUntranslated("hello world", "你好，世界"))
     }
 
+    @Test
+    fun `translating into japanese adds kana and must not be flagged`() {
+        // 方向性保护：中文为主的混排译入日语，正确译文的假名远多于原文——
+        // 旧逻辑按"残留假名过半"误杀，导致混排块整段回退原文
+        val source = "这个角色实在太可爱了，完全是我的本命。かわいい！"
+        val output = "このキャラは本当に可愛すぎて、完全に私の推しだ。かわいい！"
+        assertFalse(LlmTranslateEngine.looksUntranslated(source, output))
+    }
+
+    @Test
+    fun `echoed mixed source still counts as untranslated`() {
+        // 原样复读（假名数相等）仍判未翻：方向性保护不得放过回声
+        val source = "这个角色太可爱了。かわいい！"
+        assertTrue(LlmTranslateEngine.looksUntranslated(source, source))
+    }
+
+    @Test
+    fun `ja to zh partial kana retention boundary unchanged`() {
+        val source = "これは面白い小説です本当に面白いのだ" // 假名 12 个
+        // 残留 4 个（< 一半）：允许保留的拟声词/专名，算已翻译
+        assertFalse(LlmTranslateEngine.looksUntranslated(source, "这是有趣的小说ゴゴゴ"))
+        // 残留 7 个（> 一半）：基本没译
+        assertTrue(
+            LlmTranslateEngine.looksUntranslated(
+                source,
+                "これは面白い小说、本当に面白いのだよ",
+            ),
+        )
+    }
+
     // ---------------- isAlreadyInTarget（目标语言预检矩阵） ----------------
 
     private val zh = "Simplified Chinese"
@@ -133,6 +163,41 @@ class LlmTranslateEngineTest {
     }
 
     @Test
+    fun `ja target skips kanji heavy japanese titles`() {
+        // 汉字:假名 ≈ 1:1 的正常日文（転生したらスライムだった件 ≈ 13:12）不受 3 倍阈值影响
+        assertTrue(
+            LlmTranslateEngine.isAlreadyInTarget("転生したらスライムだった件", LlmTranslateEngine.TARGET_JA),
+        )
+    }
+
+    @Test
+    fun `ja target sends chinese dominant mixed text`() {
+        // 中文段落里夹一句日语感叹：汉字远超假名 3 倍 → 送翻，
+        // 日本用户不再看到整段未翻的中文主体
+        assertFalse(
+            LlmTranslateEngine.isAlreadyInTarget(
+                "这个角色实在太可爱了，完全是我的本命。かわいい！",
+                LlmTranslateEngine.TARGET_JA,
+            ),
+        )
+    }
+
+    @Test
+    fun `zh target sends halfwidth katakana instead of passing it through`() {
+        // 半角片假名（U+FF66-FF9F）不在旧平/片假名区段内，修复前会被当"已中文"透传
+        assertFalse(LlmTranslateEngine.isAlreadyInTarget("ｶﾞﾝﾊﾞﾚ", zh))
+        assertFalse(LlmTranslateEngine.isAlreadyInTarget("ﾃﾞｰﾀ保存用", zh))
+    }
+
+    @Test
+    fun `zh target sends mixed zh ja sentence containing kana`() {
+        // 中日混排只要出现假名就送翻：中文部分需要翻译，日文部分模型原样保留
+        assertFalse(
+            LlmTranslateEngine.isAlreadyInTarget("今天天气不错、とても良い天気ですね", zh),
+        )
+    }
+
+    @Test
     fun `en target skips plain english without cjk`() {
         assertTrue(
             LlmTranslateEngine.isAlreadyInTarget("Hello world, this is fine.", LlmTranslateEngine.TARGET_EN),
@@ -143,6 +208,40 @@ class LlmTranslateEngineTest {
     fun `en target sends any cjk content`() {
         assertFalse(LlmTranslateEngine.isAlreadyInTarget("雨の日の放課後", LlmTranslateEngine.TARGET_EN))
         assertFalse(LlmTranslateEngine.isAlreadyInTarget("今天天气不错", LlmTranslateEngine.TARGET_EN))
+    }
+
+    @Test
+    fun `zh target sends korean instead of passing it through`() {
+        // 韩文无假名、无拉丁词，修复前会被误判为"已中文"而静默透传
+        assertFalse(LlmTranslateEngine.isAlreadyInTarget("안녕하세요 오늘도 좋은 하루", zh))
+        assertFalse(LlmTranslateEngine.isAlreadyInTarget("한국어 태그", zh))
+    }
+
+    @Test
+    fun `zh target sends cyrillic arabic and greek text`() {
+        assertFalse(LlmTranslateEngine.isAlreadyInTarget("Привет мир", zh))
+        assertFalse(LlmTranslateEngine.isAlreadyInTarget("مرحبا بالعالم", zh))
+        assertFalse(LlmTranslateEngine.isAlreadyInTarget("Καλημέρα κόσμε", zh))
+    }
+
+    @Test
+    fun `en target sends non latin foreign scripts`() {
+        assertFalse(LlmTranslateEngine.isAlreadyInTarget("안녕하세요", LlmTranslateEngine.TARGET_EN))
+        assertFalse(LlmTranslateEngine.isAlreadyInTarget("Привет мир", LlmTranslateEngine.TARGET_EN))
+        assertFalse(LlmTranslateEngine.isAlreadyInTarget("สวัสดีครับ", LlmTranslateEngine.TARGET_EN))
+    }
+
+    @Test
+    fun `ja target still sends korean and russian`() {
+        // 无假名的外语在日语目标下本来就放行，回归确认不受本次改动影响
+        assertFalse(LlmTranslateEngine.isAlreadyInTarget("안녕하세요", LlmTranslateEngine.TARGET_JA))
+        assertFalse(LlmTranslateEngine.isAlreadyInTarget("Привет мир", LlmTranslateEngine.TARGET_JA))
+    }
+
+    @Test
+    fun `mixed chinese with latin word still passes through in zh target`() {
+        // 中英混排、不含外语字系的文本行为不变
+        assertTrue(LlmTranslateEngine.isAlreadyInTarget("今天天气不错 nice day", zh))
     }
 
     // ---------------- isPureLink（纯链接预检） ----------------

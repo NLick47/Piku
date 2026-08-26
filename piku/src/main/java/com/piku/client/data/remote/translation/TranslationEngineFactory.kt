@@ -39,7 +39,7 @@ class TranslationEngineFactory @Inject constructor(
             defaults?.params?.forEach { (k, v) -> put(k, v) }
             catalogEntry?.params?.forEach { (k, v) -> put(k, v) }
         }
-        val prompts = catalogEntry?.prompts ?: defaults?.prompts
+        val prompts = catalogEntry?.prompts
         return LlmTranslateEngine(api) {
             LlmTranslateEngine.LlmConfig(
                 baseUrl = catalogEntry?.baseUrl ?: settingsRepository.llmBaseUrl.value,
@@ -47,6 +47,7 @@ class TranslationEngineFactory @Inject constructor(
                 model = catalogEntry?.model ?: settingsRepository.llmModel.value,
                 params = params,
                 prompts = prompts,
+                defaultPrompts = defaults?.prompts,
             )
         }
     }

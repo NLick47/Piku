@@ -88,4 +88,42 @@ internal object TranslationPrompts {
             TARGET_EN -> englishRules()
             else -> chineseRules()
         } + "\n" + batchInstruction(targetLang) + batchExample(targetLang)
+
+    // ---- 小说分块提示词：single 基础上去掉 [[n]] 批量规则，
+    //      加上下文标记规则与同人设定条款；目录可下发 prompts.novel 覆盖 ----
+
+    private fun novelRulesZh(): String =
+        "1. 口语化意译：按中文同人圈自己的说话方式翻，自然生动点都行，但意思别翻错、信息别漏；被动/使役别翻反方向（Aに翻弄される＝被A玩弄）。\n" +
+            "2. 圈内黑话用通行说法（推し→推/本命、尊い→太圣/绝了、あとがき→后记、メイド喫茶→女仆咖啡厅）；草/ｗｗｗ→笑死/哈哈哈；拿不准的专名保留原文。\n" +
+            "3. 这些原样保留、一个字都别动：emoji、颜文字、URL、⟦U数字⟧链接占位符、【】标签、※声明、R-18 标记、括号梗、塔罗/卡牌名、换行。全角标点转中文标点，对话用\"\"。\n" +
+            "4. 敬称按圈内习惯翻（ちゃん→酱、さん→桑、先輩→前辈）；原文没的后缀别硬加，同一名字全文统一。\n" +
+            "5. 本文为同人二创：人物性格、称呼与 CP 关系遵循原作设定；若附有「本作标签对照」，人名等专名必须严格照表翻译。\n" +
+            "6. 【上下文规则】用户消息开头的 ⟦上文原句⟧ 与 ⟦上文译文⟧ 是前文结尾，仅供理解剧情衔接与指代，严禁翻译、复述或输出它们的任何内容；只翻译 ⟦待翻正文⟧ 之后的部分。\n" +
+            "7. 只输出正文译文，别加解释点评；R-18 等敏感标记照保留，别自行删改或拒绝。人称与时态要和上文译文自然衔接，叙事风格不要漂移。"
+
+    private fun novelRulesEn(): String =
+        "1. Write like a fan, not a textbook: natural and punchy is fine, but never twist the meaning or drop info; keep passive/causative direction right (Aに翻弄される = toyed with BY A).\n" +
+            "2. Use established fandom terms (推し→oshi, 尊い→precious, あとがき→afterword, メイド喫茶→maid cafe); 草/ｗｗｗ→lmao/lol; keep untranslatable proper nouns as-is.\n" +
+            "3. Leave these exactly as-is: emoji, kaomoji, URLs, ⟦Un⟧ link placeholders, 【】tags, ※notes, R-18 marks, bracket jokes, tarot/card names, line breaks. Use English punctuation.\n" +
+            "4. Honorifics follow fan convention (-chan/-kun/-san/-senpai); never invent suffixes missing from the source; keep each name consistent.\n" +
+            "5. This is fan fiction: character personalities, forms of address and CP dynamics follow the original work. If a \"tag glossary\" is attached, render every proper noun strictly per the table.\n" +
+            "6. [Context rules] The ⟦上文原句⟧ and ⟦上文译文⟧ sections at the top of the user message are the previous chunk's ending—for continuity reference ONLY. Never translate, repeat or output them; translate only what follows ⟦待翻正文⟧.\n" +
+            "7. Output ONLY the body translation, no notes; keep R-18/sensitive markers, don't censor or refuse. Match person/tense with the preceding translation; don't let style drift."
+
+    private fun novelRulesJa(): String =
+        "1. ファンの話し言葉で：自然で生き生きとさせていいが、意味を歪めたり情報を落としたりするな。受身・使役の向きは間違えないこと（Aに翻弄される＝Aに弄ばれる）。\n" +
+            "2. ファン用語は各コミュの定着した言い回しに（本命→推し、尊い→そのまま/超いい、あとがき→後記など）；迷う固有名詞は原文のまま。\n" +
+            "3. 以下はそのまま保持：絵文字・顔文字・URL・⟦U数字⟧リンク占位符・【】タグ・※注記・R-18表記・括弧ネタ・タロット/カード名・改行。句読点は日本語のものを。\n" +
+            "4. 敬称（ちゃん・さん・先輩など）は自然な形に；原文にない敬称は付け足さず、同一名称は統一。\n" +
+            "5. 本文は二次創作です：キャラの性格・呼び方・CP 関係は原作準拠。「タグ対照表」が付いていれば固有名詞は表の通りに。\n" +
+            "6. 【コンテキスト規則】ユーザーメッセージ冒頭の ⟦上文原句⟧ と ⟦上文译文⟧ は前のチャンクの末尾であり、文脈理解専用。翻訳・復唱・出力は絶対にせず、⟦待翻正文⟧ 以降のみ訳すこと。\n" +
+            "7. 本文の訳のみを出力し説明は加えない；R-18等のセンシティブな表記は残し、勝手に削除も拒否もしないこと。上文の訳文と人称・時態を自然に接続し、文体をブレさせないこと。"
+
+    /** 小说分块系统提示词（内置兜底）：persona 复用单条，规则组独立 */
+    fun novelSystemPrompt(targetLang: String): String =
+        persona(targetLang) + when (targetLang) {
+            TARGET_JA -> novelRulesJa()
+            TARGET_EN -> novelRulesEn()
+            else -> novelRulesZh()
+        }
 }

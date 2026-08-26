@@ -136,6 +136,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.piku.client.data.remote.translation.ModelEntry
+import com.piku.client.data.remote.translation.Role
 import coil3.compose.AsyncImage
 import com.piku.client.R
 import com.piku.client.common.LinkSegment
@@ -420,9 +421,21 @@ fun DetailScreen(
             }
             if (state.novelReaderOpen && it.novelText.isNotBlank()) {
                 val novelTranslated = state.showTranslation(TranslateField.NOVEL)
-                val novelBody = it.translated?.novelText
-                    ?.takeIf { text -> novelTranslated && text.isNotBlank() }
-                    ?: it.novelText
+                val translatedNovel = it.translated?.novelText
+                // 边翻边读：流式进行中把未译剩余原文拼接在已译前缀之后；
+                // 首块完成前（remainder 为空）显示纯原文，避免重复拼接
+                val novelBody = if (
+                    novelTranslated &&
+                    state.novelStreamProgress != null &&
+                    translatedNovel != null &&
+                    !state.novelRemainder.isNullOrEmpty()
+                ) {
+                    "$translatedNovel\n\n${state.novelRemainder}"
+                } else {
+                    translatedNovel
+                        ?.takeIf { text -> novelTranslated && text.isNotBlank() }
+                        ?: it.novelText
+                }
                 FullNovelViewer(
                     text = novelBody,
                     title = it.translated?.title
@@ -442,8 +455,8 @@ fun DetailScreen(
                     // 只有本轮真的在拉正文才显示加载态，元数据拉取不误标
                     translating = state.fetchingNovelText,
                     busy = state.translating,
+                    novelStreamProgress = state.novelStreamProgress,
                     onToggleTranslation = viewModel::onReaderTranslateToggle,
-                    onOpenModelPicker = viewModel::openModelPicker,
                 )
             }
         }
@@ -557,9 +570,9 @@ private fun ModelPickerRow(
 ) {
     val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
     val faint = if (dark) LoginTextFaintDark else LoginTextFaintLight
-    val kindLabel = when (entry.kind) {
-        "novel" -> stringResource(R.string.detail_model_kind_novel)
-        "image" -> stringResource(R.string.detail_model_kind_image)
+    val kindLabel = when {
+        Role.NOVEL in entry.roles -> stringResource(R.string.detail_model_kind_novel)
+        Role.IMAGE in entry.roles -> stringResource(R.string.detail_model_kind_image)
         else -> stringResource(R.string.detail_model_kind_text)
     }
     Row(

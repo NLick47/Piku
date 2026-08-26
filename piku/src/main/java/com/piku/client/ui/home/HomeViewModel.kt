@@ -3,10 +3,15 @@ package com.piku.client.ui.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.piku.client.R
+import com.piku.client.data.local.CatalogSource
+import com.piku.client.data.local.CatalogSourceCodec
 import com.piku.client.data.local.SettingsRepository
+import com.piku.client.data.local.newCatalogSourceId
 import com.piku.client.data.remote.GitHubRelease
 import com.piku.client.data.remote.translation.ModelCatalogRepository
 import com.piku.client.data.remote.translation.ModelEntry
+import com.piku.client.data.remote.translation.RoleDefaultIds
+import com.piku.client.data.remote.translation.TranslationRepository
 import com.piku.client.data.repository.AuthRepository
 import com.piku.client.data.repository.ThumbnailResolver
 import com.piku.client.domain.model.AppError
@@ -61,6 +66,14 @@ sealed interface UpdateCheckState {
     data object Latest : UpdateCheckState
     data class Available(val release: GitHubRelease) : UpdateCheckState
     data object Failed : UpdateCheckState
+}
+
+/** 远程模型列表刷新状态：列表来源弹层的结果区据此渲染 */
+sealed interface CatalogRefreshState {
+    data object Idle : CatalogRefreshState
+    data object Loading : CatalogRefreshState
+    data class Success(val modelCount: Int) : CatalogRefreshState
+    data object Failed : CatalogRefreshState
 }
 
 /** 同时驻留的 FeedLoader 上限：每个 loader 兼作该 feed 的内存缓存 */
@@ -124,7 +137,21 @@ data class HomeUiState(
     val llmNovelModel: String = "",
     /** 可选模型列表（内置默认 + 远程覆盖） */
     val translateModels: List<ModelEntry> = emptyList(),
-)
+    /** 各场景当前生效的默认模型 id，选择器据此高亮"未手动选择的默认项" */
+    val roleDefaultIds: RoleDefaultIds = RoleDefaultIds(),
+    /** 远程模型目录地址（官方默认或用户自定义，见 SettingsRepository.CATALOG_URL_DEFAULT） */
+    val catalogUrl: String = SettingsRepository.CATALOG_URL_DEFAULT,
+    /** 自定义加密目录的解密密钥（空串 = 用编译期内置密钥，官方列表即此） */
+    val catalogEncKey: String = "",
+    /** 已保存的自定义目录源（官方默认不入库，UI 固定首行渲染） */
+    val catalogSources: List<CatalogSource> = emptyList(),
+    /** 列表来源弹层的刷新结果状态 */
+    val catalogRefreshState: CatalogRefreshState = CatalogRefreshState.Idle,
+) {
+    /** 当前是否为自定义目录地址：入口行副文案与二级弹层据此区分展示 */
+    val catalogIsCustom: Boolean
+        get() = catalogUrl != SettingsRepository.CATALOG_URL_DEFAULT
+}
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
@@ -153,6 +180,7 @@ class HomeViewModel @Inject constructor(
     private val setBackgroundDimUseCase: SetBackgroundDimUseCase,
     private val settingsRepository: SettingsRepository,
     private val modelCatalogRepository: ModelCatalogRepository,
+    private val translationRepository: TranslationRepository,
     private val selectTranslateModelUseCase: SelectTranslateModelUseCase,
     private val selectTranslateNovelModelUseCase: SelectTranslateNovelModelUseCase,
     private val setAiTranslateEnabledUseCase: SetAiTranslateEnabledUseCase,
@@ -324,6 +352,26 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             modelCatalogRepository.models.collect { models ->
                 _uiState.update { it.copy(translateModels = models) }
+            }
+        }
+        viewModelScope.launch {
+            translationRepository.roleDefaultIds.collect { ids ->
+                _uiState.update { it.copy(roleDefaultIds = ids) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.catalogRemoteUrl.collect { url ->
+                _uiState.update { it.copy(catalogUrl = url) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.catalogEncKey.collect { key ->
+                _uiState.update { it.copy(catalogEncKey = key) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.catalogSources.collect { sources ->
+                _uiState.update { it.copy(catalogSources = sources) }
             }
         }
         viewModelScope.launch {
@@ -606,6 +654,73 @@ class HomeViewModel @Inject constructor(
     /** 小说正文模型：传 null 表示跟随文本翻译模型 */
     fun selectTranslateNovelModel(entry: ModelEntry?) {
         selectTranslateNovelModelUseCase(entry)
+    }
+
+    /**
+     * 保存远程目录地址与解密密钥并立即刷新（地址空白 = 恢复官方默认，密钥空白 = 用内置解密）。
+     * 第三方加密目录需成对填入作者分发的地址 + 密钥；明文 JSON 只填地址即可。
+     * 拉取成功后 models StateFlow 整体替换，两个模型选择器自动跟随。
+     */
+    fun saveCatalog(url: String, encKey: String) {
+        val normalizedUrl = url.trim().ifBlank { SettingsRepository.CATALOG_URL_DEFAULT }
+        settingsRepository.setCatalogRemoteUrl(normalizedUrl)
+        settingsRepository.setCatalogEncKey(encKey)
+        refreshCatalog()
+    }
+
+    /** 恢复官方默认列表并立即刷新 */
+    fun resetCatalogUrl() = saveCatalog(SettingsRepository.CATALOG_URL_DEFAULT, "")
+
+    /** 切换到某个已保存的源：写入激活两键并立即刷新 */
+    fun activateCatalogSource(source: CatalogSource) = saveCatalog(source.url, source.encKey)
+
+    /**
+     * 把弹层当前编辑内容（地址+密钥）存为一个新源并立即激活。
+     * 名称留空时从 URL 自动推导；同 id 不存在即追加。
+     */
+    fun saveCatalogAsSource(name: String?, url: String, encKey: String) {
+        val trimmedUrl = url.trim()
+        if (trimmedUrl.isEmpty()) return
+        val source = CatalogSource(
+            id = newCatalogSourceId(),
+            name = name?.trim()?.ifEmpty { null }
+                ?: CatalogSourceCodec.autoName(trimmedUrl),
+            url = trimmedUrl,
+            encKey = encKey.trim(),
+        )
+        settingsRepository.saveCatalogSource(source)
+        activateCatalogSource(source)
+    }
+
+    fun renameCatalogSource(id: String, name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isNotEmpty()) settingsRepository.renameCatalogSource(id, trimmed)
+    }
+
+    /** 删除已存源；若删除的是当前激活的自定义源，回退官方默认避免悬空激活态 */
+    fun deleteCatalogSource(id: String) {
+        val target = _uiState.value.catalogSources.firstOrNull { it.id == id } ?: return
+        settingsRepository.deleteCatalogSource(id)
+        val active = _uiState.value
+        if (target.url == active.catalogUrl && target.encKey == active.catalogEncKey) {
+            resetCatalogUrl()
+        }
+    }
+
+    private fun refreshCatalog() {
+        _uiState.update { it.copy(catalogRefreshState = CatalogRefreshState.Loading) }
+        viewModelScope.launch {
+            val ok = modelCatalogRepository.refresh()
+            _uiState.update {
+                it.copy(
+                    catalogRefreshState = if (ok) {
+                        CatalogRefreshState.Success(modelCatalogRepository.models.value.size)
+                    } else {
+                        CatalogRefreshState.Failed
+                    },
+                )
+            }
+        }
     }
 
     /** 弹层内手动检查更新（含失败重试） */

@@ -9,7 +9,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -27,6 +26,7 @@ import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -107,9 +107,9 @@ fun FullNovelViewer(
     translating: Boolean = false,
     /** 任何翻译请求在途（含元数据）时禁用点击，避免触发被吞 */
     busy: Boolean = false,
+    /** 小说分块流式翻译进度（百分比）；非 null 时 chip 显示"翻译中 N%"且保持可点（点按仅翻面） */
+    novelStreamProgress: Int? = null,
     onToggleTranslation: () -> Unit = {},
-    /** 打开"换模型重翻"弹窗（与详情页共用同一选择器） */
-    onOpenModelPicker: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val currentOnWorkClick by rememberUpdatedState(onWorkClick)
@@ -221,7 +221,7 @@ fun FullNovelViewer(
             }
         }
 
-        // 底部设置栏：字号 A− / 配色切换 / 译/原切换 / 字号 A+
+        // 底部设置栏：原/译切换 | 字号 A− · 状态 · A+（居中成组） | 配色切换
         if (controlsVisible) {
             Row(
                 modifier = Modifier
@@ -229,38 +229,53 @@ fun FullNovelViewer(
                     .fillMaxWidth()
                     .navigationBarsPadding()
                     .background(controlBg)
-                    .padding(horizontal = 20.dp, vertical = 10.dp),
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                ReaderTranslateChip(
+                    translationAvailable = translationAvailable,
+                    translating = translating,
+                    busy = busy,
+                    showTranslation = showTranslation,
+                    streamProgress = novelStreamProgress,
+                    fg = fg,
+                    accent = linkColor,
+                    onClick = onToggleTranslation,
+                )
+                Box(Modifier.weight(1f))
                 ReaderFontButton(
                     label = "A−",
                     enabled = fontSize > NOVEL_FONT_MIN,
                     onClick = { onFontSizeChange(fontSize - 1f) },
                     fg = fg,
                 )
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .align(Alignment.CenterVertically),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Text(
-                        text = stringResource(
-                            R.string.detail_novel_font_size,
+                Text(
+                    // 流式期间中间信息位临时切换为翻译进度（宽度与原状态相当，不挤压布局）；
+                    // 钳到 99 避免"翻译中 100%"闪现，终态由 Completed 事件收尾
+                    text = if (novelStreamProgress != null) {
+                        stringResource(
+                            R.string.detail_translating_progress,
+                            minOf(novelStreamProgress, 99),
+                        )
+                    } else {
+                        stringResource(
+                            R.string.detail_novel_status,
                             fontSize.toInt(),
-                        ),
-                        color = fg,
-                        fontSize = 12.sp,
-                    )
-                    Text(
-                        text = stringResource(
-                            R.string.detail_novel_progress,
                             progressPercent(scrollState),
-                        ),
-                        color = fg.copy(alpha = 0.7f),
-                        fontSize = 11.sp,
-                    )
-                }
+                        )
+                    },
+                    color = fg.copy(alpha = 0.8f),
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    modifier = Modifier.padding(horizontal = 2.dp),
+                )
+                ReaderFontButton(
+                    label = "A+",
+                    enabled = fontSize < NOVEL_FONT_MAX,
+                    onClick = { onFontSizeChange(fontSize + 1f) },
+                    fg = fg,
+                )
+                Box(Modifier.weight(1f))
                 IconButton(onClick = { onLightChange(!light) }) {
                     Icon(
                         imageVector = if (light) Icons.Filled.DarkMode else Icons.Filled.LightMode,
@@ -272,27 +287,6 @@ fun FullNovelViewer(
                         modifier = Modifier.size(20.dp),
                     )
                 }
-                ReaderTranslateChip(
-                    translationAvailable = translationAvailable,
-                    translating = translating,
-                    busy = busy,
-                    showTranslation = showTranslation,
-                    fg = fg,
-                    accent = linkColor,
-                    onClick = onToggleTranslation,
-                )
-                ReaderFontButton(
-                    label = stringResource(R.string.detail_retry_with_model_short),
-                    enabled = !busy,
-                    onClick = onOpenModelPicker,
-                    fg = fg,
-                )
-                ReaderFontButton(
-                    label = "A+",
-                    enabled = fontSize < NOVEL_FONT_MAX,
-                    onClick = { onFontSizeChange(fontSize + 1f) },
-                    fg = fg,
-                )
             }
         }
     }
@@ -319,31 +313,34 @@ private fun ReaderFontButton(
         fontSize = 16.sp,
         modifier = Modifier
             .clip(RoundedCornerShape(8.dp))
+            .minimumInteractiveComponentSize()
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 6.dp),
     )
 }
 
-/** 底部栏译/原切换chip：无正文不渲染；翻译中禁点防连点重复扣额度 */
+/** 底部栏译/原切换chip：无正文不渲染；非流式的在途翻译禁点防重复扣额度；
+ *  流式期间保持"原/译"短标签（进度在中间信息位展示），点按仅切换原/译展示 */
 @Composable
 private fun ReaderTranslateChip(
     translationAvailable: Boolean,
     translating: Boolean,
     busy: Boolean,
     showTranslation: Boolean,
+    streamProgress: Int? = null,
     fg: Color,
     accent: Color,
     onClick: () -> Unit,
 ) {
     if (!translationAvailable) return
     Text(
-        text = stringResource(
-            when {
-                translating && !showTranslation -> R.string.detail_translating
-                showTranslation -> R.string.detail_chip_original
-                else -> R.string.detail_chip_translate
-            },
-        ),
+        // 流式期间进度显示在中间信息位，这里保持"原/译"短标签只表模式与点击去向，
+        // 避免长文案挤压底栏布局
+        text = when {
+            translating && !showTranslation -> stringResource(R.string.detail_translating)
+            showTranslation -> stringResource(R.string.detail_chip_original)
+            else -> stringResource(R.string.detail_chip_translate)
+        },
         color = if (showTranslation) accent else fg.copy(alpha = 0.7f),
         fontSize = 14.sp,
         modifier = Modifier
@@ -353,7 +350,8 @@ private fun ReaderTranslateChip(
                 if (showTranslation) accent.copy(alpha = 0.15f)
                 else Color.Transparent,
             )
-            .clickable(enabled = !busy, onClick = onClick)
+            // 流式期间切换显示永远可用（无副作用）；仅非流式的在途翻译才禁点防重复扣额度
+            .clickable(enabled = !busy || streamProgress != null, onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 5.dp),
     )
 }

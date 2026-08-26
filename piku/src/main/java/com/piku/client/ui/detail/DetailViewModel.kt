@@ -14,12 +14,14 @@ import com.piku.client.data.repository.FollowResult
 import com.piku.client.data.repository.ReactionResult
 import com.piku.client.data.repository.ThumbnailResolver
 import com.piku.client.data.local.SettingsRepository
+import com.piku.client.data.remote.translation.NovelStreamEvent
 import com.piku.client.data.remote.translation.TranslationRepository
 import com.piku.client.data.remote.translation.ModelCatalogRepository
 import com.piku.client.data.remote.translation.ModelEntry
 import com.piku.client.domain.model.AppError
 import com.piku.client.domain.model.AuthStatus
 import com.piku.client.domain.model.FavoriteFolder
+import com.piku.client.domain.model.TranslatedFields
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkDetail
 import com.piku.client.domain.model.mergeTranslatedFields
@@ -35,6 +37,8 @@ import com.piku.client.domain.usecase.RemoveCustomTagUseCase
 import com.piku.client.R
 import com.piku.client.ui.common.toFeedErrorRes
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -93,6 +97,14 @@ data class DetailUiState(
     val showModelPicker: Boolean = false,
     /** 当前这轮拉取包含长篇正文（阅读器入口触发）；用于精确驱动阅读器的加载态 */
     val fetchingNovelText: Boolean = false,
+    /**
+     * 小说分块流式翻译进度（百分比 0~100）；null = 空闲。
+     * 流式期间 [translating]/[fetchingNovelText] 保持 false——旧语义不被污染，
+     * 阅读器 chip 据此显示"翻译中 N%"且保持可点（点按仅切换原/译展示）。
+     */
+    val novelStreamProgress: Int? = null,
+    /** 流式期间尚未翻译的剩余原文；译文模式下阅读器把它拼接在已译前缀之后 */
+    val novelRemainder: String? = null,
     /**
      * 顶栏全局开关（方案 B）：true = 整页显示译文。
      * 默认 false（显示原文）；自动翻译首次拿到译文时自动置为 true
@@ -182,6 +194,9 @@ class DetailViewModel @Inject constructor(
     private var lastManualTranslateIncludeNovel = false
     /** 上次"换模型重翻"所选模型，供失败重试复用 */
     private var lastForcedEntry: ModelEntry? = null
+
+    /** 小说分块流式翻译的唯一持有 job；新流启动前必杀旧流，VM 销毁自动取消 */
+    private var novelStreamJob: Job? = null
 
     private val _uiState = MutableStateFlow(
         DetailUiState(
@@ -335,18 +350,98 @@ class DetailViewModel @Inject constructor(
 
     /**
      * 阅读器内"原/译"切换（长正文的唯一翻译入口）：
-     * - 正文尚无译文 → 此刻才发起拉取（显式意图才花额度），并预切到译文展示态；
+     * - 流式翻译进行中 → 仅切换显示，后台继续翻（发射后不管，已完成块已入缓存）；
+     * - 正文尚无译文且未在翻 → 此刻才发起分块流式拉取（显式意图才花额度），并预切到译文展示态；
      * - 已有（或原文本身为空）→ 仅切换显示。
      */
     fun onReaderTranslateToggle() {
         val detail = _uiState.value.detail ?: return
+        if (_uiState.value.novelStreamProgress != null) {
+            toggleField(TranslateField.NOVEL)
+            return
+        }
         val novelDone = detail.translated?.novelText != null || detail.novelText.isNullOrBlank()
         if (novelDone) {
             toggleField(TranslateField.NOVEL)
             return
         }
-        translate(includeLongNovel = true, requireAutoEnabled = false)
+        startNovelStream(forcedEntry = null)
         _uiState.update { it.copy(showTranslationAll = true, fieldOverrides = emptySet()) }
+    }
+
+    /**
+     * 启动小说分块流式翻译：逐事件把累计译文写入 [DetailUiState.detail] 的 novelText，
+     * 阅读器按 "已译前缀 + 剩余原文" 拼接实现边翻边读。失败块由仓库层回退原文继续流，
+     * 全部结束后若有失败段给 snackbar——重试重启流，缓存命中让成功块秒过。
+     */
+    private fun startNovelStream(forcedEntry: ModelEntry?) {
+        val detail = _uiState.value.detail ?: return
+        if (detail.novelText.isBlank()) return
+        if (!translationRepository.hasKey()) return
+        cancelNovelStream()
+        lastManualTranslateIncludeNovel = true
+        lastForcedEntry = forcedEntry
+        novelStreamJob = viewModelScope.launch {
+            _uiState.update { it.copy(novelStreamProgress = 0) }
+            try {
+                translationRepository.translateNovelStreaming(
+                    detail,
+                    observeLanguageUseCase().value,
+                    forcedEntry,
+                ).collect { event ->
+                    when (event) {
+                        is NovelStreamEvent.Progress -> _uiState.update { state ->
+                            val current = state.detail ?: return@update state
+                            state.copy(
+                                detail = current.copy(
+                                    translated = withProgressiveNovel(current.translated, event.translatedSoFar),
+                                ),
+                                // 首块完成前 translated 仍为空，阅读器显示纯原文；末块剩余为空串，
+                                // 由 Screen 的 isNullOrEmpty 判空避免拼接出尾部分隔
+                                novelRemainder = event.remainingOriginal,
+                                novelStreamProgress =
+                                if (event.totalChunks > 0) event.doneChunks * 100 / event.totalChunks else null,
+                            )
+                        }
+
+                        is NovelStreamEvent.Completed -> _uiState.update { state ->
+                            val current = state.detail ?: return@update state
+                            state.copy(
+                                detail = current.copy(
+                                    translated = withProgressiveNovel(current.translated, event.translatedSoFar),
+                                ),
+                                novelStreamProgress = null,
+                                novelRemainder = null,
+                                translateFeedbackRes =
+                                if (event.failedCount > 0) R.string.detail_novel_partial_failed
+                                else state.translateFeedbackRes,
+                            )
+                        }
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.d("PikuDiag", "novel stream fail work=$workId: ${e.message}")
+                _uiState.update { it.copy(novelStreamProgress = null, novelRemainder = null) }
+            } finally {
+                if (novelStreamJob?.isCancelled != false) novelStreamJob = null
+            }
+        }
+    }
+
+    /** 渐进写入：把流式累计译文合入 translated（无则构造最小字段集，保证 chip 出现） */
+    private fun withProgressiveNovel(old: TranslatedFields?, novelText: String): TranslatedFields? {
+        if (novelText.isBlank()) return old
+        val base = old ?: TranslatedFields()
+        return if (base.novelText == novelText) base else base.copy(novelText = novelText)
+    }
+
+    /** 杀掉进行中的小说流并清理进度状态 */
+    private fun cancelNovelStream() {
+        novelStreamJob?.cancel()
+        novelStreamJob = null
+        _uiState.update { it.copy(novelStreamProgress = null, novelRemainder = null) }
     }
 
     /** 一次翻译请求的参数快照：in-flight 期间收到的新请求记为待补跑 */
@@ -450,11 +545,27 @@ class DetailViewModel @Inject constructor(
     /**
      * 换模型重翻：一次性用指定模型重翻当前作品（含小说正文如有），不写入默认设置。
      * 失败照常给 snackbar 可重试；重试会复用所选模型。
+     * 长正文走分块流式；短字段（标题/简介/标签）仍走整批通道——两条管线并行，
+     * 各写各的字段，与原"短字段+正文都用 forced 模型"的语义保持一致。
      */
     fun reTranslateWith(entry: ModelEntry) {
         val hasNovel = _uiState.value.detail?.novelText?.isNotBlank() == true
+        if (hasNovel) {
+            startNovelStream(forcedEntry = entry)
+            translate(
+                includeLongNovel = false,
+                requireAutoEnabled = false,
+                showAfter = true,
+                forcedEntry = entry,
+                forceShow = true,
+            )
+            _uiState.update {
+                it.copy(showModelPicker = false, showTranslationAll = true, fieldOverrides = emptySet())
+            }
+            return
+        }
         translate(
-            includeLongNovel = hasNovel,
+            includeLongNovel = false,
             requireAutoEnabled = false,
             showAfter = true,
             forcedEntry = entry,
@@ -474,14 +585,18 @@ class DetailViewModel @Inject constructor(
         _uiState.update { it.copy(showModelPicker = false) }
     }
 
-    /** 手动翻译失败的 snackbar 重试：按上次入口原样重发（含一次性重翻模型） */
+    /** 手动翻译失败的 snackbar 重试：按上次入口原样重发（含一次性重翻模型）。
+     *  小说流式的失败重试直接重启流——缓存命中让已成功块秒过，只补失败块；
+     *  不能走 onReaderTranslateToggle：部分失败后 translated.novelText 已非空，
+     *  会被它误判为"已有译文"而只切换显示。 */
     fun retryLastTranslate() {
         val forced = lastForcedEntry
         if (forced != null) {
             reTranslateWith(forced)
             return
         }
-        if (lastManualTranslateIncludeNovel) onReaderTranslateToggle() else onTopBarTranslateClick()
+        if (lastManualTranslateIncludeNovel) startNovelStream(forcedEntry = null)
+        else onTopBarTranslateClick()
     }
 
     fun clearTranslateFeedback() {
