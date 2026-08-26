@@ -4,6 +4,7 @@ import android.content.SharedPreferences
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import android.util.Log
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -52,9 +53,16 @@ class CredentialStore(
 
     fun save(email: String, password: String) {
         if (email.isBlank() || password.isBlank()) return
-        storage.put(KEY_EMAIL, cipher.encrypt(email))
-        storage.put(KEY_PASSWORD, cipher.encrypt(password))
+        val encryptedEmail = encryptOrNull(email) ?: return
+        val encryptedPassword = encryptOrNull(password) ?: return
+        storage.put(KEY_EMAIL, encryptedEmail)
+        storage.put(KEY_PASSWORD, encryptedPassword)
     }
+
+    private fun encryptOrNull(plain: String): String? =
+        runCatching { cipher.encrypt(plain) }
+            .onFailure { Log.w(TAG, "credential encrypt failed: ${it.message}") }
+            .getOrNull()
 
     fun load(): Credentials? {
         val email = storage.get(KEY_EMAIL) ?: return null
@@ -79,6 +87,7 @@ class CredentialStore(
     }
 
     private companion object {
+        const val TAG = "PikuDiag"
         const val KEY_EMAIL = "email_enc"
         const val KEY_PASSWORD = "password_enc"
         const val KEY_UID = "uid"

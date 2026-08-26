@@ -19,6 +19,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -67,6 +69,7 @@ import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.OpenInBrowser
 import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -74,6 +77,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -131,6 +135,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.piku.client.data.remote.translation.ModelEntry
+import com.piku.client.data.remote.translation.Role
 import coil3.compose.AsyncImage
 import com.piku.client.R
 import com.piku.client.common.LinkSegment
@@ -181,6 +187,7 @@ import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DetailScreen(
     onBack: () -> Unit,
@@ -191,6 +198,7 @@ fun DetailScreen(
 ) {
     val viewModel: DetailViewModel = hiltViewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val catalogModels by viewModel.catalogModels.collectAsStateWithLifecycle()
     val dark = LocalDarkTheme.current
     var viewerPage by rememberSaveable { mutableIntStateOf(-1) }
     var reactionSheetVisible by rememberSaveable { mutableStateOf(false) }
@@ -234,6 +242,19 @@ fun DetailScreen(
         if (tagFeedbackMessage != null) {
             snackbarHostState.showSnackbar(tagFeedbackMessage)
             viewModel.clearTagFeedback()
+        }
+    }
+    // 手动翻译失败：snackbar 轻提示 + 一键重试（自动路径不触发，保持静默）
+    val translateFailedMessage = state.translateFeedbackRes?.let { stringResource(it) }
+    val translateRetryLabel = stringResource(R.string.detail_translate_retry)
+    LaunchedEffect(translateFailedMessage) {
+        if (translateFailedMessage != null) {
+            val result = snackbarHostState.showSnackbar(
+                message = translateFailedMessage,
+                actionLabel = translateRetryLabel,
+            )
+            if (result == SnackbarResult.ActionPerformed) viewModel.retryLastTranslate()
+            viewModel.clearTranslateFeedback()
         }
     }
 
@@ -299,6 +320,12 @@ fun DetailScreen(
                 onBack = onBack,
                 onHomeClick = onHomeClick,
                 dark = dark,
+                translationAvailable = state.hasTranslation,
+                showTranslation = state.showTranslationAll,
+                translating = state.translating,
+                canTranslate = state.canTranslate,
+                onTranslateClick = viewModel::onTopBarTranslateClick,
+                onOpenModelPicker = viewModel::openModelPicker,
             )
             when {
                 state.loading && state.detail == null -> {
@@ -327,6 +354,9 @@ fun DetailScreen(
                         customTags = state.customTags.toSet(),
                         onToggleCustomTag = viewModel::toggleCustomTag,
                         onOpenNovelReader = { viewModel.setNovelReaderOpen(true) },
+                        translationAvailable = state.hasTranslation,
+                        showTranslation = { field -> state.showTranslation(field) },
+                        onToggleField = viewModel::toggleField,
                     )
                 }
             }
@@ -390,9 +420,27 @@ fun DetailScreen(
                 }
             }
             if (state.novelReaderOpen && it.novelText.isNotBlank()) {
+                val novelTranslated = state.showTranslation(TranslateField.NOVEL)
+                val translatedNovel = it.translated?.novelText
+                // 边翻边读：流式进行中把未译剩余原文拼接在已译前缀之后；
+                // 首块完成前（remainder 为空）显示纯原文，避免重复拼接
+                val novelBody = if (
+                    novelTranslated &&
+                    state.novelStreamProgress != null &&
+                    translatedNovel != null &&
+                    !state.novelRemainder.isNullOrEmpty()
+                ) {
+                    "$translatedNovel\n\n${state.novelRemainder}"
+                } else {
+                    translatedNovel
+                        ?.takeIf { text -> novelTranslated && text.isNotBlank() }
+                        ?: it.novelText
+                }
                 FullNovelViewer(
-                    text = it.novelText,
-                    title = it.title,
+                    text = novelBody,
+                    title = it.translated?.title
+                        ?.takeIf { t -> novelTranslated && t.isNotBlank() }
+                        ?: it.title,
                     fontSize = state.novelFontSize,
                     light = state.novelReaderLight,
                     initialPercent = state.novelProgressPercent,
@@ -401,7 +449,43 @@ fun DetailScreen(
                     onLightChange = viewModel::setNovelReaderLight,
                     onClose = { viewModel.setNovelReaderOpen(false) },
                     onWorkClick = onRelatedWorkClick,
+                    // 有原文正文就给原/译切换：没翻过时点击会在阅读器内触发拉取（长篇唯一入口）
+                    translationAvailable = !it.novelText.isNullOrBlank(),
+                    showTranslation = novelTranslated,
+                    // 只有本轮真的在拉正文才显示加载态，元数据拉取不误标
+                    translating = state.fetchingNovelText,
+                    busy = state.translating,
+                    novelStreamProgress = state.novelStreamProgress,
+                    onToggleTranslation = viewModel::onReaderTranslateToggle,
                 )
+            }
+        }
+        if (state.showModelPicker) {
+            val models = catalogModels.filter { it.available && !it.apiKey.isNullOrBlank() }
+            ModalBottomSheet(
+                onDismissRequest = viewModel::dismissModelPicker,
+                containerColor = if (dark) HomeBgBottomDark else HomeBgBottomLight,
+            ) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    Text(
+                        stringResource(R.string.detail_retry_with_model_title),
+                        color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
+                    )
+                    LazyColumn(
+                        Modifier.fillMaxWidth().heightIn(max = 360.dp),
+                    ) {
+                        items(models, key = { it.id }) { entry ->
+                            ModelPickerRow(
+                                entry = entry,
+                                dark = dark,
+                                onClick = { viewModel.reTranslateWith(entry) },
+                            )
+                        }
+                    }
+                }
             }
         }
         SnackbarHost(
@@ -474,11 +558,72 @@ fun DetailScreen(
     }
 }
 
+/**
+ * "换模型重翻"弹窗里的单行：模型名 + 提示 + 用途标签。
+ * 点击即用该模型对当前作品一次性重翻（不写入默认设置）。
+ */
+@Composable
+private fun ModelPickerRow(
+    entry: ModelEntry,
+    dark: Boolean,
+    onClick: () -> Unit,
+) {
+    val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
+    val faint = if (dark) LoginTextFaintDark else LoginTextFaintLight
+    val kindLabel = when {
+        Role.NOVEL in entry.roles -> stringResource(R.string.detail_model_kind_novel)
+        Role.IMAGE in entry.roles -> stringResource(R.string.detail_model_kind_image)
+        else -> stringResource(R.string.detail_model_kind_text)
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = entry.label,
+                color = primary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+            )
+            if (entry.hint.isNotBlank()) {
+                Spacer(Modifier.height(2.dp))
+                Text(text = entry.hint, color = faint, fontSize = 11.sp)
+            }
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = kindLabel,
+            color = if (dark) ControlAccentDark else AccentDark,
+            fontSize = 11.sp,
+            modifier = Modifier
+                .border(
+                    BorderStroke(0.5.dp, if (dark) PillBorderDark else PillBorderLight),
+                    RoundedCornerShape(8.dp),
+                )
+                .padding(horizontal = 6.dp, vertical = 2.dp),
+        )
+    }
+}
+
 @Composable
 private fun DetailTopBar(
     onBack: () -> Unit,
     onHomeClick: () -> Unit,
     dark: Boolean,
+    /** 有译文时按钮高亮，点击变为整页原/译切换 */
+    translationAvailable: Boolean = false,
+    showTranslation: Boolean = false,
+    translating: Boolean = false,
+    /** 配置了 key 就常驻显示：未翻译时点击即翻 */
+    canTranslate: Boolean = false,
+    /** 顶栏翻译按钮：切换原文/译文 */
+    onTranslateClick: () -> Unit = {},
+    /** 顶栏翻译按钮：打开"换模型重翻"选择器 */
+    onOpenModelPicker: () -> Unit = {},
 ) {
     Row(
         modifier = Modifier
@@ -512,7 +657,72 @@ private fun DetailTopBar(
                 modifier = Modifier.size(20.dp),
             )
         }
+        if (canTranslate || translationAvailable || translating) {
+            Spacer(Modifier.weight(1f))
+            // 短按 = 原/译切换；长按 = 打开"换模型重翻"选择器（每次都可选，不记默认）。
+            // 用 combinedClickable 让长按与短按各自触发、互不串扰。
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .combinedClickable(
+                        enabled = !translating,
+                        onClick = onTranslateClick,
+                        onLongClick = onOpenModelPicker,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Translate,
+                    contentDescription = stringResource(
+                        when {
+                            translating -> R.string.detail_translating
+                            showTranslation -> R.string.detail_show_original
+                            else -> R.string.detail_show_translation
+                        },
+                    ),
+                    // 译文态高亮，翻译中弱化，原文态用常规色，一眼能看出当前在看哪个
+                    tint = when {
+                        translating -> if (dark) LoginTextFaintDark else LoginTextFaintLight
+                        showTranslation -> if (dark) ControlAccentDark else AccentDark
+                        else -> if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
+                    },
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
     }
+}
+
+/**
+ * 单字段"原/译"切换 chip（方案 C）。
+ * 用独立小按钮而不是长按手势：文本区域的长按已经归属"选中复制"，
+ * 抢占会破坏复制描述这类刚需操作。
+ */
+@Composable
+private fun TranslateChip(
+    showTranslation: Boolean,
+    dark: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val accent = if (dark) ControlAccentDark else AccentDark
+    val faint = if (dark) LoginTextFaintDark else LoginTextFaintLight
+    Text(
+        text = stringResource(
+            if (showTranslation) R.string.detail_chip_original else R.string.detail_chip_translate,
+        ),
+        color = if (showTranslation) accent else faint,
+        fontSize = 10.sp,
+        fontWeight = FontWeight.Medium,
+        modifier = modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(
+                if (showTranslation) accent.copy(alpha = if (dark) 0.20f else 0.12f)
+                else Color.Transparent,
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 7.dp, vertical = 2.dp),
+    )
 }
 
 @Composable
@@ -905,8 +1115,20 @@ private fun DetailContent(
     customTags: Set<String>,
     onToggleCustomTag: (String) -> Unit,
     onOpenNovelReader: () -> Unit,
+    translationAvailable: Boolean = false,
+    showTranslation: (TranslateField) -> Boolean = { false },
+    onToggleField: (TranslateField) -> Unit = {},
 ) {
     var descriptionExpanded by remember { mutableStateOf(false) }
+    val translated = detail.translated
+    // 只有该字段真有译文时才显示 chip，避免出现点了没反应的按钮
+    fun chipVisible(field: TranslateField): Boolean = translationAvailable && when (field) {
+        TranslateField.TITLE -> !translated?.title.isNullOrBlank()
+        TranslateField.DESCRIPTION -> !translated?.description.isNullOrBlank()
+        TranslateField.AUTHOR_PROFILE -> !translated?.authorProfile.isNullOrBlank()
+        TranslateField.TAGS -> !translated?.tags.isNullOrEmpty()
+        TranslateField.NOVEL -> !translated?.novelText.isNullOrBlank()
+    }
     Column(
         Modifier
             .fillMaxSize()
@@ -915,12 +1137,29 @@ private fun DetailContent(
     ) {
         AuthorRow(detail = detail, dark = dark, onAuthorClick = onAuthorClick)
         if (detail.authorProfile.isNotBlank()) {
-            Text(
-                text = linkify(detail.authorProfile, dark, onRelatedWorkClick),
-                color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
-                fontSize = 12.sp,
+            val profileTranslated = showTranslation(TranslateField.AUTHOR_PROFILE)
+            val profileText = translated?.authorProfile
+                ?.takeIf { profileTranslated && it.isNotBlank() }
+                ?: detail.authorProfile
+            Row(
+                verticalAlignment = Alignment.Top,
                 modifier = Modifier.padding(top = 6.dp),
-            )
+            ) {
+                Text(
+                    text = linkify(profileText, dark, onRelatedWorkClick),
+                    color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                    fontSize = 12.sp,
+                    modifier = Modifier.weight(1f),
+                )
+                if (chipVisible(TranslateField.AUTHOR_PROFILE)) {
+                    TranslateChip(
+                        showTranslation = profileTranslated,
+                        dark = dark,
+                        onClick = { onToggleField(TranslateField.AUTHOR_PROFILE) },
+                        modifier = Modifier.padding(start = 6.dp, top = 1.dp),
+                    )
+                }
+            }
         }
         Spacer(Modifier.height(10.dp))
         ImagePager(
@@ -937,26 +1176,46 @@ private fun DetailContent(
         )
         Spacer(Modifier.height(14.dp))
         if (detail.title.isNotBlank()) {
+            val titleTranslated = showTranslation(TranslateField.TITLE)
+            val titleText = translated?.title
+                ?.takeIf { titleTranslated && it.isNotBlank() }
+                ?: detail.title
             val titleSelection = remember { SelectionState() }
-            SelectionContainer(
-                state = titleSelection,
-                modifier = Modifier.pointerInput(titleSelection) {
-                    detectTapGestures(onTap = { titleSelection.clear() })
-                },
-            ) {
-                Text(
-                    text = linkify(detail.title, dark, onRelatedWorkClick),
-                    color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
+            Row(verticalAlignment = Alignment.Top) {
+                SelectionContainer(
+                    state = titleSelection,
+                    modifier = Modifier
+                        .weight(1f)
+                        .pointerInput(titleSelection) {
+                            detectTapGestures(onTap = { titleSelection.clear() })
+                        },
+                ) {
+                    Text(
+                        text = linkify(titleText, dark, onRelatedWorkClick),
+                        color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+                if (chipVisible(TranslateField.TITLE)) {
+                    TranslateChip(
+                        showTranslation = titleTranslated,
+                        dark = dark,
+                        onClick = { onToggleField(TranslateField.TITLE) },
+                        modifier = Modifier.padding(start = 6.dp, top = 2.dp),
+                    )
+                }
             }
         }
         if (detail.description.isNotBlank()) {
             Spacer(Modifier.height(8.dp))
+            val descriptionTranslated = showTranslation(TranslateField.DESCRIPTION)
+            val descriptionText = translated?.description
+                ?.takeIf { descriptionTranslated && it.isNotBlank() }
+                ?: detail.description
             val descriptionSelection = remember { SelectionState() }
             val textMeasurer = rememberTextMeasurer()
-            val linkifiedDescription = linkify(detail.description, dark, onRelatedWorkClick)
+            val linkifiedDescription = linkify(descriptionText, dark, onRelatedWorkClick)
             var containerWidthPx by remember { mutableIntStateOf(0) }
             val descriptionStyle = LocalTextStyle.current.copy(fontSize = 13.sp, lineHeight = 20.sp)
             val fullLineCount = if (containerWidthPx > 0) {
@@ -994,28 +1253,56 @@ private fun DetailContent(
                     modifier = Modifier.onSizeChanged { containerWidthPx = it.width },
                 )
             }
-            if (collapsible) {
-                Text(
-                    text = stringResource(
-                        if (descriptionExpanded) R.string.detail_show_less else R.string.detail_show_more
-                    ),
-                    color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier
-                        .padding(top = 4.dp, bottom = 8.dp)
-                        .clickable { descriptionExpanded = !descriptionExpanded },
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (collapsible) {
+                    Text(
+                        text = stringResource(
+                            if (descriptionExpanded) R.string.detail_show_less else R.string.detail_show_more
+                        ),
+                        color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier
+                            .padding(top = 4.dp, bottom = 8.dp)
+                            .clickable { descriptionExpanded = !descriptionExpanded },
+                    )
+                }
+                if (chipVisible(TranslateField.DESCRIPTION)) {
+                    if (collapsible) Spacer(Modifier.width(8.dp))
+                    TranslateChip(
+                        showTranslation = descriptionTranslated,
+                        dark = dark,
+                        onClick = { onToggleField(TranslateField.DESCRIPTION) },
+                        modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+                    )
+                }
             }
         }
         if (detail.tags.isNotEmpty()) {
             Spacer(Modifier.height(10.dp))
+            val tagsTranslated = showTranslation(TranslateField.TAGS)
+            // 译文标签与原文标签一一对应；点击筛选始终用原文，否则搜不到结果
+            val displayTags = translated?.tags
+                ?.takeIf { tagsTranslated && it.size == detail.tags.size }
+                ?: detail.tags
             TagFlow(
                 tags = detail.tags,
+                displayTags = displayTags,
                 customTags = customTags,
                 dark = dark,
                 onTagClick = onTagClick,
                 onToggleCustomTag = onToggleCustomTag,
+                trailing = if (chipVisible(TranslateField.TAGS)) {
+                    {
+                        TranslateChip(
+                            showTranslation = tagsTranslated,
+                            dark = dark,
+                            onClick = { onToggleField(TranslateField.TAGS) },
+                        )
+                    }
+                } else {
+                    null
+                },
             )
         }
         if (detail.relatedWorks.isNotEmpty()) {
@@ -1326,12 +1613,20 @@ private fun TagFlow(
     dark: Boolean,
     onTagClick: (String) -> Unit,
     onToggleCustomTag: (String) -> Unit,
+    /**
+     * 实际渲染的文字（译文态时为译文），与 [tags] 下标一一对应。
+     * 点击筛选/收藏仍使用 [tags] 的原文，否则按译文去搜会搜不到。
+     */
+    displayTags: List<String> = tags,
+    /** 尾部附加内容（原/译 chip） */
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        tags.forEach { tag ->
+        tags.forEachIndexed { index, tag ->
+            val label = displayTags.getOrElse(index) { tag }
             val added = tag in customTags
             val shape = RoundedCornerShape(12.dp)
             // 加入/移除时的图标弹跳
@@ -1361,7 +1656,7 @@ private fun TagFlow(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "#$tag",
+                    text = "#$label",
                     color = if (dark) LoginTextSecondaryDark else AccentDark,
                     fontSize = 11.sp,
                 )
@@ -1401,6 +1696,14 @@ private fun TagFlow(
                             },
                     )
                 }
+            }
+        }
+        if (trailing != null) {
+            Box(
+                modifier = Modifier.padding(top = 5.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                trailing()
             }
         }
     }

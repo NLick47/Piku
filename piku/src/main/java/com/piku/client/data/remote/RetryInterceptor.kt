@@ -23,27 +23,26 @@ class RetryInterceptor(
         val request = chain.request()
         if (request.method != "GET") return chain.proceed(request)
 
-        var attempt = 0
+        var ioAttempts = 0
+        var timeoutAttempts = 0
+        var httpAttempts = 0
         while (true) {
             if (chain.call().isCanceled()) throw IOException("Canceled")
             try {
                 val response = chain.proceed(request)
                 if (!shouldRetryHttp(response.code)) return response
-                attempt++
-                if (attempt >= maxAttempts) return response
+                httpAttempts++
+                if (httpAttempts >= maxAttempts) return response
                 response.close()
-                sleep(backoffMillis(attempt, http = true))
+                sleep(backoffMillis(httpAttempts, http = true))
             } catch (e: IOException) {
                 if (chain.call().isCanceled()) throw e
-                attempt++
-                val limit = if (e is SocketTimeoutException) {
-                    minOf(maxAttempts, 2) // 读超时最多重试 1 次
-                } else {
-                    maxAttempts
-                }
-                if (attempt >= limit) throw e
-                dns.forceReResolve(request.url.host) // 淘汰赢家，下次解析从缓存+黑名单换 IP
-                sleep(backoffMillis(attempt, http = false))
+                val timedOut = e is SocketTimeoutException
+                val used = if (timedOut) ++timeoutAttempts else ++ioAttempts
+                val limit = if (timedOut) minOf(maxAttempts, 2) else maxAttempts
+                if (used >= limit) throw e
+                dns.forceReResolve(request.url.host)
+                sleep(backoffMillis(used, http = false))
             }
         }
     }

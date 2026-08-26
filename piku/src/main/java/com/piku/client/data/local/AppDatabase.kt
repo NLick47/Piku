@@ -13,8 +13,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         HistoryEntity::class,
         SearchKeywordEntity::class,
         WorkPasswordEntity::class,
+        TranslationEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -23,6 +24,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun historyDao(): HistoryDao
     abstract fun searchKeywordDao(): SearchKeywordDao
     abstract fun workPasswordDao(): WorkPasswordDao
+    abstract fun translationDao(): TranslationDao
 
     companion object {
         val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -108,6 +110,22 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL(
                     "UPDATE favorite_folders SET isDefault = 1 " +
                         "WHERE id = (SELECT id FROM favorite_folders ORDER BY createdAt ASC, id ASC LIMIT 1)",
+                )
+            }
+        }
+
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // AI 翻译译文缓存：(原文哈希, 目标语言, 引擎) 三元组为主键，
+                // 换模型/换语言互不污染，纯缓存表，丢失只会重新翻译。
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS translations (" +
+                        "srcHash TEXT NOT NULL, " +
+                        "targetLang TEXT NOT NULL, " +
+                        "engineId TEXT NOT NULL, " +
+                        "translated TEXT NOT NULL, " +
+                        "updatedAt INTEGER NOT NULL, " +
+                        "PRIMARY KEY(srcHash, targetLang, engineId))",
                 )
             }
         }

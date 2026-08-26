@@ -9,11 +9,16 @@ import coil3.disk.directory
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.allowHardware
 import coil3.request.crossfade
+import com.piku.client.data.remote.translation.ModelCatalogRepository
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.android.HiltAndroidApp
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 
 @HiltAndroidApp
@@ -44,11 +49,22 @@ class PoipikuApplication : Application() {
                 }
                 .build()
         }
+
+        // 每次冷启动静默拉取远程模型目录并整体替换当前列表
+        // （解密后得到内置免费模型的共享 key，已下架条目随之消失）。
+        // 目录只存内存：进程重启即回退无 key 的内置默认，因此必须重新拉取。
+        // 失败静默沿用内置默认，下次冷启动自动重试。
+        val catalogRepository = entryPoint.modelCatalogRepository()
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            catalogRepository.refresh()
+        }
     }
 
     @EntryPoint
     @InstallIn(SingletonComponent::class)
     interface AppEntryPoint {
         fun okHttpClient(): OkHttpClient
+
+        fun modelCatalogRepository(): ModelCatalogRepository
     }
 }

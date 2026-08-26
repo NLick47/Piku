@@ -64,6 +64,40 @@ class CredentialStoreTest {
         assertNull(store.load())
     }
 
+    @Test
+    fun saveDoesNotPropagateEncryptionFailure() {
+        val store = CredentialStore(InMemoryStorage(), AlwaysFailCipher())
+
+        store.save("user@example.com", "secret123")
+
+        assertNull(store.load())
+    }
+
+    @Test
+    fun failedSaveKeepsPreviousCredentialsIntact() {
+        val storage = InMemoryStorage()
+        val cipher = SwitchableCipher()
+        val store = CredentialStore(storage, cipher)
+        store.save("user@example.com", "secret123")
+
+        cipher.delegate = AlwaysFailCipher()
+        store.save("new@example.com", "new-secret")
+
+        assertEquals("ENC:user@example.com", storage.get("email_enc"))
+        assertEquals("ENC:secret123", storage.get("password_enc"))
+    }
+
+    private class AlwaysFailCipher : CredentialCipher {
+        override fun encrypt(plain: String): String = throw IllegalStateException("keystore unavailable")
+        override fun decrypt(cipherText: String): String = error("unreachable")
+    }
+
+    private class SwitchableCipher(initial: CredentialCipher = FakeCipher()) : CredentialCipher {
+        var delegate: CredentialCipher = initial
+        override fun encrypt(plain: String): String = delegate.encrypt(plain)
+        override fun decrypt(cipherText: String): String = delegate.decrypt(cipherText)
+    }
+
     private class FakeCipher : CredentialCipher {
         override fun encrypt(plain: String): String = "ENC:$plain"
         override fun decrypt(cipherText: String): String {
