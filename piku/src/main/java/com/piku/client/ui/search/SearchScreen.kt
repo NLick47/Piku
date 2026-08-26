@@ -1327,7 +1327,8 @@ private fun SearchUserRow(
             }
             Spacer(Modifier.width(10.dp))
             FollowPillButton(
-                unfollowed = !followed,
+                followed = followed,
+                refollow = false,
                 sending = followSending,
                 dark = dark,
                 onClick = onToggleFollow,

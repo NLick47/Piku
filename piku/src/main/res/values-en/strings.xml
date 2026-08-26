@@ -119,6 +119,7 @@
     <string name="follow_users_count">%1$d followed</string>
     <string name="follow_user_unfollow">Unfollow</string>
     <string name="follow_user_refollow">Follow again</string>
+    <string name="follow_user_follow">Follow</string>
     <string name="user_works_title">Works by %1$s</string>
     <string name="user_works_empty">No works by this user yet</string>
     <string name="user_works_empty_self">You haven\'t published any works yet</string>

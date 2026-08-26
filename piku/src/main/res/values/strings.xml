@@ -119,6 +119,7 @@
     <string name="follow_users_count">共 %1$d 位关注</string>
     <string name="follow_user_unfollow">取消关注</string>
     <string name="follow_user_refollow">重新关注</string>
+    <string name="follow_user_follow">关注</string>
     <string name="user_works_title">%1$s 的作品</string>
     <string name="user_works_empty">该用户暂无作品</string>
     <string name="user_works_empty_self">你还没有发布作品</string>

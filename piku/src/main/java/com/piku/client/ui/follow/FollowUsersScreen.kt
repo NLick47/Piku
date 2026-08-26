@@ -316,7 +316,8 @@ private fun FollowUserRow(
             }
             Spacer(Modifier.width(10.dp))
             FollowPillButton(
-                unfollowed = unfollowed,
+                followed = !unfollowed,
+                refollow = true,
                 sending = unfollowing,
                 dark = dark,
                 onClick = onUnfollow,

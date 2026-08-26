@@ -36,14 +36,15 @@ import com.piku.client.ui.theme.LoginTextPrimaryDark
 import com.piku.client.ui.theme.LoginTextPrimaryLight
 
 /**
- * 玻璃质感胶囊关注按钮：关注列表与作者搜索页共用
- * - 已关注（[unfollowed] = false）：柔和红玻璃，点击取消关注
- * - 已取消（[unfollowed] = true）：中性玻璃，点击重新关注
+ *   关注列表与作者搜索页共用
+ * - 已关注（[followed] = true）：柔和红玻璃，点击取消关注
+ * - 未关注：中性玻璃，点击关注；[refollow] = true 时文案为"重新关注"（关注列表内取消过的用户）
  * - 操作中（[sending] = true）：转圈 + 禁用
  */
 @Composable
 fun FollowPillButton(
-    unfollowed: Boolean,
+    followed: Boolean,
+    refollow: Boolean,
     sending: Boolean,
     dark: Boolean,
     onClick: () -> Unit,
@@ -56,20 +57,23 @@ fun FollowPillButton(
         label = "followPillPress",
     )
 
+    val labelRes = when {
+        followed -> R.string.follow_user_unfollow
+        refollow -> R.string.follow_user_refollow
+        else -> R.string.follow_user_follow
+    }
     val bgColor = when {
-        sending -> if (dark) Color(0x14FFFFFF) else Color(0x0D2C2C2C)
-        unfollowed -> if (dark) Color(0x14FFFFFF) else Color(0x0D2C2C2C)
-        else -> if (dark) Color(0x14E08A8A) else Color(0x0FC24B4B)
+        followed && !sending -> if (dark) Color(0x14E08A8A) else Color(0x0FC24B4B)
+        else -> if (dark) Color(0x14FFFFFF) else Color(0x0D2C2C2C)
     }
     val borderColor = when {
-        sending -> if (dark) Color(0x26FFFFFF) else Color(0x1A2C2C2C)
-        unfollowed -> if (dark) Color(0x33FFFFFF) else Color(0x242C2C2C)
-        else -> if (dark) Color(0x33E08A8A) else Color(0x26C24B4B)
+        followed && !sending -> if (dark) Color(0x33E08A8A) else Color(0x26C24B4B)
+        else -> if (dark) Color(0x33FFFFFF) else Color(0x242C2C2C)
     }
     val contentColor = when {
         sending -> if (dark) LoginTextFaintDark else LoginTextFaintLight
-        unfollowed -> if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
-        else -> if (dark) Color(0xFFE08A8A) else Color(0xFFC24B4B)
+        followed -> if (dark) Color(0xFFE08A8A) else Color(0xFFC24B4B)
+        else -> if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
     }
 
     Row(
@@ -98,17 +102,15 @@ fun FollowPillButton(
             )
             Spacer(Modifier.width(6.dp))
             Text(
-                text = stringResource(R.string.follow_user_unfollow),
+                text = stringResource(labelRes),
                 color = contentColor,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
             )
         } else {
-            Crossfade(targetState = unfollowed, label = "followPillState") { alreadyUnfollowed ->
+            Crossfade(targetState = labelRes, label = "followPillState") { res ->
                 Text(
-                    text = stringResource(
-                        if (alreadyUnfollowed) R.string.follow_user_refollow else R.string.follow_user_unfollow
-                    ),
+                    text = stringResource(res),
                     color = contentColor,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,

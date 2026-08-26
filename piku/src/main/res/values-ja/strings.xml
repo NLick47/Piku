@@ -119,6 +119,7 @@
     <string name="follow_users_count">フォロー %1$d 人</string>
     <string name="follow_user_unfollow">フォロー解除</string>
     <string name="follow_user_refollow">再フォロー</string>
+    <string name="follow_user_follow">フォロー</string>
     <string name="user_works_title">%1$s の作品</string>
     <string name="user_works_empty">このユーザーの作品はまだありません</string>
     <string name="user_works_empty_self">まだ作品を公開していません</string>
