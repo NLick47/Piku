@@ -398,7 +398,9 @@ class DetailViewModel @Inject constructor(
                                 ),
                                 // 首块完成前 translated 仍为空，阅读器显示纯原文；末块剩余为空串，
                                 // 由 Screen 的 isNullOrEmpty 判空避免拼接出尾部分隔
-                                novelRemainder = event.remainingOriginal,
+                                novelRemainder = current.novelText
+                                    .takeIf { it.isNotBlank() }
+                                    ?.let { it.substring(event.consumedOffset) },
                                 novelStreamProgress =
                                 if (event.totalChunks > 0) event.doneChunks * 100 / event.totalChunks else null,
                             )
@@ -814,15 +816,17 @@ class DetailViewModel @Inject constructor(
         }
     }
 
-    private fun currentWork(detail: WorkDetail): Work = work.copy(
-        title = detail.title,
-        authorName = detail.authorName,
-        authorAvatarUrl = detail.authorAvatarUrl.ifBlank { null },
-        categoryName = detail.categoryName,
-        thumbnailUrl = stableThumbnail(detail),
-        imageCount = detail.imageUrls.size,
-        r18 = detail.r18,
+    private fun WorkDetail.toHistoryWork(): Work = work.copy(
+        title = title,
+        authorName = authorName,
+        authorAvatarUrl = authorAvatarUrl.ifBlank { null },
+        categoryName = categoryName,
+        thumbnailUrl = stableThumbnail(this),
+        imageCount = imageUrls.size,
+        r18 = r18,
     )
+
+    private fun currentWork(detail: WorkDetail): Work = detail.toHistoryWork()
 
     /**
      * 历史/收藏使用的稳定缩略图，优先级：
@@ -916,17 +920,7 @@ class DetailViewModel @Inject constructor(
 
     private fun recordHistory(detail: WorkDetail) {
         viewModelScope.launch {
-            recordHistoryUseCase(
-                work.copy(
-                    authorName = detail.authorName,
-                    authorAvatarUrl = detail.authorAvatarUrl.ifBlank { null },
-                    categoryName = detail.categoryName,
-                    title = detail.title,
-                    thumbnailUrl = stableThumbnail(detail),
-                    imageCount = detail.imageUrls.size,
-                    r18 = detail.r18,
-                ),
-            )
+            recordHistoryUseCase(detail.toHistoryWork())
         }
     }
 

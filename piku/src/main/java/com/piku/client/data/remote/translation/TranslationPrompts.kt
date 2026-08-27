@@ -11,10 +11,9 @@ package com.piku.client.data.remote.translation
  */
 internal object TranslationPrompts {
 
-    // ---- 目标语言名（与 LlmTranslateEngine 中的常量保持一致） ----
-
-    private const val TARGET_EN = "English"
-    private const val TARGET_JA = "Japanese"
+    // ---- 目标语言名（统一引用 LlmTranslateEngine 常量） ----
+    private val TARGET_EN get() = LlmTranslateEngine.TARGET_EN
+    private val TARGET_JA get() = LlmTranslateEngine.TARGET_JA
 
     // ---- 单条提示词：按目标语言三分支，原则一致、措辞各用母语（模型遵循更好） ----
 

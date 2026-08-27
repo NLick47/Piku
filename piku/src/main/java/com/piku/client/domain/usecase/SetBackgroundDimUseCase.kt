@@ -6,7 +6,7 @@ import javax.inject.Inject
 class SetBackgroundDimUseCase @Inject constructor(
     private val settingsRepository: SettingsRepository,
 ) {
-    operator fun invoke(value: Float) {
-        settingsRepository.setBackgroundDim(value)
+    operator fun invoke(value: Float, persist: Boolean = false) {
+        settingsRepository.setBackgroundDim(value, persist)
     }
 }

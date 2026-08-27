@@ -1,6 +1,7 @@
 package com.piku.client.data.local
 
 import androidx.room.Entity
+import androidx.room.Index
 
 /**
  * 译文缓存。
@@ -10,7 +11,11 @@ import androidx.room.Entity
  * - 换目标语言或换模型都视为不同缓存，不会互相污染；
  * - 同一段文本在多个作品间复用（如相同标签）自然命中。
  */
-@Entity(tableName = "translations", primaryKeys = ["srcHash", "targetLang", "engineId"])
+@Entity(
+    tableName = "translations",
+    primaryKeys = ["srcHash", "targetLang", "engineId"],
+    indices = [Index("updatedAt")],
+)
 data class TranslationEntity(
     val srcHash: String,
     val targetLang: String,

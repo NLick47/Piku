@@ -77,7 +77,7 @@ internal object NovelChunker {
             if (buffer.isNotEmpty() && (bufferChars >= TARGET_CHUNK_CHARS || dividerEnd >= 0)) {
                 val cut = maxOf(dividerEnd, 0)
                 chunks += Chunk(buffer.toString(), atom.leadingSep.substring(0, cut))
-                buffer = StringBuilder()
+                buffer.setLength(0)
                 bufferChars = 0
                 buffer.append(atom.leadingSep.substring(cut))
             } else {

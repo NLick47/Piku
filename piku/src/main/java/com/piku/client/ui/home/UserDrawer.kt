@@ -53,6 +53,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -168,7 +169,6 @@ private fun DrawerPanel(
     onLogout: () -> Unit,
     dark: Boolean,
 ) {
-    val shape = RoundedCornerShape(topEnd = 26.dp, bottomEnd = 26.dp)
     val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
     val faint = if (dark) LoginTextFaintDark else LoginTextFaintLight
     val divider = if (dark) LoginCardBorderDark else LoginCardBorderLight
@@ -179,13 +179,11 @@ private fun DrawerPanel(
         modifier = Modifier
             .fillMaxHeight()
             .width(304.dp)
-            .shadow(
-                elevation = 20.dp,
-                shape = shape,
-                ambientColor = Color(0x55000000),
-                spotColor = Color(0x66000000),
-            )
-            .clip(shape)
+            .graphicsLayer {
+                shadowElevation = 20.dp.toPx()
+                shape = RoundedCornerShape(topEnd = 26.dp, bottomEnd = 26.dp)
+                clip = true
+            }
             .background(
                 Brush.verticalGradient(
                     if (dark) listOf(Color(0xFF23211F), Color(0xFF262031))
@@ -194,7 +192,7 @@ private fun DrawerPanel(
             )
             .border(
                 BorderStroke(0.5.dp, if (dark) Color(0x33FFFFFF) else Color(0x66FFFFFF)),
-                shape,
+                RoundedCornerShape(topEnd = 26.dp, bottomEnd = 26.dp),
             )
             .statusBarsPadding()
             .navigationBarsPadding()

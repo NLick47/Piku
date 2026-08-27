@@ -29,7 +29,12 @@ class TranslationRepositoryBuildFieldsTest {
 
     // 把 6 元素 out 拆成 shortOut(标题/简介/作者简介/标签) 与 novelOut(正文)
     private fun split(out: List<String>) =
-        listOf(out[0], out[1], out[2], out[4], out[5]) to out[3]
+        ShortTranslation(
+            title = out[0],
+            description = out[1],
+            authorProfile = out[2],
+            tags = listOf(out[4], out[5]),
+        ) to out[3]
 
     @Test
     fun `full passthrough yields no fields at all`() {
@@ -103,7 +108,7 @@ class TranslationRepositoryBuildFieldsTest {
         val fields = TranslationRepository.buildFields(
             titleSrc = "タイトル", descriptionSrc = "説", profileSrc = "プ", novelSrc = "",
             tagsSrc = emptyList(),
-            shortOut = out.subList(0, 3),
+            shortOut = ShortTranslation(title = out[0], description = out[1], authorProfile = out[2]),
             novelOut = out[3],
         )
         assertNull(fields?.novelText)
@@ -117,7 +122,7 @@ class TranslationRepositoryBuildFieldsTest {
         val fields = TranslationRepository.buildFields(
             titleSrc = "感謝", descriptionSrc = "簡介", profileSrc = "", novelSrc = "",
             tagsSrc = emptyList(),
-            shortOut = out.subList(0, 3),
+            shortOut = ShortTranslation(title = out[0], description = out[1], authorProfile = out[2]),
             novelOut = out[3],
         )
         assertNull(fields?.title)

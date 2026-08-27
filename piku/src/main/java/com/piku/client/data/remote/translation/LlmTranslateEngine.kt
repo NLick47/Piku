@@ -3,14 +3,17 @@ package com.piku.client.data.remote.translation
 import android.util.Log
 import com.piku.client.domain.translation.ChunkContext
 import com.piku.client.domain.translation.TranslationEngine
+import kotlinx.coroutines.delay
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import retrofit2.HttpException
+import kotlin.random.Random
 
 class LlmTranslateEngine(
     private val api: LlmChatApi,
-    private val config: () -> LlmConfig,
+    private val config: LlmConfig,
 ) : TranslationEngine {
 
     data class LlmConfig(
@@ -33,10 +36,7 @@ class LlmTranslateEngine(
      * baseUrl 隔离避免两家服务商同名模型共享命名空间。
      */
     override val engineId: String
-        get() {
-            val cfg = config()
-            return "llm:${cfg.role}:${cfg.model}:${cfg.baseUrl.trimEnd('/')}"
-        }
+        get() = "llm:${config.role}:${config.model}:${config.baseUrl.trimEnd('/')}"
 
     override suspend fun translate(
         texts: List<String>,
@@ -79,20 +79,25 @@ class LlmTranslateEngine(
         // 提示词组按场景路由：只有小说通道（role=NOVEL 或显式带上下文）才用 novel 组；
         // 文本通道的单条路径（批量仅剩 1 条、>600 长简介、批量失败逐条回退）
         // 一律走 single 组——小说条款（上下文标记/同人设定）绝不窜进小文本模型
-        val system = if (config().role == Role.NOVEL || context != null) {
+        val system = if (config.role == Role.NOVEL || context != null) {
             novelSystemPrompt(targetLang, context)
         } else {
             systemPrompt(targetLang, isBatch = false)
         }
         val user = context?.let { contextUserPrefix(it) + text } ?: text
         repeat(MAX_ATTEMPTS) { attempt ->
-            val output = request(
-                system = system,
-                user = user,
-            ) ?: return@repeat
+            val output = try {
+                request(system = system, user = user)
+            } catch (e: TranslationApiException) {
+                Log.d(TAG, "translateSingle attempt=${attempt + 1} api error: ${e.code}")
+                if (attempt < MAX_ATTEMPTS - 1 && e.code != 0) delay(retryDelay(attempt))
+                return@repeat
+            }
+            if (output.isBlank()) return ""
             val cleaned = stripEcho(output.trim(), context)
             if (!looksUntranslated(text, cleaned)) return cleaned
-            Log.d(TAG, "translateSingle attempt=${attempt + 1} looks untranslated, retrying")
+            Log.d(TAG, "translateSingle attempt=${attempt + 1} looks untranslated")
+            if (attempt < MAX_ATTEMPTS - 1) delay(retryDelay(attempt))
         }
         return ""
     }
@@ -108,25 +113,33 @@ class LlmTranslateEngine(
             "${marker(i + 1)}\n$text"
         }
         repeat(MAX_ATTEMPTS) { attempt ->
-            val output = request(
-                system = systemPrompt(targetLang, true),
-                user = payload,
-            ) ?: return@repeat
+            val output = try {
+                request(
+                    system = systemPrompt(targetLang, true),
+                    user = payload,
+                )
+            } catch (e: TranslationApiException) {
+                Log.d(TAG, "translateBatch attempt=${attempt + 1} api error: ${e.code}")
+                if (attempt < MAX_ATTEMPTS - 1 && e.code != 0) delay(retryDelay(attempt))
+                return@repeat
+            }
+            if (output.isBlank()) return texts.map { translateSingle(it, targetLang) }
             val parsed = parseBatch(output, texts.size)
             if (parsed != null && parsed.indices.none { looksUntranslated(texts[it], parsed[it]) }) {
                 return parsed
             }
             Log.d(TAG, "translateBatch attempt=${attempt + 1} parse/validate failed")
+            if (attempt < MAX_ATTEMPTS - 1) delay(retryDelay(attempt))
         }
         // 批量不可靠时逐条重试，保证尽量有译文
         return texts.map { translateSingle(it, targetLang) }
     }
 
-    private suspend fun request(system: String, user: String): String? {
-        val cfg = config()
+    private suspend fun request(system: String, user: String): String {
+        val cfg = config
         if (cfg.apiKey.isBlank()) {
             Log.d(TAG, "translate skipped: api key blank")
-            return null
+            return ""
         }
         val messages = buildJsonArray {
             add(buildJsonObject { put("role", JsonPrimitive("system")); put("content", JsonPrimitive(system)) })
@@ -135,21 +148,28 @@ class LlmTranslateEngine(
         val body = buildJsonObject {
             put("model", JsonPrimitive(cfg.model))
             put("messages", messages)
-            // 强制非流式：流式响应是 SSE 分片而非 JSON 对象，会让 content 解析为 null 而整体失败；
-            // 目录 params 不得覆盖这些结构性字段（见 RESERVED_PARAM_KEYS）
             put("stream", JsonPrimitive(false))
-            // 参数名全部来自目录，不写死；但结构性保留字段已强制，这里跳过
             cfg.params.forEach { (k, v) -> if (k !in RESERVED_PARAM_KEYS) put(k, v) }
         }
-        return runCatching {
-            api.chat(
+        try {
+            val response = api.chat(
                 url = chatUrl(cfg.baseUrl),
                 authorization = "Bearer ${cfg.apiKey}",
                 body = body,
-            ).content
-        }.onFailure { error ->
-            Log.d(TAG, "translate request failed: ${error::class.simpleName}: ${error.message}")
-        }.getOrNull()
+            )
+            val content = response.content
+            if (content.isBlank()) {
+                throw TranslationApiException(0, "empty response")
+            }
+            return content
+        } catch (e: HttpException) {
+            throw TranslationApiException(e.code(), e.message())
+        } catch (e: TranslationApiException) {
+            throw e
+        } catch (e: Exception) {
+            Log.d(TAG, "translate request failed: ${e::class.simpleName}: ${e.message}")
+            throw TranslationApiException(0, e.message ?: "unknown error")
+        }
     }
 
     /**
@@ -167,8 +187,8 @@ class LlmTranslateEngine(
             isBatch -> batch
             else -> single
         }
-        config().prompts?.group()?.get(key)?.let { return it }
-        config().defaultPrompts?.group()?.get(key)?.let { return it }
+        config.prompts?.group()?.get(key)?.let { return it }
+        config.defaultPrompts?.group()?.get(key)?.let { return it }
         return when {
             isNovel -> TranslationPrompts.novelSystemPrompt(targetLang)
             isBatch -> TranslationPrompts.batchSystemPrompt(targetLang)
@@ -196,11 +216,17 @@ class LlmTranslateEngine(
         else -> "zh"
     }
 
+    /** 指数退避 + 抖动，防止多客户端同步挤兑同一把 key */
+    private fun retryDelay(attempt: Int): Long {
+        val exp = 1500L * (1L shl attempt.coerceAtMost(3))
+        return exp + Random.nextLong(0, 500)
+    }
+
     companion object {
         private const val TAG = "PikuDiag"
 
         /** 校验失败后最多再试一次（免费模型偶发抽风） */
-        private const val MAX_ATTEMPTS = 2
+        private const val MAX_ATTEMPTS = 3
 
         /** 回声判定中 ⟦待翻正文⟧ 标记允许出现的最大偏移（相对注入前缀长度的富余量） */
         private const val ECHO_SLACK = 32
@@ -246,6 +272,8 @@ class LlmTranslateEngine(
         /** 超过这个长度的文本单独发一条请求 */
         internal const val LONG_TEXT_THRESHOLD = 600
 
+        private val BATCH_MARKER_REGEX = Regex("""\[\[(\d+)]]""")
+
         internal fun marker(n: Int) = "[[$n]]"
 
         /** baseUrl 结尾有无斜杠都能拼对 */
@@ -255,6 +283,7 @@ class LlmTranslateEngine(
         // ---- 目标语言名（与 TranslationRepository.targetLangName 保持一致） ----
         internal const val TARGET_EN = "English"
         internal const val TARGET_JA = "Japanese"
+        internal const val TARGET_ZH = "Simplified Chinese"
 
         private val LATIN_WORD = Regex("[A-Za-z]{4,}")
 
@@ -398,8 +427,7 @@ class LlmTranslateEngine(
          * 按 [[n]] 切分批量回复。缺条、多条、序号不连续都返回 null（视为失败）。
          */
         internal fun parseBatch(output: String, expected: Int): List<String>? {
-            val regex = Regex("""\[\[(\d+)]]""")
-            val matches = regex.findAll(output).toList()
+            val matches = BATCH_MARKER_REGEX.findAll(output).toList()
             if (matches.size != expected) return null
             val result = MutableList(expected) { "" }
             matches.forEachIndexed { i, match ->
@@ -431,3 +459,6 @@ class LlmTranslateEngine(
         }
     }
 }
+
+/** API 层面错误（429 限速 / 5xx 服务端 / 空响应），用于区分校验失败 */
+class TranslationApiException(val code: Int, message: String) : Exception(message)

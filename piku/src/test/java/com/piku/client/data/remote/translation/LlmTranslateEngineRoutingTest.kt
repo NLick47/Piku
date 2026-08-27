@@ -95,7 +95,8 @@ class LlmTranslateEngineRoutingTest {
     )
 
     private fun engine(api: CapturingApi, role: String, entry: ModelEntry?): LlmTranslateEngine =
-        LlmTranslateEngine(api) {
+        LlmTranslateEngine(
+            api,
             TranslationEngineFactory.buildConfig(
                 apiKey = "test-key",
                 role = role,
@@ -103,8 +104,8 @@ class LlmTranslateEngineRoutingTest {
                 defaults = defaults,
                 fallbackBaseUrl = "https://fallback.example.com/v1",
                 fallbackModel = "fallback-model",
-            )
-        }
+            ),
+        )
 
     private fun JsonObject.systemMessage(): String =
         this["messages"]!!.jsonArray[0].jsonObject["content"]!!.jsonPrimitive.content

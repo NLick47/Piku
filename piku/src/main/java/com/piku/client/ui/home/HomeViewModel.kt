@@ -586,32 +586,36 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch { setCustomBackgroundUseCase.clear() }
     }
 
-    fun setBackgroundDim(value: Float) {
-        setBackgroundDimUseCase(value)
+    fun setBackgroundDim(value: Float, persist: Boolean = false) {
+        setBackgroundDimUseCase(value, persist)
     }
 
-    fun setBackgroundScale(value: Float) {
-        settingsRepository.setBackgroundScale(value)
+    fun setBackgroundScale(value: Float, persist: Boolean = false) {
+        settingsRepository.setBackgroundScale(value, persist)
     }
 
-    fun setBackgroundBlur(value: Float) {
-        settingsRepository.setBackgroundBlur(value)
+    fun setBackgroundBlur(value: Float, persist: Boolean = false) {
+        settingsRepository.setBackgroundBlur(value, persist)
     }
 
-    fun setBackgroundHeroFraction(value: Float) {
-        settingsRepository.setBackgroundHeroFraction(value)
+    fun setBackgroundHeroFraction(value: Float, persist: Boolean = false) {
+        settingsRepository.setBackgroundHeroFraction(value, persist)
     }
 
     fun setBackgroundOffset(x: Float, y: Float, persist: Boolean = false) {
         settingsRepository.setBackgroundOffset(x, y, persist)
     }
 
-    fun setHeroScale(value: Float) {
-        settingsRepository.setHeroScale(value)
+    fun setHeroScale(value: Float, persist: Boolean = false) {
+        settingsRepository.setHeroScale(value, persist)
     }
 
     fun setHeroOffset(x: Float, y: Float, persist: Boolean = false) {
         settingsRepository.setHeroOffset(x, y, persist)
+    }
+
+    fun persistHeroOffset() {
+        settingsRepository.persistHeroOffset()
     }
 
     /** 保存相册图片为独立背景层；失败时置错误提示（弹层内展示） */

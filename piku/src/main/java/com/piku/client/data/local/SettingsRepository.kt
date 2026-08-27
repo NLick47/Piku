@@ -224,34 +224,34 @@ class SettingsRepository @Inject constructor(
         _customBackgroundPath.value = path
     }
 
-    fun setBackgroundScale(value: Float) {
+    fun setBackgroundScale(value: Float, persist: Boolean = false) {
         val clamped = value.coerceIn(BACKGROUND_SCALE_MIN, BACKGROUND_SCALE_MAX)
-        prefs.edit().putFloat(KEY_BACKGROUND_SCALE, clamped).apply()
+        if (persist) prefs.edit().putFloat(KEY_BACKGROUND_SCALE, clamped).apply()
         _backgroundScale.value = clamped
     }
 
-    fun setBackgroundDim(value: Float) {
+    fun setBackgroundDim(value: Float, persist: Boolean = false) {
         val clamped = value.coerceIn(BACKGROUND_DIM_MIN, BACKGROUND_DIM_MAX)
-        prefs.edit().putFloat(KEY_BACKGROUND_DIM, clamped).apply()
+        if (persist) prefs.edit().putFloat(KEY_BACKGROUND_DIM, clamped).apply()
         _backgroundDim.value = clamped
     }
 
-    fun setBackgroundBlur(value: Float) {
+    fun setBackgroundBlur(value: Float, persist: Boolean = false) {
         val clamped = value.coerceIn(BACKGROUND_BLUR_MIN, BACKGROUND_BLUR_MAX)
-        prefs.edit().putFloat(KEY_BACKGROUND_BLUR, clamped).apply()
+        if (persist) prefs.edit().putFloat(KEY_BACKGROUND_BLUR, clamped).apply()
         _backgroundBlur.value = clamped
     }
 
-    fun setBackgroundHeroFraction(value: Float) {
+    fun setBackgroundHeroFraction(value: Float, persist: Boolean = false) {
         val clamped = value.coerceIn(BACKGROUND_HERO_MIN, BACKGROUND_HERO_MAX)
-        prefs.edit().putFloat(KEY_BACKGROUND_HERO, clamped).apply()
+        if (persist) prefs.edit().putFloat(KEY_BACKGROUND_HERO, clamped).apply()
         _backgroundHeroFraction.value = clamped
     }
 
     /** 头部层缩放（0.5~1.5） */
-    fun setHeroScale(value: Float) {
+    fun setHeroScale(value: Float, persist: Boolean = false) {
         val clamped = value.coerceIn(HERO_SCALE_MIN, HERO_SCALE_MAX)
-        prefs.edit().putFloat(KEY_HERO_SCALE, clamped).apply()
+        if (persist) prefs.edit().putFloat(KEY_HERO_SCALE, clamped).apply()
         _heroScale.value = clamped
     }
 
@@ -319,6 +319,14 @@ class SettingsRepository @Inject constructor(
         prefs.edit()
             .putFloat(KEY_BACKGROUND_OFFSET_X, _backgroundOffsetX.value)
             .putFloat(KEY_BACKGROUND_OFFSET_Y, _backgroundOffsetY.value)
+            .apply()
+    }
+
+    /** 头部层归一化偏移持久化（拖动结束时调用） */
+    fun persistHeroOffset() {
+        prefs.edit()
+            .putFloat(KEY_HERO_OFFSET_X, _heroOffsetX.value)
+            .putFloat(KEY_HERO_OFFSET_Y, _heroOffsetY.value)
             .apply()
     }
 

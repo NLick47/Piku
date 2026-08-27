@@ -30,6 +30,8 @@ import com.piku.client.ui.login.RegisterScreen
 import com.piku.client.ui.search.PoipikuLink
 import com.piku.client.ui.search.SearchScreen
 import com.piku.client.ui.tags.TagScreen
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 
 object Routes {
     const val LOGIN = "login"
@@ -69,6 +71,8 @@ object Routes {
 private const val BACK_POP_DEBOUNCE_MS = 400L
 
 private const val KEY_PENDING_TAG = "pending_tag"
+
+private const val KEY_SHOULD_REOPEN_DRAWER = "should_reopen_drawer"
 
 private const val TAG = "PikuDiag"
 
@@ -111,6 +115,10 @@ fun AppNavHost() {
     NavHost(
         navController = navController,
         startDestination = Routes.HOME,
+        enterTransition = { EnterTransition.None },
+        exitTransition = { ExitTransition.None },
+        popEnterTransition = { EnterTransition.None },
+        popExitTransition = { ExitTransition.None },
     ) {
         composable(Routes.LOGIN) {
             // 有上一页（能回退）才显示返回按钮；按钮直接弹栈，
@@ -157,11 +165,18 @@ fun AppNavHost() {
             val pendingTag by backStackEntry.savedStateHandle
                 .getStateFlow<String?>(KEY_PENDING_TAG, null)
                 .collectAsStateWithLifecycle()
+            val shouldReopenDrawer by backStackEntry.savedStateHandle
+                .getStateFlow<Boolean>(KEY_SHOULD_REOPEN_DRAWER, false)
+                .collectAsStateWithLifecycle()
 
             HomeScreen(
                 pendingTag = pendingTag,
                 onTagConsumed = {
                     backStackEntry.savedStateHandle[KEY_PENDING_TAG] = null
+                },
+                shouldReopenDrawer = shouldReopenDrawer,
+                onDrawerReopenConsumed = {
+                    backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = false
                 },
                 onWorkClick = { work: Work ->
                     navController.navigate(Routes.detail(work.authorId, work.id, work.thumbnailUrl))
@@ -170,14 +185,28 @@ fun AppNavHost() {
                     Log.d(TAG, "navigate LOGIN " +
                         "current=${navController.currentBackStackEntry?.destination?.route} " +
                         "prev=${navController.previousBackStackEntry?.destination?.route}")
+                    backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = true
                     navController.navigate(Routes.LOGIN)
                 },
-                onHistoryClick = { navController.navigate(Routes.HISTORY) },
-                onCollectionClick = { navController.navigate(Routes.COLLECTION) },
-                onTagsClick = { navController.navigate(Routes.TAGS) },
-                onFollowUsersClick = { navController.navigate(Routes.followUsers()) },
+                onHistoryClick = {
+                    backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = true
+                    navController.navigate(Routes.HISTORY)
+                },
+                onCollectionClick = {
+                    backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = true
+                    navController.navigate(Routes.COLLECTION)
+                },
+                onTagsClick = {
+                    backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = true
+                    navController.navigate(Routes.TAGS)
+                },
+                onFollowUsersClick = {
+                    backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = true
+                    navController.navigate(Routes.followUsers())
+                },
                 onSearchClick = { navController.navigate(Routes.search()) },
                 onProfileOpen = { uid, name ->
+                    backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = true
                     navController.navigate(Routes.userWorks(uid, name))
                 },
             )

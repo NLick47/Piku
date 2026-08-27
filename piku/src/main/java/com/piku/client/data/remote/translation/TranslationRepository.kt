@@ -39,7 +39,7 @@ data class TranslationOutcome(
  * 小说分块流式翻译的事件流。
  *
  * - [Progress]：一块完成即发；[translatedSoFar] 为已译部分拼接，
- *   [remainingOriginal] 为尚未处理的原文尾部——UI 拼成
+ *   [consumedOffset] 为已消费原文偏移量——UI 按原文切片得到剩余尾部，拼成
  *   "已译前缀 + 剩余原文"实现边翻边读；
  * - [Completed]：全部块处理完。[failedCount] > 0 表示有块失败（已回退原文展示），
  *   调用方可提示重试——重试重启流，已成功块全部缓存秒过，只有失败块真正上网。
@@ -47,7 +47,7 @@ data class TranslationOutcome(
 sealed interface NovelStreamEvent {
     data class Progress(
         val translatedSoFar: String,
-        val remainingOriginal: String,
+        val consumedOffset: Int,
         val doneChunks: Int,
         val totalChunks: Int,
     ) : NovelStreamEvent
@@ -58,6 +58,17 @@ sealed interface NovelStreamEvent {
         val totalChunks: Int,
     ) : NovelStreamEvent
 }
+
+/**
+ * 短文本字段译文（类型安全：替代裸 [List] 的下标约定）。
+ * 顺序固定为 标题/简介/作者简介 + 标签组，调用方按名取用，避免新增字段时下标错位。
+ */
+internal data class ShortTranslation(
+    val title: String = "",
+    val description: String = "",
+    val authorProfile: String = "",
+    val tags: List<String> = emptyList(),
+)
 
 /**
  * 各场景当前生效的默认模型 id（已按可用 + 带内置 key 过滤）。
@@ -86,6 +97,9 @@ class TranslationRepository @Inject constructor(
 
     private val mutex = Mutex()
 
+    /** 距上次淘汰后累计写入行数；超过阈值才触发 COUNT(*) + 淘汰，避免每次 persist 都全表扫描 */
+    private var rowsSinceEviction = 0
+
     /**
      * 写缓存并按容量 FIFO 淘汰：超过 [CACHE_MAX_ROWS] 时删除最旧的行，
      * 防止重度用户缓存表无限膨胀。命中不续期（真 LRU 需要读时写时间戳）——
@@ -95,8 +109,12 @@ class TranslationRepository @Inject constructor(
         if (rows.isEmpty()) return
         withContext(Dispatchers.IO) {
             dao.upsertAll(rows)
-            val total = dao.count()
-            if (total > CACHE_MAX_ROWS) dao.deleteOldest(total - CACHE_MAX_ROWS)
+            rowsSinceEviction += rows.size
+            if (rowsSinceEviction >= EVICTION_CHECK_THRESHOLD) {
+                val total = dao.count()
+                if (total > CACHE_MAX_ROWS) dao.deleteOldest(total - CACHE_MAX_ROWS)
+                rowsSinceEviction = 0
+            }
         }
     }
 
@@ -178,12 +196,19 @@ class TranslationRepository @Inject constructor(
         if (shortTranslated == null && novelTranslated == null) {
             return TranslationOutcome(fields = null, failed = true)
         }
+        val shortList = shortTranslated ?: List(3 + detail.tags.size) { "" }
+        val short = ShortTranslation(
+            title = shortList.getOrNull(0) ?: "",
+            description = shortList.getOrNull(1) ?: "",
+            authorProfile = shortList.getOrNull(2) ?: "",
+            tags = shortList.subList(3, shortList.size),
+        )
         val fields = buildFields(
             titleSrc = detail.title,
             descriptionSrc = detail.description,
             profileSrc = detail.authorProfile,
             tagsSrc = detail.tags,
-            shortOut = shortTranslated ?: List(3 + detail.tags.size) { "" },
+            shortOut = short,
             novelSrc = novelSource ?: "",
             novelOut = novelTranslated,
         ) ?: return TranslationOutcome(fields = null, failed = false)
@@ -230,6 +255,14 @@ class TranslationRepository @Inject constructor(
         var failedCount = 0
         var tailOriginal = ""
         var tailTranslated = ""
+        // 累积待落盘实体，达到 STREAM_PERSIST_BATCH 或流结束时批量写入
+        val pendingPersist = mutableListOf<TranslationEntity>()
+        suspend fun flushPersist() {
+            if (pendingPersist.isNotEmpty()) {
+                persist(pendingPersist.toList())
+                pendingPersist.clear()
+            }
+        }
 
         for ((index, chunk) in chunks.withIndex()) {
             val context = if (index == 0) {
@@ -256,7 +289,7 @@ class TranslationRepository @Inject constructor(
                         chunk.text
                     } else {
                         val cached = withContext(Dispatchers.IO) {
-                            dao.get(hash(stripped), targetLang, engineId)
+                            dao.get(cacheKey(stripped, links), targetLang, engineId)
                         }
                         cached ?: run {
                             val out = engine.translate(listOf(stripped), targetLang, context)
@@ -270,18 +303,14 @@ class TranslationRepository @Inject constructor(
                                 } else {
                                     out.trimEnd() + links.joinToString("") { " $it" }
                                 }
-                                // persist 内部自带 IO 调度，写完按容量 FIFO 淘汰
-                                persist(
-                                    listOf(
-                                        TranslationEntity(
-                                            srcHash = hash(stripped),
-                                            targetLang = targetLang,
-                                            engineId = engineId,
-                                            translated = full,
-                                            updatedAt = System.currentTimeMillis(),
-                                        ),
-                                    ),
+                                pendingPersist += TranslationEntity(
+                                    srcHash = cacheKey(stripped, links),
+                                    targetLang = targetLang,
+                                    engineId = engineId,
+                                    translated = full,
+                                    updatedAt = System.currentTimeMillis(),
                                 )
+                                if (pendingPersist.size >= STREAM_PERSIST_BATCH) flushPersist()
                                 full
                             }
                         }
@@ -295,7 +324,7 @@ class TranslationRepository @Inject constructor(
             emit(
                 NovelStreamEvent.Progress(
                     translatedSoFar = translated.toString(),
-                    remainingOriginal = source.substring(consumed.coerceAtMost(source.length)),
+                    consumedOffset = consumed.coerceAtMost(source.length),
                     doneChunks = index + 1,
                     totalChunks = total,
                 ),
@@ -303,6 +332,7 @@ class TranslationRepository @Inject constructor(
             tailOriginal = NovelChunker.tail(chunk.text, NovelChunker.TAIL_ORIGINAL_CHARS)
             tailTranslated = NovelChunker.tail(piece, NovelChunker.TAIL_TRANSLATED_CHARS)
         }
+        flushPersist()
         emit(
             NovelStreamEvent.Completed(
                 translatedSoFar = translated.toString(),
@@ -389,13 +419,19 @@ class TranslationRepository @Inject constructor(
                 }
             }
             withContext(Dispatchers.IO) {
-                for ((id, unit) in units.withIndex()) {
-                    if (unit.value != null) continue
-                    val cached = dao.get(hash(unit.stripped), targetLang, engineId)
-                    if (cached != null) {
-                        unit.value = cached
-                    } else {
-                        pending += id
+                // 批量缓存读取：一次查询取回所有待查单元的译文，避免逐条 DB 往返（N+1）
+                val toLookup = units.withIndex().filter { it.value.value == null }
+                if (toLookup.isNotEmpty()) {
+                    val hashes = toLookup.map { cacheKey(it.value.stripped, it.value.links) }
+                    val cachedMap = dao.getAll(hashes, targetLang, engineId)
+                        .associate { it.srcHash to it.translated }
+                    toLookup.forEachIndexed { i, indexed ->
+                        val cached = cachedMap[hashes[i]]
+                        if (cached != null) {
+                            units[indexed.index].value = cached
+                        } else {
+                            pending += indexed.index
+                        }
                     }
                 }
             }
@@ -444,9 +480,9 @@ class TranslationRepository @Inject constructor(
                         }
                         unit.value = value
                         cacheEngineIds.forEach { engine ->
-                            rows += TranslationEntity(
-                                srcHash = hash(unit.stripped),
-                                targetLang = targetLang,
+                                rows += TranslationEntity(
+                                    srcHash = cacheKey(unit.stripped, unit.links),
+                                    targetLang = targetLang,
                                 engineId = engine,
                                 translated = value,
                                 updatedAt = now,
@@ -550,6 +586,12 @@ class TranslationRepository @Inject constructor(
 
     companion object {
 
+        private val SHA_256 = object : ThreadLocal<MessageDigest>() {
+            override fun initialValue() = MessageDigest.getInstance("SHA-256")
+        }
+
+        private val HEX_DIGITS = "0123456789abcdef".toCharArray()
+
         /** 自动/顶栏路径允许翻译的正文长度上限；更长的正文只在阅读器内显式触发 */
         const val AUTO_NOVEL_MAX_CHARS = 200
 
@@ -563,6 +605,16 @@ class TranslationRepository @Inject constructor(
          */
         private const val CACHE_MAX_ROWS = 20_000
 
+        /** 累计写入这么多行后才触发 COUNT(*) + 淘汰检查（允许暂时超出上限少量） */
+        private const val EVICTION_CHECK_THRESHOLD = 500
+
+        /**
+         * 流式落盘批大小：正文字节逐块成功后先累积，达到该数量或流结束时一次性
+         * upsert+淘汰，把每块一次 DB 往返降到约 1/STREAM_PERSIST_BATCH；
+         * 仍周期性写入，流中途取消/崩溃时近期块已入缓存可复读。
+         */
+        private const val STREAM_PERSIST_BATCH = 8
+
         /** 故障转移前的全抖动延迟范围：把同时失败的重试在时间维度打散 */
         private const val FAILOVER_JITTER_MIN_MS = 800L
         private const val FAILOVER_JITTER_MAX_MS = 2500L
@@ -573,21 +625,20 @@ class TranslationRepository @Inject constructor(
          * 顶栏与各字段 chip 全部出现、点击却毫无变化。
          *
          * 短文本字段（标题/简介/作者简介 + 标签）与小说正文由不同模型分别翻译，
-         * 故 [shortOut] 与 [novelOut] 分开传入：[shortOut] 顺序严格为
-         * 标题/简介/作者简介 + 标签组；[novelOut] 为小说正文译文（无则 null）。
+         * 故 [shortOut]（[ShortTranslation]）与 [novelOut] 分开传入；[novelOut] 为小说正文译文（无则 null）。
          */
         internal fun buildFields(
             titleSrc: String,
             descriptionSrc: String,
             profileSrc: String,
             tagsSrc: List<String>,
-            shortOut: List<String>,
+            shortOut: ShortTranslation,
             novelSrc: String,
             novelOut: String?,
         ): TranslatedFields? {
             val tags = if (tagsSrc.isNotEmpty()) {
                 val mapped = tagsSrc.mapIndexed { i, src ->
-                    (shortOut.getOrNull(3 + i) ?: "").ifBlank { src }
+                    (shortOut.tags.getOrNull(i) ?: "").ifBlank { src }
                 }
                 // 整组与原文相同（如全部被预检透传）则视为无译文
                 mapped.takeIf { list -> list.withIndex().any { (i, v) -> v != tagsSrc[i] } }
@@ -597,9 +648,9 @@ class TranslationRepository @Inject constructor(
             fun clean(src: String, value: String?): String? =
                 value?.takeIf { it.isNotBlank() && it != src }
             val fields = TranslatedFields(
-                title = clean(titleSrc, shortOut.getOrNull(0)),
-                description = clean(descriptionSrc, shortOut.getOrNull(1)),
-                authorProfile = clean(profileSrc, shortOut.getOrNull(2)),
+                title = clean(titleSrc, shortOut.title),
+                description = clean(descriptionSrc, shortOut.description),
+                authorProfile = clean(profileSrc, shortOut.authorProfile),
                 tags = tags,
                 novelText = clean(novelSrc, novelOut),
             )
@@ -608,9 +659,9 @@ class TranslationRepository @Inject constructor(
 
         /** 目标语言：跟随系统时按中文处理（本 app 主要受众） */
         internal fun targetLangName(language: AppLanguage): String = when (language) {
-            AppLanguage.EN -> "English"
-            AppLanguage.JA -> "Japanese"
-            else -> "Simplified Chinese"
+            AppLanguage.EN -> LlmTranslateEngine.TARGET_EN
+            AppLanguage.JA -> LlmTranslateEngine.TARGET_JA
+            else -> LlmTranslateEngine.TARGET_ZH
         }
 
         /**
@@ -633,9 +684,23 @@ class TranslationRepository @Inject constructor(
         }
 
         internal fun hash(text: String): String {
-            val digest = MessageDigest.getInstance("SHA-256").digest(text.toByteArray())
-            return digest.joinToString("") { "%02x".format(it) }
+            val digest = SHA_256.get()!!.apply { reset() }
+            val bytes = digest.digest(text.toByteArray())
+            val hex = CharArray(bytes.size * 2)
+            for (i in bytes.indices) {
+                val v = bytes[i].toInt() and 0xFF
+                hex[i * 2] = HEX_DIGITS[v shr 4]
+                hex[i * 2 + 1] = HEX_DIGITS[v and 0xF]
+            }
+            return String(hex)
         }
+
+        /**
+         * 缓存键由摘链后文字 [stripped] 与链接序列 [links] 共同决定，
+         * 使文字相同但链接不同的行各自拥有独立缓存。
+         */
+        internal fun cacheKey(stripped: String, links: List<String>): String =
+            hash(stripped + links.joinToString(""))
 
         /**
          * 行分解：整条文本作为单一处理单元——

@@ -36,16 +36,17 @@ class TranslationEngineFactory @Inject constructor(
         defaults: CatalogDefaults? = null,
     ): TranslationEngine? {
         if (apiKey.isBlank()) return null
-        return LlmTranslateEngine(api) {
-            buildConfig(
-                apiKey = apiKey,
-                role = role,
-                catalogEntry = catalogEntry,
-                defaults = defaults,
-                fallbackBaseUrl = settingsRepository.llmBaseUrl.value,
-                fallbackModel = settingsRepository.llmModel.value,
-            )
-        }
+        val cfg = buildConfig(
+            apiKey = apiKey,
+            role = role,
+            catalogEntry = catalogEntry,
+            defaults = defaults,
+            fallbackBaseUrl = settingsRepository.llmBaseUrl.value,
+            fallbackModel = settingsRepository.llmModel.value,
+        )
+        // 配置在创建引擎时一次性计算并持有：设置变更会触发重新 create，
+        // 故不再需要每次请求都重建 LlmConfig（含 JsonObject 分配）
+        return LlmTranslateEngine(api, cfg)
     }
 
     companion object {

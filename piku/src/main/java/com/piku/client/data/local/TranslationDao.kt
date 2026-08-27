@@ -13,6 +13,15 @@ interface TranslationDao {
     )
     suspend fun get(srcHash: String, targetLang: String, engineId: String): String?
 
+    @Query(
+        "SELECT srcHash, translated FROM translations " +
+            "WHERE srcHash IN (:srcHashes) AND targetLang = :targetLang AND engineId = :engineId",
+    )
+    suspend fun getAll(srcHashes: List<String>, targetLang: String, engineId: String): List<CacheHit>
+
+    /** 批量缓存读取的中间行（srcHash→译文 一对） */
+    data class CacheHit(val srcHash: String, val translated: String)
+
     @Upsert
     suspend fun upsertAll(entities: List<TranslationEntity>)
 

@@ -77,6 +77,30 @@ class TranslationRepositoryLinkSplitTest {
     }
 
     @Test
+    fun `same stripped text with different links gets distinct cache keys`() {
+        val a = TranslationRepository.decomposeLines("主页 https://a.com")
+            .single() as LinePart.Translate
+        val b = TranslationRepository.decomposeLines("主页 https://b.com")
+            .single() as LinePart.Translate
+        val keyA = TranslationRepository.cacheKey(a.stripped, a.links)
+        val keyB = TranslationRepository.cacheKey(b.stripped, b.links)
+        assertEquals(a.stripped, b.stripped)
+        assertFalse(keyA == keyB)
+    }
+
+    @Test
+    fun `same stripped text with identical links shares cache key`() {
+        val a = TranslationRepository.decomposeLines("主页 https://a.com")
+            .single() as LinePart.Translate
+        val b = TranslationRepository.decomposeLines("主页 https://a.com")
+            .single() as LinePart.Translate
+        assertEquals(
+            TranslationRepository.cacheKey(a.stripped, a.links),
+            TranslationRepository.cacheKey(b.stripped, b.links),
+        )
+    }
+
+    @Test
     fun `novel path keeps whole text as single unit`() {
         val text = "第一行有链接 https://x.com\n第二行是散文的延续。"
         val parts = TranslationRepository.decomposeLines(text)

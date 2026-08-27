@@ -163,7 +163,7 @@ class AuthRepository @Inject constructor(
         val profile = runCatching {
             val settingResponse = authApi.getMyEditSetting(myUid)
             val settingHtml = settingResponse.body()?.string() ?: ""
-            val preview = Regex("""PreviewImg" src="([^"]+)""")
+            val preview = PREVIEW_IMG_REGEX
                 .find(settingHtml)?.groupValues?.get(1)
             Log.d(
                 TAG,
@@ -171,7 +171,7 @@ class AuthRepository @Inject constructor(
                     "previewRaw=$preview",
             )
             val avatarUrl = preview?.let { url ->
-                if (Regex("""_\d+\.(jpg|jpeg|png)$""").containsMatchIn(url)) {
+                if (AVATAR_SUFFIX_REGEX.containsMatchIn(url)) {
                     url
                 } else {
                     url + "_120.jpg"
@@ -202,11 +202,11 @@ class AuthRepository @Inject constructor(
         val html = response.body()?.string()
         Log.d(TAG, "getUserTop: uid=$uid code=${response.code()} len=${html?.length ?: -1}")
         if (html.isNullOrEmpty()) return@runCatching null
-        val fromH2 = Regex("""<h2 class="IllustUserName">([^<]+)</h2>""")
+        val fromH2 = H2_NAME_REGEX
             .find(html)?.groupValues?.get(1)
-        val fromTitle = Regex("""<title>([^<]+)のポイピク \| イラストとか箱「ポイピク」</title>""")
+        val fromTitle = TITLE_NAME_REGEX
             .find(html)?.groupValues?.get(1)
-        val fromAlt = Regex("""<img class="IllustUserThumb"[^>]*alt="([^"]+)"""")
+        val fromAlt = ALT_NAME_REGEX
             .find(html)?.groupValues?.get(1)
         val raw = fromH2 ?: fromTitle ?: fromAlt
         Log.d(TAG, "fetchDisplayName: uid=$uid h2=$fromH2 title=$fromTitle alt=$fromAlt")
@@ -222,7 +222,7 @@ class AuthRepository @Inject constructor(
         .replace("&gt;", ">")
         .replace("&quot;", "\"")
         .replace("&#39;", "'")
-        .replace(Regex("&#(\\d+);")) { m ->
+        .replace(HTML_ENTITY_DECIMAL_REGEX) { m ->
             m.groupValues[1].toIntOrNull()?.let { it.toChar().toString() } ?: m.value
         }
 
@@ -348,6 +348,13 @@ class AuthRepository @Inject constructor(
          * 留一点余量防止服务端 -1。
          */
         const val MAX_AVATAR_BASE64_LEN = 1_250_000
+
+        private val PREVIEW_IMG_REGEX = Regex("""PreviewImg" src="([^"]+)""")
+        private val AVATAR_SUFFIX_REGEX = Regex("""_\d+\.(jpg|jpeg|png)$""")
+        private val H2_NAME_REGEX = Regex("""<h2 class="IllustUserName">([^<]+)</h2>""")
+        private val TITLE_NAME_REGEX = Regex("""<title>([^<]+)のポイピク \| イラストとか箱「ポイピク」</title>""")
+        private val ALT_NAME_REGEX = Regex("""<img class="IllustUserThumb"[^>]*alt="([^"]+)"""")
+        private val HTML_ENTITY_DECIMAL_REGEX = Regex("&#(\\d+);")
     }
 
     /** 服务端返回 result<=0 时抛出，携带原始码供上层提示 */
