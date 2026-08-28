@@ -11,11 +11,13 @@ import com.piku.client.data.repository.AuthRepository
 import com.piku.client.domain.model.AppError
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import javax.inject.Inject
 
@@ -66,13 +68,15 @@ class ProfileEditViewModel @Inject constructor(
 
     fun updateAvatar(uri: Uri) {
         if (_uiState.value.savingName || _uiState.value.uploadingAvatar) return
-        val cacheFile = copyToCache(uri) ?: run {
-            _uiState.update { it.copy(errorRes = R.string.profile_edit_avatar_read_failed) }
-            return
-        }
         viewModelScope.launch {
             _uiState.update { it.copy(uploadingAvatar = true, errorRes = null) }
-            authRepository.updateAvatar(ensureSize(cacheFile))
+            val cacheFile = withContext(Dispatchers.IO) { copyToCache(uri) }
+            if (cacheFile == null) {
+                _uiState.update { it.copy(uploadingAvatar = false, errorRes = R.string.profile_edit_avatar_read_failed) }
+                return@launch
+            }
+            val sizedFile = withContext(Dispatchers.IO) { ensureSize(cacheFile) }
+            authRepository.updateAvatar(sizedFile)
                 .onSuccess {
                     cacheFile.delete()
                     _uiState.update { it.copy(uploadingAvatar = false, saved = true) }
