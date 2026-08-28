@@ -318,6 +318,8 @@
     <string name="ai_translate_model">Short-text models</string>
     <string name="ai_translate_novel_model">Novel body model</string>
     <string name="ai_translate_novel_model_empty">No novel model in this list; novel text stays untranslated</string>
+    <string name="ai_translate_image_model">Image model</string>
+    <string name="ai_translate_image_model_empty">No image model in this list; image translation unavailable</string>
     <string name="ai_translate_catalog_source">Model list source</string>
     <string name="ai_translate_catalog_default">Official default</string>
     <string name="ai_translate_catalog_custom">Custom</string>

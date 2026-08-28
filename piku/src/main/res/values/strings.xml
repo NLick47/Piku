@@ -299,6 +299,9 @@
     <string name="detail_reaction_send_failed">发送失败</string>
     <string name="detail_reaction_limit">今日反应次数已达上限</string>
     <string name="detail_reaction_login_hint">登录后即可发送反应</string>
+    <string name="detail_image_translate">翻译图片</string>
+    <string name="detail_image_translating">翻译中…</string>
+    <string name="detail_image_translate_failed">图片翻译失败</string>
     <string name="detail_untitled_work">无标题作品</string>
     <string name="detail_follow">关注</string>
     <string name="detail_followed">已关注</string>
@@ -318,6 +321,8 @@
     <string name="ai_translate_model">短文本模型</string>
     <string name="ai_translate_novel_model">小说正文模型</string>
     <string name="ai_translate_novel_model_empty">当前列表没有小说正文模型，正文将保留原文</string>
+    <string name="ai_translate_image_model">图像模型</string>
+    <string name="ai_translate_image_model_empty">当前列表没有图像模型，图片翻译功能不可用</string>
     <string name="ai_translate_catalog_source">模型列表来源</string>
     <string name="ai_translate_catalog_default">官方默认</string>
     <string name="ai_translate_catalog_custom">自定义</string>

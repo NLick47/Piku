@@ -318,6 +318,8 @@
     <string name="ai_translate_model">短文テキストモデル</string>
     <string name="ai_translate_novel_model">小説本文モデル</string>
     <string name="ai_translate_novel_model_empty">このリストに小説本文モデルがなく、本文は原文のままになります</string>
+    <string name="ai_translate_image_model">画像モデル</string>
+    <string name="ai_translate_image_model_empty">このリストに画像モデルがなく、画像翻訳機能は利用できません</string>
     <string name="ai_translate_catalog_source">モデルリストソース</string>
     <string name="ai_translate_catalog_default">公式デフォルト</string>
     <string name="ai_translate_catalog_custom">カスタム</string>

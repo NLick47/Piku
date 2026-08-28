@@ -18,6 +18,10 @@ import com.piku.client.data.remote.translation.NovelStreamEvent
 import com.piku.client.data.remote.translation.TranslationRepository
 import com.piku.client.data.remote.translation.ModelCatalogRepository
 import com.piku.client.data.remote.translation.ModelEntry
+import com.piku.client.data.remote.translation.Role
+import com.piku.client.data.remote.translation.ImageTranslateEngine
+import com.piku.client.data.remote.translation.ImageTranslationPrompts
+import com.piku.client.data.remote.translation.LlmTranslateEngine
 import com.piku.client.domain.model.AppError
 import com.piku.client.domain.model.AuthStatus
 import com.piku.client.domain.model.FavoriteFolder
@@ -38,6 +42,7 @@ import com.piku.client.R
 import com.piku.client.ui.common.toFeedErrorRes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -46,6 +51,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 
@@ -77,6 +83,7 @@ data class DetailUiState(
     val tagFeedbackRes: Int? = null,
     /** 底部菜单一次性新手引导（仅首次进入详情页显示） */
     val guideVisible: Boolean = false,
+
     /** 全屏小说阅读器：当前是否打开 */
     val novelReaderOpen: Boolean = false,
     /** 全屏小说阅读器：字号（sp） */
@@ -116,6 +123,15 @@ data class DetailUiState(
      * 顶栏切换时清空，保证"全局切换"语义直观。
      */
     val fieldOverrides: Set<TranslateField> = emptySet(),
+    // ---- 图片翻译 ----
+    /** 已翻译的页码 → Bitmap（退出页面时清理） */
+    val translatedImages: Map<Int, android.graphics.Bitmap> = emptyMap(),
+    /** 当前正在翻译的页码（null = 空闲） */
+    val imageTranslatingPage: Int? = null,
+    /** 当前页是否显示译图 */
+    val showTranslatedImage: Boolean = false,
+    /** 是否有可用的 image 模型 */
+    val hasImageModel: Boolean = false,
 ) {
     /** 该字段当前是否显示译文：全局态异或单字段覆盖 */
     fun showTranslation(field: TranslateField): Boolean =
@@ -168,6 +184,7 @@ class DetailViewModel @Inject constructor(
     private val translationRepository: TranslationRepository,
     private val modelCatalogRepository: ModelCatalogRepository,
     private val observeLanguageUseCase: ObserveLanguageUseCase,
+    private val imageTranslateEngine: ImageTranslateEngine,
     private val prefs: SharedPreferences,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
@@ -216,6 +233,7 @@ class DetailViewModel @Inject constructor(
     fun dismissGuide() {
         if (!_uiState.value.guideVisible) return
         _uiState.update { it.copy(guideVisible = false) }
+        prefs.edit().putBoolean(KEY_BOTTOM_GUIDE_SHOWN, true).apply()
     }
 
     /** 打开/关闭全屏小说阅读器 */
@@ -296,7 +314,14 @@ class DetailViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            modelCatalogRepository.models.collect { models -> _catalogModels.value = models }
+            modelCatalogRepository.models.collect { models ->
+                _catalogModels.value = models
+                // 检查是否有可用的 image 模型
+                val hasImage = models.any {
+                    Role.IMAGE in it.roles && it.available && !it.apiKey.isNullOrBlank()
+                }
+                _uiState.update { it.copy(hasImageModel = hasImage) }
+            }
         }
         viewModelScope.launch {
             // key 可用性（远程目录内置）变化时同步手动按钮可见性；
@@ -312,6 +337,11 @@ class DetailViewModel @Inject constructor(
             }
         }
         load()
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        clearImageTranslations()
     }
 
     /**
@@ -603,6 +633,136 @@ class DetailViewModel @Inject constructor(
 
     fun clearTranslateFeedback() {
         _uiState.update { it.copy(translateFeedbackRes = null) }
+    }
+
+    // =====================================================================
+    // 图片翻译
+    // =====================================================================
+
+    private val _translatedImages = mutableMapOf<Int, android.graphics.Bitmap>()
+    private var imageTranslateJob: Job? = null
+
+    /** 切页时更新按钮状态 */
+    fun onImagePageChanged(page: Int) {
+        _uiState.update {
+            it.copy(showTranslatedImage = _translatedImages.containsKey(page))
+        }
+    }
+
+    /** 点击翻译按钮：已翻译则切换原图/译图，否则开始翻译 */
+    fun onImageTranslateClick(page: Int) {
+        if (_uiState.value.imageTranslatingPage != null) return
+        if (_translatedImages.containsKey(page)) {
+            _uiState.update { it.copy(showTranslatedImage = !it.showTranslatedImage) }
+            return
+        }
+        translateImage(page)
+    }
+
+    private fun translateImage(page: Int) {
+        val detail = _uiState.value.detail ?: return
+        val imageUrl = detail.imageUrls.getOrNull(page) ?: return
+
+        _uiState.update { it.copy(imageTranslatingPage = page) }
+        imageTranslateJob?.cancel()
+        imageTranslateJob = viewModelScope.launch {
+            try {
+                val bitmap = withTimeoutOrNull(180_000L) {
+                    doTranslateImage(imageUrl, page)
+                }
+                if (bitmap != null) {
+                    _translatedImages[page] = bitmap
+                    _uiState.update {
+                        it.copy(
+                            translatedImages = HashMap(_translatedImages),
+                            imageTranslatingPage = null,
+                            showTranslatedImage = true,
+                        )
+                    }
+                } else {
+                    _uiState.update { it.copy(imageTranslatingPage = null) }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("ImageTranslate", "failed: ${e.message}")
+                _uiState.update { it.copy(imageTranslatingPage = null) }
+            }
+        }
+    }
+
+    private suspend fun doTranslateImage(imageUrl: String, page: Int): android.graphics.Bitmap? {
+        // 1. 下载原图
+        val imageBytes = downloadImage(imageUrl) ?: return null
+
+        // 2. 获取提示词（跟随 App 语言设置）
+        val language = observeLanguageUseCase().value
+        val targetLang = TranslationRepository.targetLangName(language)
+        val prompt = getImagePrompt(targetLang)
+
+        // 3. 获取 image 模型的 baseUrl
+        val imageEntry = modelCatalogRepository.models.value.firstOrNull {
+            Role.IMAGE in it.roles && it.available && !it.apiKey.isNullOrBlank()
+        } ?: return null
+
+        // 4. 调用翻译引擎
+        return imageTranslateEngine.translate(
+            imageBytes = imageBytes,
+            prompt = prompt,
+            targetLang = targetLang,
+            proxyBaseUrl = imageEntry.baseUrl,
+        )
+    }
+
+    private suspend fun downloadImage(url: String): ByteArray? = withContext(Dispatchers.IO) {
+        try {
+            val request = okhttp3.Request.Builder()
+                .url(url)
+                .build()
+            // 复用注入的 OkHttpClient（带连接池和超时配置）
+            imageTranslateEngine.client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) response.body?.bytes() else null
+            }
+        } catch (e: Exception) {
+            Log.e("ImageTranslate", "download failed: ${e.message}")
+            null
+        }
+    }
+
+    private fun getImagePrompt(targetLang: String): String {
+        // 1. 尝试从 catalog 读取 image 模式的提示词
+        val defaults = modelCatalogRepository.catalogDefaults.value
+        val catalogPrompt = defaults?.prompts?.image?.get(langKey(targetLang))
+        if (!catalogPrompt.isNullOrBlank()) return catalogPrompt
+
+        // 2. 尝试从 image 模型自带的 prompts 读取
+        val imageEntry = modelCatalogRepository.models.value.firstOrNull {
+            Role.IMAGE in it.roles && it.available && !it.apiKey.isNullOrBlank()
+        }
+        val modelPrompt = imageEntry?.prompts?.image?.get(langKey(targetLang))
+        if (!modelPrompt.isNullOrBlank()) return modelPrompt
+
+        // 3. 回退内置提示词
+        return ImageTranslationPrompts.prompt(targetLang)
+    }
+
+    private fun langKey(targetLang: String): String = when (targetLang) {
+        LlmTranslateEngine.TARGET_ZH -> "zh"
+        LlmTranslateEngine.TARGET_JA -> "ja"
+        else -> "en"
+    }
+
+    /** 清理图片翻译缓存（退出页面时调用） */
+    fun clearImageTranslations() {
+        imageTranslateJob?.cancel()
+        _translatedImages.clear()
+        _uiState.update {
+            it.copy(
+                translatedImages = emptyMap(),
+                imageTranslatingPage = null,
+                showTranslatedImage = false,
+            )
+        }
     }
 
     fun retry() = load()
@@ -961,6 +1121,6 @@ class DetailViewModel @Inject constructor(
         const val IMAGE_WAIT_MILLIS = 8_000L
 
         /** 底部菜单新手引导已展示标记 */
-        const val KEY_BOTTOM_GUIDE_SHOWN = "detail_bottom_guide_shown"
+        const val KEY_BOTTOM_GUIDE_SHOWN = "detail_bottom_guide_shown_v2"
     }
 }

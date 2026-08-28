@@ -70,6 +70,7 @@ import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.OpenInBrowser
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Translate
+import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -104,6 +105,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
@@ -354,6 +356,12 @@ fun DetailScreen(
                         customTags = state.customTags.toSet(),
                         onToggleCustomTag = viewModel::toggleCustomTag,
                         onOpenNovelReader = { viewModel.setNovelReaderOpen(true) },
+                        hasImageModel = state.hasImageModel,
+                        imageTranslated = state.showTranslatedImage,
+                        imageTranslatingPage = state.imageTranslatingPage,
+                        translatedImages = state.translatedImages,
+                        onImageTranslateClick = { page -> viewModel.onImageTranslateClick(page) },
+                        onPageChanged = { page -> viewModel.onImagePageChanged(page) },
                         translationAvailable = state.hasTranslation,
                         showTranslation = { field -> state.showTranslation(field) },
                         onToggleField = viewModel::toggleField,
@@ -416,7 +424,13 @@ fun DetailScreen(
                         onClose = { viewerPage = -1 },
                         onSaveImage = { page -> confirmSavePage = page },
                         dark = dark,
+                        hasImageModel = state.hasImageModel,
+                        imageTranslating = state.imageTranslatingPage != null,
+                        imageTranslated = state.showTranslatedImage,
+                        translatedImages = state.translatedImages,
+                        onImageTranslateClick = { page -> viewModel.onImageTranslateClick(page) },
                     )
+
                 }
             }
             if (state.novelReaderOpen && it.novelText.isNotBlank()) {
@@ -680,10 +694,10 @@ private fun DetailTopBar(
                             else -> R.string.detail_show_translation
                         },
                     ),
-                    // 译文态高亮，翻译中弱化，原文态用常规色，一眼能看出当前在看哪个
+                    // 译文态蓝色高亮，翻译中弱化，原文态用常规色
                     tint = when {
                         translating -> if (dark) LoginTextFaintDark else LoginTextFaintLight
-                        showTranslation -> if (dark) ControlAccentDark else AccentDark
+                        showTranslation -> Color(0xFF4FC3F7)
                         else -> if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
                     },
                     modifier = Modifier.size(20.dp),
@@ -1040,6 +1054,18 @@ private fun BottomBarGuideHint(
                 label = stringResource(R.string.detail_more),
                 dark = dark,
             )
+            GuideHintItem(
+                icon = {
+                    Icon(
+                        imageVector = Icons.Outlined.PhotoLibrary,
+                        contentDescription = null,
+                        tint = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                        modifier = Modifier.size(14.dp),
+                    )
+                },
+                label = stringResource(R.string.detail_image_translate),
+                dark = dark,
+            )
         }
     }
 }
@@ -1061,6 +1087,8 @@ private fun GuideHintItem(
         )
     }
 }
+
+
 
 /**
  * 单击 + 长按统一手势：
@@ -1115,6 +1143,12 @@ private fun DetailContent(
     customTags: Set<String>,
     onToggleCustomTag: (String) -> Unit,
     onOpenNovelReader: () -> Unit,
+    hasImageModel: Boolean = false,
+    imageTranslated: Boolean = false,
+    imageTranslatingPage: Int? = null,
+    translatedImages: Map<Int, android.graphics.Bitmap> = emptyMap(),
+    onImageTranslateClick: ((Int) -> Unit)? = null,
+    onPageChanged: ((Int) -> Unit)? = null,
     translationAvailable: Boolean = false,
     showTranslation: (TranslateField) -> Boolean = { false },
     onToggleField: (TranslateField) -> Unit = {},
@@ -1173,6 +1207,12 @@ private fun DetailContent(
             onPasswordSubmit = onPasswordSubmit,
             passwordLoading = passwordLoading,
             onOpenNovelReader = onOpenNovelReader,
+            hasImageModel = hasImageModel,
+            imageTranslated = imageTranslated,
+            imageTranslatingPage = imageTranslatingPage,
+            translatedImages = translatedImages,
+            onImageTranslateClick = onImageTranslateClick,
+            onPageChanged = onPageChanged,
         )
         Spacer(Modifier.height(14.dp))
         if (detail.title.isNotBlank()) {
@@ -1370,8 +1410,17 @@ private fun ImagePager(
     onPasswordSubmit: () -> Unit,
     passwordLoading: Boolean,
     onOpenNovelReader: () -> Unit,
+    hasImageModel: Boolean = false,
+    imageTranslated: Boolean = false,
+    imageTranslatingPage: Int? = null,
+    translatedImages: Map<Int, android.graphics.Bitmap> = emptyMap(),
+    onImageTranslateClick: ((Int) -> Unit)? = null,
+    onPageChanged: ((Int) -> Unit)? = null,
 ) {
     val pagerState = rememberPagerState(pageCount = { detail.imageUrls.size })
+    LaunchedEffect(pagerState.currentPage) {
+        onPageChanged?.invoke(pagerState.currentPage)
+    }
 
     Box(
         modifier = Modifier
@@ -1430,18 +1479,34 @@ private fun ImagePager(
                 state = pagerState,
                 modifier = Modifier.fillMaxSize(),
             ) { page ->
-                AsyncImage(
-                    model = detail.imageUrls[page],
-                    contentDescription = detail.title,
-                    colorFilter = if (dark) TameWhiteColorFilter else null,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .combinedClickable(
-                            onClick = { onImageClick(page) },
-                            onLongClick = { onImageLongPress(page) },
-                        ),
-                    contentScale = ContentScale.Fit,
-                )
+                val translatedBitmap = if (imageTranslated) translatedImages[page] else null
+                if (translatedBitmap != null) {
+                    androidx.compose.foundation.Image(
+                        bitmap = translatedBitmap.asImageBitmap(),
+                        contentDescription = detail.title,
+                        colorFilter = if (dark) TameWhiteColorFilter else null,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .combinedClickable(
+                                onClick = { onImageClick(page) },
+                                onLongClick = { onImageLongPress(page) },
+                            ),
+                        contentScale = ContentScale.Fit,
+                    )
+                } else {
+                    AsyncImage(
+                        model = detail.imageUrls[page],
+                        contentDescription = detail.title,
+                        colorFilter = if (dark) TameWhiteColorFilter else null,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .combinedClickable(
+                                onClick = { onImageClick(page) },
+                                onLongClick = { onImageLongPress(page) },
+                            ),
+                        contentScale = ContentScale.Fit,
+                    )
+                }
             }
             if (detail.imageUrls.size > 1) {
                 Text(
@@ -1459,6 +1524,45 @@ private fun ImagePager(
                         .background(Color(0x99000000))
                         .padding(horizontal = 8.dp, vertical = 3.dp),
                 )
+            }
+            if (hasImageModel && onImageTranslateClick != null) {
+                val isCurrentPageTranslating = imageTranslatingPage == pagerState.currentPage
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(
+                            when {
+                                isCurrentPageTranslating -> Color(0x44000000)
+                                imageTranslated -> Color(0x442196F3)
+                                dark -> Color(0x66000000)
+                                else -> Color(0x66FFFFFF)
+                            },
+                        )
+                        .clickable(
+                            enabled = !isCurrentPageTranslating,
+                            onClick = { onImageTranslateClick(pagerState.currentPage) },
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (isCurrentPageTranslating) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(14.dp),
+                            strokeWidth = 2.dp,
+                            color = Color.White,
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Outlined.PhotoLibrary,
+                            contentDescription = null,
+                            tint = if (imageTranslated) Color(0xFF4FC3F7)
+                            else if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
+                }
             }
         }
     }

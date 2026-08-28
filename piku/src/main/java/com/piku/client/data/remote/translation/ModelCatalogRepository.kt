@@ -16,15 +16,7 @@ import javax.inject.Inject
 import javax.inject.Named
 import javax.inject.Singleton
 
-/**
- * 模型列表来源：启动时从远程加密目录整体拉取，内置默认仅作离线兜底。
- *
- * 免费模型经常下架/改名，key 也可能需要轮换，远程目录让这些修正不必发版：
- * 默认地址指向 piku-models 仓库经 jsDelivr 分发的 AES-256-GCM 密文，
- * [refresh] 拉取后解密并整体替换当前列表（远程为准，已下架条目随之消失）；
- * 用户也可自填明文 JSON 地址（旧用法兼容）。
- * 拉取失败时静默沿用当前列表（冷启动即内置默认），模型选择不能因为这个可选功能而不可用。
- */
+/** 远程加密模型目录：启动时拉取解密替换内置默认，失败静默沿用内置列表。 */
 @Singleton
 class ModelCatalogRepository @Inject constructor(
     private val settingsRepository: SettingsRepository,
@@ -35,17 +27,10 @@ class ModelCatalogRepository @Inject constructor(
     private val _models = MutableStateFlow(ModelCatalog.DEFAULTS)
     val models: StateFlow<List<ModelEntry>> = _models.asStateFlow()
 
-    /** 目录全局默认（请求参数 + 提示词），供翻译引擎按模型继承/覆盖 */
     private val _defaults = MutableStateFlow<CatalogDefaults?>(null)
     val catalogDefaults: StateFlow<CatalogDefaults?> = _defaults.asStateFlow()
 
-    /**
-     * 拉取远程目录并整体替换当前列表（远程为准：新增/修改生效，已删除条目随之移除）。
-     * 默认地址主用 jsDelivr，被墙时回退 GitHub 直连；自定义地址不附加回退。
-     * jsDelivr 对分支 URL 有最长约 12h 的边缘缓存，拉取前先 purge 强制回源，
-     * 保证发布新目录后下一次冷启动就能拿到（见 [purgeJsDelivrCache]）。
-     * 远程返回空列表视为无效数据，不清空当前列表；任一候选成功即返回 true。
-     */
+    /** 拉取远程目录并整体替换当前列表；拉取前先 purge jsDelivr 边缘缓存。 */
     suspend fun refresh(): Boolean = withContext(Dispatchers.IO) {
         val url = settingsRepository.catalogRemoteUrl.value.trim()
         if (url.isBlank()) return@withContext false
@@ -58,17 +43,13 @@ class ModelCatalogRepository @Inject constructor(
         for (candidate in candidates) {
             val body = fetch(candidate) ?: continue
             val dto = decode(body) ?: continue
-            if (dto.models.isEmpty()) {
-                Log.d(TAG, "catalog from $candidate has no models, ignored")
-                continue
-            }
+            if (dto.models.isEmpty()) continue
             _models.value = dto.models
             _defaults.value = dto.defaults
-            Log.d(TAG, "catalog refreshed from $candidate: ${dto.models.size} entries, " +
-                "keyed=${dto.models.count { !it.apiKey.isNullOrBlank() }}")
+            Log.d(TAG, "catalog refreshed from $candidate: ${dto.models.size} entries")
             return@withContext true
         }
-        Log.d(TAG, "catalog refresh failed: all ${candidates.size} candidate(s) unreachable/undecodable/empty")
+        Log.d(TAG, "catalog refresh failed: all ${candidates.size} candidate(s) unreachable/undecodable")
         false
     }
 
@@ -79,11 +60,7 @@ class ModelCatalogRepository @Inject constructor(
         }
     }.onFailure { Log.d(TAG, "catalog fetch failed ($url): ${it.message}") }.getOrNull()
 
-    /**
-     * 请求 jsDelivr 官方 purge 端点，把内置目录分支 URL 的边缘缓存清掉。
-     * 尽力而为：失败只记日志不影响后续拉取（大不了沿用缓存 TTL 内的旧数据）；
-     * 短超时避免网络不佳时拖慢启动刷新。仅对内置默认地址生效，自定义地址不 purge。
-     */
+    /** 请求 jsDelivr purge 端点清边缘缓存，失败不影响后续拉取。 */
     private fun purgeJsDelivrCache() {
         val purgeUrl = SettingsRepository.CATALOG_URL_DEFAULT
             .replace("https://cdn.jsdelivr.net", "https://purge.jsdelivr.net")
@@ -99,18 +76,14 @@ class ModelCatalogRepository @Inject constructor(
         }.onFailure { Log.d(TAG, "jsdelivr purge skipped: ${it.message}") }
     }
 
-    /**
-     * 加密信封优先解密；否则按用户自定义的明文 JSON 解析（保持旧用法兼容）。
-     * 解密密钥：用户为第三方加密目录填入的自定义密钥优先，空则回退编译期内置密钥
-     * （官方列表）。两者都解不开时返回 null，refresh 沿用当前列表。
-     */
+    /** 加密信封解密，否则按明文 JSON 解析（兼容自定义地址）。 */
     private fun decode(body: String): ModelCatalogDto? = runCatching {
         val envelope = runCatching { json.decodeFromString<CryptoHelper.Envelope>(body) }.getOrNull()
             ?.takeIf { it.alg.isNotBlank() && it.iv.isNotBlank() && it.data.isNotBlank() }
         val plain = if (envelope != null) {
             val key = settingsRepository.catalogEncKey.value.trim()
                 .ifBlank { BuildConfig.CATALOG_ENC_KEY }
-            if (key.isBlank()) error("缺少解密密钥（内置为空且未自定义）")
+            if (key.isBlank()) error("缺少解密密钥")
             CryptoHelper.decrypt(envelope, key)
         } else {
             body

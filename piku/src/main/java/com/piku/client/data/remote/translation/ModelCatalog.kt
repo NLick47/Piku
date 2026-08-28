@@ -60,13 +60,15 @@ data class ModelEntry(
     val roles: List<String> = listOf(Role.TEXT),
 )
 
-/** 翻译提示词集：单条 / 批量 / 小说分块，各目标语言（zh/en/ja）一套。远程下发实现热更新。 */
+/** 翻译提示词集：单条 / 批量 / 小说分块 / 图片，各目标语言（zh/en/ja）一套。远程下发实现热更新。 */
 @Serializable
 data class PromptSet(
     val single: Map<String, String> = emptyMap(),
     val batch: Map<String, String> = emptyMap(),
     /** 小说正文分块翻译（含上下文标记规则）；缺省回退内置 [TranslationPrompts.novelSystemPrompt] */
     val novel: Map<String, String> = emptyMap(),
+    /** 图片翻译（擦除原文→翻译→写回）；缺省回退内置 [ImageTranslationPrompts] */
+    val image: Map<String, String> = emptyMap(),
 )
 
 /** 目录全局默认：请求参数、提示词与各场景默认模型，供未自带覆盖的模型继承。 */

@@ -77,6 +77,7 @@ internal data class ShortTranslation(
 data class RoleDefaultIds(
     val text: String? = null,
     val novel: String? = null,
+    val image: String? = null,
 )
 
 /**
@@ -143,6 +144,7 @@ class TranslationRepository @Inject constructor(
         RoleDefaultIds(
             text = ModelCatalog.resolveRoleDefault(Role.TEXT, models, roleDefaults)?.id,
             novel = ModelCatalog.resolveRoleDefault(Role.NOVEL, models, roleDefaults)?.id,
+            image = ModelCatalog.resolveRoleDefault(Role.IMAGE, models, roleDefaults)?.id,
         )
     }
 

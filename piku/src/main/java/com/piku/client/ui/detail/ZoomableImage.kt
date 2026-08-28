@@ -6,25 +6,31 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -59,6 +65,7 @@ import coil3.compose.SubcomposeAsyncImage
 import com.piku.client.R
 import com.piku.client.ui.theme.TameWhiteColorFilter
 import com.piku.client.ui.theme.ViewerBackgroundDark
+import androidx.compose.ui.graphics.asImageBitmap
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -261,6 +268,107 @@ private fun ZoomableImage(
     }
 }
 
+/**
+ * Translated image viewer with the same zoom/pan gestures as [ZoomableImage].
+ * Renders an in-memory Bitmap instead of a URL-loaded image.
+ */
+@Composable
+private fun TranslatedZoomableImage(
+    bitmap: android.graphics.Bitmap,
+    contentDescription: String?,
+    dark: Boolean,
+    onTap: () -> Unit,
+    onLongPress: () -> Unit,
+) {
+    var zoom by remember { mutableStateOf(ZoomState()) }
+    var viewport by remember { mutableStateOf(IntSize.Zero) }
+    val currentOnTap by rememberUpdatedState(onTap)
+    val currentOnLongPress by rememberUpdatedState(onLongPress)
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .onSizeChanged { viewport = it }
+            .pointerInput(viewport) {
+                detectTapGestures(
+                    onDoubleTap = { pivot ->
+                        val zoomed = zoom.scale > MIN_SCALE + SCALE_EPSILON
+                        val target = if (zoomed) MIN_SCALE else DOUBLE_TAP_SCALE
+                        zoom = ZoomTransform.zoomTo(zoom, target, pivot, viewport)
+                    },
+                    onLongPress = { currentOnLongPress() },
+                    onTap = { currentOnTap() },
+                )
+            }
+            .pointerInput(viewport) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    if (zoom.scale > MIN_SCALE + SCALE_EPSILON) down.consume()
+
+                    var pastTouchSlop = false
+                    var accumulatedZoom = 1f
+                    var accumulatedPan = Offset.Zero
+                    var lastPointerCount = 1
+
+                    do {
+                        val event = awaitPointerEvent()
+                        val pointerCount = event.changes.count { it.pressed }
+                        if (event.changes.fastAny { it.isConsumed }) continue
+
+                        val zoomed = zoom.scale > MIN_SCALE + SCALE_EPSILON
+                        if (!zoomed && pointerCount < 2) continue
+
+                        event.changes.fastForEach { if (it.positionChanged()) it.consume() }
+
+                        val pointerSetChanged = pointerCount != lastPointerCount
+                        lastPointerCount = pointerCount
+                        if (pointerSetChanged) continue
+
+                        val zoomChange = event.calculateZoom()
+                        val panChange = event.calculatePan()
+
+                        if (!pastTouchSlop) {
+                            accumulatedZoom *= zoomChange
+                            accumulatedPan += panChange
+                            val slop = viewConfiguration.touchSlop
+                            if (accumulatedPan.getDistance() > slop ||
+                                abs(1f - accumulatedZoom) * maxOf(viewport.width, viewport.height) > slop
+                            ) {
+                                pastTouchSlop = true
+                            } else {
+                                continue
+                            }
+                        }
+
+                        zoom = ZoomTransform.transform(
+                            current = zoom,
+                            zoomChange = zoomChange,
+                            panChange = panChange,
+                            centroid = event.calculateCentroid(),
+                            viewport = viewport,
+                        )
+                    } while (event.changes.fastAny { it.pressed })
+                }
+            }
+            .graphicsLayer {
+                transformOrigin = TransformOrigin(0f, 0f)
+                scaleX = zoom.scale
+                scaleY = zoom.scale
+                translationX = zoom.offset.x
+                translationY = zoom.offset.y
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        androidx.compose.foundation.Image(
+            bitmap = bitmap.asImageBitmap(),
+            contentDescription = contentDescription,
+            contentScale = ContentScale.Fit,
+            colorFilter = if (dark) TameWhiteColorFilter else null,
+            modifier = Modifier.fillMaxSize(),
+        )
+    }
+}
+
 @Composable
 fun FullScreenViewer(
     images: List<ViewerImage>,
@@ -268,6 +376,11 @@ fun FullScreenViewer(
     dark: Boolean,
     onClose: () -> Unit,
     onSaveImage: (Int) -> Unit,
+    hasImageModel: Boolean = false,
+    imageTranslating: Boolean = false,
+    imageTranslated: Boolean = false,
+    translatedImages: Map<Int, android.graphics.Bitmap> = emptyMap(),
+    onImageTranslateClick: (Int) -> Unit = {},
 ) {
     val pagerState = rememberPagerState(
         pageCount = { images.size },
@@ -301,20 +414,38 @@ fun FullScreenViewer(
     ) {
         BackHandler(onBack = onClose)
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
-            ZoomableImage(
-                image = images[page],
-                contentDescription = null,
-                dark = dark,
-                onTap = {
-                    if (controlsVisible) {
-                        controlsVisible = false
-                        autoHideJob?.cancel()
-                    } else {
-                        refreshAutoHide()
-                    }
-                },
-                onLongPress = { onSaveImage(page) },
-            )
+            val translatedBitmap = if (imageTranslated) translatedImages[page] else null
+            if (translatedBitmap != null) {
+                TranslatedZoomableImage(
+                    bitmap = translatedBitmap,
+                    contentDescription = null,
+                    dark = dark,
+                    onTap = {
+                        if (controlsVisible) {
+                            controlsVisible = false
+                            autoHideJob?.cancel()
+                        } else {
+                            refreshAutoHide()
+                        }
+                    },
+                    onLongPress = { onSaveImage(page) },
+                )
+            } else {
+                ZoomableImage(
+                    image = images[page],
+                    contentDescription = null,
+                    dark = dark,
+                    onTap = {
+                        if (controlsVisible) {
+                            controlsVisible = false
+                            autoHideJob?.cancel()
+                        } else {
+                            refreshAutoHide()
+                        }
+                    },
+                    onLongPress = { onSaveImage(page) },
+                )
+            }
         }
         AnimatedVisibility(
             visible = controlsVisible,
@@ -351,6 +482,64 @@ fun FullScreenViewer(
                         .background(Color(0x66000000))
                         .padding(horizontal = 10.dp, vertical = 4.dp),
                 )
+            }
+        }
+        // 底部浮动区域：翻译按钮 + 页码计数器（常驻可见，不跟顶栏一起隐藏）
+        if (hasImageModel || images.size > 1) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .navigationBarsPadding()
+                    .padding(end = 12.dp, bottom = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (hasImageModel) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (imageTranslated) Color(0x442196F3)
+                                else Color(0x66000000),
+                            )
+                            .clickable(
+                                enabled = !imageTranslating,
+                                onClick = { onImageTranslateClick(pagerState.currentPage) },
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (imageTranslating) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = Color.White,
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Outlined.PhotoLibrary,
+                                contentDescription = stringResource(R.string.detail_image_translate),
+                                tint = if (imageTranslated) Color(0xFF4FC3F7) else Color.White,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                    }
+                }
+                if (images.size > 1) {
+                    Text(
+                        text = stringResource(
+                            R.string.detail_image_index,
+                            pagerState.currentPage + 1,
+                            images.size,
+                        ),
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color(0x66000000))
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                    )
+                }
             }
         }
     }

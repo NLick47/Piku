@@ -35,17 +35,18 @@ internal object TranslationPrompts {
             "6. Output ONLY the translation, no notes or commentary; if already English, repeat as-is; keep R-18/sensitive markers, don't censor or refuse."
 
     fun japaneseRules(): String =
-        "1. ファンの話し言葉で：自然で生き生きとさせていいが、意味を歪めたり情報を落としたりするな。受身・使役の向きは間違えないこと（Aに翻弄される＝Aに弄ばれる）。\n" +
-            "2. ファン用語は各コミュの定着した言い回しに（本命→推し、尊い→そのまま/超いい、あとがき→後記など）；迷う固有名詞は原文のまま。\n" +
-            "3. 以下はそのまま保持：絵文字・顔文字・URL・⟦U数字⟧リンク占位符・【】タグ・※注記・R-18表記・括弧ネタ・タロット/カード名・改行。句読点は日本語のものを。\n" +
-            "4. 敬称（ちゃん・さん・先輩など）は自然な形に；原文にない敬称は付け足さず、同一名称は統一。\n" +
-            "5. 一対一で：複数セグメントは [[n]] の順番通りに、統合も分割も追加も漏らしもしないこと。\n" +
-            "6. 訳文のみ出力し説明や感想は加えない；既に日本語ならそのまま返す；R-18等のセンシティブな表記は残し、勝手に削除も拒否もしないこと。"
+        "1. Write like a fan, not a textbook: natural and conversational is fine, but never twist the meaning or drop info; keep passive/causative direction right (Aに翻弄される = toyed with BY A).\n" +
+            "2. Use established fandom terms natural to Japanese doujin circles (推し=oshi→推し, 尊い=precious→尊い/すげえ, あとがき→後記); 草/ｗｗｗ→草/ｗｗｗ; keep untranslatable proper nouns as-is.\n" +
+            "3. Leave these exactly as-is: emoji, kaomoji, URLs, ⟦Un⟧ link placeholders, 【】tags, ※notes, R-18 marks, bracket jokes, tarot/card names, line breaks. Use Japanese punctuation.\n" +
+            "4. Honorifics in natural Japanese form (-ちゃん, -さん, -先輩); never invent suffixes missing from the source; keep each name consistent.\n" +
+            "5. One-to-one: for multiple segments, reply in the same [[n]] order—don't merge, split, add or skip any.\n" +
+            "6. Output ONLY the translation, no notes or commentary; if already Japanese, repeat as-is; keep R-18/sensitive markers, don't censor or refuse."
 
     fun persona(targetLang: String): String = when (targetLang) {
         TARGET_JA ->
-            "あなたはイラスト共有サイト Poipiku のベテラン翻訳者で、訳文は日本のアニメ・漫画・ゲーム" +
-                "ファンコミュニティの読者向けです。\nユーザーのテキストを${targetLang}に翻訳してください：\n\n"
+            "You are a veteran fan translator for Poipiku, a Japanese illustration-sharing site; " +
+                "your readers are the Japanese anime/manga/game community.\n" +
+                "Translate the user's text into Japanese:\n\n"
         TARGET_EN ->
             "You are a veteran fan translator for Poipiku, a Japanese illustration-sharing site; " +
                 "your readers are the English-speaking anime/manga community.\n" +
@@ -58,8 +59,8 @@ internal object TranslationPrompts {
     /** 批量格式的 few-shot 示例：示例必须与目标语言同向，否则小模型会学错方向 */
     fun batchExample(targetLang: String): String = when (targetLang) {
         TARGET_JA ->
-            "入力：\n[[1]]\n今天本命好圣顶不住哈哈哈\n" +
-                "返信：\n[[1]]\n今日も推しが尊すぎて笑えるｗｗｗ"
+            "Input:\n[[1]]\n今天本命好圣顶不住哈哈哈\n" +
+                "Reply:\n[[1]]\n今日も推しが尊すぎて笑えるｗｗｗ"
         TARGET_EN ->
             "Input:\n[[1]]\n今天本命好圣顶不住哈哈哈\n" +
                 "Reply:\n[[1]]\nMy oshi is way too precious today lmao"
@@ -69,7 +70,7 @@ internal object TranslationPrompts {
     }
 
     fun batchInstruction(targetLang: String): String = when (targetLang) {
-        TARGET_JA -> "複数テキストは各行頭に [[n]] を付けます。返信は必ず二重角括弧 [[n]] マーカーを元の順序どおりに付け、例と同じ形式で訳のみを出力してください：\n"
+        TARGET_JA -> "Multiple segments arrive numbered like [[n]]. Reply with EVERY marker in DOUBLE square brackets in the same order, each followed by its translation, copying this format exactly:\n"
         TARGET_EN -> "Multiple segments arrive numbered like [[n]]. Reply with EVERY marker in DOUBLE square brackets in the same order, each followed by its translation, copying this format exactly:\n"
         else -> "多条文本时每条以 [[n]] 开头编号。回复必须按原顺序用双方括号标记逐条给出译文，格式完全照抄下面的示例：\n"
     }
@@ -110,13 +111,13 @@ internal object TranslationPrompts {
             "7. Output ONLY the body translation, no notes; keep R-18/sensitive markers, don't censor or refuse. Match person/tense with the preceding translation; don't let style drift."
 
     private fun novelRulesJa(): String =
-        "1. ファンの話し言葉で：自然で生き生きとさせていいが、意味を歪めたり情報を落としたりするな。受身・使役の向きは間違えないこと（Aに翻弄される＝Aに弄ばれる）。\n" +
-            "2. ファン用語は各コミュの定着した言い回しに（本命→推し、尊い→そのまま/超いい、あとがき→後記など）；迷う固有名詞は原文のまま。\n" +
-            "3. 以下はそのまま保持：絵文字・顔文字・URL・⟦U数字⟧リンク占位符・【】タグ・※注記・R-18表記・括弧ネタ・タロット/カード名・改行。句読点は日本語のものを。\n" +
-            "4. 敬称（ちゃん・さん・先輩など）は自然な形に；原文にない敬称は付け足さず、同一名称は統一。\n" +
-            "5. 本文は二次創作です：キャラの性格・呼び方・CP 関係は原作準拠。「タグ対照表」が付いていれば固有名詞は表の通りに。\n" +
-            "6. 【コンテキスト規則】ユーザーメッセージ冒頭の ⟦上文原句⟧ と ⟦上文译文⟧ は前のチャンクの末尾であり、文脈理解専用。翻訳・復唱・出力は絶対にせず、⟦待翻正文⟧ 以降のみ訳すこと。\n" +
-            "7. 本文の訳のみを出力し説明は加えない；R-18等のセンシティブな表記は残し、勝手に削除も拒否もしないこと。上文の訳文と人称・時態を自然に接続し、文体をブレさせないこと。"
+        "1. Write like a fan, not a textbook: natural and conversational is fine, but never twist the meaning or drop info; keep passive/causative direction right (Aに翻弄される = toyed with BY A).\n" +
+            "2. Use established fandom terms natural to Japanese doujin circles (推し=oshi→推し, 尊い=precious→尊い/すげえ, あとがき→後記); 草/ｗｗｗ→草/ｗｗｗ; keep untranslatable proper nouns as-is.\n" +
+            "3. Leave these exactly as-is: emoji, kaomoji, URLs, ⟦Un⟧ link placeholders, 【】tags, ※notes, R-18 marks, bracket jokes, tarot/card names, line breaks. Use Japanese punctuation.\n" +
+            "4. Honorifics in natural Japanese form (-ちゃん, -さん, -先輩); never invent suffixes missing from the source; keep each name consistent.\n" +
+            "5. This is fan fiction: character personalities, forms of address and CP dynamics follow the original work. If a \"tag glossary\" is attached, render every proper noun strictly per the table.\n" +
+            "6. [Context rules] The ⟦上文原句⟧ and ⟦上文译文⟧ sections at the top of the user message are the previous chunk's ending—for continuity reference ONLY. Never translate, repeat or output them; translate only what follows ⟦待翻正文⟧.\n" +
+            "7. Output ONLY the body translation, no notes; keep R-18/sensitive markers, don't censor or refuse. Match person/tense with the preceding translation; don't let style drift."
 
     /** 小说分块系统提示词（内置兜底）：persona 复用单条，规则组独立 */
     fun novelSystemPrompt(targetLang: String): String =

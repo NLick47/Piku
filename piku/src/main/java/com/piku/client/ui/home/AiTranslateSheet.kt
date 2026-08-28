@@ -258,6 +258,63 @@ private fun AiTranslateMainPage(
         }
 
         Spacer(Modifier.height(18.dp))
+        SheetSectionLabel(stringResource(R.string.ai_translate_image_model), faint)
+        Spacer(Modifier.height(8.dp))
+
+        val imageModels = usableModels.filter { Role.IMAGE in it.roles }
+        if (imageModels.isEmpty()) {
+            Text(
+                text = stringResource(R.string.ai_translate_image_model_empty),
+                color = faint,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
+            )
+        } else {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .border(
+                        BorderStroke(0.5.dp, if (dark) LoginCardBorderDark else LoginCardBorderLight),
+                        RoundedCornerShape(14.dp),
+                    ),
+            ) {
+                imageModels.forEachIndexed { index, entry ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = entry.label,
+                                color = primary,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                            )
+                            if (entry.hint.isNotBlank()) {
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    text = entry.hint,
+                                    color = faint,
+                                    fontSize = 11.sp,
+                                )
+                            }
+                        }
+                    }
+                    if (index < imageModels.lastIndex) {
+                        HorizontalDivider(
+                            color = if (dark) LoginCardBorderDark else LoginCardBorderLight,
+                            thickness = 0.5.dp,
+                            modifier = Modifier.padding(start = 14.dp),
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(18.dp))
 
         Row(
             modifier = Modifier
