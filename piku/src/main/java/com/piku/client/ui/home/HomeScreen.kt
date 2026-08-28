@@ -164,14 +164,16 @@ fun HomeScreen(
         drawerState.currentValue == DrawerValue.Closed &&
         drawerState.targetValue == DrawerValue.Closed
 
-    val openDrawer = {
-        if (drawerButtonEnabled) {
-            drawerOpenPending = true
-            scope.launch {
-                try {
-                    drawerState.open()
-                } finally {
-                    drawerOpenPending = false
+    val openDrawer = remember(drawerButtonEnabled) {
+        {
+            if (drawerButtonEnabled) {
+                drawerOpenPending = true
+                scope.launch {
+                    try {
+                        drawerState.open()
+                    } finally {
+                        drawerOpenPending = false
+                    }
                 }
             }
         }
@@ -199,15 +201,17 @@ fun HomeScreen(
         }
     }
 
-    val onLogout = { showLogoutConfirm = true }
+    val onLogout = remember { { showLogoutConfirm = true } }
 
-    val onOpenUpdate = {
-        val release = state.updateBanner
-            ?: (state.updateCheckState as? UpdateCheckState.Available)?.release
-        if (release != null) {
-            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(release.htmlUrl)))
+    val onOpenUpdate = remember(state.updateBanner, state.updateCheckState) {
+        {
+            val release = state.updateBanner
+                ?: (state.updateCheckState as? UpdateCheckState.Available)?.release
+            if (release != null) {
+                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(release.htmlUrl)))
+            }
+            viewModel.dismissUpdateBanner()
         }
-        viewModel.dismissUpdateBanner()
     }
 
     UserDrawer(
