@@ -15,7 +15,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         WorkPasswordEntity::class,
         TranslationEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -127,6 +127,12 @@ abstract class AppDatabase : RoomDatabase() {
                         "updatedAt INTEGER NOT NULL, " +
                         "PRIMARY KEY(srcHash, targetLang, engineId))",
                 )
+            }
+        }
+
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_translations_updatedAt ON translations(updatedAt)")
             }
         }
     }
