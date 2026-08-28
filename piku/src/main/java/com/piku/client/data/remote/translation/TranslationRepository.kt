@@ -292,27 +292,35 @@ class TranslationRepository @Inject constructor(
                             dao.get(cacheKey(stripped, links), targetLang, engineId)
                         }
                         cached ?: run {
-                            val out = engine.translate(listOf(stripped), targetLang, context)
-                                .firstOrNull().orEmpty()
-                            if (out.isBlank()) {
-                                failedCount++
-                                null
-                            } else {
-                                val full = if (links.isEmpty()) {
-                                    out
-                                } else {
-                                    out.trimEnd() + links.joinToString("") { " $it" }
+                            var translatedText: String? = null
+                            repeat(1 + CHUNK_RETRY_ATTEMPTS) { attempt ->
+                                if (translatedText != null) return@repeat
+                                try {
+                                    val out = engine.translate(listOf(stripped), targetLang, context)
+                                        .firstOrNull().orEmpty()
+                                    if (out.isBlank()) {
+                                        if (attempt < CHUNK_RETRY_ATTEMPTS) delay(chunkRetryDelay(attempt))
+                                        return@repeat
+                                    }
+                                    val full = if (links.isEmpty()) out
+                                    else out.trimEnd() + links.joinToString("") { " $it" }
+                                    pendingPersist += TranslationEntity(
+                                        srcHash = cacheKey(stripped, links),
+                                        targetLang = targetLang,
+                                        engineId = engineId,
+                                        translated = full,
+                                        updatedAt = System.currentTimeMillis(),
+                                    )
+                                    if (pendingPersist.size >= STREAM_PERSIST_BATCH) flushPersist()
+                                    translatedText = full
+                                } catch (e: TranslationApiException) {
+                                    if (attempt < CHUNK_RETRY_ATTEMPTS && e.code != 0) {
+                                        delay(chunkRetryDelay(attempt))
+                                    }
                                 }
-                                pendingPersist += TranslationEntity(
-                                    srcHash = cacheKey(stripped, links),
-                                    targetLang = targetLang,
-                                    engineId = engineId,
-                                    translated = full,
-                                    updatedAt = System.currentTimeMillis(),
-                                )
-                                if (pendingPersist.size >= STREAM_PERSIST_BATCH) flushPersist()
-                                full
                             }
+                            if (translatedText == null) failedCount++
+                            translatedText
                         }
                     }
                 }
@@ -563,6 +571,12 @@ class TranslationRepository @Inject constructor(
         return ""
     }
 
+    /** 块级重试延迟：指数退避 + 随机抖动 */
+    private fun chunkRetryDelay(attempt: Int): Long {
+        val exp = CHUNK_RETRY_DELAY_BASE_MS * (1L shl attempt.coerceAtMost(3))
+        return exp + Random.nextLong(0, 500)
+    }
+
     /**
      * 设置里存的是目录 id 或裸模型名（如默认 glm-4-flash），两种都做匹配。
      * 目录权威高于历史选中：指向已下架/被撤 key 条目的旧值视为未选择，
@@ -614,6 +628,12 @@ class TranslationRepository @Inject constructor(
          * 仍周期性写入，流中途取消/崩溃时近期块已入缓存可复读。
          */
         private const val STREAM_PERSIST_BATCH = 8
+
+        /** 块级重试次数（不含首次尝试） */
+        private const val CHUNK_RETRY_ATTEMPTS = 2
+
+        /** 块级重试延迟基数（ms）：指数退避 1s → 2s → 4s... */
+        private const val CHUNK_RETRY_DELAY_BASE_MS = 1000L
 
         /** 故障转移前的全抖动延迟范围：把同时失败的重试在时间维度打散 */
         private const val FAILOVER_JITTER_MIN_MS = 800L
