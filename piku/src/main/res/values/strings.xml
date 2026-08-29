@@ -111,6 +111,8 @@
     <string name="retention_forever">永久保留</string>
     <string name="menu_section_library">收藏与记录</string>
     <string name="menu_section_general">通用</string>
+    <string name="menu_section_settings">常用设置</string>
+    <string name="menu_settings">更多设置</string>
     <string name="menu_my_tags">我的标签</string>
     <string name="menu_follow_users">我的关注</string>
     <string name="follow_users_title">我的关注</string>

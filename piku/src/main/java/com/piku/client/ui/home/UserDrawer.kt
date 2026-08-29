@@ -26,14 +26,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.DarkMode
-import androidx.compose.material.icons.outlined.DeleteSweep
-import androidx.compose.material.icons.outlined.GTranslate
 import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Tag
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.outlined.Wallpaper
@@ -81,18 +80,14 @@ fun UserDrawer(
     adultEnabled: Boolean,
     themeMode: ThemeMode,
     customBackgroundPath: String?,
-    historyRetentionDays: Int,
     language: AppLanguage,
-    aiTranslateEnabled: Boolean,
     currentVersion: String,
     updateAvailable: Boolean,
     onToggleAdult: () -> Unit,
+    onSettingsClick: () -> Unit,
     onAboutClick: () -> Unit,
     onThemeClick: () -> Unit,
     onBackgroundClick: () -> Unit,
-    onRetentionClick: () -> Unit,
-    onLanguageClick: () -> Unit,
-    onAiTranslateClick: () -> Unit,
     onHistoryClick: () -> Unit,
     onCollectionClick: () -> Unit,
     onTagsClick: () -> Unit,
@@ -113,18 +108,14 @@ fun UserDrawer(
                 adultEnabled = adultEnabled,
                 themeMode = themeMode,
                 customBackgroundPath = customBackgroundPath,
-                historyRetentionDays = historyRetentionDays,
                 language = language,
-                aiTranslateEnabled = aiTranslateEnabled,
                 currentVersion = currentVersion,
                 updateAvailable = updateAvailable,
                 onToggleAdult = onToggleAdult,
+                onSettingsClick = onSettingsClick,
                 onAboutClick = onAboutClick,
                 onThemeClick = onThemeClick,
                 onBackgroundClick = onBackgroundClick,
-                onRetentionClick = onRetentionClick,
-                onLanguageClick = onLanguageClick,
-                onAiTranslateClick = onAiTranslateClick,
                 onHistoryClick = onHistoryClick,
                 onCollectionClick = onCollectionClick,
                 onTagsClick = onTagsClick,
@@ -147,18 +138,14 @@ private fun DrawerPanel(
     adultEnabled: Boolean,
     themeMode: ThemeMode,
     customBackgroundPath: String?,
-    historyRetentionDays: Int,
     language: AppLanguage,
-    aiTranslateEnabled: Boolean,
     currentVersion: String,
     updateAvailable: Boolean,
     onToggleAdult: () -> Unit,
+    onSettingsClick: () -> Unit,
     onAboutClick: () -> Unit,
     onThemeClick: () -> Unit,
     onBackgroundClick: () -> Unit,
-    onRetentionClick: () -> Unit,
-    onLanguageClick: () -> Unit,
-    onAiTranslateClick: () -> Unit,
     onHistoryClick: () -> Unit,
     onCollectionClick: () -> Unit,
     onTagsClick: () -> Unit,
@@ -267,12 +254,34 @@ private fun DrawerPanel(
             )
             Spacer(Modifier.height(14.dp))
             SectionLabel(
-                text = stringResource(R.string.menu_section_general),
+                text = stringResource(R.string.menu_section_settings),
                 color = faint,
             )
             AdultContentRow(
                 adultEnabled = adultEnabled,
                 onToggleAdult = onToggleAdult,
+                dark = dark,
+                accent = iconAccent,
+            )
+            DrawerMenuRow(
+                icon = Icons.Outlined.DarkMode,
+                label = stringResource(R.string.menu_theme),
+                trailing = stringResource(themeMode.labelRes()),
+                onClick = onThemeClick,
+                dark = dark,
+                accent = iconAccent,
+            )
+            DrawerMenuRow(
+                icon = Icons.Outlined.Wallpaper,
+                label = stringResource(R.string.menu_background),
+                trailing = stringResource(
+                    if (customBackgroundPath != null) {
+                        R.string.background_state_custom
+                    } else {
+                        R.string.background_state_default
+                    },
+                ),
+                onClick = onBackgroundClick,
                 dark = dark,
                 accent = iconAccent,
             )
@@ -302,54 +311,9 @@ private fun DrawerPanel(
                 },
             )
             DrawerMenuRow(
-                icon = Icons.Outlined.DarkMode,
-                label = stringResource(R.string.menu_theme),
-                trailing = stringResource(themeMode.labelRes()),
-                onClick = onThemeClick,
-                dark = dark,
-                accent = iconAccent,
-            )
-            DrawerMenuRow(
-                icon = Icons.Outlined.Wallpaper,
-                label = stringResource(R.string.menu_background),
-                trailing = stringResource(
-                    if (customBackgroundPath != null) {
-                        R.string.background_state_custom
-                    } else {
-                        R.string.background_state_default
-                    },
-                ),
-                onClick = onBackgroundClick,
-                dark = dark,
-                accent = iconAccent,
-            )
-            DrawerMenuRow(
-                icon = Icons.Outlined.Translate,
-                label = stringResource(R.string.menu_language),
-                trailing = stringResource(language.labelRes()),
-                onClick = onLanguageClick,
-                dark = dark,
-                accent = iconAccent,
-            )
-            DrawerMenuRow(
-                icon = Icons.Outlined.GTranslate,
-                label = stringResource(R.string.menu_ai_translate),
-                trailing = stringResource(
-                    if (aiTranslateEnabled) {
-                        R.string.ai_translate_state_on
-                    } else {
-                        R.string.ai_translate_state_off
-                    },
-                ),
-                onClick = onAiTranslateClick,
-                dark = dark,
-                accent = iconAccent,
-            )
-            DrawerMenuRow(
-                icon = Icons.Outlined.DeleteSweep,
-                label = stringResource(R.string.menu_history_retention),
-                trailing = retentionLabel(historyRetentionDays),
-                onClick = onRetentionClick,
+                icon = Icons.Outlined.Settings,
+                label = stringResource(R.string.menu_settings),
+                onClick = onSettingsClick,
                 dark = dark,
                 accent = iconAccent,
             )
@@ -569,37 +533,6 @@ private fun DrawerMenuRow(
     }
 }
 
-@Composable
-private fun UpdateChip(
-    text: String,
-    dark: Boolean,
-) {
-    val color = if (dark) Color(0xFF9A7FC9) else Color(0xFF5E4B8B)
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(999.dp))
-            .background(color.copy(alpha = if (dark) 0.22f else 0.12f))
-            .padding(horizontal = 7.dp, vertical = 2.dp),
-    ) {
-        Text(
-            text = text,
-            color = color,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.SemiBold,
-        )
-    }
-}
-
-@Composable
-private fun retentionLabel(days: Int): String = stringResource(
-    when (days) {
-        7 -> R.string.retention_7d
-        30 -> R.string.retention_30d
-        90 -> R.string.retention_90d
-        else -> R.string.retention_forever
-    },
-)
-
 private fun ThemeMode.labelRes(): Int = when (this) {
     ThemeMode.SYSTEM -> R.string.theme_mode_system
     ThemeMode.LIGHT -> R.string.theme_mode_light
@@ -656,6 +589,27 @@ private fun AdultContentRow(
             checked = adultEnabled,
             onCheckedChange = { onToggleAdult() },
             colors = themedSwitchColors(dark),
+        )
+    }
+}
+
+@Composable
+private fun UpdateChip(
+    text: String,
+    dark: Boolean,
+) {
+    val color = if (dark) Color(0xFF9A7FC9) else Color(0xFF5E4B8B)
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(color.copy(alpha = if (dark) 0.22f else 0.12f))
+            .padding(horizontal = 7.dp, vertical = 2.dp),
+    ) {
+        Text(
+            text = text,
+            color = color,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
         )
     }
 }

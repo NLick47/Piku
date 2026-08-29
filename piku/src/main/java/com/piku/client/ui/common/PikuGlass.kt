@@ -19,6 +19,7 @@ fun GlassCard(
     dark: Boolean,
     shape: Shape,
     modifier: Modifier = Modifier,
+    bgColor: Color = if (dark) Color(0x8C262421) else Color(0xA6FFFFFF),
     content: @Composable BoxScope.() -> Unit,
 ) {
     Box(
@@ -30,9 +31,7 @@ fun GlassCard(
                 spotColor = Color(0x33000000),
             )
             .clip(shape)
-            .background(
-                if (dark) Color(0x8C262421) else Color(0xA6FFFFFF),
-            )
+            .background(bgColor)
             .border(
                 BorderStroke(0.5.dp, if (dark) Color(0x26FFFFFF) else Color(0x66FFFFFF)),
                 shape,

@@ -83,6 +83,10 @@ import com.piku.client.data.local.CatalogSource
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.domain.model.Work
 import com.piku.client.ui.profile.ProfileEditSheet
+import com.piku.client.ui.collection.CollectionScreen
+import com.piku.client.ui.follow.FollowUsersScreen
+import com.piku.client.ui.history.HistoryScreen
+import com.piku.client.ui.tags.TagScreen
 import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.LocalDarkTheme
 import com.piku.client.ui.theme.LoginTextFaintDark
@@ -150,6 +154,11 @@ fun HomeScreen(
     var showAiTranslateSheet by rememberSaveable { mutableStateOf(false) }
     var showCatalogSource by rememberSaveable { mutableStateOf(false) }
     var showAboutSheet by rememberSaveable { mutableStateOf(false) }
+    var showSettingsPage by rememberSaveable { mutableStateOf(false) }
+    var showHistoryPage by rememberSaveable { mutableStateOf(false) }
+    var showCollectionPage by rememberSaveable { mutableStateOf(false) }
+    var showTagsPage by rememberSaveable { mutableStateOf(false) }
+    var showFollowUsersPage by rememberSaveable { mutableStateOf(false) }
     var showLogoutConfirm by rememberSaveable { mutableStateOf(false) }
     var showProfileEdit by rememberSaveable { mutableStateOf(false) }
     val isScrolling = remember { mutableStateOf(false) }
@@ -220,12 +229,14 @@ fun HomeScreen(
         adultEnabled = state.adultEnabled,
         themeMode = state.themeMode,
         customBackgroundPath = state.customBackgroundPath,
-        historyRetentionDays = state.historyRetentionDays,
         language = state.language,
-        aiTranslateEnabled = state.aiTranslateEnabled,
         currentVersion = displayVersionName(),
         updateAvailable = state.updateCheckState is UpdateCheckState.Available,
         onToggleAdult = viewModel::toggleAdultContent,
+        onSettingsClick = {
+            scope.launch { drawerState.close() }
+            showSettingsPage = true
+        },
         onAboutClick = { showAboutSheet = true },
         onThemeClick = { showThemeSheet = true },
         onBackgroundClick = {
@@ -242,13 +253,22 @@ fun HomeScreen(
             bgPreviewMode = BG_PREVIEW_REAL
             isBackgroundEditMode = true
         },
-        onRetentionClick = { showRetentionSheet = true },
-        onLanguageClick = { showLanguageSheet = true },
-        onAiTranslateClick = { showAiTranslateSheet = true },
-        onHistoryClick = { onHistoryClick() },
-        onCollectionClick = { onCollectionClick() },
-        onTagsClick = { onTagsClick() },
-        onFollowUsersClick = { onFollowUsersClick() },
+        onHistoryClick = {
+            scope.launch { drawerState.close() }
+            showHistoryPage = true
+        },
+        onCollectionClick = {
+            scope.launch { drawerState.close() }
+            showCollectionPage = true
+        },
+        onTagsClick = {
+            scope.launch { drawerState.close() }
+            showTagsPage = true
+        },
+        onFollowUsersClick = {
+            scope.launch { drawerState.close() }
+            showFollowUsersPage = true
+        },
         onProfileClick = { showProfileEdit = true },
         onProfileOpen = {
             val profile = state.userProfile
@@ -782,6 +802,76 @@ fun HomeScreen(
                 )
             }
         }
+    }
+
+    HomeOverlays(
+        showSettingsPage = showSettingsPage,
+        onSettingsBack = { showSettingsPage = false; scope.launch { drawerState.open() } },
+        onAiTranslateClick = { showAiTranslateSheet = true },
+        onLanguageClick = { showLanguageSheet = true },
+        onRetentionClick = { showRetentionSheet = true },
+        showHistoryPage = showHistoryPage,
+        onHistoryBack = { showHistoryPage = false; scope.launch { drawerState.open() } },
+        showCollectionPage = showCollectionPage,
+        onCollectionBack = { showCollectionPage = false; scope.launch { drawerState.open() } },
+        showTagsPage = showTagsPage,
+        onTagsBack = { showTagsPage = false; scope.launch { drawerState.open() } },
+        showFollowUsersPage = showFollowUsersPage,
+        onFollowUsersBack = { showFollowUsersPage = false; scope.launch { drawerState.open() } },
+        onWorkClick = onWorkClick,
+        onLoginClick = onLoginClick,
+        onProfileOpen = onProfileOpen,
+        state = state,
+        dark = dark,
+    )
+}
+
+@Composable
+private fun HomeOverlays(
+    showSettingsPage: Boolean,
+    onSettingsBack: () -> Unit,
+    onAiTranslateClick: () -> Unit,
+    onLanguageClick: () -> Unit,
+    onRetentionClick: () -> Unit,
+    showHistoryPage: Boolean,
+    onHistoryBack: () -> Unit,
+    showCollectionPage: Boolean,
+    onCollectionBack: () -> Unit,
+    showTagsPage: Boolean,
+    onTagsBack: () -> Unit,
+    showFollowUsersPage: Boolean,
+    onFollowUsersBack: () -> Unit,
+    onWorkClick: (Work) -> Unit,
+    onLoginClick: () -> Unit,
+    onProfileOpen: (Long, String) -> Unit,
+    state: HomeUiState,
+    dark: Boolean,
+) {
+    if (showSettingsPage) {
+        SettingsPage(
+            state = state,
+            onBack = onSettingsBack,
+            onAiTranslateClick = onAiTranslateClick,
+            onLanguageClick = onLanguageClick,
+            onRetentionClick = onRetentionClick,
+            dark = dark,
+        )
+    }
+    if (showHistoryPage) {
+        HistoryScreen(onBack = onHistoryBack, onWorkClick = { onWorkClick(it) })
+    }
+    if (showCollectionPage) {
+        CollectionScreen(onBack = onCollectionBack, onWorkClick = { onWorkClick(it) })
+    }
+    if (showTagsPage) {
+        TagScreen(onBack = onTagsBack, onWorkClick = { onWorkClick(it) })
+    }
+    if (showFollowUsersPage) {
+        FollowUsersScreen(
+            onBack = onFollowUsersBack,
+            onLoginClick = onLoginClick,
+            onUserClick = { user -> onProfileOpen(user.userId, user.name) },
+        )
     }
 }
 
