@@ -72,6 +72,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -153,6 +155,7 @@ fun HomeScreen(
     var showLanguageSheet by rememberSaveable { mutableStateOf(false) }
     var showAiTranslateSheet by rememberSaveable { mutableStateOf(false) }
     var showCatalogSource by rememberSaveable { mutableStateOf(false) }
+    var showWebDavPage by rememberSaveable { mutableStateOf(false) }
     var showAboutSheet by rememberSaveable { mutableStateOf(false) }
     var showSettingsPage by rememberSaveable { mutableStateOf(false) }
     var showHistoryPage by rememberSaveable { mutableStateOf(false) }
@@ -161,6 +164,8 @@ fun HomeScreen(
     var showFollowUsersPage by rememberSaveable { mutableStateOf(false) }
     var showLogoutConfirm by rememberSaveable { mutableStateOf(false) }
     var showProfileEdit by rememberSaveable { mutableStateOf(false) }
+    val anyOverlayActive = showSettingsPage || showWebDavPage || showHistoryPage ||
+        showCollectionPage || showTagsPage || showFollowUsersPage
     val isScrolling = remember { mutableStateOf(false) }
     val gridState = rememberLazyStaggeredGridState()
     val scope = rememberCoroutineScope()
@@ -281,6 +286,7 @@ fun HomeScreen(
             onLoginClick()
         },
         onLogout = onLogout,
+        gesturesEnabled = !anyOverlayActive,
         dark = dark,
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -732,9 +738,9 @@ fun HomeScreen(
             }
 
             if (showCatalogSource) {
-                androidx.compose.ui.window.Dialog(
+                Dialog(
                     onDismissRequest = { showCatalogSource = false },
-                    properties = androidx.compose.ui.window.DialogProperties(
+                    properties = DialogProperties(
                         usePlatformDefaultWidth = false,
                         decorFitsSystemWindows = false,
                         dismissOnClickOutside = false,
@@ -801,29 +807,38 @@ fun HomeScreen(
                     onDismiss = { showProfileEdit = false },
                 )
             }
+
+            HomeOverlays(
+                showSettingsPage = showSettingsPage,
+                onSettingsBack = { showSettingsPage = false; scope.launch { drawerState.open() } },
+                onAiTranslateClick = { showAiTranslateSheet = true },
+                onLanguageClick = { showLanguageSheet = true },
+                onRetentionClick = { showRetentionSheet = true },
+                onWebDavClick = { showWebDavPage = true },
+                showWebDavPage = showWebDavPage,
+                onWebDavBack = { showWebDavPage = false; scope.launch { drawerState.open() } },
+                onWebDavUrlChange = viewModel::setWebDavUrl,
+                onWebDavUsernameChange = viewModel::setWebDavUsername,
+                onWebDavPasswordChange = viewModel::setWebDavPassword,
+                onWebDavEnabledChange = viewModel::setWebDavEnabled,
+                onWebDavTestConnection = viewModel::testWebDavConnection,
+                onSyncClick = { viewModel.syncNow() },
+                showHistoryPage = showHistoryPage,
+                onHistoryBack = { showHistoryPage = false; scope.launch { drawerState.open() } },
+                showCollectionPage = showCollectionPage,
+                onCollectionBack = { showCollectionPage = false; scope.launch { drawerState.open() } },
+                showTagsPage = showTagsPage,
+                onTagsBack = { showTagsPage = false; scope.launch { drawerState.open() } },
+                showFollowUsersPage = showFollowUsersPage,
+                onFollowUsersBack = { showFollowUsersPage = false; scope.launch { drawerState.open() } },
+                onWorkClick = onWorkClick,
+                onLoginClick = onLoginClick,
+                onProfileOpen = onProfileOpen,
+                state = state,
+                dark = dark,
+            )
         }
     }
-
-    HomeOverlays(
-        showSettingsPage = showSettingsPage,
-        onSettingsBack = { showSettingsPage = false; scope.launch { drawerState.open() } },
-        onAiTranslateClick = { showAiTranslateSheet = true },
-        onLanguageClick = { showLanguageSheet = true },
-        onRetentionClick = { showRetentionSheet = true },
-        showHistoryPage = showHistoryPage,
-        onHistoryBack = { showHistoryPage = false; scope.launch { drawerState.open() } },
-        showCollectionPage = showCollectionPage,
-        onCollectionBack = { showCollectionPage = false; scope.launch { drawerState.open() } },
-        showTagsPage = showTagsPage,
-        onTagsBack = { showTagsPage = false; scope.launch { drawerState.open() } },
-        showFollowUsersPage = showFollowUsersPage,
-        onFollowUsersBack = { showFollowUsersPage = false; scope.launch { drawerState.open() } },
-        onWorkClick = onWorkClick,
-        onLoginClick = onLoginClick,
-        onProfileOpen = onProfileOpen,
-        state = state,
-        dark = dark,
-    )
 }
 
 @Composable
@@ -833,6 +848,15 @@ private fun HomeOverlays(
     onAiTranslateClick: () -> Unit,
     onLanguageClick: () -> Unit,
     onRetentionClick: () -> Unit,
+    onWebDavClick: () -> Unit,
+    showWebDavPage: Boolean,
+    onWebDavBack: () -> Unit,
+    onWebDavUrlChange: (String) -> Unit,
+    onWebDavUsernameChange: (String) -> Unit,
+    onWebDavPasswordChange: (String) -> Unit,
+    onWebDavEnabledChange: (Boolean) -> Unit,
+    onWebDavTestConnection: () -> Unit,
+    onSyncClick: () -> Unit,
     showHistoryPage: Boolean,
     onHistoryBack: () -> Unit,
     showCollectionPage: Boolean,
@@ -847,31 +871,69 @@ private fun HomeOverlays(
     state: HomeUiState,
     dark: Boolean,
 ) {
+    val fullScreenProps = DialogProperties(
+        usePlatformDefaultWidth = false,
+        decorFitsSystemWindows = false,
+        dismissOnClickOutside = false,
+    )
+
     if (showSettingsPage) {
-        SettingsPage(
-            state = state,
-            onBack = onSettingsBack,
-            onAiTranslateClick = onAiTranslateClick,
-            onLanguageClick = onLanguageClick,
-            onRetentionClick = onRetentionClick,
-            dark = dark,
-        )
+        Dialog(onDismissRequest = onSettingsBack, properties = fullScreenProps) {
+            SettingsPage(
+                state = state,
+                onBack = onSettingsBack,
+                onAiTranslateClick = onAiTranslateClick,
+                onLanguageClick = onLanguageClick,
+                onRetentionClick = onRetentionClick,
+                onWebDavClick = onWebDavClick,
+                dark = dark,
+            )
+        }
+    }
+    if (showWebDavPage) {
+        Dialog(onDismissRequest = onWebDavBack, properties = fullScreenProps) {
+            WebDavSettingsScreen(
+                url = state.webDavUrl,
+                username = state.webDavUsername,
+                password = state.webDavPassword,
+                enabled = state.webDavEnabled,
+                lastSyncAt = state.lastSyncAt,
+                syncResult = state.syncResult,
+                syncState = state.syncState,
+                onUrlChange = onWebDavUrlChange,
+                onUsernameChange = onWebDavUsernameChange,
+                onPasswordChange = onWebDavPasswordChange,
+                onEnabledChange = onWebDavEnabledChange,
+                onTestConnection = onWebDavTestConnection,
+                onSyncNow = onSyncClick,
+                onBack = onWebDavBack,
+                dark = dark,
+            )
+        }
     }
     if (showHistoryPage) {
-        HistoryScreen(onBack = onHistoryBack, onWorkClick = { onWorkClick(it) })
+        Dialog(onDismissRequest = onHistoryBack, properties = fullScreenProps) {
+            HistoryScreen(onBack = onHistoryBack, onWorkClick = { onWorkClick(it) })
+        }
     }
     if (showCollectionPage) {
-        CollectionScreen(onBack = onCollectionBack, onWorkClick = { onWorkClick(it) })
+        Dialog(onDismissRequest = onCollectionBack, properties = fullScreenProps) {
+            CollectionScreen(onBack = onCollectionBack, onWorkClick = { onWorkClick(it) }, onSyncClick = onSyncClick)
+        }
     }
     if (showTagsPage) {
-        TagScreen(onBack = onTagsBack, onWorkClick = { onWorkClick(it) })
+        Dialog(onDismissRequest = onTagsBack, properties = fullScreenProps) {
+            TagScreen(onBack = onTagsBack, onWorkClick = { onWorkClick(it) })
+        }
     }
     if (showFollowUsersPage) {
-        FollowUsersScreen(
-            onBack = onFollowUsersBack,
-            onLoginClick = onLoginClick,
-            onUserClick = { user -> onProfileOpen(user.userId, user.name) },
-        )
+        Dialog(onDismissRequest = onFollowUsersBack, properties = fullScreenProps) {
+            FollowUsersScreen(
+                onBack = onFollowUsersBack,
+                onLoginClick = onLoginClick,
+                onUserClick = { user -> onProfileOpen(user.userId, user.name) },
+            )
+        }
     }
 }
 

@@ -98,6 +98,7 @@ fun UserDrawer(
     onLoginClick: () -> Unit,
     onLogout: () -> Unit,
     dark: Boolean,
+    gesturesEnabled: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     ModalNavigationDrawer(
@@ -128,6 +129,7 @@ fun UserDrawer(
             )
         },
         scrimColor = if (dark) Color(0xB3000000) else Color(0x99000000),
+        gesturesEnabled = gesturesEnabled,
         content = content,
     )
 }
