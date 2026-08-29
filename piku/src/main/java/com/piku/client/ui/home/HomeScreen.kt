@@ -6,8 +6,12 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -239,7 +243,6 @@ fun HomeScreen(
         updateAvailable = state.updateCheckState is UpdateCheckState.Available,
         onToggleAdult = viewModel::toggleAdultContent,
         onSettingsClick = {
-            scope.launch { drawerState.close() }
             showSettingsPage = true
         },
         onAboutClick = { showAboutSheet = true },
@@ -259,19 +262,15 @@ fun HomeScreen(
             isBackgroundEditMode = true
         },
         onHistoryClick = {
-            scope.launch { drawerState.close() }
             showHistoryPage = true
         },
         onCollectionClick = {
-            scope.launch { drawerState.close() }
             showCollectionPage = true
         },
         onTagsClick = {
-            scope.launch { drawerState.close() }
             showTagsPage = true
         },
         onFollowUsersClick = {
-            scope.launch { drawerState.close() }
             showFollowUsersPage = true
         },
         onProfileClick = { showProfileEdit = true },
@@ -822,6 +821,7 @@ fun HomeScreen(
                 onWebDavPasswordChange = viewModel::setWebDavPassword,
                 onWebDavEnabledChange = viewModel::setWebDavEnabled,
                 onWebDavTestConnection = viewModel::testWebDavConnection,
+                onClearTestResult = viewModel::clearTestConnectionState,
                 onSyncClick = { viewModel.syncNow() },
                 showHistoryPage = showHistoryPage,
                 onHistoryBack = { showHistoryPage = false; scope.launch { drawerState.open() } },
@@ -856,6 +856,7 @@ private fun HomeOverlays(
     onWebDavPasswordChange: (String) -> Unit,
     onWebDavEnabledChange: (Boolean) -> Unit,
     onWebDavTestConnection: () -> Unit,
+    onClearTestResult: () -> Unit,
     onSyncClick: () -> Unit,
     showHistoryPage: Boolean,
     onHistoryBack: () -> Unit,
@@ -876,63 +877,81 @@ private fun HomeOverlays(
         decorFitsSystemWindows = false,
         dismissOnClickOutside = false,
     )
+    val pageEnter = slideInHorizontally(
+        initialOffsetX = { it },
+        animationSpec = tween(250),
+    ) + fadeIn(animationSpec = tween(250))
 
     if (showSettingsPage) {
         Dialog(onDismissRequest = onSettingsBack, properties = fullScreenProps) {
-            SettingsPage(
-                state = state,
-                onBack = onSettingsBack,
-                onAiTranslateClick = onAiTranslateClick,
-                onLanguageClick = onLanguageClick,
-                onRetentionClick = onRetentionClick,
-                onWebDavClick = onWebDavClick,
-                dark = dark,
-            )
+            AnimatedVisibility(visible = true, enter = pageEnter) {
+                SettingsPage(
+                    state = state,
+                    onBack = onSettingsBack,
+                    onAiTranslateClick = onAiTranslateClick,
+                    onLanguageClick = onLanguageClick,
+                    onRetentionClick = onRetentionClick,
+                    onWebDavClick = onWebDavClick,
+                    dark = dark,
+                )
+            }
         }
     }
     if (showWebDavPage) {
         Dialog(onDismissRequest = onWebDavBack, properties = fullScreenProps) {
-            WebDavSettingsScreen(
-                url = state.webDavUrl,
-                username = state.webDavUsername,
-                password = state.webDavPassword,
-                enabled = state.webDavEnabled,
-                lastSyncAt = state.lastSyncAt,
-                syncResult = state.syncResult,
-                syncState = state.syncState,
-                onUrlChange = onWebDavUrlChange,
-                onUsernameChange = onWebDavUsernameChange,
-                onPasswordChange = onWebDavPasswordChange,
-                onEnabledChange = onWebDavEnabledChange,
-                onTestConnection = onWebDavTestConnection,
-                onSyncNow = onSyncClick,
-                onBack = onWebDavBack,
-                dark = dark,
-            )
+            AnimatedVisibility(visible = true, enter = pageEnter) {
+                WebDavSettingsScreen(
+                    url = state.webDavUrl,
+                    username = state.webDavUsername,
+                    password = state.webDavPassword,
+                    enabled = state.webDavEnabled,
+                    lastSyncAt = state.lastSyncAt,
+                    syncResult = state.syncResult,
+                    syncState = state.syncState,
+                    testConnectionState = state.testConnectionState,
+                    onUrlChange = onWebDavUrlChange,
+                    onUsernameChange = onWebDavUsernameChange,
+                    onPasswordChange = onWebDavPasswordChange,
+                    onEnabledChange = onWebDavEnabledChange,
+                    onTestConnection = onWebDavTestConnection,
+                    onClearTestResult = onClearTestResult,
+                    onSyncNow = onSyncClick,
+                    onBack = onWebDavBack,
+                    dark = dark,
+                )
+            }
         }
     }
     if (showHistoryPage) {
         Dialog(onDismissRequest = onHistoryBack, properties = fullScreenProps) {
-            HistoryScreen(onBack = onHistoryBack, onWorkClick = { onWorkClick(it) })
+            AnimatedVisibility(visible = true, enter = pageEnter) {
+                HistoryScreen(onBack = onHistoryBack, onWorkClick = { onWorkClick(it) })
+            }
         }
     }
     if (showCollectionPage) {
         Dialog(onDismissRequest = onCollectionBack, properties = fullScreenProps) {
-            CollectionScreen(onBack = onCollectionBack, onWorkClick = { onWorkClick(it) }, onSyncClick = onSyncClick)
+            AnimatedVisibility(visible = true, enter = pageEnter) {
+                CollectionScreen(onBack = onCollectionBack, onWorkClick = { onWorkClick(it) }, onSyncClick = onSyncClick)
+            }
         }
     }
     if (showTagsPage) {
         Dialog(onDismissRequest = onTagsBack, properties = fullScreenProps) {
-            TagScreen(onBack = onTagsBack, onWorkClick = { onWorkClick(it) })
+            AnimatedVisibility(visible = true, enter = pageEnter) {
+                TagScreen(onBack = onTagsBack, onWorkClick = { onWorkClick(it) })
+            }
         }
     }
     if (showFollowUsersPage) {
         Dialog(onDismissRequest = onFollowUsersBack, properties = fullScreenProps) {
-            FollowUsersScreen(
-                onBack = onFollowUsersBack,
-                onLoginClick = onLoginClick,
-                onUserClick = { user -> onProfileOpen(user.userId, user.name) },
-            )
+            AnimatedVisibility(visible = true, enter = pageEnter) {
+                FollowUsersScreen(
+                    onBack = onFollowUsersBack,
+                    onLoginClick = onLoginClick,
+                    onUserClick = { user -> onProfileOpen(user.userId, user.name) },
+                )
+            }
         }
     }
 }
