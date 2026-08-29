@@ -26,7 +26,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material.icons.outlined.Group
+import androidx.compose.material.icons.outlined.GTranslate
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.automirrored.outlined.Logout
@@ -43,12 +45,14 @@ import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -99,8 +103,15 @@ fun UserDrawer(
     onLogout: () -> Unit,
     dark: Boolean,
     gesturesEnabled: Boolean = true,
+    aiTranslateEnabled: Boolean = false,
+    historyRetentionDays: Int = 30,
+    onAiTranslateClick: () -> Unit = {},
+    onLanguageClick: () -> Unit = {},
+    onRetentionClick: () -> Unit = {},
     content: @Composable () -> Unit,
 ) {
+    var settingsExpanded by remember { mutableStateOf(false) }
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
@@ -113,7 +124,10 @@ fun UserDrawer(
                 currentVersion = currentVersion,
                 updateAvailable = updateAvailable,
                 onToggleAdult = onToggleAdult,
-                onSettingsClick = onSettingsClick,
+                onSettingsClick = {
+                    settingsExpanded = !settingsExpanded
+                    onSettingsClick()
+                },
                 onAboutClick = onAboutClick,
                 onThemeClick = onThemeClick,
                 onBackgroundClick = onBackgroundClick,
@@ -126,6 +140,12 @@ fun UserDrawer(
                 onLoginClick = onLoginClick,
                 onLogout = onLogout,
                 dark = dark,
+                settingsExpanded = settingsExpanded,
+                aiTranslateEnabled = aiTranslateEnabled,
+                historyRetentionDays = historyRetentionDays,
+                onAiTranslateClick = onAiTranslateClick,
+                onLanguageClick = onLanguageClick,
+                onRetentionClick = onRetentionClick,
             )
         },
         scrimColor = if (dark) Color(0xB3000000) else Color(0x99000000),
@@ -157,11 +177,16 @@ private fun DrawerPanel(
     onLoginClick: () -> Unit,
     onLogout: () -> Unit,
     dark: Boolean,
+    settingsExpanded: Boolean,
+    aiTranslateEnabled: Boolean,
+    historyRetentionDays: Int,
+    onAiTranslateClick: () -> Unit,
+    onLanguageClick: () -> Unit,
+    onRetentionClick: () -> Unit,
 ) {
     val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
     val faint = if (dark) LoginTextFaintDark else LoginTextFaintLight
     val divider = if (dark) LoginCardBorderDark else LoginCardBorderLight
-    // 图标统一用主题自适应单色：浅色近黑、深色近白，保证两种主题下都清晰可见
     val iconAccent = if (dark) LoginTextPrimaryDark else AccentDark
 
     Column(
@@ -193,11 +218,17 @@ private fun DrawerPanel(
             onLoginClick = onLoginClick,
             dark = dark,
         )
+        val scrollState = rememberScrollState()
+        LaunchedEffect(settingsExpanded) {
+            if (settingsExpanded) {
+                scrollState.animateScrollTo(scrollState.maxValue)
+            }
+        }
         Column(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(scrollState),
         ) {
             if (userProfile?.profileUrl != null) {
                 Spacer(Modifier.height(2.dp))
@@ -314,11 +345,54 @@ private fun DrawerPanel(
             )
             DrawerMenuRow(
                 icon = Icons.Outlined.Settings,
-                label = stringResource(R.string.menu_settings),
+                label = if (settingsExpanded) stringResource(R.string.detail_show_less)
+                else stringResource(R.string.menu_settings),
                 onClick = onSettingsClick,
                 dark = dark,
                 accent = iconAccent,
+                showChevron = false,
+                trailingContent = {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = faint,
+                        modifier = Modifier
+                            .size(16.dp)
+                            .graphicsLayer {
+                                rotationZ = if (settingsExpanded) 90f else 0f
+                            },
+                    )
+                },
             )
+            if (settingsExpanded) {
+                Column {
+                    DrawerMenuRow(
+                        icon = Icons.Outlined.GTranslate,
+                        label = stringResource(R.string.menu_ai_translate),
+                        trailing = if (aiTranslateEnabled) stringResource(R.string.ai_translate_state_on)
+                        else stringResource(R.string.ai_translate_state_off),
+                        onClick = onAiTranslateClick,
+                        dark = dark,
+                        accent = iconAccent,
+                    )
+                    DrawerMenuRow(
+                        icon = Icons.Outlined.Translate,
+                        label = stringResource(R.string.menu_language),
+                        trailing = stringResource(language.labelRes()),
+                        onClick = onLanguageClick,
+                        dark = dark,
+                        accent = iconAccent,
+                    )
+                    DrawerMenuRow(
+                        icon = Icons.Outlined.DeleteSweep,
+                        label = stringResource(R.string.menu_history_retention),
+                        trailing = retentionLabel(historyRetentionDays),
+                        onClick = onRetentionClick,
+                        dark = dark,
+                        accent = iconAccent,
+                    )
+                }
+            }
             Spacer(Modifier.height(8.dp))
         }
         HorizontalDivider(
@@ -353,7 +427,6 @@ private fun DrawerHeader(
     val blobPink = if (dark) Color(0x30D8A8B8) else Color(0x3DD8A8B8)
     val ring = if (dark) Color(0x66FFFFFF) else AccentDark.copy(alpha = 0.5f)
 
-    // 已登录：点头部进入自己的个人主页；未登录：点头部进入登录
     val loggedIn = userProfile != null
     val headerClickable = if (loggedIn) userProfile?.uid != null else true
 
@@ -430,7 +503,6 @@ private fun DrawerHeader(
                 }
                 if (!loggedIn) {
                     Spacer(Modifier.size(3.dp))
-                    // 未登录提示：引导用户点击头像/此处登录
                     Text(
                         text = stringResource(R.string.drawer_login_hint),
                         color = if (dark) LoginTextPrimaryDark else AccentDark,
@@ -615,3 +687,13 @@ private fun UpdateChip(
         )
     }
 }
+
+@Composable
+private fun retentionLabel(days: Int): String = stringResource(
+    when (days) {
+        7 -> R.string.retention_7d
+        30 -> R.string.retention_30d
+        90 -> R.string.retention_90d
+        else -> R.string.retention_forever
+    },
+)

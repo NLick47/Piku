@@ -343,6 +343,8 @@
     <string name="ai_translate_catalog_success">Loaded %1$d models</string>
     <string name="ai_translate_catalog_failed">Fetch failed; keeping the current list</string>
     <string name="ai_translate_novel_follow">Same as text</string>
+    <string name="ai_translate_not_selected">Not selected</string>
+    <string name="ai_translate_image_count">%1$d models</string>
     <string name="detail_show_translation">Show translation</string>
     <string name="detail_show_original">Show original</string>
     <string name="detail_chip_translate">TR</string>

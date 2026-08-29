@@ -159,16 +159,14 @@ fun HomeScreen(
     var showLanguageSheet by rememberSaveable { mutableStateOf(false) }
     var showAiTranslateSheet by rememberSaveable { mutableStateOf(false) }
     var showCatalogSource by rememberSaveable { mutableStateOf(false) }
-    var showWebDavPage by rememberSaveable { mutableStateOf(false) }
     var showAboutSheet by rememberSaveable { mutableStateOf(false) }
-    var showSettingsPage by rememberSaveable { mutableStateOf(false) }
     var showHistoryPage by rememberSaveable { mutableStateOf(false) }
     var showCollectionPage by rememberSaveable { mutableStateOf(false) }
     var showTagsPage by rememberSaveable { mutableStateOf(false) }
     var showFollowUsersPage by rememberSaveable { mutableStateOf(false) }
     var showLogoutConfirm by rememberSaveable { mutableStateOf(false) }
     var showProfileEdit by rememberSaveable { mutableStateOf(false) }
-    val anyOverlayActive = showSettingsPage || showWebDavPage || showHistoryPage ||
+    val anyOverlayActive = showHistoryPage ||
         showCollectionPage || showTagsPage || showFollowUsersPage
     val isScrolling = remember { mutableStateOf(false) }
     val gridState = rememberLazyStaggeredGridState()
@@ -242,9 +240,7 @@ fun HomeScreen(
         currentVersion = displayVersionName(),
         updateAvailable = state.updateCheckState is UpdateCheckState.Available,
         onToggleAdult = viewModel::toggleAdultContent,
-        onSettingsClick = {
-            showSettingsPage = true
-        },
+        onSettingsClick = {},
         onAboutClick = { showAboutSheet = true },
         onThemeClick = { showThemeSheet = true },
         onBackgroundClick = {
@@ -287,6 +283,17 @@ fun HomeScreen(
         onLogout = onLogout,
         gesturesEnabled = !anyOverlayActive,
         dark = dark,
+        aiTranslateEnabled = state.aiTranslateEnabled,
+        historyRetentionDays = state.historyRetentionDays,
+        onAiTranslateClick = {
+            showAiTranslateSheet = true
+        },
+        onLanguageClick = {
+            showLanguageSheet = true
+        },
+        onRetentionClick = {
+            showRetentionSheet = true
+        },
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             val customBgPath = state.customBackgroundPath
@@ -808,21 +815,6 @@ fun HomeScreen(
             }
 
             HomeOverlays(
-                showSettingsPage = showSettingsPage,
-                onSettingsBack = { showSettingsPage = false; scope.launch { drawerState.open() } },
-                onAiTranslateClick = { showAiTranslateSheet = true },
-                onLanguageClick = { showLanguageSheet = true },
-                onRetentionClick = { showRetentionSheet = true },
-                onWebDavClick = { showWebDavPage = true },
-                showWebDavPage = showWebDavPage,
-                onWebDavBack = { showWebDavPage = false; scope.launch { drawerState.open() } },
-                onWebDavUrlChange = viewModel::setWebDavUrl,
-                onWebDavUsernameChange = viewModel::setWebDavUsername,
-                onWebDavPasswordChange = viewModel::setWebDavPassword,
-                onWebDavEnabledChange = viewModel::setWebDavEnabled,
-                onWebDavTestConnection = viewModel::testWebDavConnection,
-                onClearTestResult = viewModel::clearTestConnectionState,
-                onSyncClick = { viewModel.syncNow() },
                 showHistoryPage = showHistoryPage,
                 onHistoryBack = { showHistoryPage = false; scope.launch { drawerState.open() } },
                 showCollectionPage = showCollectionPage,
@@ -843,21 +835,6 @@ fun HomeScreen(
 
 @Composable
 private fun HomeOverlays(
-    showSettingsPage: Boolean,
-    onSettingsBack: () -> Unit,
-    onAiTranslateClick: () -> Unit,
-    onLanguageClick: () -> Unit,
-    onRetentionClick: () -> Unit,
-    onWebDavClick: () -> Unit,
-    showWebDavPage: Boolean,
-    onWebDavBack: () -> Unit,
-    onWebDavUrlChange: (String) -> Unit,
-    onWebDavUsernameChange: (String) -> Unit,
-    onWebDavPasswordChange: (String) -> Unit,
-    onWebDavEnabledChange: (Boolean) -> Unit,
-    onWebDavTestConnection: () -> Unit,
-    onClearTestResult: () -> Unit,
-    onSyncClick: () -> Unit,
     showHistoryPage: Boolean,
     onHistoryBack: () -> Unit,
     showCollectionPage: Boolean,
@@ -882,46 +859,6 @@ private fun HomeOverlays(
         animationSpec = tween(250),
     ) + fadeIn(animationSpec = tween(250))
 
-    if (showSettingsPage) {
-        Dialog(onDismissRequest = onSettingsBack, properties = fullScreenProps) {
-            AnimatedVisibility(visible = true, enter = pageEnter) {
-                SettingsPage(
-                    state = state,
-                    onBack = onSettingsBack,
-                    onAiTranslateClick = onAiTranslateClick,
-                    onLanguageClick = onLanguageClick,
-                    onRetentionClick = onRetentionClick,
-                    onWebDavClick = onWebDavClick,
-                    dark = dark,
-                )
-            }
-        }
-    }
-    if (showWebDavPage) {
-        Dialog(onDismissRequest = onWebDavBack, properties = fullScreenProps) {
-            AnimatedVisibility(visible = true, enter = pageEnter) {
-                WebDavSettingsScreen(
-                    url = state.webDavUrl,
-                    username = state.webDavUsername,
-                    password = state.webDavPassword,
-                    enabled = state.webDavEnabled,
-                    lastSyncAt = state.lastSyncAt,
-                    syncResult = state.syncResult,
-                    syncState = state.syncState,
-                    testConnectionState = state.testConnectionState,
-                    onUrlChange = onWebDavUrlChange,
-                    onUsernameChange = onWebDavUsernameChange,
-                    onPasswordChange = onWebDavPasswordChange,
-                    onEnabledChange = onWebDavEnabledChange,
-                    onTestConnection = onWebDavTestConnection,
-                    onClearTestResult = onClearTestResult,
-                    onSyncNow = onSyncClick,
-                    onBack = onWebDavBack,
-                    dark = dark,
-                )
-            }
-        }
-    }
     if (showHistoryPage) {
         Dialog(onDismissRequest = onHistoryBack, properties = fullScreenProps) {
             AnimatedVisibility(visible = true, enter = pageEnter) {
@@ -932,7 +869,7 @@ private fun HomeOverlays(
     if (showCollectionPage) {
         Dialog(onDismissRequest = onCollectionBack, properties = fullScreenProps) {
             AnimatedVisibility(visible = true, enter = pageEnter) {
-                CollectionScreen(onBack = onCollectionBack, onWorkClick = { onWorkClick(it) }, onSyncClick = onSyncClick)
+                CollectionScreen(onBack = onCollectionBack, onWorkClick = { onWorkClick(it) })
             }
         }
     }

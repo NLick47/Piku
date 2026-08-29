@@ -343,6 +343,8 @@
     <string name="ai_translate_catalog_success">%1$d 個のモデルを読み込みました</string>
     <string name="ai_translate_catalog_failed">取得に失敗しました。現在のリストを維持します</string>
     <string name="ai_translate_novel_follow">テキスト翻訳と同じ</string>
+    <string name="ai_translate_not_selected">未選択</string>
+    <string name="ai_translate_image_count">%1$d 個のモデル</string>
     <string name="detail_show_translation">翻訳を表示</string>
     <string name="detail_show_original">原文を表示</string>
     <string name="detail_chip_translate">訳</string>

@@ -346,6 +346,8 @@
     <string name="ai_translate_catalog_success">已加载 %1$d 个模型</string>
     <string name="ai_translate_catalog_failed">拉取失败，沿用当前列表</string>
     <string name="ai_translate_novel_follow">与文本翻译相同</string>
+    <string name="ai_translate_not_selected">未选择</string>
+    <string name="ai_translate_image_count">%1$d 个模型</string>
     <string name="detail_show_translation">显示译文</string>
     <string name="detail_show_original">显示原文</string>
     <string name="detail_chip_translate">译</string>
