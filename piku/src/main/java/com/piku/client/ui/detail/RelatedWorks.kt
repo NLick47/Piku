@@ -35,6 +35,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import com.piku.client.ui.common.isAnimatedImage
 import com.piku.client.R
 import com.piku.client.domain.model.Work
 import com.piku.client.ui.theme.AccentDark
@@ -206,6 +207,22 @@ private fun RelatedWorkCard(
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Fit,
             )
+            if (isAnimatedImage(work.thumbnailUrl)) {
+                Text(
+                    // 格式名，各语言写法一致，不走 i18n
+                    text = "GIF",
+                    color = Color.White,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.5.sp,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(6.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0x99000000))
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                )
+            }
             if (work.imageCount > 1) {
                 Text(
                     text = "${work.imageCount}",

@@ -189,6 +189,9 @@ dependencies {
 
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
+    // 动图解码（GIF / APNG / 动画 WebP）：3.x 里 coil-animated 已并入此 artifact，
+    // 内部按 SDK_INT 选 AnimatedImageDecoder(28+) 或纯 Kotlin 的 GifDecoder
+    implementation(libs.coil.gif)
     implementation(libs.androidx.palette.ktx)
 
     testImplementation(libs.junit)

@@ -81,6 +81,7 @@ import com.piku.client.common.LinkSegment
 import com.piku.client.common.LinkText
 import com.piku.client.domain.model.WorkDetail
 import com.piku.client.ui.common.ExpandableIconAction
+import com.piku.client.ui.common.rememberAnimatedImage
 import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.AccentSolid
 import com.piku.client.ui.theme.ControlAccentDark
@@ -527,7 +528,7 @@ private fun ImagePager(
                     )
                 } else {
                     AsyncImage(
-                        model = detail.imageUrls[page],
+                        model = rememberAnimatedImage(detail.imageUrls[page]),
                         contentDescription = detail.title,
                         colorFilter = if (dark) TameWhiteColorFilter else null,
                         modifier = Modifier

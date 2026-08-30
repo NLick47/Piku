@@ -62,6 +62,7 @@ import androidx.compose.ui.util.fastAny
 import androidx.compose.ui.util.fastForEach
 import coil3.compose.AsyncImage
 import coil3.compose.SubcomposeAsyncImage
+import com.piku.client.ui.common.rememberAnimatedImage
 import com.piku.client.R
 import com.piku.client.ui.theme.TameWhiteColorFilter
 import com.piku.client.ui.theme.ViewerBackgroundDark
@@ -160,6 +161,9 @@ private fun ZoomableImage(
 ) {
     var zoom by remember { mutableStateOf(ZoomState()) }
     var viewport by remember { mutableStateOf(IntSize.Zero) }
+    // 原图就绪后撤掉打底的缩略图：静态图留着只是多占一份内存，动图留着则是两张
+    // 叠在一起各自逐帧解码，纯属白烧 CPU
+    var fullReady by remember(image.fullUrl) { mutableStateOf(false) }
     val currentOnTap by rememberUpdatedState(onTap)
     val currentOnLongPress by rememberUpdatedState(onLongPress)
 
@@ -247,20 +251,24 @@ private fun ZoomableImage(
             },
         contentAlignment = Alignment.Center,
     ) {
-        AsyncImage(
-            model = image.thumbnailUrl,
-            contentDescription = contentDescription,
-            contentScale = ContentScale.Fit,
-            colorFilter = if (dark) TameWhiteColorFilter else null,
-            modifier = Modifier.fillMaxSize(),
-        )
-        if (image.fullUrl != null && image.fullUrl != image.thumbnailUrl) {
-            SubcomposeAsyncImage(
-                model = image.fullUrl,
+        if (!fullReady) {
+            AsyncImage(
+                model = rememberAnimatedImage(image.thumbnailUrl),
                 contentDescription = contentDescription,
                 contentScale = ContentScale.Fit,
                 colorFilter = if (dark) TameWhiteColorFilter else null,
                 modifier = Modifier.fillMaxSize(),
+            )
+        }
+        if (image.fullUrl != null && image.fullUrl != image.thumbnailUrl) {
+            SubcomposeAsyncImage(
+                model = rememberAnimatedImage(image.fullUrl),
+                contentDescription = contentDescription,
+                contentScale = ContentScale.Fit,
+                colorFilter = if (dark) TameWhiteColorFilter else null,
+                modifier = Modifier.fillMaxSize(),
+                onSuccess = { fullReady = true },
+                onError = { fullReady = false },
                 loading = {},
                 error = {},
             )

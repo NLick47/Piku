@@ -153,6 +153,24 @@ fun WorkCard(
                     contentScale = ContentScale.Crop,
                 )
             }
+            // 动图角标：网格不播放动画（几十张同时逐帧解码会拖垮滚动），
+            // 只标出这是动图，点进详情页才播。判定走文件名，不花任何网络请求。
+            if (isAnimatedImage(work.thumbnailUrl)) {
+                Text(
+                    // 格式名，各语言写法一致，不走 i18n
+                    text = "GIF",
+                    color = Color.White,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.5.sp,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(6.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0x99000000))
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                )
+            }
             if (work.imageCount > 1) {
                 Box(
                     modifier = Modifier
