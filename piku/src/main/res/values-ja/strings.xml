@@ -2,6 +2,7 @@
 <resources>
     <string name="app_name">Piku</string>
     <string name="back">戻る</string>
+    <string name="exit_confirm_hint">もう一度戻るボタンを押すと終了します</string>
     <string name="email_login_title">Poipikuアカウントログイン</string>
     <string name="email_label">メールアドレス</string>
     <string name="password_label">パスワード</string>

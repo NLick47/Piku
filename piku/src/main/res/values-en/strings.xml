@@ -2,6 +2,7 @@
 <resources>
     <string name="app_name">Piku</string>
     <string name="back">Back</string>
+    <string name="exit_confirm_hint">Press back again to exit</string>
     <string name="email_login_title">Poipiku sign in</string>
     <string name="email_label">Email</string>
     <string name="password_label">Password</string>

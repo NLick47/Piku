@@ -1,14 +1,17 @@
 package com.piku.client.ui.navigation
 
+import android.app.Activity
 import android.net.Uri
 import android.os.SystemClock
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -17,6 +20,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.piku.client.R
 import com.piku.client.domain.model.FollowUser
 import com.piku.client.domain.model.Work
 import com.piku.client.ui.collection.CollectionScreen
@@ -70,6 +74,8 @@ object Routes {
  */
 private const val BACK_POP_DEBOUNCE_MS = 400L
 
+private const val EXIT_CONFIRM_INTERVAL_MS = 2000L
+
 private const val KEY_PENDING_TAG = "pending_tag"
 
 private const val KEY_SHOULD_REOPEN_DRAWER = "should_reopen_drawer"
@@ -107,9 +113,23 @@ fun AppNavHost() {
         }
     }
 
-    // 仅在非首页拦截系统返回；首页时禁用，保持默认退出行为
-    BackHandler(enabled = currentRoute != null && currentRoute != Routes.HOME) {
-        safePopBack()
+    // 拦截系统返回：
+    // - 非首页：safePopBack 弹出上一层
+    // - 首页（栈底）：第一次按返回弹"再按一次退出"提示，2 秒内再按一次才退出，防误触
+    val context = LocalContext.current
+    var lastExitHintAt by remember { mutableLongStateOf(0L) }
+    BackHandler(enabled = currentRoute != null) {
+        if (currentRoute == Routes.HOME) {
+            val now = SystemClock.elapsedRealtime()
+            if (now - lastExitHintAt < EXIT_CONFIRM_INTERVAL_MS) {
+                (context as? Activity)?.finish()
+            } else {
+                lastExitHintAt = now
+                Toast.makeText(context, R.string.exit_confirm_hint, Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            safePopBack()
+        }
     }
 
     NavHost(
