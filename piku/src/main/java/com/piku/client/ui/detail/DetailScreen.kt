@@ -228,7 +228,13 @@ fun DetailScreen(
                     }
                 }
                 state.errorRes != null && state.detail == null -> {
-                    DetailError(errorRes = state.errorRes!!, onRetry = viewModel::retry, dark = dark)
+                    DetailError(
+                        errorRes = state.errorRes!!,
+                        hintRes = state.errorHintRes,
+                        retryable = state.errorRetryable,
+                        onRetry = viewModel::retry,
+                        dark = dark,
+                    )
                 }
                 state.detail != null -> {
                     DetailContent(
@@ -485,34 +491,58 @@ private fun FeedbackSnackbar(
     }
 }
 
+/**
+ * 详情页加载失败占位。
+ *
+ * 终态错误（作品被删除/不存在）连「重试」都不给——重试必然再次失败，只会让用户
+ * 以为是自己网络不好。返回走顶栏，不再单独放按钮：
+ * 曾放过「在浏览器打开」，但作品 404 时浏览器打开的还是同一个 404 页，纯属多余。
+ */
 @Composable
-private fun DetailError(errorRes: Int, onRetry: () -> Unit, dark: Boolean) {
+private fun DetailError(
+    errorRes: Int,
+    hintRes: Int?,
+    retryable: Boolean,
+    onRetry: () -> Unit,
+    dark: Boolean,
+) {
     Column(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().padding(horizontal = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
         Text(
             text = stringResource(errorRes),
-            color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
-            fontSize = 13.sp,
+            color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
         )
-        Spacer(Modifier.height(16.dp))
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(16.dp))
-                .border(
-                    BorderStroke(0.5.dp, if (dark) LoginCardBorderDark else LoginCardBorderLight),
-                    RoundedCornerShape(16.dp),
-                )
-                .clickable(onClick = onRetry)
-                .padding(horizontal = 24.dp, vertical = 10.dp),
-        ) {
+        if (hintRes != null) {
+            Spacer(Modifier.height(8.dp))
             Text(
-                text = stringResource(R.string.home_retry),
-                color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
-                fontSize = 13.sp,
+                text = stringResource(hintRes),
+                color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                fontSize = 12.sp,
             )
+        }
+        if (retryable) {
+            Spacer(Modifier.height(16.dp))
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(16.dp))
+                    .border(
+                        BorderStroke(0.5.dp, if (dark) LoginCardBorderDark else LoginCardBorderLight),
+                        RoundedCornerShape(16.dp),
+                    )
+                    .clickable(onClick = onRetry)
+                    .padding(horizontal = 24.dp, vertical = 10.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.home_retry),
+                    color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                    fontSize = 13.sp,
+                )
+            }
         }
     }
 }

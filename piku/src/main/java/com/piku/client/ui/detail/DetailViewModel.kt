@@ -64,6 +64,13 @@ data class DetailUiState(
     val fullImagesLoading: Boolean = false,
     val loading: Boolean = false,
     val errorRes: Int? = null,
+    /** 错误副文案：说明可能的成因，仅部分错误类型有（如作品不存在） */
+    val errorHintRes: Int? = null,
+    /**
+     * 错误是否可通过重试解决。作品被删除/不存在（404）是终态，重试只会反复失败，
+     * 此时 UI 不给「重试」按钮，改给「在浏览器打开」让用户自行确认。
+     */
+    val errorRetryable: Boolean = true,
     val isFavorite: Boolean = false,
     val favoriteFolders: List<FavoriteFolder> = emptyList(),
     val workFavoriteFolderIds: Set<Long> = emptySet(),
@@ -1111,13 +1118,21 @@ class DetailViewModel @Inject constructor(
     private fun load() {
         if (_uiState.value.loading) return
         viewModelScope.launch {
-            _uiState.update { it.copy(loading = true, errorRes = null) }
+            _uiState.update {
+                it.copy(loading = true, errorRes = null, errorHintRes = null, errorRetryable = true)
+            }
             // 保留已输入的密码：自动重登/刷新详情后已解锁作品不会重新锁回
             val retainedPassword = _uiState.value.password
             loadWorkDetailUseCase(work, retainedPassword)
                 .onSuccess { detail ->
                     _uiState.update {
-                        it.copy(detail = detail, loading = false, errorRes = null)
+                        it.copy(
+                            detail = detail,
+                            loading = false,
+                            errorRes = null,
+                            errorHintRes = null,
+                            errorRetryable = true,
+                        )
                     }
                     recordHistory(detail)
                     loadFullImages(retainedPassword)
@@ -1130,10 +1145,20 @@ class DetailViewModel @Inject constructor(
                         "loadDetail fail work=$workId error=${error::class.simpleName}: ${error.message}",
                         error,
                     )
+                    // 404（作品已删除/链接有误）是终态：文案直说原因，且不给重试按钮。
+                    // 其余错误（网络、解析、未知）保留重试；未知类型也要有文案，
+                    // 否则 errorRes 为 null 会退化成一片空白页。
+                    val notFound = error is AppError.NotFound
                     _uiState.update {
                         it.copy(
                             loading = false,
-                            errorRes = (error as? AppError)?.toFeedErrorRes(),
+                            errorRes = if (notFound) {
+                                R.string.detail_error_not_found
+                            } else {
+                                (error as? AppError)?.toFeedErrorRes() ?: R.string.home_error_parse
+                            },
+                            errorHintRes = if (notFound) R.string.detail_error_not_found_hint else null,
+                            errorRetryable = !notFound,
                         )
                     }
                 }

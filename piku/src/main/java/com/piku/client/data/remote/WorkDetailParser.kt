@@ -1,12 +1,21 @@
 package com.piku.client.data.remote
 
 import com.piku.client.common.LinkText
+import com.piku.client.domain.model.AppError
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkDetail
 
 object WorkDetailParser {
 
+    /**
+     * 解析作品详情页。
+     *
+     * @throws AppError.NotFound 页面不是作品详情页（作品被删除后的兜底页、非公开作品等）。
+     *   这类页面不含任何作品区块，继续解析只会得到一个全空的 [WorkDetail]，
+     *   让 UI 显示一片空白——比报错更让人摸不着头脑，所以在此直接失败。
+     */
     fun parse(html: String): WorkDetail {
+        ensureWorkPage(html)
         val mainBlock = html.substringAfter("<div class=\"IllustItem ", html)
         val titleBlock = REGEX_TITLE.find(mainBlock)?.groupValues?.get(1)?.trim() ?: ""
         val marked = LinkText.convert(titleBlock)
@@ -121,6 +130,20 @@ object WorkDetailParser {
             .filter { it.id > 0 && it.id != excludeId }
             .distinctBy { it.id }
 
+    /**
+     * 判定是否为作品页：作品区块（`<div class="IllustItem `）存在即可，
+     * 匿名/锁页/文字作品该区块恒在。
+     *
+     * 找不到时再看 canonical：它存在说明页面仍指向某个作品（多半是 poipiku 改了
+     * 结构），此时宁可退回"字段解析为空"也不要误报"作品已删除"——
+     * 后者会让用户以为收藏的作品没了。
+     */
+    private fun ensureWorkPage(html: String) {
+        if (REGEX_ILLUST_BLOCK.containsMatchIn(html)) return
+        if (REGEX_CANONICAL.containsMatchIn(html)) return
+        throw AppError.NotFound
+    }
+
     private fun String.cleanText(): String = LinkText.decodeEntities(
         this.replace("<br />", "\n").replace("<br/>", "\n").replace("<br>", "\n"),
     ).trim()
@@ -153,6 +176,7 @@ object WorkDetailParser {
     private val REGEX_FOLLOW_BTN = Regex("""class="([^"]*UserInfoCmdFollow[^"]*)"""")
     private val REGEX_NOVEL = Regex("""<div class="NovelSection">(.*?)</div>""", RegexOption.DOT_MATCHES_ALL)
     private val REGEX_ILLUST_TEXT_CLASS = Regex("""<div class="IllustItem[^"]*\bText\b""")
+    private val REGEX_ILLUST_BLOCK = Regex("""<div class="IllustItem """)
     private val REGEX_REACTION =
         Regex("""<span class="ResEmoji"><img class="Twemoji"[^>]*alt="([^"]+)"[^>]*/>""")
     private val REGEX_PROFILE =

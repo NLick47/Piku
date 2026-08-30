@@ -203,3 +203,41 @@ dependencies {
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 }
+
+tasks.register("checkTranslations") {
+    val resDir = layout.projectDirectory.dir("src/main/res")
+    doLast {
+        val nameRegex = Regex("<string name=\"([^\"]+)\"")
+        fun names(file: java.io.File): Set<String> =
+            nameRegex.findAll(file.readText()).map { it.groupValues[1] }.toSet()
+
+        val base = names(resDir.file("values/strings.xml").asFile)
+        val langs = (resDir.asFile.listFiles() ?: emptyArray())
+            .filter { it.isDirectory && it.name.startsWith("values-") }
+            .mapNotNull { dir ->
+                dir.resolve("strings.xml").takeIf { it.exists() }?.let { dir.name to it }
+            }
+
+        val report = StringBuilder()
+        var missingTotal = 0
+        var extraTotal = 0
+        langs.forEach { (lang, file) ->
+            val have = names(file)
+            val missing = (base - have).sorted()
+            val extra = (have - base).sorted()
+            missingTotal += missing.size
+            extraTotal += extra.size
+            if (missing.isEmpty() && extra.isEmpty()) {
+                report.appendLine("  $lang: OK (${have.size} 条)")
+            } else {
+                report.appendLine("  $lang: 缺失 ${missing.size} 条，多余 ${extra.size} 条")
+                missing.forEach { report.appendLine("      缺失 $it") }
+                extra.forEach { report.appendLine("      多余 $it") }
+            }
+        }
+        logger.lifecycle("翻译检查：基准 ${base.size} 条，语言 ${langs.size} 个\n$report")
+        if (missingTotal > 0 || extraTotal > 0) {
+            throw GradleException("翻译不完整：缺失 $missingTotal 条、多余 $extraTotal 条，详见上方清单")
+        }
+    }
+}

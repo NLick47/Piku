@@ -1,5 +1,6 @@
 package com.piku.client.data.remote
 
+import com.piku.client.domain.model.AppError
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -259,5 +260,27 @@ class WorkDetailParserTest {
     fun extractUnlockBlockedMessageReturnsEmptyForBlank() {
         assertTrue(WorkDetailParser.extractUnlockBlockedMessage("   ").isEmpty())
         assertTrue(WorkDetailParser.extractUnlockBlockedMessage("").isEmpty())
+    }
+
+    @Test
+    fun throwsNotFoundForDeletedWorkPage() {
+        val notFoundHtml = """
+            <html><head><title>ご指定のページが見つかりません</title></head>
+            <body><div class="ErrMsg">ご指定のページが見つかりません</div></body></html>
+        """.trimIndent()
+        val error = runCatching { WorkDetailParser.parse(notFoundHtml) }.exceptionOrNull()
+        assertTrue("expected AppError.NotFound, got $error", error is AppError.NotFound)
+    }
+
+    @Test
+    fun fallsBackToEmptyParseWhenCanonicalPresent() {
+        val html = """
+            <html><head>
+            <link rel="canonical" href="https://poipiku.com/13240156/13349246.html" />
+            </head><body><div class="Renamed">作品</div></body></html>
+        """.trimIndent()
+        val detail = WorkDetailParser.parse(html)
+        assertTrue(detail.title.isEmpty())
+        assertTrue(detail.imageUrls.isEmpty())
     }
 }

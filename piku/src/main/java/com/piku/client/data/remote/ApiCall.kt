@@ -13,7 +13,7 @@ suspend fun <T> apiCall(block: suspend () -> T): Result<T> = try {
 } catch (e: IOException) {
     Result.failure(AppError.Network)
 } catch (e: HttpException) {
-    Result.failure(AppError.Http(e.code()))
+    Result.failure(if (e.code() == 404) AppError.NotFound else AppError.Http(e.code()))
 } catch (e: SerializationException) {
     Result.failure(AppError.Parse)
 } catch (e: Exception) {

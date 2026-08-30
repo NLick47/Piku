@@ -191,6 +191,8 @@
     <string name="detail_home">Home</string>
     <string name="detail_untitled">Untitled</string>
     <string name="detail_no_image">No image</string>
+    <string name="detail_error_not_found">This work doesn\'t exist or has been deleted</string>
+    <string name="detail_error_not_found_hint">The author may have deleted it or set it to private, or the link may be wrong</string>
     <string name="detail_image_index">%1$d / %2$d</string>
     <string name="home_retry">Retry</string>
     <string name="home_empty">No works yet</string>
@@ -203,6 +205,7 @@
     <string name="home_back_to_top">Back to top</string>
     <string name="home_error_network">Failed to load. Network error</string>
     <string name="home_error_parse">Failed to parse the page. Please try again later</string>
+    <string name="error_content_not_found">Content doesn\'t exist or has been deleted</string>
     <string name="home_image_count">%1$d images</string>
     <string name="home_refresh_new">%1$d new works — tap to go top</string>
     <string name="home_refresh_fresh">Already up to date</string>
@@ -301,6 +304,9 @@
     <string name="detail_reaction_send_failed">Failed to send</string>
     <string name="detail_reaction_limit">Daily reaction limit reached</string>
     <string name="detail_reaction_login_hint">Sign in to send reactions</string>
+    <string name="detail_image_translate">Translate image</string>
+    <string name="detail_image_translating">Translating…</string>
+    <string name="detail_image_translate_failed">Image translation failed</string>
     <string name="detail_untitled_work">Untitled</string>
     <string name="detail_follow">Follow</string>
     <string name="detail_followed">Following</string>
@@ -354,6 +360,10 @@
     <string name="detail_novel_partial_failed">Some paragraphs failed. Tap to retry (finished parts are cached)</string>
     <string name="detail_translate_failed">Translation failed. Try again later.</string>
     <string name="detail_translate_retry">Retry</string>
+    <string name="detail_retry_with_model_title">Pick a model (this re-translation only)</string>
+    <string name="detail_model_kind_text">Text</string>
+    <string name="detail_model_kind_novel">Novel</string>
+    <string name="detail_model_kind_image">Image</string>
 
     <!-- WebDAV Sync -->
     <string name="menu_webdav_sync">WebDAV Sync</string>

@@ -191,6 +191,8 @@
     <string name="detail_home">ホーム</string>
     <string name="detail_untitled">無題</string>
     <string name="detail_no_image">画像がありません</string>
+    <string name="detail_error_not_found">作品が存在しないか、削除されています</string>
+    <string name="detail_error_not_found_hint">作者が削除した、非公開に設定した、またはリンクが間違っている可能性があります</string>
     <string name="detail_image_index">%1$d / %2$d</string>
     <string name="home_retry">再試行</string>
     <string name="home_empty">作品がありません</string>
@@ -203,6 +205,7 @@
     <string name="home_back_to_top">トップへ戻る</string>
     <string name="home_error_network">ネットワークエラーで読み込めませんでした</string>
     <string name="home_error_parse">ページ解析に失敗しました。もう一度お試しください</string>
+    <string name="error_content_not_found">コンテンツが存在しないか、削除されています</string>
     <string name="home_image_count">%1$d 枚</string>
    <string name="home_refresh_new">新着 %1$d 件 — タップで先頭へ</string>
    <string name="home_refresh_fresh">最新です</string>
@@ -301,6 +304,9 @@
     <string name="detail_reaction_send_failed">送信に失敗しました</string>
     <string name="detail_reaction_limit">本日のリアクション上限に達しました</string>
     <string name="detail_reaction_login_hint">ログインして送る</string>
+    <string name="detail_image_translate">画像を翻訳</string>
+    <string name="detail_image_translating">翻訳中…</string>
+    <string name="detail_image_translate_failed">画像の翻訳に失敗しました</string>
     <string name="detail_untitled_work">無題</string>
     <string name="detail_follow">フォロー</string>
     <string name="detail_followed">フォロー中</string>
@@ -354,6 +360,10 @@
     <string name="detail_novel_partial_failed">一部の段落を翻訳できませんでした。タップで再試行（済み部分は再翻訳されません）</string>
     <string name="detail_translate_failed">翻訳に失敗しました。しばらくしてからもう一度お試しください。</string>
     <string name="detail_translate_retry">再試行</string>
+    <string name="detail_retry_with_model_title">翻訳モデルを選択（今回の再翻訳のみ）</string>
+    <string name="detail_model_kind_text">テキスト</string>
+    <string name="detail_model_kind_novel">小説</string>
+    <string name="detail_model_kind_image">画像</string>
 
     <!-- WebDAV同期 -->
     <string name="menu_webdav_sync">WebDAV 同期</string>
