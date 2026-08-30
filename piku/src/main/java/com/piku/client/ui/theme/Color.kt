@@ -48,6 +48,15 @@ val FollowDark = Color(0xFF81C784)
 val FollowTintLight = Color(0x2A4CAF50)
 val FollowTintDark = Color(0x3381C784)
 
+val ErrorRed = Color(0xFFEF5350)
+val ErrorRedDark = Color(0xFFE08A8A)
+val ErrorRedLight = Color(0xFFC24B4B)
+
+val StatusSyncing = Color(0xFFFFA726)
+
+val ShadowAmbient = Color(0x33000000)
+val ShadowSpot = Color(0x40000000)
+
 val SwitchCheckedThumbLight = Color.White
 val SwitchCheckedThumbDark = LoginBackgroundDark
 val SwitchCheckedTrackLight = AccentSolid

@@ -62,6 +62,9 @@ interface FavoriteFolderDao {
     @Query("DELETE FROM favorite_memberships WHERE folderId = :folderId AND workId = :workId")
     suspend fun deleteMembership(folderId: Long, workId: String)
 
+    @Query("SELECT * FROM favorite_memberships")
+    fun observeAllMemberships(): Flow<List<FavoriteMembershipEntity>>
+
     @Query("SELECT id FROM favorite_folders WHERE isDefault = 1 LIMIT 1")
     suspend fun defaultFolderId(): Long?
 

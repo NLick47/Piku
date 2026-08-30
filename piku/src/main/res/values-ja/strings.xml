@@ -254,8 +254,8 @@
     <string name="detail_reaction">リアクション</string>
     <string name="detail_copy_link">リンクをコピー</string>
     <string name="detail_copy_description">説明文をコピー</string>
-    <string name="detail_share_link">リンクを共有</string>
     <string name="detail_open_browser">ブラウザで開く</string>
+    <string name="detail_menu_retry_with_model">別のモデルで再翻訳</string>
     <string name="detail_link_copied">リンクをコピーしました</string>
     <string name="detail_description_copied">説明文をコピーしました</string>
     <string name="detail_show_more">もっと見る</string>
@@ -354,4 +354,39 @@
     <string name="detail_novel_partial_failed">一部の段落を翻訳できませんでした。タップで再試行（済み部分は再翻訳されません）</string>
     <string name="detail_translate_failed">翻訳に失敗しました。しばらくしてからもう一度お試しください。</string>
     <string name="detail_translate_retry">再試行</string>
+
+    <!-- WebDAV同期 -->
+    <string name="menu_webdav_sync">WebDAV 同期</string>
+    <string name="webdav_state_on">オン</string>
+    <string name="webdav_state_off">オフ</string>
+    <string name="webdav_settings_title">WebDAV お気に入り同期</string>
+    <string name="webdav_enable">同期を有効にする</string>
+    <string name="webdav_url">サーバーURL</string>
+    <string name="webdav_username">ユーザー名</string>
+    <string name="webdav_password">パスワード</string>
+    <string name="webdav_test_connection">接続テスト</string>
+    <string name="webdav_sync_now">今すぐ同期</string>
+    <string name="webdav_syncing">同期中…</string>
+    <string name="webdav_last_sync">前回の同期: %1$s</string>
+    <string name="webdav_sync_success">同期成功</string>
+    <string name="webdav_sync_failed">同期失敗</string>
+    <string name="webdav_connection_success">接続成功</string>
+    <string name="webdav_connection_failed">接続失敗</string>
+    <string name="webdav_server_config">サーバー設定</string>
+    <string name="webdav_sync_status">同期状態</string>
+    <string name="webdav_status_idle">まだ同期していません</string>
+    <string name="webdav_status_waiting">同期待機中</string>
+    <string name="webdav_never_synced">同期履歴なし</string>
+    <string name="webdav_enable_hint">有効にすると、お気に入りの変更が自動的にサーバーへ同期されます</string>
+    <string name="webdav_url_placeholder">https://dav.example.com/dav/</string>
+    <string name="webdav_url_invalid">URL は http:// または https:// で始めてください</string>
+    <string name="webdav_password_show">パスワードを表示</string>
+    <string name="webdav_password_hide">パスワードを非表示</string>
+    <string name="webdav_testing">接続テスト中…</string>
+    <string name="webdav_stat_folders">+%1$d フォルダ</string>
+    <string name="webdav_stat_works">+%1$d 作品</string>
+    <string name="webdav_stat_backup">%1$d 件をバックアップ</string>
+    <string name="webdav_test_failed_hint">サーバーURL・ユーザー名・パスワードが正しいか確認してください</string>
+    <string name="webdav_disabled_action_hint">「同期を有効にする」をオンにすると接続テストと手動同期が使えます</string>
+    <string name="webdav_help">お気に入りは JSON と画像としてサーバーの piku/ 配下に保存されます。別の端末で同じ設定を入力すれば同期できます。</string>
 </resources>

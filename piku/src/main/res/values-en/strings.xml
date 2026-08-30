@@ -254,8 +254,8 @@
     <string name="detail_reaction">React</string>
     <string name="detail_copy_link">Copy link</string>
     <string name="detail_copy_description">Copy description</string>
-    <string name="detail_share_link">Share link</string>
     <string name="detail_open_browser">Open in browser</string>
+    <string name="detail_menu_retry_with_model">Re-translate with another model</string>
     <string name="detail_link_copied">Link copied</string>
     <string name="detail_description_copied">Description copied</string>
     <string name="detail_show_more">Show more</string>
@@ -354,4 +354,39 @@
     <string name="detail_novel_partial_failed">Some paragraphs failed. Tap to retry (finished parts are cached)</string>
     <string name="detail_translate_failed">Translation failed. Try again later.</string>
     <string name="detail_translate_retry">Retry</string>
+
+    <!-- WebDAV Sync -->
+    <string name="menu_webdav_sync">WebDAV Sync</string>
+    <string name="webdav_state_on">On</string>
+    <string name="webdav_state_off">Off</string>
+    <string name="webdav_settings_title">WebDAV Favorites Sync</string>
+    <string name="webdav_enable">Enable sync</string>
+    <string name="webdav_url">Server URL</string>
+    <string name="webdav_username">Username</string>
+    <string name="webdav_password">Password</string>
+    <string name="webdav_test_connection">Test connection</string>
+    <string name="webdav_sync_now">Sync now</string>
+    <string name="webdav_syncing">Syncing…</string>
+    <string name="webdav_last_sync">Last sync: %1$s</string>
+    <string name="webdav_sync_success">Sync successful</string>
+    <string name="webdav_sync_failed">Sync failed</string>
+    <string name="webdav_connection_success">Connection successful</string>
+    <string name="webdav_connection_failed">Connection failed</string>
+    <string name="webdav_server_config">Server Configuration</string>
+    <string name="webdav_sync_status">Sync Status</string>
+    <string name="webdav_status_idle">Not synced yet</string>
+    <string name="webdav_status_waiting">Waiting to sync</string>
+    <string name="webdav_never_synced">Never synced</string>
+    <string name="webdav_enable_hint">Once enabled, favorite changes sync to the server automatically</string>
+    <string name="webdav_url_placeholder">https://dav.example.com/dav/</string>
+    <string name="webdav_url_invalid">URL must start with http:// or https://</string>
+    <string name="webdav_password_show">Show password</string>
+    <string name="webdav_password_hide">Hide password</string>
+    <string name="webdav_testing">Testing…</string>
+    <string name="webdav_stat_folders">+%1$d folders</string>
+    <string name="webdav_stat_works">+%1$d works</string>
+    <string name="webdav_stat_backup">%1$d backed up</string>
+    <string name="webdav_test_failed_hint">Check that the server URL, username and password are correct</string>
+    <string name="webdav_disabled_action_hint">Enable sync first to test the connection or sync manually</string>
+    <string name="webdav_help">Favorites are stored on the server as JSON and image files under piku/. Use the same settings on another device to sync.</string>
 </resources>

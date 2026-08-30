@@ -160,6 +160,7 @@ fun HomeScreen(
     var showAiTranslateSheet by rememberSaveable { mutableStateOf(false) }
     var showCatalogSource by rememberSaveable { mutableStateOf(false) }
     var showAboutSheet by rememberSaveable { mutableStateOf(false) }
+    var showWebDavSettings by rememberSaveable { mutableStateOf(false) }
     var showHistoryPage by rememberSaveable { mutableStateOf(false) }
     var showCollectionPage by rememberSaveable { mutableStateOf(false) }
     var showTagsPage by rememberSaveable { mutableStateOf(false) }
@@ -167,7 +168,7 @@ fun HomeScreen(
     var showLogoutConfirm by rememberSaveable { mutableStateOf(false) }
     var showProfileEdit by rememberSaveable { mutableStateOf(false) }
     val anyOverlayActive = showHistoryPage ||
-        showCollectionPage || showTagsPage || showFollowUsersPage
+        showCollectionPage || showTagsPage || showFollowUsersPage || showWebDavSettings
     val isScrolling = remember { mutableStateOf(false) }
     val gridState = rememberLazyStaggeredGridState()
     val scope = rememberCoroutineScope()
@@ -293,6 +294,10 @@ fun HomeScreen(
         },
         onRetentionClick = {
             showRetentionSheet = true
+        },
+        onWebDavClick = {
+            scope.launch { drawerState.close() }
+            showWebDavSettings = true
         },
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -798,6 +803,37 @@ fun HomeScreen(
                     onDismiss = { showAboutSheet = false },
                     dark = dark,
                 )
+            }
+
+            if (showWebDavSettings) {
+                Dialog(
+                    onDismissRequest = { showWebDavSettings = false },
+                    properties = DialogProperties(
+                        usePlatformDefaultWidth = false,
+                        decorFitsSystemWindows = false,
+                        dismissOnClickOutside = false,
+                    ),
+                ) {
+                    WebDavSettingsScreen(
+                        url = state.webDavUrl,
+                        username = state.webDavUsername,
+                        password = state.webDavPassword,
+                        enabled = state.webDavEnabled,
+                        lastSyncAt = state.lastSyncAt,
+                        syncResult = state.syncResult,
+                        syncState = state.syncState,
+                        testConnectionState = state.testConnectionState,
+                        onUrlChange = viewModel::setWebDavUrl,
+                        onUsernameChange = viewModel::setWebDavUsername,
+                        onPasswordChange = viewModel::setWebDavPassword,
+                        onEnabledChange = viewModel::setWebDavEnabled,
+                        onTestConnection = viewModel::testWebDavConnection,
+                        onClearTestResult = viewModel::clearTestConnectionState,
+                        onSyncNow = viewModel::syncNow,
+                        onBack = { showWebDavSettings = false; scope.launch { drawerState.open() } },
+                        dark = dark,
+                    )
+                }
             }
 
             if (showProfileEdit) {

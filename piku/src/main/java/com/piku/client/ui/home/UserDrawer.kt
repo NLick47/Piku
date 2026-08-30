@@ -25,6 +25,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material.icons.outlined.Group
@@ -108,6 +109,7 @@ fun UserDrawer(
     onAiTranslateClick: () -> Unit = {},
     onLanguageClick: () -> Unit = {},
     onRetentionClick: () -> Unit = {},
+    onWebDavClick: () -> Unit = {},
     content: @Composable () -> Unit,
 ) {
     var settingsExpanded by remember { mutableStateOf(false) }
@@ -146,6 +148,7 @@ fun UserDrawer(
                 onAiTranslateClick = onAiTranslateClick,
                 onLanguageClick = onLanguageClick,
                 onRetentionClick = onRetentionClick,
+                onWebDavClick = onWebDavClick,
             )
         },
         scrimColor = if (dark) Color(0xB3000000) else Color(0x99000000),
@@ -183,6 +186,7 @@ private fun DrawerPanel(
     onAiTranslateClick: () -> Unit,
     onLanguageClick: () -> Unit,
     onRetentionClick: () -> Unit,
+    onWebDavClick: () -> Unit,
 ) {
     val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
     val faint = if (dark) LoginTextFaintDark else LoginTextFaintLight
@@ -380,6 +384,13 @@ private fun DrawerPanel(
                         label = stringResource(R.string.menu_language),
                         trailing = stringResource(language.labelRes()),
                         onClick = onLanguageClick,
+                        dark = dark,
+                        accent = iconAccent,
+                    )
+                    DrawerMenuRow(
+                        icon = Icons.Outlined.CloudSync,
+                        label = stringResource(R.string.menu_webdav_sync),
+                        onClick = onWebDavClick,
                         dark = dark,
                         accent = iconAccent,
                     )

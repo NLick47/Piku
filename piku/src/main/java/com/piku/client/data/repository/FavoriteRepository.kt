@@ -1,19 +1,24 @@
 package com.piku.client.data.repository
 
+import android.util.Log
 import com.piku.client.data.local.FavoriteDao
 import com.piku.client.data.local.FavoriteFolderDao
 import com.piku.client.data.local.FavoriteFolderEntity
 import com.piku.client.data.local.FavoriteMembershipEntity
+import com.piku.client.data.local.SettingsRepository
 import com.piku.client.data.local.toFavoriteEntity
 import com.piku.client.data.local.toWork
 import com.piku.client.domain.model.FavoriteFolder
 import com.piku.client.domain.model.Work
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -21,7 +26,10 @@ import javax.inject.Singleton
 class FavoriteRepository @Inject constructor(
     private val favoriteDao: FavoriteDao,
     private val favoriteFolderDao: FavoriteFolderDao,
+    private val settingsRepository: SettingsRepository,
+    private val webDavSyncRepository: WebDavSyncRepository,
 ) {
+    private val scope = CoroutineScope(Dispatchers.IO)
     fun observeFavoriteIds(): Flow<Set<Long>> =
         favoriteFolderDao.observeAllFavoriteIds().map { ids ->
             ids.mapNotNull { it.toLongOrNull() }.toSet()
@@ -30,31 +38,31 @@ class FavoriteRepository @Inject constructor(
     fun observeFavorites(): Flow<List<Work>> =
         favoriteDao.observeAll().map { list -> list.map { it.toWork() } }
 
-fun observeFolders(): Flow<List<FavoriteFolder>> = flow {
-    // 首次订阅即保证默认收藏夹存在：直接进入收藏页时，快速收藏的落点也必须有
-    ensureDefaultFolder()
-    emitAll(
-        combine(
-            favoriteFolderDao.observeFolders(),
-            favoriteFolderDao.observeFolderCounts(),
-            favoriteFolderDao.observeFolderPreviews(),
-        ) { folders, counts, previews ->
-            val countByFolder = counts.associate { it.folderId to it.count }
-            val previewsByFolder = previews
-                .groupBy { it.folderId }
-                .mapValues { (_, list) -> list.take(3).map { it.thumbnailUrl } }
-            folders.map { folder ->
-                FavoriteFolder(
-                    id = folder.id,
-                    name = folder.name,
-                    workCount = countByFolder[folder.id] ?: 0,
-                    previewUrls = previewsByFolder[folder.id] ?: emptyList(),
-                    isDefault = folder.isDefault,
-                )
-            }
-        },
-    )
-}
+    fun observeFolders(): Flow<List<FavoriteFolder>> = flow {
+        // 首次订阅即保证默认收藏夹存在：直接进入收藏页时，快速收藏的落点也必须有
+        ensureDefaultFolder()
+        emitAll(
+            combine(
+                favoriteFolderDao.observeFolders(),
+                favoriteFolderDao.observeFolderCounts(),
+                favoriteFolderDao.observeFolderPreviews(),
+            ) { folders, counts, previews ->
+                val countByFolder = counts.associate { it.folderId to it.count }
+                val previewsByFolder = previews
+                    .groupBy { it.folderId }
+                    .mapValues { (_, list) -> list.take(3).map { it.thumbnailUrl } }
+                folders.map { folder ->
+                    FavoriteFolder(
+                        id = folder.id,
+                        name = folder.name,
+                        workCount = countByFolder[folder.id] ?: 0,
+                        previewUrls = previewsByFolder[folder.id] ?: emptyList(),
+                        isDefault = folder.isDefault,
+                    )
+                }
+            },
+        )
+    }
 
     fun observeFolderWorks(folderId: Long): Flow<List<Work>> =
         favoriteFolderDao.observeWorksInFolder(folderId).map { list -> list.map { it.toWork() } }
@@ -73,9 +81,11 @@ fun observeFolders(): Flow<List<FavoriteFolder>> = flow {
         val defaultFolderId = ensureDefaultFolder()
         return if (defaultFolderId in folderIds) {
             removeFromFolder(workId, defaultFolderId)
+            triggerAutoSync()
             false
         } else {
             addToFolder(work, defaultFolderId)
+            triggerAutoSync()
             true
         }
     }
@@ -88,6 +98,7 @@ fun observeFolders(): Flow<List<FavoriteFolder>> = flow {
         } else {
             addToFolder(work, folderId)
         }
+        triggerAutoSync()
     }
 
     suspend fun createFolder(name: String, addCurrentWork: Work? = null): Long {
@@ -100,11 +111,13 @@ fun observeFolders(): Flow<List<FavoriteFolder>> = flow {
         if (addCurrentWork != null) {
             addToFolder(addCurrentWork, folderId)
         }
+        triggerAutoSync()
         return folderId
     }
 
     suspend fun renameFolder(folderId: Long, name: String) {
         favoriteFolderDao.renameFolder(folderId, name.trim().ifBlank { "未命名收藏夹" })
+        triggerAutoSync()
     }
 
     /**
@@ -120,6 +133,7 @@ fun observeFolders(): Flow<List<FavoriteFolder>> = flow {
         if (folderId == defaultFolderId) return false
         favoriteFolderDao.deleteFolder(folderId)
         favoriteFolderDao.deleteOrphanedFavorites()
+        triggerAutoSync()
         return true
     }
 
@@ -151,6 +165,7 @@ fun observeFolders(): Flow<List<FavoriteFolder>> = flow {
         if (fromFolderId == toFolderId) return
         addToFolder(work, toFolderId)
         removeFromFolder(work.id.toString(), fromFolderId)
+        triggerAutoSync()
     }
 
     /** 确保默认收藏夹存在（快速收藏的落点，全 App 唯一）。返回其 id。 */
@@ -163,5 +178,24 @@ fun observeFolders(): Flow<List<FavoriteFolder>> = flow {
                 isDefault = true,
             ),
         )
+    }
+
+    /**
+     * 触发 WebDAV 自动同步（异步，不阻塞调用方）。
+     * 仅在 WebDAV 同步已启用时触发。
+     */
+    private fun triggerAutoSync() {
+        if (!settingsRepository.webDavEnabled.value) return
+        scope.launch {
+            try {
+                webDavSyncRepository.syncMetadataOnly()
+            } catch (e: Exception) {
+                Log.w(TAG, "triggerAutoSync failed", e)
+            }
+        }
+    }
+
+    companion object {
+        private const val TAG = "FavoriteRepo"
     }
 }

@@ -56,15 +56,18 @@ import androidx.compose.ui.unit.sp
 import com.piku.client.data.local.CatalogSource
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.R
+import androidx.compose.animation.animateColorAsState
 import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.ControlAccentDark
+import com.piku.client.ui.theme.ErrorRedDark
+import com.piku.client.ui.theme.ErrorRedLight
 import com.piku.client.ui.theme.LoginBackgroundDark
 import com.piku.client.ui.theme.LoginCardBorderDark
 import com.piku.client.ui.theme.LoginCardBorderLight
-import com.piku.client.ui.theme.LoginTextFaintDark
-import com.piku.client.ui.theme.LoginTextFaintLight
 import com.piku.client.ui.theme.LoginTextPrimaryDark
 import com.piku.client.ui.theme.LoginTextPrimaryLight
+import com.piku.client.ui.theme.LoginTextSecondaryDark
+import com.piku.client.ui.theme.LoginTextSecondaryLight
 
 private val CATALOG_KEY_HEX = Regex("^[0-9a-fA-F]{64}$")
 
@@ -82,6 +85,12 @@ fun CatalogSourceScreen(
 ) {
     BackHandler(enabled = true) { onBack() }
 
+    val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
+    val secondary = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight
+    val accent = if (dark) ControlAccentDark else AccentDark
+    val onAccent = if (dark) Color(0xFF1A1A1A) else Color.White
+    val errorColor = if (dark) ErrorRedDark else ErrorRedLight
+
     var urlInput by rememberSaveable(state.catalogUrl) { mutableStateOf(state.catalogUrl) }
     var keyInput by rememberSaveable(state.catalogEncKey) { mutableStateOf(state.catalogEncKey) }
     var managedSource by remember { mutableStateOf<CatalogSource?>(null) }
@@ -93,13 +102,24 @@ fun CatalogSourceScreen(
         (urlInput.trim() != state.catalogUrl || trimmedKey != state.catalogEncKey)
     // 两个输入框共用一套配色，避免逐字段重复
     val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = AccentDark.copy(alpha = 0.8f),
+        focusedBorderColor = accent,
         unfocusedBorderColor = if (dark) LoginCardBorderDark else LoginCardBorderLight,
+        errorBorderColor = errorColor,
         focusedContainerColor = if (dark) Color(0x14FFFFFF) else Color(0x0A000000),
         unfocusedContainerColor = if (dark) Color(0x14FFFFFF) else Color(0x0A000000),
-        cursorColor = AccentDark,
-        focusedTextColor = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
-        unfocusedTextColor = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+        errorContainerColor = if (dark) Color(0x14FFFFFF) else Color(0x0A000000),
+        cursorColor = accent,
+        errorCursorColor = errorColor,
+        focusedTextColor = primary,
+        unfocusedTextColor = primary,
+        focusedLabelColor = accent,
+        unfocusedLabelColor = secondary,
+        errorLabelColor = errorColor,
+        focusedPlaceholderColor = secondary,
+        unfocusedPlaceholderColor = secondary,
+        focusedSupportingTextColor = errorColor,
+        unfocusedSupportingTextColor = secondary,
+        errorSupportingTextColor = errorColor,
     )
 
     Box(
@@ -125,13 +145,13 @@ fun CatalogSourceScreen(
                     Icon(
                         imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
                         contentDescription = null,
-                        tint = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                        tint = secondary,
                         modifier = Modifier.size(22.dp),
                     )
                 }
                 Text(
                     text = stringResource(R.string.ai_translate_catalog_source),
-                    color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                    color = primary,
                     fontSize = 19.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -144,14 +164,14 @@ fun CatalogSourceScreen(
 
         Text(
             text = stringResource(R.string.ai_translate_catalog_desc),
-            color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+            color = secondary,
             fontSize = 12.sp,
             lineHeight = 17.sp,
         )
         Spacer(Modifier.height(16.dp))
 
         // 已保存的源：官方默认固定首行 + 自定义源，点击即切换并刷新
-        SheetSectionLabel(stringResource(R.string.ai_translate_catalog_saved), if (dark) LoginTextFaintDark else LoginTextFaintLight)
+        SheetSectionLabel(stringResource(R.string.ai_translate_catalog_saved), secondary)
         Spacer(Modifier.height(8.dp))
         Column(
             Modifier
@@ -179,14 +199,14 @@ fun CatalogSourceScreen(
             placeholder = {
                 Text(
                     text = SettingsRepository.CATALOG_URL_DEFAULT,
-                    color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                    color = secondary,
                     fontSize = 11.sp,
                     maxLines = 1,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 )
             },
             singleLine = true,
-            textStyle = TextStyle(fontSize = 12.sp, color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight),
+            textStyle = TextStyle(fontSize = 12.sp, color = primary),
             shape = RoundedCornerShape(12.dp),
             colors = fieldColors,
             modifier = Modifier.fillMaxWidth(),
@@ -202,7 +222,7 @@ fun CatalogSourceScreen(
             placeholder = {
                 Text(
                     text = stringResource(R.string.ai_translate_catalog_key_hint),
-                    color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                    color = secondary,
                     fontSize = 11.sp,
                     maxLines = 1,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
@@ -215,7 +235,7 @@ fun CatalogSourceScreen(
                 null
             },
             singleLine = true,
-            textStyle = TextStyle(fontSize = 12.sp, color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight),
+            textStyle = TextStyle(fontSize = 12.sp, color = primary),
             shape = RoundedCornerShape(12.dp),
             colors = fieldColors,
             modifier = Modifier.fillMaxWidth(),
@@ -228,7 +248,7 @@ fun CatalogSourceScreen(
             onClick = { onSaveAsSource(urlInput.trim(), trimmedKey) },
             enabled = !refreshing && keyValid && urlInput.isNotBlank(),
             contentPadding = PaddingValues(horizontal = 6.dp),
-            colors = ButtonDefaults.textButtonColors(contentColor = if (dark) ControlAccentDark else AccentDark),
+            colors = ButtonDefaults.textButtonColors(contentColor = accent),
         ) {
             Icon(
                 imageVector = Icons.Outlined.Add,
@@ -245,7 +265,7 @@ fun CatalogSourceScreen(
                 onClick = onResetCatalog,
                 // 自定义地址或自定义密钥任一存在即可恢复默认（密钥随地址一并清除）
                 enabled = !refreshing && (state.catalogIsCustom || state.catalogEncKey.isNotEmpty()),
-                colors = ButtonDefaults.textButtonColors(contentColor = if (dark) LoginTextFaintDark else LoginTextFaintLight),
+                colors = ButtonDefaults.textButtonColors(contentColor = secondary),
             ) {
                 Text(text = stringResource(R.string.ai_translate_catalog_reset), fontSize = 13.sp)
             }
@@ -254,8 +274,8 @@ fun CatalogSourceScreen(
                 onClick = { onSaveCatalog(urlInput, keyInput) },
                 enabled = saveEnabled,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = AccentDark,
-                    contentColor = Color.White,
+                    containerColor = accent,
+                    contentColor = onAccent,
                 ),
             ) {
                 Text(
@@ -273,23 +293,27 @@ fun CatalogSourceScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(start = 4.dp, top = 6.dp),
             ) {
-                CircularProgressIndicator(modifier = Modifier.size(13.dp), strokeWidth = 1.5.dp)
+                CircularProgressIndicator(
+                    modifier = Modifier.size(13.dp),
+                    color = accent,
+                    strokeWidth = 1.5.dp,
+                )
                 Spacer(Modifier.width(8.dp))
                 Text(
                     text = stringResource(R.string.ai_translate_catalog_loading),
-                    color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                    color = secondary,
                     fontSize = 12.sp,
                 )
             }
             is CatalogRefreshState.Success -> Text(
                 text = stringResource(R.string.ai_translate_catalog_success, refresh.modelCount),
-                color = if (dark) ControlAccentDark else AccentDark,
+                color = accent,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(start = 4.dp, top = 6.dp),
             )
             CatalogRefreshState.Failed -> Text(
                 text = stringResource(R.string.ai_translate_catalog_failed),
-                color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                color = errorColor,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(start = 4.dp, top = 6.dp),
             )
@@ -331,7 +355,7 @@ private fun CatalogSourceListCard(
     dark: Boolean,
 ) {
     val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
-    val faint = if (dark) LoginTextFaintDark else LoginTextFaintLight
+    val secondary = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight
     val accent = if (dark) ControlAccentDark else AccentDark
     val borderColor = if (dark) LoginCardBorderDark else LoginCardBorderLight
     val officialActive = activeUrl == SettingsRepository.CATALOG_URL_DEFAULT && activeKey.isEmpty()
@@ -342,11 +366,19 @@ private fun CatalogSourceListCard(
             .clip(RoundedCornerShape(14.dp))
             .border(BorderStroke(0.5.dp, borderColor), RoundedCornerShape(14.dp)),
     ) {
+        val officialBg by animateColorAsState(
+            targetValue = if (officialActive) {
+                accent.copy(alpha = if (dark) 0.18f else 0.12f)
+            } else {
+                Color.Transparent
+            },
+            label = "officialBg",
+        )
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
-                .background(if (officialActive) accent.copy(alpha = 0.08f) else Color.Transparent)
+                .background(officialBg)
                 .clickable(enabled = !officialActive, onClick = onActivateOfficial)
                 .padding(start = 14.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
         ) {
@@ -360,7 +392,7 @@ private fun CatalogSourceListCard(
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = stringResource(R.string.ai_translate_catalog_official_caption),
-                    color = faint,
+                    color = secondary,
                     fontSize = 11.sp,
                 )
             }
@@ -377,11 +409,19 @@ private fun CatalogSourceListCard(
         sources.forEachIndexed { index, source ->
             HorizontalDivider(color = borderColor, thickness = 0.5.dp)
             val active = source.url == activeUrl && source.encKey == activeKey
+            val rowBg by animateColorAsState(
+                targetValue = if (active) {
+                    accent.copy(alpha = if (dark) 0.18f else 0.12f)
+                } else {
+                    Color.Transparent
+                },
+                label = "sourceRowBg",
+            )
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(if (active) accent.copy(alpha = 0.08f) else Color.Transparent)
+                    .background(rowBg)
                     .clickable(enabled = !active, onClick = { onActivateSource(source) })
                     .padding(start = 14.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
             ) {
@@ -397,7 +437,7 @@ private fun CatalogSourceListCard(
                     Spacer(Modifier.height(2.dp))
                     Text(
                         text = source.url,
-                        color = faint,
+                        color = secondary,
                         fontSize = 11.sp,
                         maxLines = 1,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
@@ -415,7 +455,7 @@ private fun CatalogSourceListCard(
                 TextButton(
                     onClick = { onManageSource(source) },
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                    colors = ButtonDefaults.textButtonColors(contentColor = faint),
+                    colors = ButtonDefaults.textButtonColors(contentColor = secondary),
                 ) {
                     Text(text = "⋮", fontSize = 16.sp)
                 }

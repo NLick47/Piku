@@ -83,6 +83,12 @@ data class DetailUiState(
     val tagFeedbackRes: Int? = null,
     /** 底部菜单一次性新手引导（仅首次进入详情页显示） */
     val guideVisible: Boolean = false,
+    /**
+     * 图区「翻译图片」的一次性提示。
+     * 刻意与 [guideVisible] 分开存标记：老用户升级前就看过了底部引导，
+     * 若复用同一个标记，这个新加的提示对存量用户将永远不会出现。
+     */
+    val imageHintVisible: Boolean = false,
 
     /** 全屏小说阅读器：当前是否打开 */
     val novelReaderOpen: Boolean = false,
@@ -206,6 +212,8 @@ class DetailViewModel @Inject constructor(
     )
 
     private val showBottomGuide = !prefs.getBoolean(KEY_BOTTOM_GUIDE_SHOWN, false)
+    // 独立于底部引导的标记，保证新加的提示对升级上来的老用户也能展示一次
+    private val showImageHint = !prefs.getBoolean(KEY_IMAGE_HINT_SHOWN, false)
 
     /** 上次手动翻译的入口：失败提示的重试按原样重发（顶栏=false / 阅读器长文=true） */
     private var lastManualTranslateIncludeNovel = false
@@ -219,6 +227,7 @@ class DetailViewModel @Inject constructor(
         DetailUiState(
             shareUrl = "https://poipiku.com/$authorId/$workId.html",
             guideVisible = showBottomGuide,
+            imageHintVisible = showImageHint,
             novelProgressPercent = settingsRepository.getNovelProgress(workId),
             canTranslate = translationRepository.hasKey(),
         ),
@@ -234,6 +243,20 @@ class DetailViewModel @Inject constructor(
         if (!_uiState.value.guideVisible) return
         _uiState.update { it.copy(guideVisible = false) }
         prefs.edit().putBoolean(KEY_BOTTOM_GUIDE_SHOWN, true).apply()
+    }
+
+    /**
+     * 消耗图区「翻译图片」提示的一次机会。
+     *
+     * 由按钮真的把文字展开出来时回调触发，而不是页面初始化时就写标记：
+     * `hasImageModel` 是异步得到的（冷启动时模型目录常晚于首个详情页到达），
+     * 提前写的话，没配 image 模型的用户会白白用掉这次机会——
+     * 等他后来配好了模型，却再也看不到这个提示了。
+     */
+    fun consumeImageHint() {
+        if (!showImageHint) return
+        if (prefs.getBoolean(KEY_IMAGE_HINT_SHOWN, false)) return
+        prefs.edit().putBoolean(KEY_IMAGE_HINT_SHOWN, true).apply()
     }
 
     /** 打开/关闭全屏小说阅读器 */
@@ -260,6 +283,7 @@ class DetailViewModel @Inject constructor(
         // “已显示”标记在展示前就写入：之前是自动隐藏完成才写，用户提前离开详情页
         // 或进程被杀（如卡死后强杀）会导致标记永远存不上，每篇详情页都重复弹（历史 bug）
         if (showBottomGuide) prefs.edit().putBoolean(KEY_BOTTOM_GUIDE_SHOWN, true).apply()
+        // 注意：图区「翻译图片」提示的标记不在这里写，见 [consumeImageHint]
         viewModelScope.launch {
             observeFavoriteIdsUseCase().collect { ids ->
                 _uiState.update { it.copy(isFavorite = workId in ids) }
@@ -1122,5 +1146,6 @@ class DetailViewModel @Inject constructor(
 
         /** 底部菜单新手引导已展示标记 */
         const val KEY_BOTTOM_GUIDE_SHOWN = "detail_bottom_guide_shown_v2"
+        const val KEY_IMAGE_HINT_SHOWN = "detail_image_hint_shown_v1"
     }
 }

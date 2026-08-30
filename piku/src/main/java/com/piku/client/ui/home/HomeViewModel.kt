@@ -14,6 +14,10 @@ import com.piku.client.data.remote.translation.RoleDefaultIds
 import com.piku.client.data.remote.translation.TranslationRepository
 import com.piku.client.data.repository.AuthRepository
 import com.piku.client.data.repository.ThumbnailResolver
+import com.piku.client.data.repository.WebDavSyncRepository
+import com.piku.client.data.repository.SyncResult
+import com.piku.client.data.repository.TestConnectionState
+import com.piku.client.data.repository.SyncState
 import com.piku.client.domain.model.AppError
 import com.piku.client.domain.model.AppLanguage
 import com.piku.client.domain.model.AuthStatus
@@ -147,6 +151,15 @@ data class HomeUiState(
     val catalogSources: List<CatalogSource> = emptyList(),
     /** 列表来源弹层的刷新结果状态 */
     val catalogRefreshState: CatalogRefreshState = CatalogRefreshState.Idle,
+    // ---------------- WebDAV 同步 ----------------
+    val webDavEnabled: Boolean = false,
+    val webDavUrl: String = "",
+    val webDavUsername: String = "",
+    val webDavPassword: String = "",
+    val lastSyncAt: Long = 0L,
+    val syncState: SyncState = SyncState.IDLE,
+    val syncResult: SyncResult? = null,
+    val testConnectionState: TestConnectionState = TestConnectionState.IDLE,
 ) {
     /** 当前是否为自定义目录地址：入口行副文案与二级弹层据此区分展示 */
     val catalogIsCustom: Boolean
@@ -186,6 +199,7 @@ class HomeViewModel @Inject constructor(
     private val setAiTranslateEnabledUseCase: SetAiTranslateEnabledUseCase,
     private val authRepository: AuthRepository,
     private val thumbnailResolver: ThumbnailResolver,
+    private val webDavSyncRepository: WebDavSyncRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -428,6 +442,47 @@ class HomeViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(userProfile = profile, userAvatarUrl = profile?.avatarUrl)
                 }
+            }
+        }
+        // WebDAV 同步状态
+        viewModelScope.launch {
+            settingsRepository.webDavEnabled.collect { enabled ->
+                _uiState.update { it.copy(webDavEnabled = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.webDavUrl.collect { url ->
+                _uiState.update { it.copy(webDavUrl = url) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.webDavUsername.collect { username ->
+                _uiState.update { it.copy(webDavUsername = username) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.webDavPassword.collect { password ->
+                _uiState.update { it.copy(webDavPassword = password) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.lastSyncAt.collect { at ->
+                _uiState.update { it.copy(lastSyncAt = at) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.lastSyncResult.collect { result ->
+                _uiState.update { it.copy(syncResult = result) }
+            }
+        }
+        viewModelScope.launch {
+            webDavSyncRepository.syncState.collect { state ->
+                _uiState.update { it.copy(syncState = state) }
+            }
+        }
+        viewModelScope.launch {
+            webDavSyncRepository.testConnectionState.collect { state ->
+                _uiState.update { it.copy(testConnectionState = state) }
             }
         }
         select(FeedKey(FeedTab.LATEST, PoipikuCategory.ALL, null))
@@ -736,6 +791,44 @@ class HomeViewModel @Inject constructor(
 
     fun setAutoCheckEnabled(enabled: Boolean) {
         setAutoCheckEnabledUseCase(enabled)
+    }
+
+    // ---------------- WebDAV 同步 ----------------
+
+    fun setWebDavUrl(url: String) {
+        settingsRepository.setWebDavUrl(url)
+    }
+
+    fun setWebDavUsername(username: String) {
+        settingsRepository.setWebDavUsername(username)
+    }
+
+    fun setWebDavPassword(password: String) {
+        settingsRepository.setWebDavPassword(password)
+    }
+
+    fun setWebDavEnabled(enabled: Boolean) {
+        settingsRepository.setWebDavEnabled(enabled)
+    }
+
+    fun testWebDavConnection() {
+        viewModelScope.launch {
+            webDavSyncRepository.testConnection()
+        }
+    }
+
+    fun clearTestConnectionState() {
+        webDavSyncRepository.clearTestConnectionState()
+    }
+
+    fun syncNow() {
+        viewModelScope.launch {
+            webDavSyncRepository.sync()
+        }
+    }
+
+    fun clearSyncResult() {
+        settingsRepository.clearSyncResult()
     }
 
     private fun checkForUpdate(silent: Boolean) {

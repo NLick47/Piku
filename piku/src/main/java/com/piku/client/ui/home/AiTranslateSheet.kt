@@ -2,6 +2,7 @@ package com.piku.client.ui.home
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -66,10 +67,10 @@ import com.piku.client.ui.theme.ControlAccentDark
 import com.piku.client.ui.theme.LoginBackgroundDark
 import com.piku.client.ui.theme.LoginCardBorderDark
 import com.piku.client.ui.theme.LoginCardBorderLight
-import com.piku.client.ui.theme.LoginTextFaintDark
-import com.piku.client.ui.theme.LoginTextFaintLight
 import com.piku.client.ui.theme.LoginTextPrimaryDark
 import com.piku.client.ui.theme.LoginTextPrimaryLight
+import com.piku.client.ui.theme.LoginTextSecondaryDark
+import com.piku.client.ui.theme.LoginTextSecondaryLight
 import com.piku.client.ui.theme.themedSwitchColors
 
 /** 弹窗内的分区小标题 */
@@ -139,7 +140,7 @@ private fun AiTranslateMainPage(
     dark: Boolean,
 ) {
     val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
-    val faint = if (dark) LoginTextFaintDark else LoginTextFaintLight
+    val secondary = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight
     val accent = if (dark) ControlAccentDark else AccentDark
 
     var textExpanded by remember { mutableStateOf(false) }
@@ -211,7 +212,7 @@ private fun AiTranslateMainPage(
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = stringResource(R.string.ai_translate_auto_subtitle),
-                    color = faint,
+                    color = secondary,
                     fontSize = 11.sp,
                 )
             }
@@ -282,7 +283,7 @@ private fun AiTranslateMainPage(
             if (novelModels.isEmpty()) {
                 Text(
                     text = stringResource(R.string.ai_translate_novel_model_empty),
-                    color = faint,
+                    color = secondary,
                     fontSize = 12.sp,
                     modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
                 )
@@ -311,7 +312,7 @@ private fun AiTranslateMainPage(
             if (imageModels.isEmpty()) {
                 Text(
                     text = stringResource(R.string.ai_translate_image_model_empty),
-                    color = faint,
+                    color = secondary,
                     fontSize = 12.sp,
                     modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
                 )
@@ -343,7 +344,7 @@ private fun AiTranslateMainPage(
                                     Spacer(Modifier.height(2.dp))
                                     Text(
                                         text = entry.hint,
-                                        color = faint,
+                                        color = secondary,
                                         fontSize = 11.sp,
                                     )
                                 }
@@ -406,7 +407,7 @@ private fun AiTranslateMainPage(
                             R.string.ai_translate_catalog_default
                         },
                     ),
-                    color = faint,
+                    color = secondary,
                     fontSize = 11.sp,
                 )
             }
@@ -414,7 +415,7 @@ private fun AiTranslateMainPage(
             Icon(
                 imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
                 contentDescription = null,
-                tint = faint,
+                tint = secondary,
                 modifier = Modifier.size(18.dp),
             )
         }
@@ -431,7 +432,7 @@ private fun CollapsibleSection(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
-    val faint = if (dark) LoginTextFaintDark else LoginTextFaintLight
+    val secondary = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight
 
     Column {
         Row(
@@ -451,7 +452,7 @@ private fun CollapsibleSection(
             Spacer(Modifier.weight(1f))
             Text(
                 text = summary,
-                color = faint,
+                color = secondary,
                 fontSize = 12.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -460,7 +461,7 @@ private fun CollapsibleSection(
             Icon(
                 imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
                 contentDescription = null,
-                tint = faint,
+                tint = secondary,
                 modifier = Modifier
                     .size(16.dp)
                     .rotate(if (expanded) 90f else 0f),
@@ -519,12 +520,20 @@ private fun ModelOptionRow(
     dark: Boolean,
 ) {
     val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
-    val faint = if (dark) LoginTextFaintDark else LoginTextFaintLight
+    val secondary = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight
     val accent = if (dark) ControlAccentDark else AccentDark
+    val rowBg by animateColorAsState(
+        targetValue = if (selected) {
+            accent.copy(alpha = if (dark) 0.18f else 0.12f)
+        } else {
+            Color.Transparent
+        },
+        label = "modelRowBg",
+    )
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(if (selected) accent.copy(alpha = 0.08f) else Color.Transparent)
+            .background(rowBg)
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -540,7 +549,7 @@ private fun ModelOptionRow(
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = entry.hint,
-                    color = faint,
+                    color = secondary,
                     fontSize = 11.sp,
                 )
             }

@@ -1,6 +1,8 @@
 package com.piku.client.data.local
 
 import android.content.SharedPreferences
+import com.piku.client.data.repository.SyncResult
+import com.piku.client.data.repository.SyncState
 import com.piku.client.domain.model.ThemeMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -537,6 +539,75 @@ class SettingsRepository @Inject constructor(
         _catalogEncKey.value = value
     }
 
+    // ---------------- WebDAV 同步 ----------------
+
+    /** WebDAV 服务器地址 */
+    private val _webDavUrl = MutableStateFlow(
+        prefs.getString(KEY_WEBDAV_URL, null)?.takeIf { it.isNotBlank() } ?: "",
+    )
+    val webDavUrl: StateFlow<String> = _webDavUrl.asStateFlow()
+
+    /** WebDAV 用户名 */
+    private val _webDavUsername = MutableStateFlow(
+        prefs.getString(KEY_WEBDAV_USERNAME, null)?.takeIf { it.isNotBlank() } ?: "",
+    )
+    val webDavUsername: StateFlow<String> = _webDavUsername.asStateFlow()
+
+    /** WebDAV 密码（明文存储，SharedPreferences 本身受应用沙箱保护） */
+    private val _webDavPassword = MutableStateFlow(
+        prefs.getString(KEY_WEBDAV_PASSWORD, null) ?: "",
+    )
+    val webDavPassword: StateFlow<String> = _webDavPassword.asStateFlow()
+
+    /** WebDAV 同步总开关 */
+    private val _webDavEnabled = MutableStateFlow(
+        prefs.getBoolean(KEY_WEBDAV_ENABLED, false),
+    )
+    val webDavEnabled: StateFlow<Boolean> = _webDavEnabled.asStateFlow()
+
+    /** 上次同步时间（epoch millis），0 表示从未同步 */
+    private val _lastSyncAt = MutableStateFlow(
+        prefs.getLong(KEY_WEBDAV_LAST_SYNC_AT, 0L),
+    )
+    val lastSyncAt: StateFlow<Long> = _lastSyncAt.asStateFlow()
+
+    /** 上次同步结果（内存态，不持久化，每次启动重置） */
+    private val _lastSyncResult = MutableStateFlow<SyncResult?>(null)
+    val lastSyncResult: StateFlow<SyncResult?> = _lastSyncResult.asStateFlow()
+
+    fun setWebDavUrl(url: String) {
+        val value = url.trim()
+        prefs.edit().putString(KEY_WEBDAV_URL, value).apply()
+        _webDavUrl.value = value
+    }
+
+    fun setWebDavUsername(username: String) {
+        val value = username.trim()
+        prefs.edit().putString(KEY_WEBDAV_USERNAME, value).apply()
+        _webDavUsername.value = value
+    }
+
+    fun setWebDavPassword(password: String) {
+        prefs.edit().putString(KEY_WEBDAV_PASSWORD, password).apply()
+        _webDavPassword.value = password
+    }
+
+    fun setWebDavEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_WEBDAV_ENABLED, enabled).apply()
+        _webDavEnabled.value = enabled
+    }
+
+    fun recordSync(result: SyncResult) {
+        val now = System.currentTimeMillis()
+        prefs.edit().putLong(KEY_WEBDAV_LAST_SYNC_AT, now).apply()
+        _lastSyncAt.value = now
+        _lastSyncResult.value = result
+    }
+
+    fun clearSyncResult() {
+        _lastSyncResult.value = null
+    }
+
     companion object {
         const val KEY_SHOW_ADULT_CONTENT = "show_adult_content"
         const val KEY_THEME_MODE = "theme_mode"
@@ -614,6 +685,13 @@ class SettingsRepository @Inject constructor(
         const val KEY_CATALOG_REMOTE_URL = "llm_catalog_remote_url"
         const val KEY_CATALOG_ENC_KEY = "llm_catalog_enc_key"
         const val KEY_CATALOG_SOURCES = "llm_catalog_sources"
+
+        /** WebDAV 同步设置 */
+        const val KEY_WEBDAV_URL = "webdav_url"
+        const val KEY_WEBDAV_USERNAME = "webdav_username"
+        const val KEY_WEBDAV_PASSWORD = "webdav_password"
+        const val KEY_WEBDAV_ENABLED = "webdav_enabled"
+        const val KEY_WEBDAV_LAST_SYNC_AT = "webdav_last_sync_at"
 
         /**
          * 列表外自定义模型的兜底端点；文本模型 id 默认空串 = 未显式选择，

@@ -254,8 +254,8 @@
     <string name="detail_reaction">反应</string>
     <string name="detail_copy_link">复制链接</string>
     <string name="detail_copy_description">复制描述</string>
-    <string name="detail_share_link">分享链接</string>
     <string name="detail_open_browser">在浏览器打开</string>
+    <string name="detail_menu_retry_with_model">换模型重翻</string>
     <string name="detail_link_copied">链接已复制</string>
     <string name="detail_description_copied">描述已复制</string>
     <string name="detail_show_more">展开</string>
@@ -361,4 +361,39 @@
     <string name="detail_model_kind_text">文本</string>
     <string name="detail_model_kind_novel">小说</string>
     <string name="detail_model_kind_image">图片</string>
+
+    <!-- WebDAV 同步 -->
+    <string name="menu_webdav_sync">WebDAV 同步</string>
+    <string name="webdav_state_on">已开启</string>
+    <string name="webdav_state_off">已关闭</string>
+    <string name="webdav_settings_title">WebDAV 同步收藏夹</string>
+    <string name="webdav_enable">启用同步</string>
+    <string name="webdav_url">服务器地址</string>
+    <string name="webdav_username">用户名</string>
+    <string name="webdav_password">密码</string>
+    <string name="webdav_test_connection">测试连接</string>
+    <string name="webdav_sync_now">立即同步</string>
+    <string name="webdav_syncing">同步中…</string>
+    <string name="webdav_last_sync">上次同步: %1$s</string>
+    <string name="webdav_sync_success">同步成功</string>
+    <string name="webdav_sync_failed">同步失败</string>
+    <string name="webdav_connection_success">连接成功</string>
+    <string name="webdav_connection_failed">连接失败</string>
+    <string name="webdav_server_config">服务器配置</string>
+    <string name="webdav_sync_status">同步状态</string>
+    <string name="webdav_status_idle">尚未同步</string>
+    <string name="webdav_status_waiting">等待同步</string>
+    <string name="webdav_never_synced">从未同步过</string>
+    <string name="webdav_enable_hint">开启后，收藏变动会自动同步到服务器</string>
+    <string name="webdav_url_placeholder">https://dav.example.com/dav/</string>
+    <string name="webdav_url_invalid">地址需以 http:// 或 https:// 开头</string>
+    <string name="webdav_password_show">显示密码</string>
+    <string name="webdav_password_hide">隐藏密码</string>
+    <string name="webdav_testing">测试中…</string>
+    <string name="webdav_stat_folders">+%1$d 文件夹</string>
+    <string name="webdav_stat_works">+%1$d 作品</string>
+    <string name="webdav_stat_backup">备份 %1$d 个</string>
+    <string name="webdav_test_failed_hint">请检查服务器地址、用户名和密码是否正确</string>
+    <string name="webdav_disabled_action_hint">开启「启用同步」后即可测试连接与手动同步</string>
+    <string name="webdav_help">收藏夹数据会以 JSON 与图片的形式保存在服务器的 piku/ 目录下，在另一台设备填入相同配置即可同步。</string>
 </resources>
