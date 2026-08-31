@@ -597,11 +597,13 @@ class SettingsRepository @Inject constructor(
         _webDavEnabled.value = enabled
     }
 
-    fun recordSync(result: SyncResult) {
-        val now = System.currentTimeMillis()
-        prefs.edit().putLong(KEY_WEBDAV_LAST_SYNC_AT, now).apply()
-        _lastSyncAt.value = now
+    fun recordSyncResult(result: SyncResult) {
         _lastSyncResult.value = result
+        if (result.state == SyncState.SUCCESS) {
+            val now = System.currentTimeMillis()
+            prefs.edit().putLong(KEY_WEBDAV_LAST_SYNC_AT, now).apply()
+            _lastSyncAt.value = now
+        }
     }
 
     fun clearSyncResult() {

@@ -1,5 +1,6 @@
 package com.piku.client.ui.home
 
+import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -33,48 +34,53 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.CloudSync
-import androidx.compose.material.icons.outlined.Error
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.ripple
+import androidx.compose.material3.TextFieldColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -94,17 +100,20 @@ import com.piku.client.ui.theme.HomeBgBottomLight
 import com.piku.client.ui.theme.HomeBgTopDark
 import com.piku.client.ui.theme.HomeBgTopLight
 import com.piku.client.ui.theme.LocalDarkTheme
-import com.piku.client.ui.theme.LoginCardBorderDark
-import com.piku.client.ui.theme.LoginCardBorderLight
 import com.piku.client.ui.theme.LoginTextFaintDark
 import com.piku.client.ui.theme.LoginTextFaintLight
 import com.piku.client.ui.theme.LoginTextPrimaryDark
 import com.piku.client.ui.theme.LoginTextPrimaryLight
 import com.piku.client.ui.theme.LoginTextSecondaryDark
 import com.piku.client.ui.theme.LoginTextSecondaryLight
+import com.piku.client.ui.theme.PillBorderDark
+import com.piku.client.ui.theme.PillBorderLight
 import com.piku.client.ui.theme.StatusSyncing
 import com.piku.client.ui.theme.themedSwitchColors
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -114,12 +123,9 @@ import java.util.Locale
 private val PagePaddingH = 20.dp
 private val CardCorner = 20.dp
 private val FieldCorner = 14.dp
-private val ActionHeight = 50.dp
+private val PrimaryButtonHeight = 52.dp
+private val SecondaryButtonHeight = 48.dp
 
-/** 动作按钮的三态结果（无 / 成功 / 失败） */
-private enum class ActionResult { NONE, SUCCESS, FAILED }
-
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WebDavSettingsScreen(
     url: String,
@@ -140,13 +146,25 @@ fun WebDavSettingsScreen(
     onBack: () -> Unit,
     dark: Boolean = LocalDarkTheme.current,
 ) {
-    BackHandler { onBack() }
+    val focusManager: FocusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    BackHandler(enabled = keyboard?.let { true } ?: true) {
+        // 软键盘显示时按返回先收键盘，避免用户输入到一半被退出页面
+        if (keyboard != null) {
+            keyboard.hide()
+            focusManager.clearFocus()
+        } else {
+            onBack()
+        }
+    }
 
     val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
     val secondary = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight
     val faint = if (dark) LoginTextFaintDark else LoginTextFaintLight
     val accent = if (dark) ControlAccentDark else AccentDark
-    val border = if (dark) LoginCardBorderDark else LoginCardBorderLight
+    val border = if (dark) PillBorderDark else PillBorderLight
 
     var passwordVisible by remember { mutableStateOf(false) }
 
@@ -158,21 +176,45 @@ fun WebDavSettingsScreen(
     val isSyncing = syncState == SyncState.SYNCING
     val isTesting = testConnectionState == TestConnectionState.TESTING
     val actionsEnabled = enabled && configValid && !isSyncing && !isTesting
+    // 测试成功的展示窗口内禁用测试按钮，避免手滑重复测试触发限流
+    val testEnabled = actionsEnabled && testConnectionState != TestConnectionState.SUCCESS
 
-    // 测试成功后短暂停留再复位，便于用户看清结果
+    // 测试结果 Snackbar 提示
     LaunchedEffect(testConnectionState) {
-        if (testConnectionState == TestConnectionState.SUCCESS) {
-            delay(2200L)
-            onClearTestResult()
+        when (testConnectionState) {
+            TestConnectionState.SUCCESS -> {
+                snackbarHostState.showSnackbar(
+                    message = context.getString(R.string.webdav_connection_success),
+                )
+                delay(1500L)
+                onClearTestResult()
+            }
+            TestConnectionState.FAILED -> {
+                snackbarHostState.showSnackbar(
+                    message = context.getString(R.string.webdav_connection_failed),
+                )
+                delay(1500L)
+                onClearTestResult()
+            }
+            else -> {}
         }
     }
-    // 修改任一配置项时清掉上一次的测试结果
-    LaunchedEffect(url, username, password) {
-        if (testConnectionState == TestConnectionState.SUCCESS ||
-            testConnectionState == TestConnectionState.FAILED
-        ) {
-            onClearTestResult()
-        }
+    // 修改任一配置项时清掉上一次的测试结果。
+    // 用 snapshotFlow + debounce 替代 key-based LaunchedEffect：
+    // - debounce 500ms 避免连续输入时反复 clear，与新一轮 TESTING 形成竞态
+    // - distinctUntilChanged 保证真实变化才触发，配置项空串初始化不会清空 SUCCESS
+    LaunchedEffect(Unit) {
+        snapshotFlow { Triple(url, username, password) }
+            .drop(1)
+            .debounce(500L)
+            .distinctUntilChanged()
+            .collect {
+                if (testConnectionState == TestConnectionState.SUCCESS ||
+                    testConnectionState == TestConnectionState.FAILED
+                ) {
+                    onClearTestResult()
+                }
+            }
     }
 
     Box(
@@ -196,21 +238,13 @@ fun WebDavSettingsScreen(
             SettingsTopBar(title = stringResource(R.string.webdav_settings_title), primary = primary, onBack = onBack)
 
             Column(modifier = Modifier.padding(horizontal = PagePaddingH)) {
-                Spacer(Modifier.height(2.dp))
+                Spacer(Modifier.height(4.dp))
 
-                SyncStatusStrip(
+                SyncHeroCard(
+                    enabled = enabled,
                     syncState = syncState,
                     syncResult = syncResult,
                     lastSyncAt = lastSyncAt,
-                    dark = dark,
-                    primary = primary,
-                    secondary = secondary,
-                )
-
-                Spacer(Modifier.height(20.dp))
-
-                EnableCard(
-                    enabled = enabled,
                     dark = dark,
                     primary = primary,
                     secondary = secondary,
@@ -218,7 +252,7 @@ fun WebDavSettingsScreen(
                     onCheckedChange = onEnabledChange,
                 )
 
-                Spacer(Modifier.height(22.dp))
+                Spacer(Modifier.height(20.dp))
                 SheetSectionLabel(text = stringResource(R.string.webdav_server_config), color = secondary)
                 Spacer(Modifier.height(8.dp))
 
@@ -240,53 +274,33 @@ fun WebDavSettingsScreen(
                     onPasswordChange = onPasswordChange,
                 )
 
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(18.dp))
 
-                Row(
+                PrimaryActionButton(
+                    onClick = onSyncNow,
+                    enabled = actionsEnabled,
+                    running = isSyncing,
+                    dark = dark,
+                    icon = Icons.Outlined.Sync,
+                    idleLabel = stringResource(R.string.webdav_sync_now),
+                    runningLabel = stringResource(R.string.webdav_syncing),
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    ActionButton(
-                        onClick = onTestConnection,
-                        enabled = actionsEnabled,
-                        running = isTesting,
-                        result = when (testConnectionState) {
-                            TestConnectionState.SUCCESS -> ActionResult.SUCCESS
-                            TestConnectionState.FAILED -> ActionResult.FAILED
-                            else -> ActionResult.NONE
-                        },
-                        filled = false,
-                        dark = dark,
-                        primary = primary,
-                        accent = accent,
-                        icon = Icons.Outlined.Link,
-                        idleLabel = stringResource(R.string.webdav_test_connection),
-                        loadingLabel = stringResource(R.string.webdav_testing),
-                        successLabel = stringResource(R.string.webdav_connection_success),
-                        errorLabel = stringResource(R.string.webdav_connection_failed),
-                        modifier = Modifier.weight(1f),
-                    )
-                    ActionButton(
-                        onClick = onSyncNow,
-                        enabled = actionsEnabled,
-                        running = isSyncing,
-                        result = when (syncState) {
-                            SyncState.SUCCESS -> ActionResult.SUCCESS
-                            SyncState.FAILED -> ActionResult.FAILED
-                            else -> ActionResult.NONE
-                        },
-                        filled = true,
-                        dark = dark,
-                        primary = primary,
-                        accent = accent,
-                        icon = Icons.Outlined.Sync,
-                        idleLabel = stringResource(R.string.webdav_sync_now),
-                        loadingLabel = stringResource(R.string.webdav_syncing),
-                        successLabel = stringResource(R.string.webdav_sync_success),
-                        errorLabel = stringResource(R.string.webdav_sync_failed),
-                        modifier = Modifier.weight(1f),
-                    )
-                }
+                )
+
+                Spacer(Modifier.height(10.dp))
+
+                SecondaryActionButton(
+                    onClick = onTestConnection,
+                    enabled = testEnabled,
+                    running = isTesting,
+                    dark = dark,
+                    accent = accent,
+                    primary = primary,
+                    icon = Icons.Outlined.Link,
+                    idleLabel = stringResource(R.string.webdav_test_connection),
+                    runningLabel = stringResource(R.string.webdav_testing),
+                    modifier = Modifier.fillMaxWidth(),
+                )
 
                 // 同步未开启时说明按钮为何不可点
                 AnimatedVisibility(
@@ -305,47 +319,24 @@ fun WebDavSettingsScreen(
                     )
                 }
 
-                TestResultBanner(
-                    testConnectionState = testConnectionState,
-                    dark = dark,
-                    primary = primary,
-                    secondary = secondary,
-                )
-
                 Spacer(Modifier.height(24.dp))
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 2.dp),
-                    verticalAlignment = Alignment.Top,
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Info,
-                        contentDescription = null,
-                        tint = faint,
-                        modifier = Modifier
-                            .size(15.dp)
-                            .offset(y = 2.dp),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = stringResource(R.string.webdav_help),
-                        color = secondary,
-                        fontSize = 12.sp,
-                        lineHeight = 17.sp,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
+                HelpFooter(faint = faint, secondary = secondary, accent = accent)
 
                 Spacer(Modifier.height(28.dp))
             }
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter),
+        )
     }
 }
 
 // ──────────────────────── 顶栏 ────────────────────────
 
+/** 与历史/收藏等抽屉子页一致的顶栏：返回键 + 标题，直接落在页面底色上 */
 @Composable
 private fun SettingsTopBar(
     title: String,
@@ -355,8 +346,8 @@ private fun SettingsTopBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 8.dp, end = 16.dp, top = 4.dp)
-            .height(52.dp),
+            .padding(horizontal = 4.dp, vertical = 6.dp)
+            .height(48.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconButton(onClick = onBack) {
@@ -369,7 +360,7 @@ private fun SettingsTopBar(
         Text(
             text = title,
             color = primary,
-            fontSize = 18.sp,
+            fontSize = 17.sp,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -378,37 +369,58 @@ private fun SettingsTopBar(
     }
 }
 
-// ──────────────────────── 同步状态条 ────────────────────────
+// ──────────────────────── 状态总览卡 ────────────────────────
 
 /**
- * 紧凑状态条：直接落在页面底色上，不再额外套一层卡片，
- * 避免亮色模式下出现一整块比页面更白的底板。
+ * 启用开关 + 实时同步状态合二为一的总览卡：
+ * 图标与底色随状态变化（关闭/已开启/同步中/成功/失败），
+ * 副标题直接展示上次同步时间或失败原因，成功时附统计 chips。
  */
 @Composable
-private fun SyncStatusStrip(
+private fun SyncHeroCard(
+    enabled: Boolean,
     syncState: SyncState,
     syncResult: SyncResult?,
     lastSyncAt: Long,
     dark: Boolean,
     primary: Color,
     secondary: Color,
+    accent: Color,
+    onCheckedChange: (Boolean) -> Unit,
 ) {
-    val tone = when (syncState) {
-        SyncState.SYNCING -> StatusSyncing
-        SyncState.SUCCESS -> if (dark) FollowDark else FollowLight
-        SyncState.FAILED -> if (dark) ErrorRedDark else ErrorRedLight
-        SyncState.IDLE -> secondary
-    }
+    val successColor = if (dark) FollowDark else FollowLight
+    val errorColor = if (dark) ErrorRedDark else ErrorRedLight
+    val isSyncing = syncState == SyncState.SYNCING
+    val isFailed = syncState == SyncState.FAILED
+    val isSuccess = !isSyncing && !isFailed && syncResult?.state == SyncState.SUCCESS
 
-    val statusText = when (syncState) {
-        SyncState.SYNCING -> stringResource(R.string.webdav_syncing)
-        SyncState.SUCCESS -> stringResource(R.string.webdav_sync_success)
-        SyncState.FAILED -> stringResource(R.string.webdav_sync_failed)
-        SyncState.IDLE -> if (lastSyncAt > 0) {
-            stringResource(R.string.webdav_status_waiting)
-        } else {
-            stringResource(R.string.webdav_status_idle)
-        }
+    val iconBg by animateColorAsState(
+        targetValue = when {
+            isSyncing -> StatusSyncing.copy(alpha = if (dark) 0.20f else 0.13f)
+            isFailed -> errorColor.copy(alpha = if (dark) 0.20f else 0.12f)
+            isSuccess -> successColor.copy(alpha = if (dark) 0.20f else 0.12f)
+            enabled -> accent.copy(alpha = if (dark) 0.22f else 0.13f)
+            else -> if (dark) Color(0x12FFFFFF) else Color(0x08000000)
+        },
+        label = "heroIconBg",
+    )
+    val iconTint by animateColorAsState(
+        targetValue = when {
+            isSyncing -> StatusSyncing
+            isFailed -> errorColor
+            isSuccess -> successColor
+            enabled -> accent
+            else -> secondary
+        },
+        label = "heroIconTint",
+    )
+
+    val title = when {
+        isSyncing -> stringResource(R.string.webdav_syncing)
+        isFailed -> stringResource(R.string.webdav_sync_failed)
+        isSuccess -> stringResource(R.string.webdav_sync_success)
+        enabled -> stringResource(R.string.webdav_state_on)
+        else -> stringResource(R.string.webdav_state_off)
     }
 
     val lastSyncText = if (lastSyncAt > 0) {
@@ -419,16 +431,16 @@ private fun SyncStatusStrip(
     } else {
         stringResource(R.string.webdav_never_synced)
     }
-
-    val errorMessage = if (syncState == SyncState.FAILED) {
-        syncResult?.error?.takeIf { it.isNotBlank() }
-    } else {
-        null
+    val subtitle = when {
+        isFailed -> syncResult?.error?.takeIf { it.isNotBlank() }
+            ?: stringResource(R.string.webdav_test_failed_hint)
+        enabled -> lastSyncText
+        else -> stringResource(R.string.webdav_enable_hint)
     }
 
-    val stats = remember(syncState, syncResult) {
+    val stats = remember(syncResult) {
         val r = syncResult ?: return@remember emptyList()
-        if (syncState != SyncState.SUCCESS) return@remember emptyList()
+        if (r.state != SyncState.SUCCESS) return@remember emptyList()
         buildList {
             if (r.newFolders > 0) add(StatItem(R.string.webdav_stat_folders, r.newFolders))
             if (r.newWorks > 0) add(StatItem(R.string.webdav_stat_works, r.newWorks))
@@ -436,75 +448,81 @@ private fun SyncStatusStrip(
         }
     }
 
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp)) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth(),
+    GlassCard(dark = dark, shape = RoundedCornerShape(CardCorner), modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
         ) {
-            if (syncState == SyncState.SYNCING) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(12.dp),
-                    color = tone,
-                    strokeWidth = 1.8.dp,
-                )
-            } else {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(tone),
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(iconBg),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (isSyncing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = StatusSyncing,
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Outlined.CloudSync,
+                            contentDescription = null,
+                            tint = iconTint,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+                }
+                Spacer(Modifier.width(13.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = title,
+                        color = primary,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        text = subtitle,
+                        color = if (isFailed) errorColor else secondary,
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp,
+                        maxLines = if (isFailed) 3 else 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
+                Switch(
+                    checked = enabled,
+                    onCheckedChange = onCheckedChange,
+                    colors = themedSwitchColors(dark),
                 )
             }
-            Spacer(Modifier.width(9.dp))
-            Text(
-                text = statusText,
-                color = primary,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Spacer(Modifier.width(10.dp))
-            Text(
-                text = lastSyncText,
-                color = secondary,
-                fontSize = 12.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.End,
-                modifier = Modifier.weight(1f),
-            )
-        }
 
-        if (errorMessage != null) {
-            Text(
-                text = errorMessage,
-                color = tone,
-                fontSize = 12.sp,
-                lineHeight = 16.sp,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = 17.dp, top = 5.dp),
-            )
-        }
-
-        AnimatedVisibility(
-            visible = stats.isNotEmpty(),
-            enter = fadeIn(tween(200)) + expandVertically(tween(200)),
-            exit = fadeOut(tween(200)) + shrinkVertically(tween(200)),
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 17.dp, top = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            AnimatedVisibility(
+                visible = stats.isNotEmpty(),
+                enter = fadeIn(tween(200)) + expandVertically(tween(200)),
+                exit = fadeOut(tween(200)) + shrinkVertically(tween(200)),
             ) {
-                stats.forEach { item ->
-                    StatChip(
-                        text = stringResource(item.labelRes, item.count),
-                        dark = dark,
-                        textColor = primary,
-                    )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    stats.forEach { item ->
+                        StatChip(
+                            text = stringResource(item.labelRes, item.count),
+                            dark = dark,
+                            textColor = primary,
+                        )
+                    }
                 }
             }
         }
@@ -541,100 +559,20 @@ private fun StatChip(
     }
 }
 
-// ──────────────────────── 启用开关 ────────────────────────
-
-@Composable
-private fun EnableCard(
-    enabled: Boolean,
-    dark: Boolean,
-    primary: Color,
-    secondary: Color,
-    accent: Color,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    val iconBg by animateColorAsState(
-        targetValue = if (enabled) {
-            accent.copy(alpha = if (dark) 0.22f else 0.13f)
-        } else {
-            if (dark) Color(0x12FFFFFF) else Color(0x08000000)
-        },
-        label = "enableIconBg",
-    )
-    val iconTint by animateColorAsState(
-        targetValue = if (enabled) accent else secondary,
-        label = "enableIconTint",
-    )
-
-    GlassCard(dark = dark, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(13.dp))
-                    .background(iconBg),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.CloudSync,
-                    contentDescription = null,
-                    tint = iconTint,
-                    modifier = Modifier.size(21.dp),
-                )
-            }
-            Spacer(Modifier.width(13.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(R.string.webdav_enable),
-                    color = primary,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Spacer(Modifier.height(3.dp))
-                Text(
-                    text = stringResource(R.string.webdav_enable_hint),
-                    color = secondary,
-                    fontSize = 12.sp,
-                    lineHeight = 16.sp,
-                )
-            }
-            Spacer(Modifier.width(10.dp))
-            Switch(
-                checked = enabled,
-                onCheckedChange = onCheckedChange,
-                colors = themedSwitchColors(dark),
-            )
-        }
-    }
-}
-
 // ──────────────────────── 服务器配置 ────────────────────────
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** 输入框配色：透明容器 + 细边框 + 浮动标签，与旧版一致 */
 @Composable
-private fun ServerConfigCard(
-    url: String,
-    username: String,
-    password: String,
-    passwordVisible: Boolean,
-    urlInvalid: Boolean,
+private fun webDavFieldColors(
     dark: Boolean,
+    accent: Color,
+    border: Color,
     primary: Color,
     secondary: Color,
     faint: Color,
-    accent: Color,
-    border: Color,
-    onPasswordVisibleChange: (Boolean) -> Unit,
-    onUrlChange: (String) -> Unit,
-    onUsernameChange: (String) -> Unit,
-    onPasswordChange: (String) -> Unit,
-) {
+): TextFieldColors {
     val errorColor = if (dark) ErrorRedDark else ErrorRedLight
-    val fieldColors = OutlinedTextFieldDefaults.colors(
+    return OutlinedTextFieldDefaults.colors(
         focusedBorderColor = accent,
         unfocusedBorderColor = border,
         disabledBorderColor = border,
@@ -656,9 +594,6 @@ private fun ServerConfigCard(
         focusedPlaceholderColor = faint,
         unfocusedPlaceholderColor = faint,
         errorPlaceholderColor = faint,
-        focusedLeadingIconColor = accent,
-        unfocusedLeadingIconColor = secondary,
-        errorLeadingIconColor = errorColor,
         focusedTrailingIconColor = accent,
         unfocusedTrailingIconColor = secondary,
         errorTrailingIconColor = errorColor,
@@ -666,13 +601,34 @@ private fun ServerConfigCard(
         unfocusedSupportingTextColor = secondary,
         errorSupportingTextColor = errorColor,
     )
+}
+
+@Composable
+private fun ServerConfigCard(
+    url: String,
+    username: String,
+    password: String,
+    passwordVisible: Boolean,
+    urlInvalid: Boolean,
+    dark: Boolean,
+    primary: Color,
+    secondary: Color,
+    faint: Color,
+    accent: Color,
+    border: Color,
+    onPasswordVisibleChange: (Boolean) -> Unit,
+    onUrlChange: (String) -> Unit,
+    onUsernameChange: (String) -> Unit,
+    onPasswordChange: (String) -> Unit,
+) {
+    val fieldColors = webDavFieldColors(dark, accent, border, primary, secondary, faint)
     val fieldTextStyle = TextStyle(fontSize = 14.sp, color = primary)
 
     GlassCard(dark = dark, shape = RoundedCornerShape(CardCorner), modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 16.dp),
+                .padding(16.dp),
         ) {
             OutlinedTextField(
                 value = url,
@@ -693,6 +649,7 @@ private fun ServerConfigCard(
                 },
                 isError = urlInvalid,
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
                 textStyle = fieldTextStyle,
                 shape = RoundedCornerShape(FieldCorner),
                 colors = fieldColors,
@@ -706,6 +663,7 @@ private fun ServerConfigCard(
                 onValueChange = onUsernameChange,
                 label = { Text(stringResource(R.string.webdav_username), fontSize = 13.sp) },
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                 textStyle = fieldTextStyle,
                 shape = RoundedCornerShape(FieldCorner),
                 colors = fieldColors,
@@ -735,7 +693,7 @@ private fun ServerConfigCard(
                     }
                 },
                 visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
                 singleLine = true,
                 textStyle = fieldTextStyle,
                 shape = RoundedCornerShape(FieldCorner),
@@ -748,27 +706,18 @@ private fun ServerConfigCard(
 
 // ──────────────────────── 操作按钮 ────────────────────────
 
+/** 主操作：与登录页同款的渐变玻璃按钮，按压缩放反馈 */
 @Composable
-private fun ActionButton(
+private fun PrimaryActionButton(
     onClick: () -> Unit,
     enabled: Boolean,
     running: Boolean,
-    result: ActionResult,
-    filled: Boolean,
     dark: Boolean,
-    primary: Color,
-    accent: Color,
     icon: ImageVector,
     idleLabel: String,
-    loadingLabel: String,
-    successLabel: String,
-    errorLabel: String,
+    runningLabel: String,
     modifier: Modifier = Modifier,
 ) {
-    val onAccent = if (dark) Color(0xFF1A1A1A) else Color.White
-    val successColor = if (dark) FollowDark else FollowLight
-    val errorColor = if (dark) ErrorRedDark else ErrorRedLight
-
     val shape = RoundedCornerShape(16.dp)
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
@@ -778,85 +727,134 @@ private fun ActionButton(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessMedium,
         ),
-        label = "actionScale",
+        label = "primaryScale",
     )
-
-    val resultColor = when (result) {
-        ActionResult.SUCCESS -> successColor
-        ActionResult.FAILED -> errorColor
-        ActionResult.NONE -> accent
-    }
-    val bg by animateColorAsState(
-        targetValue = when {
-            !filled -> Color.Transparent
-            running -> accent.copy(alpha = 0.82f)
-            result != ActionResult.NONE -> resultColor
-            else -> accent
-        },
-        label = "actionBg",
-    )
-    val fg by animateColorAsState(
-        targetValue = when {
-            filled -> onAccent
-            running -> accent
-            result != ActionResult.NONE -> resultColor
-            else -> primary
-        },
-        label = "actionFg",
-    )
-    val stroke by animateColorAsState(
-        targetValue = when {
-            filled -> Color.Transparent
-            running || result != ActionResult.NONE -> Color.Transparent
-            else -> accent.copy(alpha = if (dark) 0.34f else 0.28f)
-        },
-        label = "actionStroke",
-    )
+    val ink = if (dark) Color(0xFF1C1A18) else Color.White
 
     Box(
         modifier = modifier
-            .height(ActionHeight)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                alpha = if (enabled || running) 1f else 0.45f
+            }
+            .shadow(
+                elevation = if (enabled) 10.dp else 0.dp,
+                shape = shape,
+                ambientColor = Color(0x33000000),
+                spotColor = Color(0x40000000),
+            )
             .clip(shape)
-            .background(bg)
-            .border(BorderStroke(1.dp, stroke), shape)
+            .background(
+                Brush.horizontalGradient(
+                    if (dark) listOf(Color(0xFFF2F2F2), Color(0xFFC7C7C7))
+                    else listOf(Color(0xFF3A3A3A), Color(0xFF141414)),
+                ),
+            )
             .clickable(
                 enabled = enabled && !running,
                 interactionSource = interactionSource,
-                indication = ripple(),
+                indication = null,
                 onClick = onClick,
             )
-            .padding(horizontal = 14.dp),
+            .height(PrimaryButtonHeight),
         contentAlignment = Alignment.Center,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            val contentAlpha = if (enabled) 1f else 0.42f
             if (running) {
                 CircularProgressIndicator(
-                    modifier = Modifier.size(17.dp),
-                    color = fg,
+                    modifier = Modifier.size(18.dp),
+                    color = ink,
                     strokeWidth = 2.dp,
                 )
             } else {
                 Icon(
-                    imageVector = when (result) {
-                        ActionResult.SUCCESS -> Icons.Outlined.CheckCircle
-                        ActionResult.FAILED -> Icons.Outlined.Error
-                        ActionResult.NONE -> icon
-                    },
+                    imageVector = icon,
                     contentDescription = null,
-                    tint = fg.copy(alpha = contentAlpha),
+                    tint = ink,
                     modifier = Modifier.size(18.dp),
                 )
             }
-            Spacer(Modifier.width(7.dp))
+            Spacer(Modifier.width(8.dp))
             Text(
-                text = when {
-                    running -> loadingLabel
-                    result == ActionResult.SUCCESS -> successLabel
-                    result == ActionResult.FAILED -> errorLabel
-                    else -> idleLabel
-                },
-                color = fg.copy(alpha = contentAlpha),
+                text = if (running) runningLabel else idleLabel,
+                color = ink,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+/**
+ * 次操作：描边玻璃按钮
+ */
+@Composable
+private fun SecondaryActionButton(
+    onClick: () -> Unit,
+    enabled: Boolean,
+    running: Boolean,
+    dark: Boolean,
+    accent: Color,
+    primary: Color,
+    icon: ImageVector,
+    idleLabel: String,
+    runningLabel: String,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(16.dp)
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.97f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium,
+        ),
+        label = "secondaryScale",
+    )
+    val contentColor = if (running) accent else primary
+    val label = if (running) runningLabel else idleLabel
+
+    Box(
+        modifier = modifier
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                alpha = if (enabled || running) 1f else 0.45f
+            }
+            .clip(shape)
+            .border(BorderStroke(1.dp, accent.copy(alpha = if (dark) 0.34f else 0.28f)), shape)
+            .clickable(
+                enabled = enabled && !running,
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick,
+            )
+            .height(SecondaryButtonHeight),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (running) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    color = contentColor,
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = contentColor,
+                    modifier = Modifier.size(17.dp),
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = label,
+                color = contentColor,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
@@ -866,69 +864,41 @@ private fun ActionButton(
     }
 }
 
-// ──────────────────────── 连接测试结果 ────────────────────────
+// ──────────────────────── 底部帮助 ────────────────────────
 
 @Composable
-private fun TestResultBanner(
-    testConnectionState: TestConnectionState,
-    dark: Boolean,
-    primary: Color,
-    secondary: Color,
-) {
-    val ok = testConnectionState == TestConnectionState.SUCCESS
-    val visible = testConnectionState == TestConnectionState.SUCCESS ||
-        testConnectionState == TestConnectionState.FAILED
-
-    AnimatedVisibility(
-        visible = visible,
-        enter = fadeIn(tween(200)) + expandVertically(tween(200)),
-        exit = fadeOut(tween(200)) + shrinkVertically(tween(200)),
+private fun HelpFooter(faint: Color, secondary: Color, accent: Color) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 2.dp),
     ) {
-        val tone = if (ok) {
-            if (dark) FollowDark else FollowLight
-        } else {
-            if (dark) ErrorRedDark else ErrorRedLight
-        }
-        val shape = RoundedCornerShape(14.dp)
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 12.dp)
-                .clip(shape)
-                .background(tone.copy(alpha = if (dark) 0.14f else 0.09f))
-                .border(BorderStroke(0.5.dp, tone.copy(alpha = if (dark) 0.30f else 0.22f)), shape)
-                .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.Top,
         ) {
             Icon(
-                imageVector = if (ok) Icons.Outlined.CheckCircle else Icons.Outlined.Error,
+                imageVector = Icons.Outlined.Info,
                 contentDescription = null,
-                tint = tone,
+                tint = faint,
                 modifier = Modifier
-                    .size(17.dp)
-                    .offset(y = 1.dp),
+                    .size(15.dp)
+                    .offset(y = 2.dp),
             )
-            Spacer(Modifier.width(10.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(
-                        if (ok) R.string.webdav_connection_success else R.string.webdav_connection_failed,
-                    ),
-                    color = if (ok) primary else tone,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                )
-                if (!ok) {
-                    Spacer(Modifier.height(3.dp))
-                    Text(
-                        text = stringResource(R.string.webdav_test_failed_hint),
-                        color = secondary,
-                        fontSize = 12.sp,
-                        lineHeight = 16.sp,
-                    )
-                }
-            }
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = stringResource(R.string.webdav_help),
+                color = secondary,
+                fontSize = 12.sp,
+                lineHeight = 17.sp,
+                modifier = Modifier.weight(1f),
+            )
         }
+        Spacer(Modifier.height(12.dp))
+        Text(
+            text = stringResource(R.string.webdav_nutstore_hint),
+            fontSize = 11.sp,
+            color = accent.copy(alpha = 0.8f),
+            lineHeight = 16.sp,
+        )
     }
 }
-

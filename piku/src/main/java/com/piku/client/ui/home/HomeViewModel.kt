@@ -813,7 +813,11 @@ class HomeViewModel @Inject constructor(
 
     fun testWebDavConnection() {
         viewModelScope.launch {
-            webDavSyncRepository.testConnection()
+            // 测试通过说明服务器与凭据可用，顺手清掉残留的同步失败态，
+            // 避免总览卡"连接成功"与"同步失败"同时出现的矛盾
+            if (webDavSyncRepository.testConnection() == TestConnectionState.SUCCESS) {
+                webDavSyncRepository.clearSyncFailure()
+            }
         }
     }
 

@@ -400,4 +400,5 @@
     <string name="webdav_test_failed_hint">请检查服务器地址、用户名和密码是否正确</string>
     <string name="webdav_disabled_action_hint">开启「启用同步」后即可测试连接与手动同步</string>
     <string name="webdav_help">收藏夹数据会以 JSON 与图片的形式保存在服务器的 piku/ 目录下，在另一台设备填入相同配置即可同步。</string>
+    <string name="webdav_nutstore_hint">推荐使用坚果云 WebDAV，在坚果云「设置 → 安全选项 → 第三方应用管理」中开启。</string>
 </resources>

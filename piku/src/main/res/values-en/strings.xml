@@ -400,4 +400,5 @@
     <string name="webdav_test_failed_hint">Check that the server URL, username and password are correct</string>
     <string name="webdav_disabled_action_hint">Enable sync first to test the connection or sync manually</string>
     <string name="webdav_help">Favorites are stored on the server as JSON and image files under piku/. Use the same settings on another device to sync.</string>
+    <string name="webdav_nutstore_hint">Nutstore (坚果云) WebDAV recommended. Enable in Settings → Security → Third-party apps.</string>
 </resources>

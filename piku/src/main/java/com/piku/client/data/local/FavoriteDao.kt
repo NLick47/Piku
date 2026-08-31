@@ -16,6 +16,9 @@ interface FavoriteDao {
     @Upsert
     suspend fun upsert(entity: FavoriteEntity)
 
+    @Query("UPDATE favorites SET contentBackedUp = :backedUp WHERE workId = :workId")
+    suspend fun setContentBackedUp(workId: String, backedUp: Boolean)
+
     @Query("DELETE FROM favorites WHERE workId = :workId")
     suspend fun delete(workId: String)
 }

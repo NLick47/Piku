@@ -10,18 +10,26 @@ import com.piku.client.data.local.toFavoriteEntity
 import com.piku.client.data.local.toWork
 import com.piku.client.domain.model.FavoriteFolder
 import com.piku.client.domain.model.Work
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
 class FavoriteRepository @Inject constructor(
     private val favoriteDao: FavoriteDao,
@@ -29,7 +37,37 @@ class FavoriteRepository @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val webDavSyncRepository: WebDavSyncRepository,
 ) {
-    private val scope = CoroutineScope(Dispatchers.IO)
+    // SupervisorJob：单个同步失败不会拖垮后续；与 app 进程同生命周期。
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    // 自动同步触发源：用 SharedFlow 而不是直接 launch，可以让连续操作被 debounce + conflate 合并。
+    private val autoSyncTrigger = MutableSharedFlow<Unit>(
+        replay = 0,
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+
+    init {
+        scope.launch {
+            autoSyncTrigger
+                .onEach {
+                    Log.d(TAG, "autoSync: trigger received, debouncing ${AUTO_SYNC_DEBOUNCE_MS}ms")
+                    delay(AUTO_SYNC_DEBOUNCE_MS)
+                }
+                .collect {
+                    Log.d(TAG, "autoSync: debounce fired, calling sync")
+                    try {
+                        val result = webDavSyncRepository.sync()
+                        Log.d(TAG, "autoSync: result state=${result.state} error=${result.error}")
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Log.e(TAG, "autoSync failed", e)
+                    }
+                }
+        }
+    }
+
     fun observeFavoriteIds(): Flow<Set<Long>> =
         favoriteFolderDao.observeAllFavoriteIds().map { ids ->
             ids.mapNotNull { it.toLongOrNull() }.toSet()
@@ -39,7 +77,6 @@ class FavoriteRepository @Inject constructor(
         favoriteDao.observeAll().map { list -> list.map { it.toWork() } }
 
     fun observeFolders(): Flow<List<FavoriteFolder>> = flow {
-        // 首次订阅即保证默认收藏夹存在：直接进入收藏页时，快速收藏的落点也必须有
         ensureDefaultFolder()
         emitAll(
             combine(
@@ -70,11 +107,6 @@ class FavoriteRepository @Inject constructor(
     fun observeWorkFolderIds(workId: Long): Flow<Set<Long>> =
         favoriteFolderDao.observeFolderIdsForWork(workId.toString()).map { it.toSet() }
 
-    /**
-     * 快速收藏切换：把作品加入/移出默认收藏夹。
-     *
-     * @return true 表示本次操作后作品已收藏（加入默认夹），false 表示已取消收藏（移出默认夹）。
-     */
     suspend fun toggleFavorite(work: Work): Boolean {
         val workId = work.id.toString()
         val folderIds = favoriteFolderDao.observeFolderIdsForWork(workId).first().toSet()
@@ -120,14 +152,6 @@ class FavoriteRepository @Inject constructor(
         triggerAutoSync()
     }
 
-    /**
-     * 删除收藏夹。
-     *
-     * 默认收藏夹不可删除：它是快速收藏的落点，删除后快速收藏将失去目标，
-     * 因此这里直接拒绝并返回 false。
-     *
-     * @return true 表示删除成功，false 表示拒绝删除（默认收藏夹）。
-     */
     suspend fun deleteFolder(folderId: Long): Boolean {
         val defaultFolderId = favoriteFolderDao.defaultFolderId() ?: return true
         if (folderId == defaultFolderId) return false
@@ -140,7 +164,7 @@ class FavoriteRepository @Inject constructor(
     private suspend fun addToFolder(work: Work, folderId: Long) {
         val workId = work.id.toString()
         favoriteDao.upsert(work.toFavoriteEntity())
-        favoriteFolderDao.insertMembership(
+        favoriteFolderDao.upsertMembership(
             FavoriteMembershipEntity(
                 folderId = folderId,
                 workId = workId,
@@ -157,10 +181,6 @@ class FavoriteRepository @Inject constructor(
         }
     }
 
-    /**
-     * 把作品从 [fromFolderId] 移动到 [toFolderId]。
-     * 先加入目标再移出来源：目标与来源相同时保持原样，避免中间态丢失收藏记录。
-     */
     suspend fun moveWork(work: Work, fromFolderId: Long, toFolderId: Long) {
         if (fromFolderId == toFolderId) return
         addToFolder(work, toFolderId)
@@ -168,7 +188,6 @@ class FavoriteRepository @Inject constructor(
         triggerAutoSync()
     }
 
-    /** 确保默认收藏夹存在（快速收藏的落点，全 App 唯一）。返回其 id。 */
     suspend fun ensureDefaultFolder(): Long {
         favoriteFolderDao.defaultFolderId()?.let { return it }
         return favoriteFolderDao.insertFolder(
@@ -181,21 +200,32 @@ class FavoriteRepository @Inject constructor(
     }
 
     /**
-     * 触发 WebDAV 自动同步（异步，不阻塞调用方）。
-     * 仅在 WebDAV 同步已启用时触发。
+     * 触发 WebDAV 自动同步。
+     * - 总开关未启用：直接 return
+     * - 凭据不全：直接 return（UI 不应再静默吞错）
+     * - 同一窗口内的多次触发会 debounce 合并为一次 syncMetadataOnly()
      */
     private fun triggerAutoSync() {
-        if (!settingsRepository.webDavEnabled.value) return
-        scope.launch {
-            try {
-                webDavSyncRepository.syncMetadataOnly()
-            } catch (e: Exception) {
-                Log.w(TAG, "triggerAutoSync failed", e)
-            }
+        val enabled = settingsRepository.webDavEnabled.value
+        val url = settingsRepository.webDavUrl.value
+        val username = settingsRepository.webDavUsername.value
+        val passwordLen = settingsRepository.webDavPassword.value.length
+        if (!enabled) {
+            Log.d(TAG, "triggerAutoSync: skipped, webDavEnabled=false")
+            return
         }
+        if (url.isBlank() || username.isBlank()) {
+            Log.d(TAG, "triggerAutoSync: skipped, url='$url' username='$username' urlBlank=${url.isBlank()} userBlank=${username.isBlank()}")
+            return
+        }
+        val emitted = autoSyncTrigger.tryEmit(Unit)
+        Log.d(TAG, "triggerAutoSync: tryEmit=$emitted url=$url username=$username passwordLen=$passwordLen")
     }
 
     companion object {
         private const val TAG = "FavoriteRepo"
+
+        /** 自动同步去抖：合并 1.5 秒内的连续收藏/移动/重命名等操作。 */
+        private const val AUTO_SYNC_DEBOUNCE_MS = 1_500L
     }
 }

@@ -2,8 +2,9 @@ package com.piku.client.data.local
 
 import androidx.room.Dao
 import androidx.room.Insert
-import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Update
+import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
 data class FolderCount(
@@ -50,14 +51,20 @@ interface FavoriteFolderDao {
     @Insert
     suspend fun insertFolder(folder: FavoriteFolderEntity): Long
 
+    @Update
+    suspend fun updateFolder(folder: FavoriteFolderEntity)
+
+    @Query("SELECT * FROM favorite_folders WHERE name = :name LIMIT 1")
+    suspend fun folderByName(name: String): FavoriteFolderEntity?
+
     @Query("UPDATE favorite_folders SET name = :name WHERE id = :folderId")
     suspend fun renameFolder(folderId: Long, name: String)
 
     @Query("DELETE FROM favorite_folders WHERE id = :folderId")
     suspend fun deleteFolder(folderId: Long)
 
-    @Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun insertMembership(membership: FavoriteMembershipEntity)
+    @Upsert
+    suspend fun upsertMembership(membership: FavoriteMembershipEntity)
 
     @Query("DELETE FROM favorite_memberships WHERE folderId = :folderId AND workId = :workId")
     suspend fun deleteMembership(folderId: Long, workId: String)

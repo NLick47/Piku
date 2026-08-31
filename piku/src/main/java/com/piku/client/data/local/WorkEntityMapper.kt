@@ -39,3 +39,17 @@ fun Work.toFavoriteEntity(addedAt: Long = System.currentTimeMillis()) = Favorite
     r18 = r18,
     addedAt = addedAt,
 )
+
+fun FavoriteEntity.toSyncWork(): com.piku.client.domain.model.SyncWork =
+    com.piku.client.domain.model.SyncWork(
+        workId = workId,
+        authorId = authorId,
+        title = title,
+        authorName = authorName,
+        thumbnailUrl = thumbnailUrl,
+        authorAvatarUrl = authorAvatarUrl,
+        imageCount = imageCount,
+        r18 = r18,
+        addedAt = addedAt,
+        contentBackedUp = contentBackedUp,
+    )

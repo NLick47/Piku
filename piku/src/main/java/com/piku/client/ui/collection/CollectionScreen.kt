@@ -34,7 +34,6 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.DriveFileMove
 import androidx.compose.material.icons.outlined.Edit
@@ -109,7 +108,6 @@ private fun glassSheen(dark: Boolean): Brush =
 fun CollectionScreen(
     onWorkClick: (Work) -> Unit,
     onBack: () -> Unit,
-    onSyncClick: () -> Unit = {},
     dark: Boolean = LocalDarkTheme.current,
 ) {
     val viewModel: CollectionViewModel = hiltViewModel()
@@ -158,7 +156,6 @@ fun CollectionScreen(
                 onFolderClick = viewModel::selectFolder,
                 onRenameFolder = { renamingFolder = it },
                 onDeleteFolder = { deletingFolder = it },
-                onSyncClick = onSyncClick,
             )
         } else {
             FolderDetailContent(
@@ -322,7 +319,6 @@ private fun FolderListContent(
     onFolderClick: (FavoriteFolder) -> Unit,
     onRenameFolder: (FavoriteFolder) -> Unit,
     onDeleteFolder: (FavoriteFolder) -> Unit,
-    onSyncClick: () -> Unit,
 ) {
     Column(Modifier.fillMaxSize()) {
         Row(
@@ -347,13 +343,6 @@ private fun FolderListContent(
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f),
             )
-            IconButton(onClick = onSyncClick) {
-                Icon(
-                    imageVector = Icons.Outlined.CloudSync,
-                    contentDescription = stringResource(R.string.webdav_sync_now),
-                    tint = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
-                )
-            }
             IconButton(onClick = onNewFolder) {
                 Icon(
                     imageVector = Icons.Outlined.Add,

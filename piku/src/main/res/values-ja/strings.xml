@@ -400,4 +400,5 @@
     <string name="webdav_test_failed_hint">サーバーURL・ユーザー名・パスワードが正しいか確認してください</string>
     <string name="webdav_disabled_action_hint">「同期を有効にする」をオンにすると接続テストと手動同期が使えます</string>
     <string name="webdav_help">お気に入りは JSON と画像としてサーバーの piku/ 配下に保存されます。別の端末で同じ設定を入力すれば同期できます。</string>
+    <string name="webdav_nutstore_hint">Nutstore（坚果云）WebDAV を推奨。設定 → セキュリティ → サードパーティアプリで有効にしてください。</string>
 </resources>
