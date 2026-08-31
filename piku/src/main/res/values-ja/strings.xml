@@ -305,7 +305,7 @@
     <string name="detail_reaction_send_failed">送信に失敗しました</string>
     <string name="detail_reaction_limit">本日のリアクション上限に達しました</string>
     <string name="detail_reaction_login_hint">ログインして送る</string>
-    <string name="detail_image_translate">画像を翻訳</string>
+    <string name="detail_image_translate">漫画翻訳</string>
     <string name="detail_image_translating">翻訳中…</string>
     <string name="detail_image_translate_failed">画像の翻訳に失敗しました</string>
     <string name="detail_untitled_work">無題</string>

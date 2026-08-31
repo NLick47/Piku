@@ -305,7 +305,7 @@
     <string name="detail_reaction_send_failed">Failed to send</string>
     <string name="detail_reaction_limit">Daily reaction limit reached</string>
     <string name="detail_reaction_login_hint">Sign in to send reactions</string>
-    <string name="detail_image_translate">Translate image</string>
+    <string name="detail_image_translate">Translate manga</string>
     <string name="detail_image_translating">Translating…</string>
     <string name="detail_image_translate_failed">Image translation failed</string>
     <string name="detail_untitled_work">Untitled</string>

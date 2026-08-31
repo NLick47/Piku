@@ -305,7 +305,7 @@
     <string name="detail_reaction_send_failed">发送失败</string>
     <string name="detail_reaction_limit">今日反应次数已达上限</string>
     <string name="detail_reaction_login_hint">登录后即可发送反应</string>
-    <string name="detail_image_translate">翻译图片</string>
+    <string name="detail_image_translate">漫画翻译</string>
     <string name="detail_image_translating">翻译中…</string>
     <string name="detail_image_translate_failed">图片翻译失败</string>
     <string name="detail_untitled_work">无标题作品</string>
