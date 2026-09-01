@@ -79,6 +79,7 @@ class WebDavSyncRepository @Inject constructor(
     private val historyDao: HistoryDao,
     private val settingsRepository: SettingsRepository,
     private val poipikuApi: PoipikuApi,
+    private val authRepository: AuthRepository,
     @Named("main") private val mainClient: OkHttpClient,
     private val json: Json,
 ) {
@@ -494,16 +495,18 @@ class WebDavSyncRepository @Inject constructor(
                 val folders = workFolders[work.workId].orEmpty()
                 if (folders.isEmpty()) continue
 
-                val detail = fetchWorkDetail(work.authorId, workId) ?: continue
+                val workDetail = fetchWorkDetail(work.authorId, workId, work.imageCount) ?: continue
                 var anyUploaded = false
 
-                if (detail.imageUrls.isNotEmpty()) {
-                    if (backupImages(url, credentials, folders, workId, detail.imageUrls)) {
+                // 使用原图 URL，如果没有原图则降级使用缩略图
+                val imageUrls = workDetail.fullImageUrls.ifEmpty { workDetail.detail.imageUrls }
+                if (imageUrls.isNotEmpty()) {
+                    if (backupImages(url, credentials, folders, workId, imageUrls)) {
                         anyUploaded = true
                     }
                 }
-                if (detail.novelText.isNotBlank()) {
-                    if (backupNovelText(url, credentials, folders, workId, detail.novelText)) {
+                if (workDetail.detail.novelText.isNotBlank()) {
+                    if (backupNovelText(url, credentials, folders, workId, workDetail.detail.novelText)) {
                         anyUploaded = true
                     }
                 }
@@ -537,17 +540,33 @@ class WebDavSyncRepository @Inject constructor(
         delay(FETCH_GAP_MIN_MS + fetchGapRandom.nextLong(FETCH_GAP_JITTER_MS))
     }
 
+    private data class WorkDetailWithFullImages(
+        val detail: com.piku.client.domain.model.WorkDetail,
+        val fullImageUrls: List<String>,
+    )
+
     private suspend fun fetchWorkDetail(
         authorId: Long,
         workId: Long,
-    ): com.piku.client.domain.model.WorkDetail? {
+        imageCount: Int,
+    ): WorkDetailWithFullImages? {
         return try {
             val html = poipikuApi.getWorkDetail(authorId, workId).string()
             val detail = WorkDetailParser.parse(html)
             if (detail.passwordProtected && detail.imageUrls.isEmpty() && detail.novelText.isBlank()) {
                 return null
             }
-            // 调用 append API 获取所有图片（主图 + 追加图）
+
+            // 单图直接获取原图，跳过 showAppendFile
+            if (imageCount <= 1) {
+                val fullImageUrls = fetchMainFullImage(authorId, workId)
+                return WorkDetailWithFullImages(
+                    detail = detail.copy(novelText = ""),
+                    fullImageUrls = fullImageUrls,
+                )
+            }
+
+            // 多图作品：调用 append API 获取所有图片（主图 + 追加图）
             delay(APPEND_FILE_GAP_MS)
             val appendResp = poipikuApi.showAppendFile(authorId, workId, "", 0, -1)
             val appendUrls = if (appendResp.result_num > 0) {
@@ -555,13 +574,55 @@ class WebDavSyncRepository @Inject constructor(
             } else emptyList()
             val novelText = WorkDetailParser.extractNovelText(appendResp.html)
             val mergedUrls = ThumbnailResolver.mergeWorkImages(detail.imageUrls, appendUrls)
-            detail.copy(imageUrls = mergedUrls, novelText = novelText)
+
+            // 获取原图 URL
+            val fullImageUrls = fetchFullImageUrls(authorId, workId, appendResp.html)
+
+            WorkDetailWithFullImages(
+                detail = detail.copy(imageUrls = mergedUrls, novelText = novelText),
+                fullImageUrls = fullImageUrls,
+            )
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             Log.w(TAG, "fetchWorkDetail failed for $authorId/$workId", e)
             null
         }
+    }
+
+    private suspend fun fetchMainFullImage(authorId: Long, workId: Long): List<String> {
+        delay(ILLUST_DETAIL_GAP_MS)
+        val resp = runCatching { poipikuApi.showIllustDetail(authorId, workId, -1, "") }.getOrNull()
+        if (resp == null || resp.error_code != 0) {
+            Log.d(TAG, "fetchMainFullImage failed: error_code=${resp?.error_code} work=$authorId/$workId")
+            return emptyList()
+        }
+        return WorkDetailParser.extractFullImageUrls(resp.html)
+    }
+
+    private suspend fun fetchFullImageUrls(
+        authorId: Long,
+        workId: Long,
+        appendHtml: String,
+    ): List<String> {
+        if (!authRepository.isLoggedIn()) return emptyList()
+
+        val fullUrls = mutableListOf<String>()
+
+        // 获取主图原图
+        val mainUrls = fetchMainFullImage(authorId, workId)
+        fullUrls.addAll(mainUrls)
+
+        val ads = runCatching { WorkDetailParser.extractAppendAds(appendHtml) }.getOrDefault(emptyList())
+        for (ad in ads) {
+            delay(ILLUST_DETAIL_GAP_MS)
+            val resp = runCatching { poipikuApi.showIllustDetail(authorId, workId, ad, "") }.getOrNull()
+            if (resp != null && resp.error_code == 0) {
+                val urls = WorkDetailParser.extractFullImageUrls(resp.html)
+                urls.firstOrNull()?.let { fullUrls.add(it) }
+            }
+        }
+        return fullUrls
     }
 
     private suspend fun backupImages(
@@ -655,6 +716,9 @@ class WebDavSyncRepository @Inject constructor(
 
         /** 同域连续请求（详情页 → showAppendFile）之间的最小间隔 */
         private const val APPEND_FILE_GAP_MS = 800L
+
+        /** showIllustDetail 请求之间的最小间隔 */
+        private const val ILLUST_DETAIL_GAP_MS = 800L
 
         const val CURRENT_VERSION = 1
     }
