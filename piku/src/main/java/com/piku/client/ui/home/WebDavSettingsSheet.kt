@@ -442,8 +442,6 @@ private fun SyncHeroCard(
         val r = syncResult ?: return@remember emptyList()
         if (r.state != SyncState.SUCCESS) return@remember emptyList()
         buildList {
-            if (r.newFolders > 0) add(StatItem(R.string.webdav_stat_folders, r.newFolders))
-            if (r.newWorks > 0) add(StatItem(R.string.webdav_stat_works, r.newWorks))
             if (r.backedUpWorks > 0) add(StatItem(R.string.webdav_stat_backup, r.backedUpWorks))
         }
     }

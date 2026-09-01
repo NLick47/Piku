@@ -47,8 +47,6 @@ enum class TestConnectionState {
 
 data class SyncResult(
     val state: SyncState,
-    val newFolders: Int = 0,
-    val newWorks: Int = 0,
     val backedUpWorks: Int = 0,
     val error: String? = null,
 )
@@ -180,7 +178,6 @@ class WebDavSyncRepository @Inject constructor(
             backupViewedContent(url, credentials, merged)
         } else 0
 
-        val remote = if (skipMerge) null else null // 统计口径：与原行为一致（无法区分远程原始大小，跳过）
         return SyncResult(
             state = SyncState.SUCCESS,
             backedUpWorks = backedUp,
