@@ -30,10 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.piku.client.R
-import com.piku.client.ui.theme.LoginTextFaintDark
-import com.piku.client.ui.theme.LoginTextFaintLight
-import com.piku.client.ui.theme.LoginTextPrimaryDark
-import com.piku.client.ui.theme.LoginTextPrimaryLight
+import com.piku.client.ui.theme.PikuColors
 
 /**
  *   关注列表与作者搜索页共用
@@ -71,9 +68,9 @@ fun FollowPillButton(
         else -> if (dark) Color(0x33FFFFFF) else Color(0x242C2C2C)
     }
     val contentColor = when {
-        sending -> if (dark) LoginTextFaintDark else LoginTextFaintLight
-        followed -> if (dark) Color(0xFFE08A8A) else Color(0xFFC24B4B)
-        else -> if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
+        sending -> PikuColors.textFaint
+        followed -> PikuColors.error
+        else -> PikuColors.textPrimary
     }
 
     Row(

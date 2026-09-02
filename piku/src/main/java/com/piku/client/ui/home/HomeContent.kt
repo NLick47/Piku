@@ -91,20 +91,9 @@ import com.piku.client.ui.theme.FollowDark
 import com.piku.client.ui.theme.FollowLight
 import com.piku.client.ui.theme.GlassCardBgDark
 import com.piku.client.ui.theme.LoginBackgroundDark
-import com.piku.client.ui.theme.LoginCardDark
-import com.piku.client.ui.theme.LoginCardLight
-import com.piku.client.ui.theme.LoginTextFaintDark
-import com.piku.client.ui.theme.LoginTextFaintLight
-import com.piku.client.ui.theme.LoginTextPrimaryDark
-import com.piku.client.ui.theme.LoginTextPrimaryLight
-import com.piku.client.ui.theme.LoginTextSecondaryDark
-import com.piku.client.ui.theme.LoginTextSecondaryLight
 import com.piku.client.ui.theme.LoginButtonDark
 import com.piku.client.ui.theme.LoginButtonLight
-import com.piku.client.ui.theme.PillBorderDark
-import com.piku.client.ui.theme.PillBorderLight
-import com.piku.client.ui.theme.LoginCardBorderDark
-import com.piku.client.ui.theme.LoginCardBorderLight
+import com.piku.client.ui.theme.PikuColors
 import com.piku.client.ui.theme.WorkCardBgDark
 import com.piku.client.ui.theme.WorkCardBorderDark
 import com.piku.client.ui.theme.WorkCardPlaceholderDark
@@ -177,7 +166,7 @@ internal fun HomeContent(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         text = stringResource(emptyRes),
-                        color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                        color = PikuColors.textSecondary,
                         fontSize = 13.sp,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(horizontal = 32.dp),
@@ -263,7 +252,7 @@ private fun UpdateBannerBar(
     dark: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
+    val primary = PikuColors.textPrimary
     val pill = RoundedCornerShape(22.dp)
     val currentOnDismiss by rememberUpdatedState(onDismiss)
     LaunchedEffect(release.tagName) {
@@ -275,9 +264,9 @@ private fun UpdateBannerBar(
             .padding(horizontal = 16.dp, vertical = 8.dp)
             .shadow(10.dp, pill)
             .clip(pill)
-            .background(if (dark) LoginCardDark else LoginCardLight, pill)
+            .background(PikuColors.surface, pill)
             .border(
-                BorderStroke(0.5.dp, if (dark) PillBorderDark else PillBorderLight),
+                BorderStroke(0.5.dp, PikuColors.border),
                 pill,
             )
             .clickable(onClick = onOpen)
@@ -317,7 +306,7 @@ private fun UpdateBannerBar(
             Icon(
                 imageVector = Icons.Filled.Close,
                 contentDescription = stringResource(R.string.detail_fullscreen_close),
-                tint = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                tint = PikuColors.textFaint,
                 modifier = Modifier.size(14.dp),
             )
         }
@@ -332,7 +321,7 @@ private fun RefreshNoticeBar(
     dark: Boolean,
 ) {
     val isNew = count > 0
-    val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
+    val primary = PikuColors.textPrimary
     val pill = RoundedCornerShape(22.dp)
     LaunchedEffect(isNew) {
         delay(if (isNew) 3500 else 1600)
@@ -343,9 +332,9 @@ private fun RefreshNoticeBar(
             .padding(top = 10.dp)
             .shadow(10.dp, pill)
             .clip(pill)
-            .background(if (dark) LoginCardDark else LoginCardLight, pill)
+            .background(PikuColors.surface, pill)
             .border(
-                BorderStroke(0.5.dp, if (dark) PillBorderDark else PillBorderLight),
+                BorderStroke(0.5.dp, PikuColors.border),
                 pill,
             )
             .clickable {
@@ -577,7 +566,7 @@ private fun BackToTopButton(onClick: () -> Unit, dark: Boolean) {
         Icon(
             imageVector = Icons.Filled.KeyboardArrowUp,
             contentDescription = stringResource(R.string.home_back_to_top),
-            tint = if (dark) LoginTextPrimaryDark else AccentDark,
+            tint = PikuColors.accent,
             modifier = Modifier.size(20.dp),
         )
     }
@@ -594,7 +583,7 @@ private fun LoadMoreErrorItem(errorRes: Int, onRetry: () -> Unit, dark: Boolean)
     ) {
         Text(
             text = stringResource(errorRes),
-            color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+            color = PikuColors.textSecondary,
             fontSize = 12.sp,
         )
         Spacer(Modifier.width(10.dp))
@@ -603,7 +592,7 @@ private fun LoadMoreErrorItem(errorRes: Int, onRetry: () -> Unit, dark: Boolean)
                 .clip(RoundedCornerShape(14.dp))
                 .background(if (dark) GlassCardBgDark else Color.White)
                 .border(
-                    BorderStroke(0.5.dp, if (dark) PillBorderDark else PillBorderLight),
+                    BorderStroke(0.5.dp, PikuColors.border),
                     RoundedCornerShape(14.dp),
                 )
                 .clickable(onClick = onRetry)
@@ -611,7 +600,7 @@ private fun LoadMoreErrorItem(errorRes: Int, onRetry: () -> Unit, dark: Boolean)
         ) {
             Text(
                 text = stringResource(R.string.home_retry),
-                color = if (dark) LoginTextPrimaryDark else AccentDark,
+                color = PikuColors.accent,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
             )
@@ -627,7 +616,7 @@ private fun NoMoreItem(dark: Boolean) {
     ) {
         Text(
             text = stringResource(R.string.home_no_more),
-            color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+            color = PikuColors.textFaint,
             fontSize = 11.sp,
         )
     }
@@ -644,7 +633,7 @@ private fun ShuffleItem(onShuffle: () -> Unit, dark: Boolean) {
                 .clip(RoundedCornerShape(16.dp))
                 .background(if (dark) GlassCardBgDark else Color.White)
                 .border(
-                    BorderStroke(0.5.dp, if (dark) PillBorderDark else PillBorderLight),
+                    BorderStroke(0.5.dp, PikuColors.border),
                     RoundedCornerShape(16.dp),
                 )
                 .clickable(onClick = onShuffle)
@@ -652,7 +641,7 @@ private fun ShuffleItem(onShuffle: () -> Unit, dark: Boolean) {
         ) {
             Text(
                 text = stringResource(R.string.home_random_more),
-                color = if (dark) LoginTextPrimaryDark else AccentDark,
+                color = PikuColors.accent,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
             )
@@ -726,7 +715,7 @@ private fun ErrorState(errorRes: Int, onRetry: () -> Unit, dark: Boolean) {
     ) {
         Text(
             text = stringResource(errorRes),
-            color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+            color = PikuColors.textSecondary,
             fontSize = 13.sp,
         )
         Spacer(Modifier.height(16.dp))
@@ -734,7 +723,7 @@ private fun ErrorState(errorRes: Int, onRetry: () -> Unit, dark: Boolean) {
             modifier = Modifier
                 .clip(RoundedCornerShape(16.dp))
                 .border(
-                    BorderStroke(0.5.dp, if (dark) LoginCardBorderDark else LoginCardBorderLight),
+                    BorderStroke(0.5.dp, PikuColors.border),
                     RoundedCornerShape(16.dp),
                 )
                 .clickable(onClick = onRetry)
@@ -742,7 +731,7 @@ private fun ErrorState(errorRes: Int, onRetry: () -> Unit, dark: Boolean) {
         ) {
             Text(
                 text = stringResource(R.string.home_retry),
-                color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                color = PikuColors.textPrimary,
                 fontSize = 13.sp,
                 onTextLayout = {},
             )

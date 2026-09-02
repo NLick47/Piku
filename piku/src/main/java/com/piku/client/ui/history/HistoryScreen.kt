@@ -63,17 +63,9 @@ import com.piku.client.ui.theme.HomeBgBottomDark
 import com.piku.client.ui.theme.HomeBgBottomLight
 import com.piku.client.ui.theme.HomeBgTopDark
 import com.piku.client.ui.theme.HomeBgTopLight
-import com.piku.client.ui.theme.LoginCardBorderDark
-import com.piku.client.ui.theme.LoginCardBorderLight
-import com.piku.client.ui.theme.LoginCardDark
-import com.piku.client.ui.theme.LoginTextFaintDark
-import com.piku.client.ui.theme.LoginTextFaintLight
 import com.piku.client.ui.theme.LoginTextPrimaryDark
-import com.piku.client.ui.theme.LoginTextPrimaryLight
 import com.piku.client.ui.theme.LoginTextSecondaryDark
-import com.piku.client.ui.theme.LoginTextSecondaryLight
-import com.piku.client.ui.theme.PillBorderDark
-import com.piku.client.ui.theme.PillBorderLight
+import com.piku.client.ui.theme.PikuColors
 
 @Composable
 fun HistoryScreen(
@@ -159,11 +151,11 @@ fun HistoryScreen(
     if (showClearConfirm) {
         AlertDialog(
             onDismissRequest = { showClearConfirm = false },
-            containerColor = if (dark) LoginCardDark else Color.White,
+            containerColor = PikuColors.surface,
             title = {
                 Text(
                     text = stringResource(R.string.history_clear_confirm_title),
-                    color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                    color = PikuColors.textPrimary,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -171,7 +163,7 @@ fun HistoryScreen(
             text = {
                 Text(
                     text = stringResource(R.string.history_clear_confirm_message),
-                    color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                    color = PikuColors.textSecondary,
                     fontSize = 13.sp,
                 )
             },
@@ -182,7 +174,7 @@ fun HistoryScreen(
                 }) {
                     Text(
                         text = stringResource(R.string.history_clear),
-                        color = if (dark) Color(0xFFE08A8A) else Color(0xFFC24B4B),
+                        color = PikuColors.error,
                     )
                 }
             },
@@ -190,7 +182,7 @@ fun HistoryScreen(
                 TextButton(onClick = { showClearConfirm = false }) {
                     Text(
                         text = stringResource(R.string.search_cancel),
-                        color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                        color = PikuColors.textSecondary,
                     )
                 }
             },
@@ -205,8 +197,8 @@ private fun HistoryTopBar(
     clearEnabled: Boolean,
     dark: Boolean,
 ) {
-    val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
-    val faint = if (dark) LoginTextFaintDark else LoginTextFaintLight
+    val primary = PikuColors.textPrimary
+    val faint = PikuColors.textFaint
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -286,8 +278,8 @@ private fun HistoryRangeChip(
         else -> if (dark) GlassCardBgDark else Color.White
     }
     val borderColor = when {
-        active -> if (dark) LoginTextPrimaryDark else AccentDark
-        else -> if (dark) PillBorderDark else PillBorderLight
+        active -> PikuColors.accent
+        else -> PikuColors.border
     }
     val contentColor = when {
         active -> if (dark) LoginTextPrimaryDark else Color.White
@@ -318,7 +310,7 @@ private fun HistoryEmptyState(dark: Boolean, filtered: Boolean) {
         Icon(
             imageVector = Icons.Outlined.History,
             contentDescription = null,
-            tint = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+            tint = PikuColors.textFaint,
             modifier = Modifier.size(44.dp),
         )
         Spacer(Modifier.height(12.dp))
@@ -326,7 +318,7 @@ private fun HistoryEmptyState(dark: Boolean, filtered: Boolean) {
             text = stringResource(
                 if (filtered) R.string.history_empty_range else R.string.history_empty,
             ),
-            color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+            color = PikuColors.textSecondary,
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
         )

@@ -57,17 +57,8 @@ import com.piku.client.data.local.CatalogSource
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.R
 import androidx.compose.animation.animateColorAsState
-import com.piku.client.ui.theme.AccentDark
-import com.piku.client.ui.theme.ControlAccentDark
-import com.piku.client.ui.theme.ErrorRedDark
-import com.piku.client.ui.theme.ErrorRedLight
 import com.piku.client.ui.theme.LoginBackgroundDark
-import com.piku.client.ui.theme.LoginCardBorderDark
-import com.piku.client.ui.theme.LoginCardBorderLight
-import com.piku.client.ui.theme.LoginTextPrimaryDark
-import com.piku.client.ui.theme.LoginTextPrimaryLight
-import com.piku.client.ui.theme.LoginTextSecondaryDark
-import com.piku.client.ui.theme.LoginTextSecondaryLight
+import com.piku.client.ui.theme.PikuColors
 
 private val CATALOG_KEY_HEX = Regex("^[0-9a-fA-F]{64}$")
 
@@ -85,11 +76,11 @@ fun CatalogSourceScreen(
 ) {
     BackHandler(enabled = true) { onBack() }
 
-    val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
-    val secondary = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight
-    val accent = if (dark) ControlAccentDark else AccentDark
+    val primary = PikuColors.textPrimary
+    val secondary = PikuColors.textSecondary
+    val accent = PikuColors.controlAccent
     val onAccent = if (dark) Color(0xFF1A1A1A) else Color.White
-    val errorColor = if (dark) ErrorRedDark else ErrorRedLight
+    val errorColor = PikuColors.error
 
     var urlInput by rememberSaveable(state.catalogUrl) { mutableStateOf(state.catalogUrl) }
     var keyInput by rememberSaveable(state.catalogEncKey) { mutableStateOf(state.catalogEncKey) }
@@ -103,7 +94,7 @@ fun CatalogSourceScreen(
     // 两个输入框共用一套配色，避免逐字段重复
     val fieldColors = OutlinedTextFieldDefaults.colors(
         focusedBorderColor = accent,
-        unfocusedBorderColor = if (dark) LoginCardBorderDark else LoginCardBorderLight,
+        unfocusedBorderColor = PikuColors.border,
         errorBorderColor = errorColor,
         focusedContainerColor = if (dark) Color(0x14FFFFFF) else Color(0x0A000000),
         unfocusedContainerColor = if (dark) Color(0x14FFFFFF) else Color(0x0A000000),
@@ -157,7 +148,7 @@ fun CatalogSourceScreen(
                 )
             }
             HorizontalDivider(
-                color = if (dark) LoginCardBorderDark else LoginCardBorderLight,
+                color = PikuColors.border,
                 thickness = 0.5.dp,
             )
             Spacer(Modifier.height(14.dp))
@@ -354,10 +345,10 @@ private fun CatalogSourceListCard(
     onManageSource: (CatalogSource) -> Unit,
     dark: Boolean,
 ) {
-    val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
-    val secondary = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight
-    val accent = if (dark) ControlAccentDark else AccentDark
-    val borderColor = if (dark) LoginCardBorderDark else LoginCardBorderLight
+    val primary = PikuColors.textPrimary
+    val secondary = PikuColors.textSecondary
+    val accent = PikuColors.controlAccent
+    val borderColor = PikuColors.border
     val officialActive = activeUrl == SettingsRepository.CATALOG_URL_DEFAULT && activeKey.isEmpty()
 
     Column(
@@ -474,7 +465,7 @@ private fun CatalogManageDialog(
     onDismiss: () -> Unit,
     dark: Boolean,
 ) {
-    val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
+    val primary = PikuColors.textPrimary
     var nameInput by rememberSaveable(source.id) { mutableStateOf(source.name) }
     AlertDialog(
         onDismissRequest = onDismiss,

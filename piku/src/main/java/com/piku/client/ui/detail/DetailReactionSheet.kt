@@ -49,17 +49,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.piku.client.R
 import com.piku.client.domain.model.WorkDetail
-import com.piku.client.ui.theme.AccentDark
-import com.piku.client.ui.theme.ControlAccentDark
 import com.piku.client.ui.theme.LoginBackgroundDark
 import com.piku.client.ui.theme.LoginBackgroundLight
-import com.piku.client.ui.theme.LoginCardDark
-import com.piku.client.ui.theme.LoginTextPrimaryDark
-import com.piku.client.ui.theme.LoginTextPrimaryLight
-import com.piku.client.ui.theme.LoginTextSecondaryDark
-import com.piku.client.ui.theme.LoginTextSecondaryLight
-import com.piku.client.ui.theme.PillBorderDark
-import com.piku.client.ui.theme.PillBorderLight
+import com.piku.client.ui.theme.PikuColors
 import kotlinx.coroutines.delay
 
 private val SEND_EMOJIS = listOf("💖", "❤", "👍", "👏", "💯", "🥰", "😍", "💞", "🫶", "🎉")
@@ -95,7 +87,7 @@ internal fun ReactionSheet(
             ) {
                 Text(
                     text = stringResource(R.string.detail_reaction_title),
-                    color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                    color = PikuColors.textPrimary,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
@@ -103,7 +95,7 @@ internal fun ReactionSheet(
                 if (detail.reactionCount > 0) {
                     Text(
                         text = stringResource(R.string.detail_reaction_total, detail.reactionCount),
-                        color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                        color = PikuColors.textSecondary,
                         fontSize = 12.sp,
                     )
                 }
@@ -124,7 +116,7 @@ internal fun ReactionSheet(
                     Spacer(Modifier.height(8.dp))
                     Text(
                         text = stringResource(R.string.detail_reaction_more, entries.size - visible.size),
-                        color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                        color = PikuColors.textSecondary,
                         fontSize = 12.sp,
                     )
                 }
@@ -132,7 +124,7 @@ internal fun ReactionSheet(
                 Spacer(Modifier.height(16.dp))
                 Text(
                     text = stringResource(R.string.detail_reaction_empty),
-                    color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                    color = PikuColors.textSecondary,
                     fontSize = 13.sp,
                 )
             }
@@ -140,7 +132,7 @@ internal fun ReactionSheet(
                 Spacer(Modifier.height(20.dp))
                 Text(
                     text = stringResource(R.string.detail_reaction_send_title),
-                    color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                    color = PikuColors.textPrimary,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
                 )
@@ -157,13 +149,13 @@ internal fun ReactionSheet(
                     Icon(
                         imageVector = Icons.Filled.FavoriteBorder,
                         contentDescription = null,
-                        tint = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                        tint = PikuColors.textSecondary,
                         modifier = Modifier.size(13.dp),
                     )
                     Spacer(Modifier.width(5.dp))
                     Text(
                         text = stringResource(R.string.detail_reaction_login_hint),
-                        color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                        color = PikuColors.textSecondary,
                         fontSize = 12.sp,
                     )
                 }
@@ -178,9 +170,9 @@ private fun ReceivedReactionPill(emoji: String, count: Int?, dark: Boolean) {
     Row(
         modifier = Modifier
             .clip(shape)
-            .background(if (dark) LoginCardDark else Color(0xFFF1EFEA))
+            .background(PikuColors.surfaceSoft)
             .border(
-                BorderStroke(0.5.dp, if (dark) PillBorderDark else PillBorderLight),
+                BorderStroke(0.5.dp, PikuColors.border),
                 shape,
             )
             .padding(horizontal = 10.dp, vertical = 5.dp),
@@ -191,7 +183,7 @@ private fun ReceivedReactionPill(emoji: String, count: Int?, dark: Boolean) {
         if (count != null) {
             Text(
                 text = count.toString(),
-                color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                color = PikuColors.textSecondary,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Medium,
             )
@@ -232,7 +224,7 @@ private fun ReactionSendButton(
     dark: Boolean,
     onClick: () -> Unit,
 ) {
-    val accent = if (dark) ControlAccentDark else AccentDark
+    val accent = PikuColors.controlAccent
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     var popped by remember { mutableStateOf(false) }

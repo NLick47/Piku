@@ -37,17 +37,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.piku.client.R
-import com.piku.client.ui.theme.AccentDark
-import com.piku.client.ui.theme.ControlAccentDark
 import com.piku.client.ui.theme.GlassHeaderTintDark
 import com.piku.client.ui.theme.GlassHeaderTintLight
 import com.piku.client.ui.theme.HomeFrameIcon
-import com.piku.client.ui.theme.LoginTextFaintDark
-import com.piku.client.ui.theme.LoginTextFaintLight
 import com.piku.client.ui.theme.LoginTextPrimaryDark
-import com.piku.client.ui.theme.LoginTextPrimaryLight
-import com.piku.client.ui.theme.LoginTextSecondaryDark
-import com.piku.client.ui.theme.LoginTextSecondaryLight
+import com.piku.client.ui.theme.PikuColors
 import com.piku.client.ui.theme.PillBorderDark
 import com.piku.client.ui.theme.PillBorderLight
 
@@ -98,7 +92,7 @@ internal fun DetailTopBar(
             Icon(
                 imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
                 contentDescription = stringResource(R.string.detail_back),
-                tint = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                tint = PikuColors.textPrimary,
                 modifier = Modifier.size(20.dp),
             )
         }
@@ -106,7 +100,7 @@ internal fun DetailTopBar(
             Icon(
                 imageVector = HomeFrameIcon,
                 contentDescription = stringResource(R.string.detail_home),
-                tint = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                tint = PikuColors.textPrimary,
                 modifier = Modifier.size(20.dp),
             )
         }
@@ -119,7 +113,7 @@ internal fun DetailTopBar(
         ) {
             Text(
                 text = title,
-                color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                color = PikuColors.textPrimary,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
@@ -162,13 +156,13 @@ internal fun DetailTopBar(
                         },
                     ),
                     tint = when {
-                        translating -> if (dark) LoginTextFaintDark else LoginTextFaintLight
+                        translating -> PikuColors.textFaint
                         showTranslation -> Color(0xFF4FC3F7)
                         // 暗色下按下去提亮到纯白（LoginTextPrimaryDark #E8E4DE 再往上只有白色了）。
                         // 亮色主题下不改色：图标本来就是深色 #2C2C2C，往浅改反而像禁用态，
                         // 按压反馈交给下面的缩放即可
                         pressed && dark -> Color.White
-                        else -> if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
+                        else -> PikuColors.textPrimary
                     },
                     modifier = Modifier
                         .size(20.dp)
@@ -194,8 +188,8 @@ internal fun TranslateChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val accent = if (dark) ControlAccentDark else AccentDark
-    val off = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight
+    val accent = PikuColors.controlAccent
+    val off = PikuColors.textSecondary
     Text(
         text = stringResource(
             if (showTranslation) R.string.detail_chip_original else R.string.detail_chip_translate,

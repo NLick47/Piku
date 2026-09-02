@@ -84,16 +84,9 @@ import com.piku.client.ui.theme.HomeBgBottomLight
 import com.piku.client.ui.theme.HomeBgTopDark
 import com.piku.client.ui.theme.HomeBgTopLight
 import com.piku.client.ui.theme.LoginBackgroundDark
-import com.piku.client.ui.theme.LoginCardBorderDark
-import com.piku.client.ui.theme.LoginCardBorderLight
-import com.piku.client.ui.theme.LoginCardDark
-import com.piku.client.ui.theme.LoginTextFaintDark
-import com.piku.client.ui.theme.LoginTextFaintLight
-import com.piku.client.ui.theme.LoginTextPrimaryDark
-import com.piku.client.ui.theme.LoginTextPrimaryLight
 import com.piku.client.ui.theme.LoginTextSecondaryDark
 import com.piku.client.ui.theme.LoginTextSecondaryLight
-import com.piku.client.ui.theme.TameWhiteColorFilter
+import com.piku.client.ui.theme.PikuColors
 
 /**
  * 玻璃卡片顶部的高光渐变，增强玻璃质感。
@@ -208,11 +201,11 @@ fun CollectionScreen(
     deletingFolder?.let { folder ->
         AlertDialog(
             onDismissRequest = { deletingFolder = null },
-            containerColor = if (dark) LoginCardDark else Color.White,
+            containerColor = PikuColors.surface,
             title = {
                 Text(
                     text = stringResource(R.string.collection_delete_confirm_title),
-                    color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                    color = PikuColors.textPrimary,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -220,7 +213,7 @@ fun CollectionScreen(
             text = {
                 Text(
                     text = stringResource(R.string.collection_delete_confirm_message, folder.name),
-                    color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                    color = PikuColors.textSecondary,
                     fontSize = 13.sp,
                 )
             },
@@ -231,7 +224,7 @@ fun CollectionScreen(
                 }) {
                     Text(
                         text = stringResource(R.string.collection_delete),
-                        color = if (dark) Color(0xFFE08A8A) else Color(0xFFC24B4B),
+                        color = PikuColors.error,
                     )
                 }
             },
@@ -239,7 +232,7 @@ fun CollectionScreen(
                 TextButton(onClick = { deletingFolder = null }) {
                     Text(
                         text = stringResource(R.string.detail_favorite_cancel),
-                        color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                        color = PikuColors.textSecondary,
                     )
                 }
             },
@@ -259,11 +252,11 @@ private fun FolderNameDialog(
     var name by rememberSaveable { mutableStateOf(initialName) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = if (dark) LoginCardDark else Color.White,
+        containerColor = PikuColors.surface,
         title = {
             Text(
                 text = title,
-                color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                color = PikuColors.textPrimary,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -281,10 +274,10 @@ private fun FolderNameDialog(
                 singleLine = true,
                 shape = RoundedCornerShape(14.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = if (dark) LoginCardDark else Color(0xFFEAE8E3),
-                    unfocusedContainerColor = if (dark) LoginCardDark else Color(0xFFEAE8E3),
-                    focusedBorderColor = if (dark) LoginCardBorderDark else LoginCardBorderLight,
-                    unfocusedBorderColor = if (dark) LoginCardBorderDark else LoginCardBorderLight,
+                    focusedContainerColor = PikuColors.surfaceMuted,
+                    unfocusedContainerColor = PikuColors.surfaceMuted,
+                    focusedBorderColor = PikuColors.border,
+                    unfocusedBorderColor = PikuColors.border,
                     cursorColor = AccentDark,
                 ),
             )
@@ -293,7 +286,7 @@ private fun FolderNameDialog(
             TextButton(onClick = { onConfirm(name) }, enabled = name.isNotBlank()) {
                 Text(
                     text = confirmLabel,
-                    color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                    color = PikuColors.textPrimary,
                 )
             }
         },
@@ -301,7 +294,7 @@ private fun FolderNameDialog(
             TextButton(onClick = onDismiss) {
                 Text(
                     text = stringResource(R.string.detail_favorite_cancel),
-                    color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                    color = PikuColors.textSecondary,
                 )
             }
         },
@@ -333,12 +326,12 @@ private fun FolderListContent(
                 Icon(
                     imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
                     contentDescription = stringResource(R.string.back),
-                    tint = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                    tint = PikuColors.textPrimary,
                 )
             }
             Text(
                 text = stringResource(R.string.collection_title),
-                color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                color = PikuColors.textPrimary,
                 fontSize = 17.sp,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f),
@@ -347,7 +340,7 @@ private fun FolderListContent(
                 Icon(
                     imageVector = Icons.Outlined.Add,
                     contentDescription = stringResource(R.string.collection_create),
-                    tint = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                    tint = PikuColors.textPrimary,
                 )
             }
         }
@@ -363,7 +356,7 @@ private fun FolderListContent(
                         Icon(
                             imageVector = Icons.Outlined.StarBorder,
                             contentDescription = null,
-                            tint = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                            tint = PikuColors.textFaint,
                             modifier = Modifier.size(44.dp),
                         )
                         Spacer(Modifier.height(12.dp))
@@ -381,7 +374,7 @@ private fun FolderListContent(
                         TextButton(onClick = onNewFolder) {
                             Text(
                                 text = stringResource(R.string.collection_create),
-                                color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                                color = PikuColors.textPrimary,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Medium,
                             )
@@ -468,7 +461,7 @@ private fun FolderCard(
                         Icon(
                             imageVector = Icons.Outlined.StarBorder,
                             contentDescription = null,
-                            tint = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                            tint = PikuColors.textFaint,
                             modifier = Modifier.size(26.dp),
                         )
                     }
@@ -491,7 +484,7 @@ private fun FolderCard(
                                     AsyncImage(
                                         model = url,
                                         contentDescription = null,
-                                        colorFilter = if (dark) TameWhiteColorFilter else null,
+                                        colorFilter = PikuColors.tameWhiteFilter,
                                         modifier = Modifier.fillMaxSize(),
                                         contentScale = ContentScale.Crop,
                                     )
@@ -504,7 +497,7 @@ private fun FolderCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = folder.name,
-                        color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                        color = PikuColors.textPrimary,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
@@ -521,13 +514,13 @@ private fun FolderCard(
                     Icon(
                         imageVector = Icons.Filled.Star,
                         contentDescription = null,
-                        tint = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                        tint = PikuColors.textSecondary,
                         modifier = Modifier.size(13.dp),
                     )
                     Spacer(Modifier.width(4.dp))
                     Text(
                         text = stringResource(R.string.collection_work_count, folder.workCount),
-                        color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                        color = PikuColors.textFaint,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
                     )
@@ -573,7 +566,7 @@ private fun FolderActionSheet(
         ) {
             Text(
                 text = folder.name,
-                color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                color = PikuColors.textPrimary,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
@@ -611,7 +604,7 @@ private fun FolderActionSheet(
 private fun DefaultFolderBadge(dark: Boolean) {
     Text(
         text = stringResource(R.string.collection_default_badge),
-        color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+        color = PikuColors.textSecondary,
         fontSize = 9.sp,
         fontWeight = FontWeight.Medium,
         modifier = Modifier
@@ -651,14 +644,14 @@ private fun FolderDetailContent(
                 Icon(
                     imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
                     contentDescription = stringResource(R.string.detail_back),
-                    tint = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                    tint = PikuColors.textPrimary,
                     modifier = Modifier.size(20.dp),
                 )
             }
             Column(Modifier.weight(1f)) {
                 Text(
                     text = folderName,
-                    color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                    color = PikuColors.textPrimary,
                     fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
@@ -666,7 +659,7 @@ private fun FolderDetailContent(
                 )
                 Text(
                     text = stringResource(R.string.collection_work_count, works.size),
-                    color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                    color = PikuColors.textFaint,
                     fontSize = 12.sp,
                 )
             }
@@ -675,7 +668,7 @@ private fun FolderDetailContent(
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
                     text = stringResource(R.string.collection_folder_empty),
-                    color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                    color = PikuColors.textFaint,
                     fontSize = 14.sp,
                 )
             }
@@ -740,11 +733,11 @@ private fun FolderDetailContent(
         removeConfirmWork?.let { work ->
             AlertDialog(
                 onDismissRequest = { removeConfirmWork = null },
-                containerColor = if (dark) LoginCardDark else Color.White,
+                containerColor = PikuColors.surface,
                 title = {
                     Text(
                         text = stringResource(R.string.collection_remove_confirm_title),
-                        color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                        color = PikuColors.textPrimary,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -755,7 +748,7 @@ private fun FolderDetailContent(
                             R.string.collection_remove_confirm_message,
                             work.title.ifBlank { stringResource(R.string.collection_work_actions) },
                         ),
-                        color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                        color = PikuColors.textSecondary,
                         fontSize = 13.sp,
                     )
                 },
@@ -766,7 +759,7 @@ private fun FolderDetailContent(
                     }) {
                         Text(
                             text = stringResource(R.string.collection_remove_confirm),
-                            color = if (dark) Color(0xFFE08A8A) else Color(0xFFC24B4B),
+                            color = PikuColors.error,
                         )
                     }
                 },
@@ -774,7 +767,7 @@ private fun FolderDetailContent(
                     TextButton(onClick = { removeConfirmWork = null }) {
                         Text(
                             text = stringResource(R.string.detail_favorite_cancel),
-                            color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                            color = PikuColors.textSecondary,
                         )
                     }
                 },
@@ -804,7 +797,7 @@ private fun WorkActionSheet(
         ) {
             Text(
                 text = work.title.ifBlank { stringResource(R.string.collection_work_actions) },
-                color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                color = PikuColors.textPrimary,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
@@ -814,7 +807,7 @@ private fun WorkActionSheet(
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = work.authorName,
-                    color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                    color = PikuColors.textFaint,
                     fontSize = 12.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -863,14 +856,14 @@ private fun MoveWorkSheet(
         ) {
             Text(
                 text = stringResource(R.string.collection_move_title),
-                color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                color = PikuColors.textPrimary,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.SemiBold,
             )
             Spacer(Modifier.height(4.dp))
             Text(
                 text = work.title,
-                color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                color = PikuColors.textFaint,
                 fontSize = 12.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -880,7 +873,7 @@ private fun MoveWorkSheet(
             if (targets.isEmpty()) {
                 Text(
                     text = stringResource(R.string.collection_move_no_target),
-                    color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                    color = PikuColors.textFaint,
                     fontSize = 13.sp,
                 )
             } else {
@@ -916,13 +909,13 @@ private fun FolderPickRow(
         Icon(
             imageVector = if (folder.isDefault) Icons.Filled.Star else Icons.Outlined.StarBorder,
             contentDescription = null,
-            tint = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+            tint = PikuColors.textSecondary,
             modifier = Modifier.size(18.dp),
         )
         Spacer(Modifier.width(10.dp))
         Text(
             text = folder.name,
-            color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+            color = PikuColors.textPrimary,
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
             maxLines = 1,
@@ -936,7 +929,7 @@ private fun FolderPickRow(
         Spacer(Modifier.width(8.dp))
         Text(
             text = stringResource(R.string.collection_work_count, folder.workCount),
-            color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+            color = PikuColors.textFaint,
             fontSize = 12.sp,
         )
     }
@@ -949,12 +942,12 @@ private fun SheetActionRow(
     label: String,
     dark: Boolean,
     subtitle: String? = null,
-    tint: Color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+    tint: Color = PikuColors.textPrimary,
     danger: Boolean = false,
     onClick: () -> Unit,
 ) {
-    val dangerTint = if (dark) Color(0xFFE08A8A) else Color(0xFFC24B4B)
-    val faint = if (dark) LoginTextFaintDark else LoginTextFaintLight
+    val dangerTint = PikuColors.error
+    val faint = PikuColors.textFaint
     // 危险区：浅红底色容器 + 红图标气泡；普通动作：透明容器 + 中性图标气泡
     val rowBg = if (danger) {
         if (dark) Color(0x1AE08A8A) else Color(0x14C24B4B)

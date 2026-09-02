@@ -64,7 +64,7 @@ import coil3.compose.AsyncImage
 import coil3.compose.SubcomposeAsyncImage
 import com.piku.client.ui.common.rememberAnimatedImage
 import com.piku.client.R
-import com.piku.client.ui.theme.TameWhiteColorFilter
+import com.piku.client.ui.theme.PikuColors
 import com.piku.client.ui.theme.ViewerBackgroundDark
 import androidx.compose.ui.graphics.asImageBitmap
 import kotlinx.coroutines.Job
@@ -256,7 +256,7 @@ private fun ZoomableImage(
                 model = rememberAnimatedImage(image.thumbnailUrl),
                 contentDescription = contentDescription,
                 contentScale = ContentScale.Fit,
-                colorFilter = if (dark) TameWhiteColorFilter else null,
+                colorFilter = PikuColors.tameWhiteFilter,
                 modifier = Modifier.fillMaxSize(),
             )
         }
@@ -265,7 +265,7 @@ private fun ZoomableImage(
                 model = rememberAnimatedImage(image.fullUrl),
                 contentDescription = contentDescription,
                 contentScale = ContentScale.Fit,
-                colorFilter = if (dark) TameWhiteColorFilter else null,
+                colorFilter = PikuColors.tameWhiteFilter,
                 modifier = Modifier.fillMaxSize(),
                 onSuccess = { fullReady = true },
                 onError = { fullReady = false },
@@ -371,7 +371,7 @@ private fun TranslatedZoomableImage(
             bitmap = bitmap.asImageBitmap(),
             contentDescription = contentDescription,
             contentScale = ContentScale.Fit,
-            colorFilter = if (dark) TameWhiteColorFilter else null,
+            colorFilter = PikuColors.tameWhiteFilter,
             modifier = Modifier.fillMaxSize(),
         )
     }

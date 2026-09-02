@@ -89,26 +89,15 @@ import com.piku.client.ui.common.LoaderDots
 import com.piku.client.ui.common.LoginPrompt
 import com.piku.client.ui.common.UserAvatar
 import com.piku.client.ui.common.WorkCard
-import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.HomeBgBottomDark
 import com.piku.client.ui.theme.HomeBgBottomLight
 import com.piku.client.ui.theme.HomeBgTopDark
 import com.piku.client.ui.theme.HomeBgTopLight
 import com.piku.client.ui.theme.LocalDarkTheme
 import com.piku.client.ui.theme.LoginBackgroundDark
-import com.piku.client.ui.theme.LoginCardBorderDark
-import com.piku.client.ui.theme.LoginCardBorderLight
-import com.piku.client.ui.theme.LoginCardDark
-import com.piku.client.ui.theme.LoginCardLight
-import com.piku.client.ui.theme.LoginTextFaintDark
 import com.piku.client.ui.theme.LoginTextFaintLight
-import com.piku.client.ui.theme.LoginTextPrimaryDark
-import com.piku.client.ui.theme.LoginTextPrimaryLight
 import com.piku.client.ui.theme.LoginTextSecondaryDark
-import com.piku.client.ui.theme.LoginTextSecondaryLight
-import com.piku.client.ui.theme.PillBorderDark
-import com.piku.client.ui.theme.PillBorderLight
-import com.piku.client.ui.theme.TameWhiteColorFilter
+import com.piku.client.ui.theme.PikuColors
 import com.piku.client.ui.theme.WorkCardBgDark
 import com.piku.client.ui.theme.WorkCardBorderDark
 import com.piku.client.ui.theme.WorkCardInfoBgDark
@@ -274,8 +263,8 @@ private fun SearchTopBar(
     focusRequester: FocusRequester,
     dark: Boolean,
 ) {
-    val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
-    val secondary = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight
+    val primary = PikuColors.textPrimary
+    val secondary = PikuColors.textSecondary
 
     Row(
         modifier = Modifier
@@ -339,7 +328,7 @@ private fun SearchTopBar(
                 unfocusedContainerColor = if (dark) Color(0x40FFFFFF) else Color(0xD9FFFFFF),
                 focusedBorderColor = if (dark) Color(0x66FFFFFF) else Color(0x59A09A92),
                 unfocusedBorderColor = if (dark) Color(0x40FFFFFF) else Color(0x40A09A92),
-                cursorColor = if (dark) LoginTextPrimaryDark else AccentDark,
+                cursorColor = PikuColors.accent,
             ),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { onSubmit() }),
@@ -350,7 +339,7 @@ private fun SearchTopBar(
         Spacer(Modifier.width(6.dp))
         Text(
             text = stringResource(if (isLink) R.string.search_open_link else R.string.search_action),
-            color = if (dark) LoginTextPrimaryDark else AccentDark,
+            color = PikuColors.accent,
             fontSize = 15.sp,
             fontWeight = FontWeight.Medium,
             modifier = Modifier
@@ -612,7 +601,7 @@ private fun SearchTabItem(
         Text(
             text = text,
             color = when {
-                active -> if (dark) LoginTextPrimaryDark else AccentDark
+                active -> PikuColors.accent
                 else -> if (dark) LoginTextSecondaryDark else Color(0xFF8A8A8A)
             },
             fontSize = 15.sp,
@@ -624,7 +613,7 @@ private fun SearchTabItem(
                 .width(if (active) 18.dp else 0.dp)
                 .height(2.dp)
                 .clip(RoundedCornerShape(1.dp))
-                .background(if (dark) LoginTextPrimaryDark else AccentDark),
+                .background(PikuColors.accent),
         )
     }
 }
@@ -642,7 +631,7 @@ private fun TagPill(
             .clip(shape)
             .background(
                 when {
-                    active -> if (dark) LoginTextPrimaryDark else Color(0xFF2C2C2C)
+                    active -> PikuColors.accent
                     else -> if (dark) Color(0x40FFFFFF) else Color(0xE6FFFFFF)
                 },
             )
@@ -650,8 +639,8 @@ private fun TagPill(
                 BorderStroke(
                     0.5.dp,
                     when {
-                        active -> if (dark) LoginTextPrimaryDark else Color(0xFF2C2C2C)
-                        else -> if (dark) PillBorderDark else PillBorderLight
+                        active -> PikuColors.accent
+                        else -> PikuColors.border
                     },
                 ),
                 shape,
@@ -755,7 +744,7 @@ private fun WorksTabContent(
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
                         text = stringResource(R.string.search_empty),
-                        color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                        color = PikuColors.textFaint,
                         fontSize = 14.sp,
                     )
                 }
@@ -823,7 +812,7 @@ private fun TagsTabContent(
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text(
                                 text = stringResource(R.string.search_tags_not_found),
-                                color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                                color = PikuColors.textFaint,
                                 fontSize = 14.sp,
                             )
                         }
@@ -858,7 +847,7 @@ private fun TagsTabContent(
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text(
                                 text = stringResource(R.string.search_tags_empty),
-                                color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                                color = PikuColors.textFaint,
                                 fontSize = 14.sp,
                             )
                         }
@@ -891,7 +880,7 @@ private fun TagWorksHeader(
     onBack: () -> Unit,
     dark: Boolean,
 ) {
-    val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
+    val primary = PikuColors.textPrimary
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -988,7 +977,7 @@ private fun TagCardGrid(
                     ) {
                         Text(
                             text = stringResource(R.string.home_no_more),
-                            color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                            color = PikuColors.textFaint,
                             fontSize = 12.sp,
                         )
                     }
@@ -1039,7 +1028,7 @@ private fun TagCardItem(
                     Icon(
                         imageVector = Icons.Outlined.Label,
                         contentDescription = "#${card.name}",
-                        tint = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                        tint = PikuColors.textFaint,
                         modifier = Modifier.size(32.dp),
                     )
                 }
@@ -1047,7 +1036,7 @@ private fun TagCardItem(
                 AsyncImage(
                     model = card.thumbnailUrl,
                     contentDescription = "#${card.name}",
-                    colorFilter = if (dark) TameWhiteColorFilter else null,
+                    colorFilter = PikuColors.tameWhiteFilter,
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(1f)
@@ -1064,7 +1053,7 @@ private fun TagCardItem(
         ) {
             Text(
                 text = "#${card.name}",
-                color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                color = PikuColors.textPrimary,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
@@ -1148,7 +1137,7 @@ private fun SearchWorkGrid(
                     ) {
                         Text(
                             text = stringResource(R.string.home_no_more),
-                            color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                            color = PikuColors.textFaint,
                             fontSize = 12.sp,
                         )
                     }
@@ -1191,7 +1180,7 @@ private fun UsersTabContent(
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
                     text = stringResource(R.string.search_users_empty),
-                    color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                    color = PikuColors.textFaint,
                     fontSize = 14.sp,
                     lineHeight = 22.sp,
                 )
@@ -1273,7 +1262,7 @@ private fun SearchUserList(
                     Box(Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
                         Text(
                             text = stringResource(R.string.home_no_more),
-                            color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                            color = PikuColors.textFaint,
                             fontSize = 12.sp,
                         )
                     }
@@ -1311,7 +1300,7 @@ private fun SearchUserRow(
             Column(Modifier.weight(1f)) {
                 Text(
                     text = user.name,
-                    color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                    color = PikuColors.textPrimary,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
@@ -1319,7 +1308,7 @@ private fun SearchUserRow(
                 )
                 Text(
                     text = "ID: ${user.userId}",
-                    color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                    color = PikuColors.textFaint,
                     fontSize = 11.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -1351,16 +1340,16 @@ private fun SearchErrorState(
     ) {
         Text(
             text = stringResource(errorRes ?: R.string.home_error_parse),
-            color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+            color = PikuColors.textSecondary,
             fontSize = 14.sp,
         )
         Spacer(Modifier.height(14.dp))
         Box(
             modifier = Modifier
                 .clip(shape)
-                .background(if (dark) LoginCardDark else LoginCardLight)
+                .background(PikuColors.surface)
                 .border(
-                    BorderStroke(0.5.dp, if (dark) LoginCardBorderDark else LoginCardBorderLight),
+                    BorderStroke(0.5.dp, PikuColors.border),
                     shape,
                 )
                 .clickable(onClick = onRetry)
@@ -1369,7 +1358,7 @@ private fun SearchErrorState(
         ) {
             Text(
                 text = stringResource(R.string.home_retry),
-                color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                color = PikuColors.textPrimary,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -1389,9 +1378,9 @@ private fun SearchLoadMoreError(
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 10.dp)
             .clip(shape)
-            .background(if (dark) LoginCardDark else LoginCardLight)
+            .background(PikuColors.surface)
             .border(
-                BorderStroke(0.5.dp, if (dark) LoginCardBorderDark else LoginCardBorderLight),
+                BorderStroke(0.5.dp, PikuColors.border),
                 shape,
             )
             .clickable(onClick = onRetry)
@@ -1401,13 +1390,13 @@ private fun SearchLoadMoreError(
     ) {
         Text(
             text = stringResource(errorRes ?: R.string.home_error_parse),
-            color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+            color = PikuColors.textFaint,
             fontSize = 12.sp,
         )
         Spacer(Modifier.width(6.dp))
         Text(
             text = stringResource(R.string.home_retry),
-            color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+            color = PikuColors.textPrimary,
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
         )

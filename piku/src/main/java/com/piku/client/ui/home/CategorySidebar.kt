@@ -31,12 +31,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.piku.client.R
 import com.piku.client.domain.model.PoipikuCategory
-import com.piku.client.ui.theme.LoginCardBorderDark
-import com.piku.client.ui.theme.LoginCardBorderLight
-import com.piku.client.ui.theme.LoginCardDark
 import com.piku.client.ui.theme.LoginTextPrimaryDark
 import com.piku.client.ui.theme.LoginTextPrimaryLight
 import com.piku.client.ui.theme.LoginTextSecondaryDark
+import com.piku.client.ui.theme.PikuColors
 
 @Composable
 internal fun CategorySidebar(
@@ -48,8 +46,8 @@ internal fun CategorySidebar(
         Modifier
             .width(176.dp)
             .fillMaxHeight()
-            .background(if (dark) LoginCardDark else Color.White)
-            .border(0.5.dp, if (dark) LoginCardBorderDark else LoginCardBorderLight)
+            .background(PikuColors.surface)
+            .border(0.5.dp, PikuColors.border)
             .verticalScroll(rememberScrollState())
             .statusBarsPadding()
             .padding(vertical = 12.dp),
@@ -107,7 +105,7 @@ private fun SidebarItem(
                 .clip(RoundedCornerShape(2.dp))
                 .background(
                     if (active) {
-                        if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
+                        PikuColors.textPrimary
                     } else {
                         Color.Transparent
                     },

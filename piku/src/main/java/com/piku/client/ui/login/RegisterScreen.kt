@@ -65,8 +65,7 @@ import com.piku.client.ui.theme.HomeBgBottomLight
 import com.piku.client.ui.theme.HomeBgTopDark
 import com.piku.client.ui.theme.HomeBgTopLight
 import com.piku.client.ui.theme.LocalDarkTheme
-import com.piku.client.ui.theme.LoginTextPrimaryDark
-import com.piku.client.ui.theme.LoginTextPrimaryLight
+import com.piku.client.ui.theme.PikuColors
 import kotlinx.coroutines.launch
 
 @Composable
@@ -226,7 +225,7 @@ private fun RegisterGlassCard(
         Spacer(Modifier.height(16.dp))
         Text(
             text = stringResource(R.string.register_title),
-            color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+            color = PikuColors.textPrimary,
             fontSize = 17.sp,
             fontWeight = FontWeight.SemiBold,
         )
@@ -341,7 +340,7 @@ private fun RegisterGlassCard(
         Spacer(Modifier.height(18.dp))
         Text(
             text = stringResource(R.string.register_has_account),
-            color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+            color = PikuColors.textPrimary,
             fontSize = 13.sp,
             modifier = Modifier
                 .clip(RoundedCornerShape(8.dp))

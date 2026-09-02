@@ -42,14 +42,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.piku.client.R
-import com.piku.client.ui.theme.ControlAccentDark
-import com.piku.client.ui.theme.ControlAccentLight
-import com.piku.client.ui.theme.LoginTextPrimaryDark
-import com.piku.client.ui.theme.LoginTextPrimaryLight
-import com.piku.client.ui.theme.LoginTextSecondaryDark
-import com.piku.client.ui.theme.LoginTextSecondaryLight
-import com.piku.client.ui.theme.PillBorderDark
-import com.piku.client.ui.theme.PillBorderLight
+import com.piku.client.ui.theme.PikuColors
 
 internal val LoginErrorRed = Color(0xFFD64545)
 
@@ -71,15 +64,15 @@ internal val NicknameKeyboardOptions = KeyboardOptions(
 internal fun glassFieldColors(dark: Boolean) = OutlinedTextFieldDefaults.colors(
     focusedContainerColor = if (dark) Color(0x14FFFFFF) else Color(0x8CFFFFFF),
     unfocusedContainerColor = if (dark) Color(0x0FFFFFFF) else Color(0x73FFFFFF),
-    focusedBorderColor = if (dark) ControlAccentDark else ControlAccentLight,
-    unfocusedBorderColor = if (dark) PillBorderDark else PillBorderLight,
-    focusedLeadingIconColor = if (dark) ControlAccentDark else ControlAccentLight,
-    unfocusedLeadingIconColor = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
-    focusedTrailingIconColor = if (dark) ControlAccentDark else ControlAccentLight,
-    unfocusedTrailingIconColor = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
-    cursorColor = if (dark) ControlAccentDark else ControlAccentLight,
-    focusedTextColor = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
-    unfocusedTextColor = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+    focusedBorderColor = PikuColors.controlAccent,
+    unfocusedBorderColor = PikuColors.border,
+    focusedLeadingIconColor = PikuColors.controlAccent,
+    unfocusedLeadingIconColor = PikuColors.textSecondary,
+    focusedTrailingIconColor = PikuColors.controlAccent,
+    unfocusedTrailingIconColor = PikuColors.textSecondary,
+    cursorColor = PikuColors.controlAccent,
+    focusedTextColor = PikuColors.textPrimary,
+    unfocusedTextColor = PikuColors.textPrimary,
 )
 
 @Composable
@@ -127,7 +120,7 @@ internal fun GlassBackButton(
         Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
             contentDescription = stringResource(R.string.back),
-            tint = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+            tint = PikuColors.textPrimary,
             modifier = Modifier.size(20.dp),
         )
     }

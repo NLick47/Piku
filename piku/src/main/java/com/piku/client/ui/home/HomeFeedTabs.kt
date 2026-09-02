@@ -39,15 +39,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.piku.client.R
-import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.GlassCardBgDark
-import com.piku.client.ui.theme.LoginTextFaintDark
-import com.piku.client.ui.theme.LoginTextFaintLight
-import com.piku.client.ui.theme.LoginTextPrimaryDark
 import com.piku.client.ui.theme.LoginTextSecondaryDark
-import com.piku.client.ui.theme.LoginTextSecondaryLight
-import com.piku.client.ui.theme.PillBorderDark
-import com.piku.client.ui.theme.PillBorderLight
+import com.piku.client.ui.theme.PikuColors
 
 @Composable
 internal fun FeedTabRow(
@@ -131,14 +125,14 @@ private fun FeedTabItem(
     )
     val textColor by animateColorAsState(
         targetValue = when {
-            active -> if (dark) LoginTextPrimaryDark else AccentDark
+            active -> PikuColors.accent
             else -> if (dark) LoginTextSecondaryDark else Color(0xFF8A8A8A)
         },
         animationSpec = tween(durationMillis = 200),
         label = "tabTextColor",
     )
     val underlineColor by animateColorAsState(
-        targetValue = if (dark) LoginTextPrimaryDark else AccentDark,
+        targetValue = PikuColors.accent,
         animationSpec = tween(durationMillis = 200),
         label = "tabUnderlineColor",
     )
@@ -193,7 +187,7 @@ private fun CurrentTagChip(
             .clip(shape)
             .background(if (dark) GlassCardBgDark else Color.White)
             .border(
-                BorderStroke(0.5.dp, if (dark) PillBorderDark else PillBorderLight),
+                BorderStroke(0.5.dp, PikuColors.border),
                 shape,
             )
             .padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
@@ -201,7 +195,7 @@ private fun CurrentTagChip(
     ) {
         Text(
             text = "$prefix$tag",
-            color = if (dark) LoginTextPrimaryDark else AccentDark,
+            color = PikuColors.accent,
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
@@ -219,7 +213,7 @@ private fun CurrentTagChip(
             Icon(
                 imageVector = Icons.Filled.Close,
                 contentDescription = stringResource(R.string.home_tag_clear),
-                tint = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                tint = PikuColors.textFaint,
                 modifier = Modifier.size(14.dp),
             )
         }

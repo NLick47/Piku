@@ -43,14 +43,7 @@ import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.FollowDark
 import com.piku.client.ui.theme.FollowLight
 import com.piku.client.ui.theme.LoginBackgroundDark
-import com.piku.client.ui.theme.LoginCardBorderDark
-import com.piku.client.ui.theme.LoginCardBorderLight
-import com.piku.client.ui.theme.LoginCardDark
-import com.piku.client.ui.theme.LoginCardLight
-import com.piku.client.ui.theme.LoginTextFaintDark
-import com.piku.client.ui.theme.LoginTextFaintLight
-import com.piku.client.ui.theme.LoginTextPrimaryDark
-import com.piku.client.ui.theme.LoginTextPrimaryLight
+import com.piku.client.ui.theme.PikuColors
 import com.piku.client.ui.theme.themedSwitchColors
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -67,9 +60,9 @@ internal fun AboutSheet(
     onDismiss: () -> Unit,
     dark: Boolean,
 ) {
-    val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
-    val faint = if (dark) LoginTextFaintDark else LoginTextFaintLight
-    val divider = if (dark) LoginCardBorderDark else LoginCardBorderLight
+    val primary = PikuColors.textPrimary
+    val faint = PikuColors.textFaint
+    val divider = PikuColors.border
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = if (dark) LoginBackgroundDark else Color.White,
@@ -136,7 +129,7 @@ private fun AboutUpdateButton(
     dark: Boolean,
 ) {
     val green = if (dark) FollowDark else FollowLight
-    val red = if (dark) Color(0xFFE08A8A) else Color(0xFFC24B4B)
+    val red = PikuColors.error
     val (targetBg, targetFg) = when (state) {
         UpdateCheckState.Checking -> AccentDark to Color.White
         UpdateCheckState.Latest -> green.copy(alpha = if (dark) 0.22f else 0.12f) to green
@@ -210,7 +203,7 @@ private fun AboutToggleRow(
     onToggle: () -> Unit,
     dark: Boolean,
 ) {
-    val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
+    val primary = PikuColors.textPrimary
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -239,7 +232,7 @@ private fun AboutLinkRow(
     onClick: () -> Unit,
     dark: Boolean,
 ) {
-    val faint = if (dark) LoginTextFaintDark else LoginTextFaintLight
+    val faint = PikuColors.textFaint
     Row(
         modifier = Modifier
             .fillMaxWidth()

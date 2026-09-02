@@ -63,19 +63,12 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.piku.client.R
 import com.piku.client.ui.common.LoaderDots
-import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.HomeBgBottomDark
 import com.piku.client.ui.theme.HomeBgBottomLight
 import com.piku.client.ui.theme.HomeBgTopDark
 import com.piku.client.ui.theme.HomeBgTopLight
 import com.piku.client.ui.theme.LocalDarkTheme
-import com.piku.client.ui.theme.LoginCardBorderDark
-import com.piku.client.ui.theme.LoginCardBorderLight
-import com.piku.client.ui.theme.LoginCardDark
-import com.piku.client.ui.theme.LoginTextPrimaryDark
-import com.piku.client.ui.theme.LoginTextPrimaryLight
-import com.piku.client.ui.theme.LoginTextSecondaryDark
-import com.piku.client.ui.theme.LoginTextSecondaryLight
+import com.piku.client.ui.theme.PikuColors
 import kotlinx.coroutines.launch
 
 /** 顶栏标题淡入所需的滚动距离：大致等于滚过图区上沿 */
@@ -376,7 +369,7 @@ fun DetailScreen(
                 Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
                     Text(
                         stringResource(R.string.detail_retry_with_model_title),
-                        color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                        color = PikuColors.textPrimary,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium,
                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
@@ -424,11 +417,11 @@ fun DetailScreen(
         if (confirmSavePage >= 0) {
             AlertDialog(
                 onDismissRequest = { confirmSavePage = -1 },
-                containerColor = if (dark) LoginCardDark else Color.White,
+                containerColor = PikuColors.surface,
                 title = {
                     Text(
                         text = stringResource(R.string.detail_save_confirm_title),
-                        color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                        color = PikuColors.textPrimary,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -436,7 +429,7 @@ fun DetailScreen(
                 text = {
                     Text(
                         text = stringResource(R.string.detail_save_confirm_message),
-                        color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                        color = PikuColors.textSecondary,
                         fontSize = 13.sp,
                     )
                 },
@@ -448,7 +441,7 @@ fun DetailScreen(
                     }) {
                         Text(
                             text = stringResource(R.string.detail_save_confirm),
-                            color = if (dark) LoginTextPrimaryDark else AccentDark,
+                            color = PikuColors.accent,
                         )
                     }
                 },
@@ -456,7 +449,7 @@ fun DetailScreen(
                     TextButton(onClick = { confirmSavePage = -1 }) {
                         Text(
                             text = stringResource(R.string.search_cancel),
-                            color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                            color = PikuColors.textSecondary,
                         )
                     }
                 },
@@ -513,7 +506,7 @@ private fun DetailError(
     ) {
         Text(
             text = stringResource(errorRes),
-            color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+            color = PikuColors.textPrimary,
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
         )
@@ -521,7 +514,7 @@ private fun DetailError(
             Spacer(Modifier.height(8.dp))
             Text(
                 text = stringResource(hintRes),
-                color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                color = PikuColors.textSecondary,
                 fontSize = 12.sp,
             )
         }
@@ -531,7 +524,7 @@ private fun DetailError(
                 modifier = Modifier
                     .clip(RoundedCornerShape(16.dp))
                     .border(
-                        BorderStroke(0.5.dp, if (dark) LoginCardBorderDark else LoginCardBorderLight),
+                        BorderStroke(0.5.dp, PikuColors.border),
                         RoundedCornerShape(16.dp),
                     )
                     .clickable(onClick = onRetry)
@@ -539,7 +532,7 @@ private fun DetailError(
             ) {
                 Text(
                     text = stringResource(R.string.home_retry),
-                    color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                    color = PikuColors.textPrimary,
                     fontSize = 13.sp,
                 )
             }

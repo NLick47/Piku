@@ -95,10 +95,7 @@ import com.piku.client.ui.history.HistoryScreen
 import com.piku.client.ui.tags.TagScreen
 import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.LocalDarkTheme
-import com.piku.client.ui.theme.LoginTextFaintDark
-import com.piku.client.ui.theme.LoginTextFaintLight
-import com.piku.client.ui.theme.LoginTextPrimaryDark
-import com.piku.client.ui.theme.LoginTextPrimaryLight
+import com.piku.client.ui.theme.PikuColors
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -576,7 +573,7 @@ fun HomeScreen(
                                 TextButton(
                                     onClick = toggleBgPreview,
                                     colors = ButtonDefaults.textButtonColors(
-                                        contentColor = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
+                                        contentColor = PikuColors.textPrimary
                                     ),
                                 ) {
                                     Icon(
@@ -965,13 +962,13 @@ private fun BackgroundEditPanel(
             Icon(
                 imageVector = Icons.Outlined.Wallpaper,
                 contentDescription = null,
-                tint = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                tint = PikuColors.textPrimary,
                 modifier = Modifier.size(20.dp)
             )
             Spacer(Modifier.width(8.dp))
             Text(
                 text = stringResource(R.string.background_select_title),
-                color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                color = PikuColors.textPrimary,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
             )
@@ -992,7 +989,7 @@ private fun BackgroundEditPanel(
             } else {
                 stringResource(R.string.background_select_hint)
             },
-            color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+            color = PikuColors.textFaint,
             fontSize = 12.sp,
         )
         Spacer(Modifier.height(16.dp))
@@ -1046,7 +1043,7 @@ private fun BackgroundEditPanel(
                         text = stringResource(
                             if (state.backdropPath != null) R.string.background_backdrop_separated else R.string.background_follow_hint
                         ),
-                        color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                        color = PikuColors.textFaint,
                         fontSize = 12.sp,
                         modifier = Modifier.weight(1f),
                     )
@@ -1068,13 +1065,13 @@ private fun BackgroundEditPanel(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = stringResource(R.string.background_dim_label),
-                        color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                        color = PikuColors.textPrimary,
                         fontSize = 13.sp,
                     )
                     Spacer(Modifier.weight(1f))
                     Text(
                         text = "${(state.backgroundDim * 100).roundToInt()}%",
-                        color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                        color = PikuColors.textFaint,
                         fontSize = 12.sp,
                     )
                 }
@@ -1089,13 +1086,13 @@ private fun BackgroundEditPanel(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = stringResource(R.string.background_blur_label),
-                        color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                        color = PikuColors.textPrimary,
                         fontSize = 13.sp,
                     )
                     Spacer(Modifier.weight(1f))
                     Text(
                         text = "${state.backgroundBlur.roundToInt()}dp",
-                        color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                        color = PikuColors.textFaint,
                         fontSize = 12.sp,
                     )
                 }
@@ -1111,13 +1108,13 @@ private fun BackgroundEditPanel(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = stringResource(R.string.background_backdrop_scale_label),
-                            color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                            color = PikuColors.textPrimary,
                             fontSize = 13.sp,
                         )
                         Spacer(Modifier.weight(1f))
                         Text(
                             text = "${String.format("%.2f", state.backgroundScale)}x",
-                            color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                            color = PikuColors.textFaint,
                             fontSize = 12.sp,
                         )
                     }
@@ -1132,13 +1129,13 @@ private fun BackgroundEditPanel(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = stringResource(R.string.background_hero_scale_label),
-                        color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                        color = PikuColors.textPrimary,
                         fontSize = 13.sp,
                     )
                     Spacer(Modifier.weight(1f))
                     Text(
                         text = "${String.format("%.2f", state.heroScale)}x",
-                        color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                        color = PikuColors.textFaint,
                         fontSize = 12.sp,
                     )
                 }
@@ -1150,7 +1147,7 @@ private fun BackgroundEditPanel(
                 if (state.heroScale < 1f) {
                     Text(
                         text = stringResource(R.string.background_frame_hint),
-                        color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                        color = PikuColors.textFaint,
                         fontSize = 11.sp,
                     )
                 }
@@ -1159,13 +1156,13 @@ private fun BackgroundEditPanel(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = stringResource(R.string.background_hero_label),
-                        color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                        color = PikuColors.textPrimary,
                         fontSize = 13.sp,
                     )
                     Spacer(Modifier.weight(1f))
                     Text(
                         text = "${(state.backgroundHeroFraction * 100).roundToInt()}%",
-                        color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                        color = PikuColors.textFaint,
                         fontSize = 12.sp,
                     )
                 }
@@ -1182,7 +1179,7 @@ private fun BackgroundEditPanel(
         state.backgroundErrorRes?.let { res ->
             Text(
                 text = stringResource(res),
-                color = if (dark) Color(0xFFE08A8A) else Color(0xFFC24B4B),
+                color = PikuColors.error,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(bottom = 12.dp)
             )
@@ -1267,7 +1264,7 @@ private fun BackgroundEditPanel(
                 TextButton(
                     onClick = onClearBackground,
                     colors = ButtonDefaults.textButtonColors(
-                        contentColor = if (dark) Color(0xFFE08A8A) else Color(0xFFC24B4B)
+                        contentColor = PikuColors.error
                     )
                 ) {
                     Icon(
@@ -1288,7 +1285,7 @@ private fun BackgroundEditPanel(
             TextButton(
                 onClick = onRevert,
                 colors = ButtonDefaults.textButtonColors(
-                    contentColor = if (dark) LoginTextFaintDark else LoginTextFaintLight
+                    contentColor = PikuColors.textFaint
                 )
             ) {
                 Text(text = stringResource(R.string.search_cancel), fontSize = 13.sp)

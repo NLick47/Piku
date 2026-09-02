@@ -85,22 +85,12 @@ import com.piku.client.domain.model.UserPageInfo
 import com.piku.client.domain.model.Work
 import com.piku.client.ui.common.LoaderDots
 import com.piku.client.ui.common.WorkCard
-import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.HomeBgBottomDark
 import com.piku.client.ui.theme.HomeBgBottomLight
 import com.piku.client.ui.theme.HomeBgTopDark
 import com.piku.client.ui.theme.HomeBgTopLight
 import com.piku.client.ui.theme.LocalDarkTheme
-import com.piku.client.ui.theme.LoginCardBorderDark
-import com.piku.client.ui.theme.LoginCardBorderLight
-import com.piku.client.ui.theme.LoginCardDark
-import com.piku.client.ui.theme.LoginCardLight
-import com.piku.client.ui.theme.LoginTextFaintDark
-import com.piku.client.ui.theme.LoginTextFaintLight
-import com.piku.client.ui.theme.LoginTextPrimaryDark
-import com.piku.client.ui.theme.LoginTextPrimaryLight
-import com.piku.client.ui.theme.LoginTextSecondaryDark
-import com.piku.client.ui.theme.LoginTextSecondaryLight
+import com.piku.client.ui.theme.PikuColors
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
@@ -211,7 +201,7 @@ fun UserWorksScreen(
                                     if (state.isSelf) R.string.user_works_empty_self
                                     else R.string.user_works_empty,
                                 ),
-                                color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                                color = PikuColors.textFaint,
                                 fontSize = 14.sp,
                             )
                         }
@@ -326,7 +316,7 @@ private fun UserWorksTopBar(
                 Icon(
                     imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
                     contentDescription = stringResource(R.string.back),
-                    tint = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                    tint = PikuColors.textPrimary,
                     modifier = Modifier.size(20.dp),
                 )
             }
@@ -339,7 +329,7 @@ private fun UserWorksTopBar(
                         } else {
                             stringResource(R.string.user_works_title, userId.toString())
                         },
-                        color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                        color = PikuColors.textPrimary,
                         fontSize = 17.sp,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
@@ -347,7 +337,7 @@ private fun UserWorksTopBar(
                     )
                     Text(
                         text = "ID: $userId",
-                        color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                        color = PikuColors.textFaint,
                         fontSize = 11.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -364,7 +354,7 @@ private fun UserWorksTopBar(
                     Spacer(Modifier.width(9.dp))
                     Text(
                         text = userName.ifBlank { userId.toString() },
-                        color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                        color = PikuColors.textPrimary,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
@@ -380,7 +370,7 @@ private fun UserWorksTopBar(
                     Icon(
                         imageVector = Icons.Outlined.MoreVert,
                         contentDescription = stringResource(R.string.detail_more),
-                        tint = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                        tint = PikuColors.textPrimary,
                         modifier = Modifier.size(22.dp),
                     )
                 }
@@ -445,7 +435,7 @@ private fun UserWorksMoreMenu(
                     Icon(
                         imageVector = Icons.Outlined.ContentCopy,
                         contentDescription = null,
-                        tint = if (dark) LoginTextPrimaryDark else AccentDark,
+                        tint = PikuColors.accent,
                         modifier = Modifier.size(16.dp),
                     )
                 },
@@ -458,7 +448,7 @@ private fun UserWorksMoreMenu(
                     Icon(
                         imageVector = Icons.Outlined.OpenInBrowser,
                         contentDescription = null,
-                        tint = if (dark) LoginTextPrimaryDark else AccentDark,
+                        tint = PikuColors.accent,
                         modifier = Modifier.size(16.dp),
                     )
                 },
@@ -488,7 +478,7 @@ private fun UserWorksMoreMenuRow(
         icon()
         Text(
             text = label,
-            color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+            color = PikuColors.textPrimary,
             fontSize = 13.sp,
         )
     }
@@ -505,7 +495,7 @@ private fun MiniAvatar(
         modifier = Modifier
             .size(size)
             .clip(CircleShape)
-            .background(if (dark) LoginTextFaintDark else LoginTextFaintLight)
+            .background(PikuColors.textFaint)
             .border(1.dp, Color.White.copy(alpha = 0.85f), CircleShape),
         contentAlignment = Alignment.Center,
     ) {
@@ -668,7 +658,7 @@ private fun UserWorksHeaderCard(
                         transformOrigin = TransformOrigin(0f, 1f)
                     }
                     .clip(CircleShape)
-                    .background(if (dark) LoginTextFaintDark else LoginTextFaintLight)
+                    .background(PikuColors.textFaint)
                     .border(2.dp, Color.White, CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
@@ -855,7 +845,7 @@ private fun UserWorksGrid(
                     ) {
                         Text(
                             text = stringResource(R.string.home_no_more),
-                            color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                            color = PikuColors.textFaint,
                             fontSize = 12.sp,
                         )
                     }
@@ -879,16 +869,16 @@ private fun UserWorksErrorState(
     ) {
         Text(
             text = stringResource(errorRes),
-            color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+            color = PikuColors.textSecondary,
             fontSize = 14.sp,
         )
         Spacer(Modifier.height(14.dp))
         Box(
             modifier = Modifier
                 .clip(shape)
-                .background(if (dark) LoginCardDark else LoginCardLight)
+                .background(PikuColors.surface)
                 .border(
-                    BorderStroke(0.5.dp, if (dark) LoginCardBorderDark else LoginCardBorderLight),
+                    BorderStroke(0.5.dp, PikuColors.border),
                     shape,
                 )
                 .clickable(onClick = onRetry)
@@ -897,7 +887,7 @@ private fun UserWorksErrorState(
         ) {
             Text(
                 text = stringResource(R.string.home_retry),
-                color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                color = PikuColors.textPrimary,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -917,9 +907,9 @@ private fun UserWorksLoadMoreError(
             .fillMaxWidth()
             .padding(horizontal = 24.dp, vertical = 10.dp)
             .clip(shape)
-            .background(if (dark) LoginCardDark else LoginCardLight)
+            .background(PikuColors.surface)
             .border(
-                BorderStroke(0.5.dp, if (dark) LoginCardBorderDark else LoginCardBorderLight),
+                BorderStroke(0.5.dp, PikuColors.border),
                 shape,
             )
             .clickable(onClick = onRetry)
@@ -929,13 +919,13 @@ private fun UserWorksLoadMoreError(
     ) {
         Text(
             text = stringResource(errorRes),
-            color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+            color = PikuColors.textFaint,
             fontSize = 12.sp,
         )
         Spacer(Modifier.width(6.dp))
         Text(
             text = stringResource(R.string.home_retry),
-            color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+            color = PikuColors.textPrimary,
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
         )

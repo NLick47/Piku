@@ -48,17 +48,12 @@ import com.piku.client.R
 import com.piku.client.domain.model.FavoriteFolder
 import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.AccentSolid
-import com.piku.client.ui.theme.ControlAccentDark
-import com.piku.client.ui.theme.ControlAccentLight
 import com.piku.client.ui.theme.LoginBackgroundDark
 import com.piku.client.ui.theme.LoginBackgroundLight
-import com.piku.client.ui.theme.LoginCardBorderDark
-import com.piku.client.ui.theme.LoginCardBorderLight
-import com.piku.client.ui.theme.LoginCardDark
 import com.piku.client.ui.theme.LoginTextPrimaryDark
 import com.piku.client.ui.theme.LoginTextPrimaryLight
 import com.piku.client.ui.theme.LoginTextSecondaryDark
-import com.piku.client.ui.theme.LoginTextSecondaryLight
+import com.piku.client.ui.theme.PikuColors
 import com.piku.client.ui.theme.StarDark
 import com.piku.client.ui.theme.StarLight
 
@@ -89,14 +84,14 @@ internal fun FavoriteSheet(
         ) {
             Text(
                 text = stringResource(R.string.detail_favorite_sheet_title),
-                color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                color = PikuColors.textPrimary,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.SemiBold,
             )
             Spacer(Modifier.height(6.dp))
             Text(
                 text = stringResource(R.string.detail_favorite_sheet_hint),
-                color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                color = PikuColors.textSecondary,
                 fontSize = 12.sp,
             )
             Spacer(Modifier.height(14.dp))
@@ -123,11 +118,11 @@ internal fun FavoriteSheet(
                     singleLine = true,
                     shape = RoundedCornerShape(14.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = if (dark) LoginCardDark else Color(0xFFEAE8E3),
-                        unfocusedContainerColor = if (dark) LoginCardDark else Color(0xFFEAE8E3),
-                        focusedBorderColor = if (dark) LoginCardBorderDark else LoginCardBorderLight,
-                        unfocusedBorderColor = if (dark) LoginCardBorderDark else LoginCardBorderLight,
-                        cursorColor = if (dark) ControlAccentDark else AccentDark,
+                        focusedContainerColor = PikuColors.surfaceMuted,
+                        unfocusedContainerColor = PikuColors.surfaceMuted,
+                        focusedBorderColor = PikuColors.border,
+                        unfocusedBorderColor = PikuColors.border,
+                        cursorColor = PikuColors.controlAccent,
                     ),
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -197,7 +192,7 @@ private fun FavoriteFolderRow(
                 BorderStroke(
                     1.dp,
                     if (selected) {
-                        if (dark) ControlAccentDark else ControlAccentLight
+                        PikuColors.controlAccent
                     } else {
                         Color.Transparent
                     },
@@ -214,14 +209,14 @@ private fun FavoriteFolderRow(
             tint = if (selected) {
                 if (dark) StarDark else StarLight
             } else {
-                if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight
+                PikuColors.textSecondary
             },
             modifier = Modifier.size(20.dp),
         )
         Spacer(Modifier.width(10.dp))
         Text(
             text = folder.name,
-            color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+            color = PikuColors.textPrimary,
             fontSize = 14.sp,
             fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
             maxLines = 1,
@@ -235,7 +230,7 @@ private fun FavoriteFolderRow(
         Spacer(Modifier.width(6.dp))
         Text(
             text = folder.workCount.toString(),
-            color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+            color = PikuColors.textSecondary,
             fontSize = 12.sp,
         )
     }
@@ -246,7 +241,7 @@ private fun FavoriteFolderRow(
 internal fun DefaultFolderBadge(dark: Boolean) {
     Text(
         text = stringResource(R.string.collection_default_badge),
-        color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+        color = PikuColors.textSecondary,
         fontSize = 9.sp,
         fontWeight = FontWeight.Medium,
         modifier = Modifier

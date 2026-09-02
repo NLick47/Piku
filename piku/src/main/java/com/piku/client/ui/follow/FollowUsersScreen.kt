@@ -58,16 +58,7 @@ import com.piku.client.ui.theme.HomeBgBottomLight
 import com.piku.client.ui.theme.HomeBgTopDark
 import com.piku.client.ui.theme.HomeBgTopLight
 import com.piku.client.ui.theme.LocalDarkTheme
-import com.piku.client.ui.theme.LoginCardBorderDark
-import com.piku.client.ui.theme.LoginCardBorderLight
-import com.piku.client.ui.theme.LoginCardDark
-import com.piku.client.ui.theme.LoginCardLight
-import com.piku.client.ui.theme.LoginTextFaintDark
-import com.piku.client.ui.theme.LoginTextFaintLight
-import com.piku.client.ui.theme.LoginTextPrimaryDark
-import com.piku.client.ui.theme.LoginTextPrimaryLight
-import com.piku.client.ui.theme.LoginTextSecondaryDark
-import com.piku.client.ui.theme.LoginTextSecondaryLight
+import com.piku.client.ui.theme.PikuColors
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 /** 我的关注列表页：展示关注的创作者，可跳转其作品页或在行内取消关注 */
@@ -132,7 +123,7 @@ fun FollowUsersScreen(
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(
                             text = stringResource(R.string.follow_users_empty),
-                            color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                            color = PikuColors.textFaint,
                             fontSize = 14.sp,
                             lineHeight = 22.sp,
                         )
@@ -179,14 +170,14 @@ private fun FollowTopBar(
             Icon(
                 imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
                 contentDescription = stringResource(R.string.back),
-                tint = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                tint = PikuColors.textPrimary,
                 modifier = Modifier.size(20.dp),
             )
         }
         Column(Modifier.weight(1f)) {
             Text(
                 text = title,
-                color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                color = PikuColors.textPrimary,
                 fontSize = 17.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
@@ -195,7 +186,7 @@ private fun FollowTopBar(
             if (count != null) {
                 Text(
                     text = count,
-                    color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                    color = PikuColors.textFaint,
                     fontSize = 12.sp,
                 )
             }
@@ -262,7 +253,7 @@ private fun FollowUserList(
                     Box(Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
                         Text(
                             text = stringResource(R.string.home_no_more),
-                            color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                            color = PikuColors.textFaint,
                             fontSize = 12.sp,
                         )
                     }
@@ -300,7 +291,7 @@ private fun FollowUserRow(
             Column(Modifier.weight(1f)) {
                 Text(
                     text = user.name,
-                    color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                    color = PikuColors.textPrimary,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
@@ -308,7 +299,7 @@ private fun FollowUserRow(
                 )
                 Text(
                     text = "ID: ${user.userId}",
-                    color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                    color = PikuColors.textFaint,
                     fontSize = 11.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -340,16 +331,16 @@ private fun FollowErrorState(
     ) {
         Text(
             text = stringResource(errorRes),
-            color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+            color = PikuColors.textSecondary,
             fontSize = 14.sp,
         )
         Spacer(Modifier.height(14.dp))
         Box(
             modifier = Modifier
                 .clip(shape)
-                .background(if (dark) LoginCardDark else LoginCardLight)
+                .background(PikuColors.surface)
                 .border(
-                    BorderStroke(0.5.dp, if (dark) LoginCardBorderDark else LoginCardBorderLight),
+                    BorderStroke(0.5.dp, PikuColors.border),
                     shape,
                 )
                 .clickable(onClick = onRetry)
@@ -358,7 +349,7 @@ private fun FollowErrorState(
         ) {
             Text(
                 text = stringResource(R.string.home_retry),
-                color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                color = PikuColors.textPrimary,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -378,9 +369,9 @@ private fun FollowLoadMoreError(
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 10.dp)
             .clip(shape)
-            .background(if (dark) LoginCardDark else LoginCardLight)
+            .background(PikuColors.surface)
             .border(
-                BorderStroke(0.5.dp, if (dark) LoginCardBorderDark else LoginCardBorderLight),
+                BorderStroke(0.5.dp, PikuColors.border),
                 shape,
             )
             .clickable(onClick = onRetry)
@@ -390,13 +381,13 @@ private fun FollowLoadMoreError(
     ) {
         Text(
             text = stringResource(errorRes),
-            color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+            color = PikuColors.textFaint,
             fontSize = 12.sp,
         )
         Spacer(Modifier.width(6.dp))
         Text(
             text = stringResource(R.string.home_retry),
-            color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+            color = PikuColors.textPrimary,
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
         )

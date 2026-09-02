@@ -20,8 +20,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
-import com.piku.client.ui.theme.LoginTextFaintDark
-import com.piku.client.ui.theme.LoginTextFaintLight
+import com.piku.client.ui.theme.PikuColors
 
 @Composable
 fun UserAvatar(
@@ -38,7 +37,7 @@ fun UserAvatar(
         modifier = Modifier
             .size(size)
             .clip(CircleShape)
-            .background(if (dark) LoginTextFaintDark else LoginTextFaintLight)
+            .background(PikuColors.textFaint)
             .clickable(
                 enabled = enabled,
                 interactionSource = interactionSource,

@@ -40,17 +40,9 @@ import com.piku.client.R
 import com.piku.client.domain.model.Work
 import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.ControlAccentDark
-import com.piku.client.ui.theme.LoginCardDark
-import com.piku.client.ui.theme.LoginCardLight
 import com.piku.client.ui.theme.LoginTextFaintDark
 import com.piku.client.ui.theme.LoginTextFaintLight
-import com.piku.client.ui.theme.LoginTextPrimaryDark
-import com.piku.client.ui.theme.LoginTextPrimaryLight
-import com.piku.client.ui.theme.LoginTextSecondaryDark
-import com.piku.client.ui.theme.LoginTextSecondaryLight
-import com.piku.client.ui.theme.PillBorderDark
-import com.piku.client.ui.theme.PillBorderLight
-import com.piku.client.ui.theme.TameWhiteColorFilter
+import com.piku.client.ui.theme.PikuColors
 
 internal const val COLS = 2
 internal const val ROWS = 2
@@ -71,7 +63,7 @@ internal fun RelatedWorksSection(
     Column {
         Text(
             text = stringResource(R.string.detail_related_works_count, works.size),
-            color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+            color = PikuColors.textPrimary,
             fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold,
         )
@@ -169,9 +161,9 @@ private fun RelatedWorkCard(
         modifier = modifier
             .clip(shape)
             .shadow(elevation = 3.dp, shape = shape)
-            .background(if (dark) LoginCardDark else LoginCardLight)
+            .background(PikuColors.surface)
             .border(
-                BorderStroke(0.5.dp, if (dark) PillBorderDark else PillBorderLight),
+                BorderStroke(0.5.dp, PikuColors.border),
                 shape,
             )
             .clickable { onClick(work.authorId, work.id, work.thumbnailUrl) },
@@ -181,13 +173,13 @@ private fun RelatedWorkCard(
                 .fillMaxWidth()
                 .height(CARD_IMAGE_HEIGHT.dp)
                 .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
-                .background(if (dark) LoginCardDark else Color(0xFFF1EFEA)),
+                .background(PikuColors.surfaceSoft),
         ) {
             // 底层：同图铺满格子 + 放大 + 模糊 + 压暗，把固定尺寸的留白变成毛玻璃衬底
             AsyncImage(
                 model = work.thumbnailUrl,
                 contentDescription = null,
-                colorFilter = if (dark) TameWhiteColorFilter else null,
+                colorFilter = PikuColors.tameWhiteFilter,
                 modifier = Modifier
                     .fillMaxSize()
                     .scale(1.15f)
@@ -203,7 +195,7 @@ private fun RelatedWorkCard(
             AsyncImage(
                 model = work.thumbnailUrl,
                 contentDescription = work.title,
-                colorFilter = if (dark) TameWhiteColorFilter else null,
+                colorFilter = PikuColors.tameWhiteFilter,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Fit,
             )
@@ -245,7 +237,7 @@ private fun RelatedWorkCard(
             if (work.title.isNotBlank()) {
                 Text(
                     text = work.title,
-                    color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                    color = PikuColors.textPrimary,
                     fontSize = 11.sp,
                     lineHeight = 14.sp,
                     maxLines = 2,
@@ -255,7 +247,7 @@ private fun RelatedWorkCard(
             }
             Text(
                 text = work.authorName,
-                color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                color = PikuColors.textSecondary,
                 fontSize = 9.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

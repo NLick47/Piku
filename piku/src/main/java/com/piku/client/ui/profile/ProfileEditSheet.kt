@@ -55,14 +55,7 @@ import com.piku.client.domain.model.UserProfile
 import com.piku.client.ui.common.UserAvatar
 import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.LoginBackgroundDark
-import com.piku.client.ui.theme.LoginCardBorderDark
-import com.piku.client.ui.theme.LoginCardBorderLight
-import com.piku.client.ui.theme.LoginTextFaintDark
-import com.piku.client.ui.theme.LoginTextFaintLight
-import com.piku.client.ui.theme.LoginTextPrimaryDark
-import com.piku.client.ui.theme.LoginTextPrimaryLight
-import com.piku.client.ui.theme.LoginTextSecondaryDark
-import com.piku.client.ui.theme.LoginTextSecondaryLight
+import com.piku.client.ui.theme.PikuColors
 import kotlinx.coroutines.delay
 
 /**
@@ -116,14 +109,14 @@ fun ProfileEditSheet(
         ) {
             Text(
                 text = stringResource(R.string.profile_edit_title),
-                color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                color = PikuColors.textPrimary,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.SemiBold,
             )
             Spacer(Modifier.height(4.dp))
             Text(
                 text = stringResource(R.string.profile_edit_hint),
-                color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                color = PikuColors.textFaint,
                 fontSize = 12.sp,
                 textAlign = TextAlign.Center,
             )
@@ -211,11 +204,11 @@ fun ProfileEditSheet(
                             R.string.profile_edit_name_char_count,
                             name.length,
                         ),
-                        color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                        color = PikuColors.textFaint,
                     )
                 },
                 textStyle = androidx.compose.ui.text.TextStyle(
-                    color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                    color = PikuColors.textPrimary,
                     fontSize = 14.sp,
                 ),
                 shape = RoundedCornerShape(14.dp),
@@ -225,7 +218,7 @@ fun ProfileEditSheet(
             state.errorRes?.let { res ->
                 Text(
                     text = stringResource(res),
-                    color = if (dark) Color(0xFFE08A8A) else Color(0xFFC24B4B),
+                    color = PikuColors.error,
                     fontSize = 12.sp,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -272,13 +265,13 @@ fun ProfileEditSheet(
                 Icon(
                     imageVector = Icons.Outlined.Language,
                     contentDescription = null,
-                    tint = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                    tint = PikuColors.textSecondary,
                     modifier = Modifier.size(14.dp),
                 )
                 Spacer(Modifier.width(5.dp))
                 Text(
                     text = stringResource(R.string.profile_edit_view_public),
-                    color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                    color = PikuColors.textSecondary,
                     fontSize = 12.sp,
                 )
             }

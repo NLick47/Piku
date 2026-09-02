@@ -77,7 +77,10 @@ fun PoipikuTheme(
         else -> LightColorScheme
     }
 
-    CompositionLocalProvider(LocalDarkTheme provides darkTheme) {
+    CompositionLocalProvider(
+        LocalDarkTheme provides darkTheme,
+        LocalPikuColors provides if (darkTheme) DarkPikuColors else LightPikuColors,
+    ) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = Typography,

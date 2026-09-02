@@ -44,14 +44,7 @@ import androidx.compose.ui.window.PopupProperties
 import com.piku.client.R
 import com.piku.client.data.remote.translation.ModelEntry
 import com.piku.client.data.remote.translation.Role
-import com.piku.client.ui.theme.AccentDark
-import com.piku.client.ui.theme.ControlAccentDark
-import com.piku.client.ui.theme.LoginTextPrimaryDark
-import com.piku.client.ui.theme.LoginTextPrimaryLight
-import com.piku.client.ui.theme.LoginTextSecondaryDark
-import com.piku.client.ui.theme.LoginTextSecondaryLight
-import com.piku.client.ui.theme.PillBorderDark
-import com.piku.client.ui.theme.PillBorderLight
+import com.piku.client.ui.theme.PikuColors
 
 @Composable
 internal fun ModelPickerRow(
@@ -59,8 +52,8 @@ internal fun ModelPickerRow(
     dark: Boolean,
     onClick: () -> Unit,
 ) {
-    val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
-    val hint = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight
+    val primary = PikuColors.textPrimary
+    val hint = PikuColors.textSecondary
     val kindLabel = when {
         Role.NOVEL in entry.roles -> stringResource(R.string.detail_model_kind_novel)
         Role.IMAGE in entry.roles -> stringResource(R.string.detail_model_kind_image)
@@ -88,11 +81,11 @@ internal fun ModelPickerRow(
         Spacer(Modifier.width(8.dp))
         Text(
             text = kindLabel,
-            color = if (dark) ControlAccentDark else AccentDark,
+            color = PikuColors.controlAccent,
             fontSize = 11.sp,
             modifier = Modifier
                 .border(
-                    BorderStroke(0.5.dp, if (dark) PillBorderDark else PillBorderLight),
+                    BorderStroke(0.5.dp, PikuColors.border),
                     RoundedCornerShape(8.dp),
                 )
                 .padding(horizontal = 6.dp, vertical = 2.dp),
@@ -186,12 +179,12 @@ private fun MoreMenuRow(
         Icon(
             imageVector = iconVector,
             contentDescription = null,
-            tint = if (dark) LoginTextPrimaryDark else AccentDark,
+            tint = PikuColors.accent,
             modifier = Modifier.size(16.dp),
         )
         Text(
             text = label,
-            color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+            color = PikuColors.textPrimary,
             fontSize = 13.sp,
         )
     }

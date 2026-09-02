@@ -59,10 +59,7 @@ import com.piku.client.ui.theme.FollowDark
 import com.piku.client.ui.theme.FollowLight
 import com.piku.client.ui.theme.FollowTintDark
 import com.piku.client.ui.theme.FollowTintLight
-import com.piku.client.ui.theme.LoginTextPrimaryDark
-import com.piku.client.ui.theme.LoginTextPrimaryLight
-import com.piku.client.ui.theme.LoginTextSecondaryDark
-import com.piku.client.ui.theme.LoginTextSecondaryLight
+import com.piku.client.ui.theme.PikuColors
 import com.piku.client.ui.theme.SoftBorderDark
 import com.piku.client.ui.theme.SoftBorderLight
 import com.piku.client.ui.theme.StarDark
@@ -138,7 +135,7 @@ internal fun DetailBottomBar(
                     tint = if (isFavorite) {
                         if (dark) StarDark else StarLight
                     } else {
-                        if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight
+                        PikuColors.textSecondary
                     },
                     modifier = Modifier
                         .size(22.dp)
@@ -160,7 +157,7 @@ internal fun DetailBottomBar(
                     tint = if (followed) {
                         if (dark) FollowDark else FollowLight
                     } else {
-                        if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight
+                        PikuColors.textSecondary
                     },
                     modifier = Modifier.size(22.dp),
                 )
@@ -174,7 +171,7 @@ internal fun DetailBottomBar(
                 Icon(
                     imageVector = Icons.Filled.Favorite,
                     contentDescription = stringResource(R.string.detail_reaction_title),
-                    tint = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                    tint = PikuColors.textSecondary,
                     modifier = Modifier.size(22.dp),
                 )
             }
@@ -186,7 +183,7 @@ internal fun DetailBottomBar(
                     Icon(
                         imageVector = Icons.Outlined.MoreVert,
                         contentDescription = stringResource(R.string.detail_more),
-                        tint = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                        tint = PikuColors.textSecondary,
                         modifier = Modifier.size(22.dp),
                     )
                 }
@@ -270,7 +267,7 @@ private fun DetailBarAction(
                 fontSize = 11.sp,
                 lineHeight = 15.sp,
                 fontWeight = FontWeight.Medium,
-                color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                color = PikuColors.textPrimary,
                 maxLines = 1,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -358,7 +355,7 @@ internal fun BottomBarGuideHint(
                     Icon(
                         imageVector = Icons.Outlined.PersonAdd,
                         contentDescription = null,
-                        tint = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                        tint = PikuColors.textSecondary,
                         modifier = Modifier.size(14.dp),
                     )
                 },
@@ -370,7 +367,7 @@ internal fun BottomBarGuideHint(
                     Icon(
                         imageVector = Icons.Filled.Favorite,
                         contentDescription = null,
-                        tint = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                        tint = PikuColors.textSecondary,
                         modifier = Modifier.size(14.dp),
                     )
                 },
@@ -382,7 +379,7 @@ internal fun BottomBarGuideHint(
                     Icon(
                         imageVector = Icons.Outlined.MoreVert,
                         contentDescription = null,
-                        tint = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                        tint = PikuColors.textSecondary,
                         modifier = Modifier.size(14.dp),
                     )
                 },
@@ -404,7 +401,7 @@ private fun GuideHintItem(
         Spacer(Modifier.width(3.dp))
         Text(
             text = label,
-            color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+            color = PikuColors.textPrimary,
             fontSize = 10.sp,
             maxLines = 1,
         )

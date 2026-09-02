@@ -70,12 +70,7 @@ import com.piku.client.domain.model.ThemeMode
 import com.piku.client.domain.model.UserProfile
 import com.piku.client.ui.common.UserAvatar
 import com.piku.client.ui.theme.AccentDark
-import com.piku.client.ui.theme.LoginCardBorderDark
-import com.piku.client.ui.theme.LoginCardBorderLight
-import com.piku.client.ui.theme.LoginTextFaintDark
-import com.piku.client.ui.theme.LoginTextFaintLight
-import com.piku.client.ui.theme.LoginTextPrimaryDark
-import com.piku.client.ui.theme.LoginTextPrimaryLight
+import com.piku.client.ui.theme.PikuColors
 import com.piku.client.ui.theme.themedSwitchColors
 
 @Composable
@@ -188,10 +183,10 @@ private fun DrawerPanel(
     onRetentionClick: () -> Unit,
     onWebDavClick: () -> Unit,
 ) {
-    val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
-    val faint = if (dark) LoginTextFaintDark else LoginTextFaintLight
-    val divider = if (dark) LoginCardBorderDark else LoginCardBorderLight
-    val iconAccent = if (dark) LoginTextPrimaryDark else AccentDark
+    val primary = PikuColors.textPrimary
+    val faint = PikuColors.textFaint
+    val divider = PikuColors.border
+    val iconAccent = PikuColors.accent
 
     Column(
         modifier = Modifier
@@ -418,7 +413,7 @@ private fun DrawerPanel(
                 label = stringResource(R.string.logout),
                 onClick = onLogout,
                 dark = dark,
-                accent = if (dark) Color(0xFFE08A8A) else Color(0xFFC24B4B),
+                accent = PikuColors.error,
                 showChevron = false,
             )
         }
@@ -432,8 +427,8 @@ private fun DrawerHeader(
     onLoginClick: () -> Unit,
     dark: Boolean,
 ) {
-    val faint = if (dark) LoginTextFaintDark else LoginTextFaintLight
-    val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
+    val faint = PikuColors.textFaint
+    val primary = PikuColors.textPrimary
     val blobPurple = if (dark) Color(0x409A7FC9) else Color(0x4D9A7FC9)
     val blobPink = if (dark) Color(0x30D8A8B8) else Color(0x3DD8A8B8)
     val ring = if (dark) Color(0x66FFFFFF) else AccentDark.copy(alpha = 0.5f)
@@ -516,7 +511,7 @@ private fun DrawerHeader(
                     Spacer(Modifier.size(3.dp))
                     Text(
                         text = stringResource(R.string.drawer_login_hint),
-                        color = if (dark) LoginTextPrimaryDark else AccentDark,
+                        color = PikuColors.accent,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
@@ -560,8 +555,8 @@ private fun DrawerMenuRow(
     trailing: String? = null,
     trailingContent: (@Composable () -> Unit)? = null,
 ) {
-    val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
-    val faint = if (dark) LoginTextFaintDark else LoginTextFaintLight
+    val primary = PikuColors.textPrimary
+    val faint = PikuColors.textFaint
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -638,7 +633,7 @@ private fun AdultContentRow(
     dark: Boolean,
     accent: Color,
 ) {
-    val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
+    val primary = PikuColors.textPrimary
     Row(
         modifier = Modifier
             .fillMaxWidth()

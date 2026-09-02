@@ -51,15 +51,7 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.piku.client.R
 import com.piku.client.domain.model.Work
-import com.piku.client.ui.theme.AccentDark
-import com.piku.client.ui.theme.LoginCardDark
-import com.piku.client.ui.theme.LoginTextFaintDark
-import com.piku.client.ui.theme.LoginTextFaintLight
-import com.piku.client.ui.theme.LoginTextPrimaryDark
-import com.piku.client.ui.theme.LoginTextPrimaryLight
-import com.piku.client.ui.theme.LoginTextSecondaryDark
-import com.piku.client.ui.theme.LoginTextSecondaryLight
-import com.piku.client.ui.theme.TameWhiteColorFilter
+import com.piku.client.ui.theme.PikuColors
 import com.piku.client.ui.theme.WorkCardBgDark
 import com.piku.client.ui.theme.WorkCardBorderDark
 import com.piku.client.ui.theme.WorkCardInfoBgDark
@@ -136,7 +128,7 @@ fun WorkCard(
                     Icon(
                         imageVector = Icons.Outlined.Lock,
                         contentDescription = work.title,
-                        tint = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                        tint = PikuColors.textFaint,
                         modifier = Modifier.size(32.dp),
                     )
                 }
@@ -145,7 +137,7 @@ fun WorkCard(
                     model = feedThumbUrl(work.thumbnailUrl),
                     contentDescription = work.title,
                     // 暗色模式下压暗白底缩略图，避免网格里出现刺眼的"亮块"
-                    colorFilter = if (dark) TameWhiteColorFilter else null,
+                    colorFilter = PikuColors.tameWhiteFilter,
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(1f)
@@ -191,7 +183,7 @@ fun WorkCard(
                 Icon(
                     imageVector = Icons.Filled.Favorite,
                     contentDescription = null,
-                    tint = if (dark) LoginTextPrimaryDark else AccentDark,
+                    tint = PikuColors.accent,
                     modifier = Modifier
                         .align(Alignment.Center)
                         .size(40.dp)
@@ -210,7 +202,7 @@ fun WorkCard(
         ) {
             Text(
                 text = work.title,
-                color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                color = PikuColors.textPrimary,
                 fontSize = 11.sp,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -228,7 +220,7 @@ fun WorkCard(
                 Spacer(Modifier.width(5.dp))
                 Text(
                     text = work.authorName,
-                    color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                    color = PikuColors.textPrimary,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
@@ -238,7 +230,7 @@ fun WorkCard(
                 if (work.categoryName.isNotBlank()) {
                     Text(
                         text = work.categoryName,
-                        color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                        color = PikuColors.textFaint,
                         fontSize = 9.sp,
                         maxLines = 1,
                     )
@@ -251,7 +243,7 @@ fun WorkCard(
 @Composable
 fun LoaderDots(dark: Boolean) {
     val transition = rememberInfiniteTransition(label = "loader")
-    val dotColor = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight
+    val dotColor = PikuColors.textSecondary
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         repeat(3) { index ->
             val alpha by transition.animateFloat(

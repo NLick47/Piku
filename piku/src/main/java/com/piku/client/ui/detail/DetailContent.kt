@@ -82,22 +82,10 @@ import com.piku.client.common.LinkText
 import com.piku.client.domain.model.WorkDetail
 import com.piku.client.ui.common.ExpandableIconAction
 import com.piku.client.ui.common.rememberAnimatedImage
-import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.AccentSolid
-import com.piku.client.ui.theme.ControlAccentDark
-import com.piku.client.ui.theme.ControlAccentLight
-import com.piku.client.ui.theme.ErrorRedDark
-import com.piku.client.ui.theme.ErrorRedLight
 import com.piku.client.ui.theme.LoginBackgroundDark
-import com.piku.client.ui.theme.LoginCardBorderDark
-import com.piku.client.ui.theme.LoginCardBorderLight
-import com.piku.client.ui.theme.LoginCardDark
-import com.piku.client.ui.theme.LoginCardLight
 import com.piku.client.ui.theme.LoginTextPrimaryDark
-import com.piku.client.ui.theme.LoginTextPrimaryLight
-import com.piku.client.ui.theme.LoginTextSecondaryDark
-import com.piku.client.ui.theme.LoginTextSecondaryLight
-import com.piku.client.ui.theme.TameWhiteColorFilter
+import com.piku.client.ui.theme.PikuColors
 import kotlin.math.roundToInt
 
 /** 描述折叠阈值：全文行数超过该值才折叠为 3 行，避免展开只多出一两行的尴尬 */
@@ -184,7 +172,7 @@ internal fun DetailContent(
             ) {
                 Text(
                     text = linkify(profileText, dark, onRelatedWorkClick),
-                    color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                    color = PikuColors.textSecondary,
                     fontSize = 12.sp,
                     modifier = Modifier.weight(1f),
                 )
@@ -237,7 +225,7 @@ internal fun DetailContent(
                 ) {
                     Text(
                         text = linkify(titleText, dark, onRelatedWorkClick),
-                        color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                        color = PikuColors.textPrimary,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -286,7 +274,7 @@ internal fun DetailContent(
             ) {
                 Text(
                     text = linkifiedDescription,
-                    color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                    color = PikuColors.textSecondary,
                     fontSize = 13.sp,
                     lineHeight = 20.sp,
                     maxLines = if (collapsible && !descriptionExpanded) 3 else Int.MAX_VALUE,
@@ -304,7 +292,7 @@ internal fun DetailContent(
                         text = stringResource(
                             if (descriptionExpanded) R.string.detail_show_less else R.string.detail_show_more
                         ),
-                        color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                        color = PikuColors.textPrimary,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
                         modifier = Modifier
@@ -370,14 +358,14 @@ private fun AuthorRow(detail: WorkDetail, dark: Boolean, onAuthorClick: () -> Un
             modifier = Modifier
                 .size(36.dp)
                 .clip(CircleShape)
-                .background(if (dark) LoginCardDark else LoginCardLight)
+                .background(PikuColors.surface)
                 .clickable(onClick = onAuthorClick),
             contentScale = ContentScale.Crop,
         )
         Spacer(Modifier.width(10.dp))
         Text(
             text = detail.authorName,
-            color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+            color = PikuColors.textPrimary,
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
             maxLines = 1,
@@ -391,11 +379,11 @@ private fun AuthorRow(detail: WorkDetail, dark: Boolean, onAuthorClick: () -> Un
         if (detail.categoryName.isNotBlank()) {
             Text(
                 text = detail.categoryName,
-                color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                color = PikuColors.textSecondary,
                 fontSize = 11.sp,
                 modifier = Modifier
                     .clip(RoundedCornerShape(10.dp))
-                    .background(if (dark) LoginCardDark else Color(0xFFF1EFEA))
+                    .background(PikuColors.surfaceSoft)
                     .padding(horizontal = 10.dp, vertical = 4.dp),
             )
         }
@@ -459,7 +447,7 @@ private fun ImagePager(
             .animateContentSize()
             .height(boxHeightDp.dp)
             .clip(RoundedCornerShape(4.dp))
-            .background(if (dark) LoginCardDark else Color(0xFFF1EFEA)),
+            .background(PikuColors.surfaceSoft),
     ) {
         if (detail.imageUrls.isEmpty()) {
             when {
@@ -467,7 +455,7 @@ private fun ImagePager(
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(
                             text = stringResource(R.string.detail_adult_locked),
-                            color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                            color = PikuColors.textSecondary,
                             fontSize = 12.sp,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.padding(horizontal = 24.dp),
@@ -500,7 +488,7 @@ private fun ImagePager(
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(
                             text = stringResource(R.string.detail_no_image),
-                            color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                            color = PikuColors.textSecondary,
                             fontSize = 12.sp,
                         )
                     }
@@ -517,7 +505,7 @@ private fun ImagePager(
                     Image(
                         bitmap = translatedBitmap.asImageBitmap(),
                         contentDescription = detail.title,
-                        colorFilter = if (dark) TameWhiteColorFilter else null,
+                        colorFilter = PikuColors.tameWhiteFilter,
                         modifier = Modifier
                             .fillMaxSize()
                             .combinedClickable(
@@ -530,7 +518,7 @@ private fun ImagePager(
                     AsyncImage(
                         model = rememberAnimatedImage(detail.imageUrls[page]),
                         contentDescription = detail.title,
-                        colorFilter = if (dark) TameWhiteColorFilter else null,
+                        colorFilter = PikuColors.tameWhiteFilter,
                         modifier = Modifier
                             .fillMaxSize()
                             .combinedClickable(
@@ -602,7 +590,7 @@ private fun ImagePager(
                                 imageVector = Icons.Outlined.PhotoLibrary,
                                 contentDescription = stringResource(R.string.detail_image_translate),
                                 tint = if (imageTranslated) Color(0xFF4FC3F7)
-                                else if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                                else PikuColors.textPrimary,
                                 modifier = Modifier.size(16.dp),
                             )
                         }
@@ -620,11 +608,11 @@ private fun ImagePager(
  */
 @Composable
 private fun NovelPreview(detail: WorkDetail, dark: Boolean, onWorkClick: (Long, Long, String) -> Unit) {
-    val backdrop = if (dark) LoginCardDark else Color(0xFFF1EFEA)
+    val backdrop = PikuColors.surfaceSoft
     Box(modifier = Modifier.fillMaxSize()) {
         Text(
             text = linkify(detail.novelText, dark, onWorkClick),
-            color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+            color = PikuColors.textSecondary,
             fontSize = 13.sp,
             lineHeight = 22.sp,
             maxLines = NOVEL_PREVIEW_MAX_LINES,
@@ -663,13 +651,13 @@ private fun NovelReaderEntryButton(
         Icon(
             imageVector = Icons.AutoMirrored.Filled.Article,
             contentDescription = null,
-            tint = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+            tint = PikuColors.textPrimary,
             modifier = Modifier.size(14.dp),
         )
         Spacer(Modifier.width(4.dp))
         Text(
             text = stringResource(R.string.detail_novel_fullscreen),
-            color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+            color = PikuColors.textPrimary,
             fontSize = 12.sp,
         )
     }
@@ -695,7 +683,7 @@ private fun PasswordBox(
     ) {
         Text(
             text = stringResource(R.string.detail_password_label),
-            color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+            color = PikuColors.textSecondary,
             fontSize = 12.sp,
         )
         Spacer(Modifier.height(12.dp))
@@ -712,11 +700,11 @@ private fun PasswordBox(
             enabled = !loading,
             shape = RoundedCornerShape(16.dp),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = if (dark) LoginCardDark else Color(0xFFEAE8E3),
-                unfocusedContainerColor = if (dark) LoginCardDark else Color(0xFFEAE8E3),
-                focusedBorderColor = if (dark) LoginCardBorderDark else LoginCardBorderLight,
-                unfocusedBorderColor = if (dark) LoginCardBorderDark else LoginCardBorderLight,
-                cursorColor = if (dark) ControlAccentDark else AccentDark,
+                focusedContainerColor = PikuColors.surfaceMuted,
+                unfocusedContainerColor = PikuColors.surfaceMuted,
+                focusedBorderColor = PikuColors.border,
+                unfocusedBorderColor = PikuColors.border,
+                cursorColor = PikuColors.controlAccent,
             ),
             modifier = Modifier
                 .fillMaxWidth()
@@ -747,7 +735,7 @@ private fun PasswordBox(
             Spacer(Modifier.height(8.dp))
             Text(
                 text = stringResource(R.string.detail_password_error),
-                color = if (dark) ErrorRedDark else ErrorRedLight,
+                color = PikuColors.error,
                 fontSize = 12.sp,
             )
         }
@@ -755,7 +743,7 @@ private fun PasswordBox(
             Spacer(Modifier.height(8.dp))
             Text(
                 text = blockedMessage.ifBlank { stringResource(R.string.detail_unlock_blocked) },
-                color = if (dark) ErrorRedDark else ErrorRedLight,
+                color = PikuColors.error,
                 fontSize = 12.sp,
                 textAlign = TextAlign.Center,
             )
@@ -772,9 +760,10 @@ private fun linkify(
     val context = LocalContext.current
     val currentContext by rememberUpdatedState(context)
     val currentOnWorkClick by rememberUpdatedState(onWorkClick)
+    val controlAccent = PikuColors.controlAccent
     return remember(raw, dark) {
         val style = SpanStyle(
-            color = if (dark) ControlAccentDark else ControlAccentLight,
+            color = controlAccent,
             textDecoration = TextDecoration.Underline,
         )
         buildAnnotatedString {

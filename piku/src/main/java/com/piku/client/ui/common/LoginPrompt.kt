@@ -23,14 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.piku.client.R
-import com.piku.client.ui.theme.AccentDark
-import com.piku.client.ui.theme.LoginCardBorderDark
-import com.piku.client.ui.theme.LoginCardBorderLight
-import com.piku.client.ui.theme.LoginCardDark
-import com.piku.client.ui.theme.LoginCardLight
-import com.piku.client.ui.theme.LoginTextPrimaryDark
-import com.piku.client.ui.theme.LoginTextSecondaryDark
-import com.piku.client.ui.theme.LoginTextSecondaryLight
+import com.piku.client.ui.theme.PikuColors
 
 /** 整屏居中的登录引导：提示文案 + 「点击登录」按钮（未登录态页面共用） */
 @Composable
@@ -47,16 +40,16 @@ fun LoginPrompt(
     ) {
         Text(
             text = message,
-            color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+            color = PikuColors.textSecondary,
             fontSize = 14.sp,
         )
         Spacer(Modifier.height(14.dp))
         Box(
             modifier = Modifier
                 .clip(shape)
-                .background(if (dark) LoginCardDark else LoginCardLight)
+                .background(PikuColors.surface)
                 .border(
-                    BorderStroke(0.5.dp, if (dark) LoginCardBorderDark else LoginCardBorderLight),
+                    BorderStroke(0.5.dp, PikuColors.border),
                     shape,
                 )
                 .clickable(onClick = onLogin)
@@ -65,7 +58,7 @@ fun LoginPrompt(
         ) {
             Text(
                 text = stringResource(R.string.drawer_login_hint),
-                color = if (dark) LoginTextPrimaryDark else AccentDark,
+                color = PikuColors.accent,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
             )

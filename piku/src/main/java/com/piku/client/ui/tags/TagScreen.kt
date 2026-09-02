@@ -58,16 +58,7 @@ import com.piku.client.ui.theme.HomeBgBottomLight
 import com.piku.client.ui.theme.HomeBgTopDark
 import com.piku.client.ui.theme.HomeBgTopLight
 import com.piku.client.ui.theme.LocalDarkTheme
-import com.piku.client.ui.theme.LoginCardBorderDark
-import com.piku.client.ui.theme.LoginCardBorderLight
-import com.piku.client.ui.theme.LoginCardDark
-import com.piku.client.ui.theme.LoginCardLight
-import com.piku.client.ui.theme.LoginTextFaintDark
-import com.piku.client.ui.theme.LoginTextFaintLight
-import com.piku.client.ui.theme.LoginTextPrimaryDark
-import com.piku.client.ui.theme.LoginTextPrimaryLight
-import com.piku.client.ui.theme.LoginTextSecondaryDark
-import com.piku.client.ui.theme.LoginTextSecondaryLight
+import com.piku.client.ui.theme.PikuColors
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 /** 我的标签管理页：管理自定义标签；点击标签在本页就地展示该标签的作品（与收藏页一致） */
@@ -155,7 +146,7 @@ private fun TagListContent(
                     Spacer(Modifier.height(16.dp))
                     Text(
                         text = stringResource(R.string.tags_screen_hint),
-                        color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                        color = PikuColors.textFaint,
                         fontSize = 12.sp,
                     )
                 }
@@ -189,14 +180,14 @@ private fun TagDetailContent(
                 Icon(
                     imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
                     contentDescription = stringResource(R.string.back),
-                    tint = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                    tint = PikuColors.textPrimary,
                     modifier = Modifier.size(20.dp),
                 )
             }
             Column(Modifier.weight(1f)) {
                 Text(
                     text = "#${state.selectedTag}",
-                    color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                    color = PikuColors.textPrimary,
                     fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
@@ -204,7 +195,7 @@ private fun TagDetailContent(
                 )
                 Text(
                     text = stringResource(R.string.collection_work_count, state.works.size),
-                    color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                    color = PikuColors.textFaint,
                     fontSize = 12.sp,
                 )
             }
@@ -222,7 +213,7 @@ private fun TagDetailContent(
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
                         text = stringResource(R.string.tags_screen_empty_works),
-                        color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                        color = PikuColors.textFaint,
                         fontSize = 14.sp,
                     )
                 }
@@ -309,7 +300,7 @@ private fun TagWorkGrid(
                     ) {
                         Text(
                             text = stringResource(R.string.home_no_more),
-                            color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                            color = PikuColors.textFaint,
                             fontSize = 12.sp,
                         )
                     }
@@ -337,12 +328,12 @@ private fun TopBar(
             Icon(
                 imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
                 contentDescription = stringResource(R.string.back),
-                tint = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                tint = PikuColors.textPrimary,
             )
         }
         Text(
             text = title,
-            color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+            color = PikuColors.textPrimary,
             fontSize = 17.sp,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.weight(1f),
@@ -364,16 +355,16 @@ private fun TagErrorState(
     ) {
         Text(
             text = stringResource(errorRes),
-            color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+            color = PikuColors.textSecondary,
             fontSize = 14.sp,
         )
         Spacer(Modifier.height(14.dp))
         Box(
             modifier = Modifier
                 .clip(shape)
-                .background(if (dark) LoginCardDark else LoginCardLight)
+                .background(PikuColors.surface)
                 .border(
-                    BorderStroke(0.5.dp, if (dark) LoginCardBorderDark else LoginCardBorderLight),
+                    BorderStroke(0.5.dp, PikuColors.border),
                     shape,
                 )
                 .clickable(onClick = onRetry)
@@ -382,7 +373,7 @@ private fun TagErrorState(
         ) {
             Text(
                 text = stringResource(R.string.home_retry),
-                color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                color = PikuColors.textPrimary,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -402,9 +393,9 @@ private fun TagLoadMoreError(
             .fillMaxWidth()
             .padding(horizontal = 24.dp, vertical = 10.dp)
             .clip(shape)
-            .background(if (dark) LoginCardDark else LoginCardLight)
+            .background(PikuColors.surface)
             .border(
-                BorderStroke(0.5.dp, if (dark) LoginCardBorderDark else LoginCardBorderLight),
+                BorderStroke(0.5.dp, PikuColors.border),
                 shape,
             )
             .clickable(onClick = onRetry)
@@ -414,13 +405,13 @@ private fun TagLoadMoreError(
     ) {
         Text(
             text = stringResource(errorRes),
-            color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+            color = PikuColors.textFaint,
             fontSize = 12.sp,
         )
         Spacer(Modifier.width(6.dp))
         Text(
             text = stringResource(R.string.home_retry),
-            color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+            color = PikuColors.textPrimary,
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
         )

@@ -89,10 +89,6 @@ import com.piku.client.data.repository.SyncResult
 import com.piku.client.data.repository.SyncState
 import com.piku.client.data.repository.TestConnectionState
 import com.piku.client.ui.common.GlassCard
-import com.piku.client.ui.theme.AccentDark
-import com.piku.client.ui.theme.ControlAccentDark
-import com.piku.client.ui.theme.ErrorRedDark
-import com.piku.client.ui.theme.ErrorRedLight
 import com.piku.client.ui.theme.FollowDark
 import com.piku.client.ui.theme.FollowLight
 import com.piku.client.ui.theme.HomeBgBottomDark
@@ -100,14 +96,7 @@ import com.piku.client.ui.theme.HomeBgBottomLight
 import com.piku.client.ui.theme.HomeBgTopDark
 import com.piku.client.ui.theme.HomeBgTopLight
 import com.piku.client.ui.theme.LocalDarkTheme
-import com.piku.client.ui.theme.LoginTextFaintDark
-import com.piku.client.ui.theme.LoginTextFaintLight
-import com.piku.client.ui.theme.LoginTextPrimaryDark
-import com.piku.client.ui.theme.LoginTextPrimaryLight
-import com.piku.client.ui.theme.LoginTextSecondaryDark
-import com.piku.client.ui.theme.LoginTextSecondaryLight
-import com.piku.client.ui.theme.PillBorderDark
-import com.piku.client.ui.theme.PillBorderLight
+import com.piku.client.ui.theme.PikuColors
 import com.piku.client.ui.theme.StatusSyncing
 import com.piku.client.ui.theme.themedSwitchColors
 import kotlinx.coroutines.delay
@@ -160,11 +149,11 @@ fun WebDavSettingsScreen(
         }
     }
 
-    val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
-    val secondary = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight
-    val faint = if (dark) LoginTextFaintDark else LoginTextFaintLight
-    val accent = if (dark) ControlAccentDark else AccentDark
-    val border = if (dark) PillBorderDark else PillBorderLight
+    val primary = PikuColors.textPrimary
+    val secondary = PikuColors.textSecondary
+    val faint = PikuColors.textFaint
+    val accent = PikuColors.controlAccent
+    val border = PikuColors.border
 
     var passwordVisible by remember { mutableStateOf(false) }
 
@@ -389,7 +378,7 @@ private fun SyncHeroCard(
     onCheckedChange: (Boolean) -> Unit,
 ) {
     val successColor = if (dark) FollowDark else FollowLight
-    val errorColor = if (dark) ErrorRedDark else ErrorRedLight
+    val errorColor = PikuColors.error
     val isSyncing = syncState == SyncState.SYNCING
     val isFailed = syncState == SyncState.FAILED
     val isSuccess = !isSyncing && !isFailed && syncResult?.state == SyncState.SUCCESS
@@ -569,7 +558,7 @@ private fun webDavFieldColors(
     secondary: Color,
     faint: Color,
 ): TextFieldColors {
-    val errorColor = if (dark) ErrorRedDark else ErrorRedLight
+    val errorColor = PikuColors.error
     return OutlinedTextFieldDefaults.colors(
         focusedBorderColor = accent,
         unfocusedBorderColor = border,

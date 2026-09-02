@@ -38,9 +38,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.piku.client.ui.theme.LoginTextPrimaryDark
-import com.piku.client.ui.theme.LoginTextPrimaryLight
 import kotlinx.coroutines.delay
+import com.piku.client.ui.theme.PikuColors
 
 /** 展开后文字停留的默认时间；功能引导这类需要更久驻留的场景可传入更长值 */
 const val DEFAULT_EXPAND_MILLIS = 3_000L
@@ -174,7 +173,7 @@ fun ExpandableIconAction(
             // 刻意不用 Arrangement.spacedBy：收起时文字宽度为 0，固定间距会把图标推离中心
             Text(
                 text = label,
-                color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                color = PikuColors.textPrimary,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,

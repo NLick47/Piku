@@ -43,11 +43,9 @@ import androidx.compose.ui.unit.sp
 import com.piku.client.R
 import com.piku.client.domain.model.PoipikuCategory
 import com.piku.client.ui.common.UserAvatar
-import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.GlassIconBgDark
 import com.piku.client.ui.theme.LoginTextPrimaryDark
-import com.piku.client.ui.theme.PillBorderDark
-import com.piku.client.ui.theme.PillBorderLight
+import com.piku.client.ui.theme.PikuColors
 
 @Composable
 internal fun GlassHeader(
@@ -177,7 +175,7 @@ private fun GlassIconButton(
             .clip(shape)
             .background(if (dark) GlassIconBgDark else Color.White)
             .border(
-                BorderStroke(0.5.dp, if (dark) PillBorderDark else PillBorderLight),
+                BorderStroke(0.5.dp, PikuColors.border),
                 shape,
             )
             .clickable(interactionSource = interaction, indication = null, onClick = onClick),
@@ -212,7 +210,7 @@ private fun CategoryMenuButton(
             imageVector = Icons.Outlined.GridView,
             contentDescription = stringResource(R.string.home_category_select),
             tint = when {
-                active -> if (dark) LoginTextPrimaryDark else AccentDark
+                active -> PikuColors.accent
                 dark -> LoginTextPrimaryDark.copy(alpha = 0.55f)
                 else -> Color(0xFF5A5A5A)
             },

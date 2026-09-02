@@ -62,15 +62,8 @@ import com.piku.client.R
 import com.piku.client.data.local.CatalogSource
 import com.piku.client.data.remote.translation.ModelEntry
 import com.piku.client.data.remote.translation.Role
-import com.piku.client.ui.theme.AccentDark
-import com.piku.client.ui.theme.ControlAccentDark
 import com.piku.client.ui.theme.LoginBackgroundDark
-import com.piku.client.ui.theme.LoginCardBorderDark
-import com.piku.client.ui.theme.LoginCardBorderLight
-import com.piku.client.ui.theme.LoginTextPrimaryDark
-import com.piku.client.ui.theme.LoginTextPrimaryLight
-import com.piku.client.ui.theme.LoginTextSecondaryDark
-import com.piku.client.ui.theme.LoginTextSecondaryLight
+import com.piku.client.ui.theme.PikuColors
 import com.piku.client.ui.theme.themedSwitchColors
 
 /** 弹窗内的分区小标题 */
@@ -139,9 +132,9 @@ private fun AiTranslateMainPage(
     onOpenSources: () -> Unit,
     dark: Boolean,
 ) {
-    val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
-    val secondary = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight
-    val accent = if (dark) ControlAccentDark else AccentDark
+    val primary = PikuColors.textPrimary
+    val secondary = PikuColors.textSecondary
+    val accent = PikuColors.controlAccent
 
     var textExpanded by remember { mutableStateOf(false) }
     var novelExpanded by remember { mutableStateOf(false) }
@@ -180,7 +173,7 @@ private fun AiTranslateMainPage(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(14.dp))
                 .border(
-                    BorderStroke(0.5.dp, if (dark) LoginCardBorderDark else LoginCardBorderLight),
+                    BorderStroke(0.5.dp, PikuColors.border),
                     RoundedCornerShape(14.dp),
                 )
                 .clickable { onToggleEnabled(!state.aiTranslateEnabled) }
@@ -322,7 +315,7 @@ private fun AiTranslateMainPage(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
                         .border(
-                            BorderStroke(0.5.dp, if (dark) LoginCardBorderDark else LoginCardBorderLight),
+                            BorderStroke(0.5.dp, PikuColors.border),
                             RoundedCornerShape(14.dp),
                         ),
                 ) {
@@ -352,7 +345,7 @@ private fun AiTranslateMainPage(
                         }
                         if (index < imageModels.lastIndex) {
                             HorizontalDivider(
-                                color = if (dark) LoginCardBorderDark else LoginCardBorderLight,
+                                color = PikuColors.border,
                                 thickness = 0.5.dp,
                                 modifier = Modifier.padding(start = 14.dp),
                             )
@@ -369,7 +362,7 @@ private fun AiTranslateMainPage(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(14.dp))
                 .border(
-                    BorderStroke(0.5.dp, if (dark) LoginCardBorderDark else LoginCardBorderLight),
+                    BorderStroke(0.5.dp, PikuColors.border),
                     RoundedCornerShape(14.dp),
                 )
                 .clickable(onClick = onOpenSources)
@@ -431,8 +424,8 @@ private fun CollapsibleSection(
     dark: Boolean,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
-    val secondary = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight
+    val primary = PikuColors.textPrimary
+    val secondary = PikuColors.textSecondary
 
     Column {
         Row(
@@ -490,7 +483,7 @@ private fun ModelListCard(
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
             .border(
-                BorderStroke(0.5.dp, if (dark) LoginCardBorderDark else LoginCardBorderLight),
+                BorderStroke(0.5.dp, PikuColors.border),
                 RoundedCornerShape(14.dp),
             ),
     ) {
@@ -503,7 +496,7 @@ private fun ModelListCard(
             )
             if (index < entries.lastIndex) {
                 HorizontalDivider(
-                    color = if (dark) LoginCardBorderDark else LoginCardBorderLight,
+                    color = PikuColors.border,
                     thickness = 0.5.dp,
                     modifier = Modifier.padding(start = 14.dp),
                 )
@@ -519,9 +512,9 @@ private fun ModelOptionRow(
     onClick: () -> Unit,
     dark: Boolean,
 ) {
-    val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
-    val secondary = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight
-    val accent = if (dark) ControlAccentDark else AccentDark
+    val primary = PikuColors.textPrimary
+    val secondary = PikuColors.textSecondary
+    val accent = PikuColors.controlAccent
     val rowBg by animateColorAsState(
         targetValue = if (selected) {
             accent.copy(alpha = if (dark) 0.18f else 0.12f)

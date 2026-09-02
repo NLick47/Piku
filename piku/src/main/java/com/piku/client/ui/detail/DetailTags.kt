@@ -39,12 +39,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.piku.client.R
 import com.piku.client.ui.theme.AccentDark
-import com.piku.client.ui.theme.LoginCardBorderDark
-import com.piku.client.ui.theme.LoginCardBorderLight
-import com.piku.client.ui.theme.LoginCardDark
 import com.piku.client.ui.theme.LoginTextPrimaryDark
 import com.piku.client.ui.theme.LoginTextSecondaryDark
-import com.piku.client.ui.theme.LoginTextSecondaryLight
+import com.piku.client.ui.theme.PikuColors
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -86,14 +83,14 @@ internal fun TagFlow(
             Row(
                 modifier = Modifier
                     .clip(shape)
-                    .background(if (dark) LoginCardDark else Color(0xFFF1EFEA))
+                    .background(PikuColors.surfaceSoft)
                     .border(
                         BorderStroke(
                             0.5.dp,
                             if (added) {
-                                if (dark) LoginTextPrimaryDark else AccentDark
+                                PikuColors.accent
                             } else {
-                                if (dark) LoginCardBorderDark else LoginCardBorderLight
+                                PikuColors.border
                             },
                         ),
                         shape,
@@ -143,9 +140,9 @@ internal fun TagFlow(
                                 else R.string.detail_tag_add_to_my_tags,
                             ),
                             tint = if (added) {
-                                if (dark) LoginTextPrimaryDark else AccentDark
+                                PikuColors.accent
                             } else {
-                                if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight
+                                PikuColors.textSecondary
                             },
                             modifier = Modifier
                                 .size(12.dp)

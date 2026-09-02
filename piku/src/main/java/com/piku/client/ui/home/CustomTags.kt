@@ -44,16 +44,8 @@ import com.piku.client.R
 import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.GlassCardBgDark
 import com.piku.client.ui.theme.LoginBackgroundDark
-import com.piku.client.ui.theme.LoginCardBorderDark
-import com.piku.client.ui.theme.LoginCardBorderLight
-import com.piku.client.ui.theme.LoginTextFaintDark
-import com.piku.client.ui.theme.LoginTextFaintLight
-import com.piku.client.ui.theme.LoginTextPrimaryDark
-import com.piku.client.ui.theme.LoginTextPrimaryLight
 import com.piku.client.ui.theme.LoginTextSecondaryDark
-import com.piku.client.ui.theme.LoginTextSecondaryLight
-import com.piku.client.ui.theme.PillBorderDark
-import com.piku.client.ui.theme.PillBorderLight
+import com.piku.client.ui.theme.PikuColors
 import com.piku.client.ui.theme.SwitchUncheckedTrackDark
 import com.piku.client.ui.theme.SwitchUncheckedTrackLight
 
@@ -72,8 +64,8 @@ fun CustomTagSection(
     dark: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val primary = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
-    val faint = if (dark) LoginTextFaintDark else LoginTextFaintLight
+    val primary = PikuColors.textPrimary
+    val faint = PikuColors.textFaint
     var input by rememberSaveable { mutableStateOf("") }
 
     Column(modifier = modifier.fillMaxWidth()) {
@@ -94,7 +86,7 @@ fun CustomTagSection(
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = AccentDark.copy(alpha = 0.8f),
-                    unfocusedBorderColor = if (dark) LoginCardBorderDark else LoginCardBorderLight,
+                    unfocusedBorderColor = PikuColors.border,
                     focusedContainerColor = if (dark) Color(0x14FFFFFF) else Color(0x0A000000),
                     unfocusedContainerColor = if (dark) Color(0x14FFFFFF) else Color(0x0A000000),
                     cursorColor = AccentDark,
@@ -166,18 +158,18 @@ private fun CustomTagChip(
 ) {
     val shape = RoundedCornerShape(14.dp)
     val chipBg = when {
-        active -> if (dark) LoginTextPrimaryDark else AccentDark.copy(alpha = 0.10f)
+        active -> PikuColors.accent.copy(alpha = 0.10f)
         else -> if (dark) GlassCardBgDark else Color.White
     }
     val chipBorder = when {
-        active -> if (dark) LoginTextPrimaryDark else AccentDark.copy(alpha = 0.30f)
-        else -> if (dark) PillBorderDark else PillBorderLight
+        active -> PikuColors.accent.copy(alpha = 0.30f)
+        else -> PikuColors.border
     }
     val textColor = when {
         active -> if (dark) LoginBackgroundDark else AccentDark
         else -> if (dark) LoginTextSecondaryDark else Color(0xFF5A5A5A)
     }
-    val faint = if (dark) LoginTextFaintDark else LoginTextFaintLight
+    val faint = PikuColors.textFaint
     val delTint = when {
         active -> if (dark) LoginBackgroundDark else AccentDark
         else -> faint

@@ -47,16 +47,11 @@ import com.piku.client.domain.model.PoipikuCategory
 import com.piku.client.domain.model.ThemeMode
 import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.LoginBackgroundDark
-import com.piku.client.ui.theme.LoginCardBorderDark
-import com.piku.client.ui.theme.LoginCardBorderLight
 import com.piku.client.ui.theme.LoginCardDark
-import com.piku.client.ui.theme.LoginTextFaintDark
-import com.piku.client.ui.theme.LoginTextFaintLight
 import com.piku.client.ui.theme.LoginTextPrimaryDark
 import com.piku.client.ui.theme.LoginTextPrimaryLight
 import com.piku.client.ui.theme.LoginTextSecondaryDark
-import com.piku.client.ui.theme.LoginTextSecondaryLight
-import com.piku.client.ui.theme.themedSwitchColors
+import com.piku.client.ui.theme.PikuColors
 
 internal data class CategoryGroup(
     val titleRes: Int,
@@ -126,7 +121,7 @@ internal fun CategorySheet(
         ) {
             Text(
                 text = stringResource(R.string.home_category_select),
-                color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                color = PikuColors.textPrimary,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -136,7 +131,7 @@ internal fun CategorySheet(
                     R.string.home_category_current,
                     stringResource(selected.nameRes),
                 ),
-                color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                color = PikuColors.textFaint,
                 fontSize = 12.sp,
             )
             Spacer(Modifier.height(16.dp))
@@ -149,7 +144,7 @@ internal fun CategorySheet(
             CATEGORY_GROUPS.forEach { group ->
                 Text(
                     text = stringResource(group.titleRes),
-                    color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                    color = PikuColors.textFaint,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Medium,
                     letterSpacing = 1.sp,
@@ -193,7 +188,7 @@ internal fun ThemeModeSheet(
         ) {
             Text(
                 text = stringResource(R.string.theme_select_title),
-                color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                color = PikuColors.textPrimary,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -241,14 +236,14 @@ internal fun RetentionSheet(
         ) {
             Text(
                 text = stringResource(R.string.retention_select_title),
-                color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                color = PikuColors.textPrimary,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.SemiBold,
             )
             Spacer(Modifier.height(4.dp))
             Text(
                 text = stringResource(R.string.retention_select_hint),
-                color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                color = PikuColors.textFaint,
                 fontSize = 12.sp,
             )
             Spacer(Modifier.height(16.dp))
@@ -284,7 +279,7 @@ internal fun LanguageSheet(
         ) {
             Text(
                 text = stringResource(R.string.language_select_title),
-                color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                color = PikuColors.textPrimary,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -310,11 +305,11 @@ internal fun LogoutConfirmDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = if (dark) LoginCardDark else Color.White,
+        containerColor = PikuColors.surface,
         title = {
             Text(
                 text = stringResource(R.string.logout),
-                color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+                color = PikuColors.textPrimary,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -322,7 +317,7 @@ internal fun LogoutConfirmDialog(
         text = {
             Text(
                 text = stringResource(R.string.logout_confirm_message),
-                color = if (dark) LoginTextSecondaryDark else LoginTextSecondaryLight,
+                color = PikuColors.textSecondary,
                 fontSize = 13.sp,
             )
         },
@@ -330,7 +325,7 @@ internal fun LogoutConfirmDialog(
             TextButton(onClick = onConfirm) {
                 Text(
                     text = stringResource(R.string.logout_confirm),
-                    color = if (dark) Color(0xFFE08A8A) else Color(0xFFC24B4B),
+                    color = PikuColors.error,
                 )
             }
         },
@@ -338,7 +333,7 @@ internal fun LogoutConfirmDialog(
             TextButton(onClick = onDismiss) {
                 Text(
                     text = stringResource(R.string.detail_favorite_cancel),
-                    color = if (dark) LoginTextFaintDark else LoginTextFaintLight,
+                    color = PikuColors.textFaint,
                 )
             }
         },
@@ -366,14 +361,14 @@ private fun SettingsOptionRow(
             .fillMaxWidth()
             .clip(shape)
             .background(container)
-            .border(BorderStroke(0.5.dp, if (dark) LoginCardBorderDark else LoginCardBorderLight), shape)
+            .border(BorderStroke(0.5.dp, PikuColors.border), shape)
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = text,
-            color = if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight,
+            color = PikuColors.textPrimary,
             fontSize = 14.sp,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             modifier = Modifier.weight(1f),
@@ -398,7 +393,7 @@ private fun AllCategoriesButton(
     val shape = RoundedCornerShape(14.dp)
     val container by animateColorAsState(
         targetValue = when {
-            active -> if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
+            active -> PikuColors.textPrimary
             else -> if (dark) LoginCardDark else Color(0xFF000000).copy(alpha = 0.03f)
         },
         label = "allBtnBg",
@@ -415,7 +410,7 @@ private fun AllCategoriesButton(
             .fillMaxWidth()
             .clip(shape)
             .background(container)
-            .border(BorderStroke(0.5.dp, if (dark) LoginCardBorderDark else LoginCardBorderLight), shape)
+            .border(BorderStroke(0.5.dp, PikuColors.border), shape)
             .clickable(onClick = onClick)
             .padding(vertical = 12.dp),
         horizontalArrangement = Arrangement.Center,
@@ -449,7 +444,7 @@ private fun CategoryPill(
     val shape = RoundedCornerShape(20.dp)
     val container by animateColorAsState(
         targetValue = when {
-            active -> if (dark) LoginTextPrimaryDark else LoginTextPrimaryLight
+            active -> PikuColors.textPrimary
             else -> if (dark) LoginCardDark else Color(0xFF000000).copy(alpha = 0.04f)
         },
         label = "pillBg",
@@ -466,7 +461,7 @@ private fun CategoryPill(
             .clip(shape)
             .then(if (active) Modifier.shadow(3.dp, shape) else Modifier)
             .background(container)
-            .border(BorderStroke(0.5.dp, if (dark) LoginCardBorderDark else LoginCardBorderLight), shape)
+            .border(BorderStroke(0.5.dp, PikuColors.border), shape)
             .clickable(onClick = onClick)
             .padding(start = 14.dp, end = if (active) 9.dp else 14.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
