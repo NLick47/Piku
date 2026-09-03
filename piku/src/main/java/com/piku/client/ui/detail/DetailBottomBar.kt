@@ -87,6 +87,10 @@ internal fun DetailBottomBar(
     onOpenBrowser: () -> Unit,
     /** 配置了可用翻译模型时传入，更多菜单里会出现"换模型重翻" */
     onOpenModelPicker: (() -> Unit)? = null,
+    /** 屏蔽该作者入口：null 不显示 */
+    onBlockUser: (() -> Unit)? = null,
+    /** 快捷屏蔽标签入口：作品无 tags 时传 null 不显示 */
+    onBlockTags: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -207,6 +211,18 @@ internal fun DetailBottomBar(
                             {
                                 menuExpanded = false
                                 picker()
+                            }
+                        },
+                        onBlockUser = onBlockUser?.let { block ->
+                            {
+                                menuExpanded = false
+                                block()
+                            }
+                        },
+                        onBlockTags = onBlockTags?.let { blockTags ->
+                            {
+                                menuExpanded = false
+                                blockTags()
                             }
                         },
                     )

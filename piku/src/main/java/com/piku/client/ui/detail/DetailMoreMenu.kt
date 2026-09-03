@@ -16,9 +16,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Article
+import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.OpenInBrowser
 import androidx.compose.material.icons.outlined.Translate
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -106,6 +108,10 @@ internal fun MoreMenuPopup(
      * 这里给一个看得见的落点；没有可用模型时传 null，整项不显示。
      */
     onOpenModelPicker: (() -> Unit)? = null,
+    /** 屏蔽该作者入口：写入首页内容屏蔽，作者作品不再出现在首页 feed */
+    onBlockUser: (() -> Unit)? = null,
+    /** 快捷屏蔽标签入口：弹出该作品 tags 的 toggle sheet */
+    onBlockTags: (() -> Unit)? = null,
 ) {
     val density = LocalDensity.current
     var offsetY by remember { mutableIntStateOf(0) }
@@ -155,6 +161,22 @@ internal fun MoreMenuPopup(
                     label = stringResource(R.string.detail_menu_retry_with_model),
                     dark = dark,
                     onClick = onOpenModelPicker,
+                )
+            }
+            if (onBlockTags != null) {
+                MoreMenuRow(
+                    iconVector = Icons.Outlined.Block,
+                    label = stringResource(R.string.detail_block_tags),
+                    dark = dark,
+                    onClick = onBlockTags,
+                )
+            }
+            if (onBlockUser != null) {
+                MoreMenuRow(
+                    iconVector = Icons.Outlined.VisibilityOff,
+                    label = stringResource(R.string.detail_block_user),
+                    dark = dark,
+                    onClick = onBlockUser,
                 )
             }
         }

@@ -103,12 +103,15 @@ fun DetailScreen(
     var viewerPage by rememberSaveable { mutableIntStateOf(-1) }
     var reactionSheetVisible by rememberSaveable { mutableStateOf(false) }
     var favoriteSheetVisible by rememberSaveable { mutableStateOf(false) }
+    var blockedTagsSheetVisible by rememberSaveable { mutableStateOf(false) }
+    val blockedTags by viewModel.blockedTags.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val linkCopiedMessage = stringResource(R.string.detail_link_copied)
     val descriptionCopiedMessage = stringResource(R.string.detail_description_copied)
+    val blockedUserMessage = stringResource(R.string.detail_block_user_done)
     FeedbackSnackbar(
         message = state.reactionFeedbackRes?.let { stringResource(it) },
         snackbarHostState = snackbarHostState,
@@ -289,6 +292,17 @@ fun DetailScreen(
             onOpenBrowser = {
                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(state.shareUrl)))
             },
+            onBlockUser = {
+                viewModel.blockUser()
+                scope.launch {
+                    snackbarHostState.showSnackbar(blockedUserMessage)
+                }
+            },
+            onBlockTags = if (!state.detail?.tags.isNullOrEmpty()) {
+                { blockedTagsSheetVisible = true }
+            } else {
+                null
+            },
             onOpenModelPicker = if (state.canTranslate) viewModel::openModelPicker else null,
             modifier = Modifier.align(Alignment.BottomCenter),
         )
@@ -402,6 +416,15 @@ fun DetailScreen(
                 onToggleFolder = viewModel::toggleFavoriteFolder,
                 onCreateFolder = viewModel::createFavoriteFolder,
                 onDismiss = { favoriteSheetVisible = false },
+            )
+        }
+        if (blockedTagsSheetVisible && state.detail != null) {
+            BlockedTagsSheet(
+                tags = state.detail!!.tags,
+                blockedTags = blockedTags.toSet(),
+                onToggle = viewModel::toggleBlockedTag,
+                onDismiss = { blockedTagsSheetVisible = false },
+                dark = dark,
             )
         }
         if (reactionSheetVisible && state.detail != null) {

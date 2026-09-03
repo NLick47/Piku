@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.piku.client.data.local.BlockedContentRepository
 import com.piku.client.data.local.ImageSaver
 import com.piku.client.data.local.WorkPasswordRepository
 import com.piku.client.data.repository.AuthRepository
@@ -186,6 +187,7 @@ class DetailViewModel @Inject constructor(
     private val observeAuthStatusUseCase: ObserveAuthStatusUseCase,
     private val detailRepository: DetailRepository,
     private val authRepository: AuthRepository,
+    private val blockedContentRepository: BlockedContentRepository,
     private val thumbnailResolver: ThumbnailResolver,
     private val workPasswordRepository: WorkPasswordRepository,
     private val imageSaver: ImageSaver,
@@ -204,6 +206,24 @@ class DetailViewModel @Inject constructor(
 
     val authorId: Long = savedStateHandle["authorId"] ?: -1L
     val workId: Long = savedStateHandle["workId"] ?: -1L
+
+    /** 屏蔽该作者：写入首页内容屏蔽，作者作品不再出现在首页 feed */
+    fun blockUser() {
+        val name = _uiState.value.detail?.authorName.orEmpty()
+        blockedContentRepository.blockUser(authorId, name)
+    }
+
+    /** 快捷屏蔽标签面板的数据源：屏蔽列表实时态 */
+    val blockedTags = blockedContentRepository.blockedTags
+
+    /** 详情页标签 sheet 的 toggle：已屏蔽则恢复，未屏蔽则加入 */
+    fun toggleBlockedTag(tag: String) {
+        if (tag in blockedContentRepository.blockedTags.value) {
+            blockedContentRepository.removeBlockedTag(tag)
+        } else {
+            blockedContentRepository.addBlockedTag(tag)
+        }
+    }
     private val work = Work(
         id = workId,
         authorId = authorId,

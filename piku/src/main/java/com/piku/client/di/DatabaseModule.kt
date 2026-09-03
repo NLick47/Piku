@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.room.Room
 import com.piku.client.data.local.AppDatabase
+import com.piku.client.data.local.BlockedContentRepository
 import com.piku.client.data.local.CustomTagRepository
 import com.piku.client.data.local.FavoriteDao
 import com.piku.client.data.local.FavoriteFolderDao
@@ -90,4 +91,9 @@ object DatabaseModule {
     @Singleton
     fun providePopularTagCacheRepository(prefs: SharedPreferences): PopularTagCacheRepository =
         PopularTagCacheRepository(prefs)
+
+    @Provides
+    @Singleton
+    fun provideBlockedContentRepository(prefs: SharedPreferences): BlockedContentRepository =
+        BlockedContentRepository(prefs)
 }

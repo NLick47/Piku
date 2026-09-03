@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.DarkMode
@@ -105,6 +106,7 @@ fun UserDrawer(
     onLanguageClick: () -> Unit = {},
     onRetentionClick: () -> Unit = {},
     onWebDavClick: () -> Unit = {},
+    onBlockedContentClick: () -> Unit = {},
     content: @Composable () -> Unit,
 ) {
     var settingsExpanded by remember { mutableStateOf(false) }
@@ -144,6 +146,7 @@ fun UserDrawer(
                 onLanguageClick = onLanguageClick,
                 onRetentionClick = onRetentionClick,
                 onWebDavClick = onWebDavClick,
+                onBlockedContentClick = onBlockedContentClick,
             )
         },
         scrimColor = if (dark) Color(0xB3000000) else Color(0x99000000),
@@ -182,6 +185,7 @@ private fun DrawerPanel(
     onLanguageClick: () -> Unit,
     onRetentionClick: () -> Unit,
     onWebDavClick: () -> Unit,
+    onBlockedContentClick: () -> Unit,
 ) {
     val primary = PikuColors.textPrimary
     val faint = PikuColors.textFaint
@@ -292,6 +296,13 @@ private fun DrawerPanel(
             AdultContentRow(
                 adultEnabled = adultEnabled,
                 onToggleAdult = onToggleAdult,
+                dark = dark,
+                accent = iconAccent,
+            )
+            DrawerMenuRow(
+                icon = Icons.Outlined.Block,
+                label = stringResource(R.string.menu_blocked_content),
+                onClick = onBlockedContentClick,
                 dark = dark,
                 accent = iconAccent,
             )
