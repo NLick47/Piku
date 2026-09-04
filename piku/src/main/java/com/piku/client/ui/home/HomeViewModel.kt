@@ -3,8 +3,6 @@ package com.piku.client.ui.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.piku.client.R
-import com.piku.client.data.local.BlockedUser
-import com.piku.client.data.local.BlockedContentRepository
 import com.piku.client.data.local.CatalogSource
 import com.piku.client.data.local.CatalogSourceCodec
 import com.piku.client.data.local.SettingsRepository
@@ -92,9 +90,6 @@ data class HomeUiState(
     val feedEpoch: Int = 0,
     val works: List<Work> = emptyList(),
     val favoriteIds: Set<Long> = emptySet(),
-    /** 首页内容屏蔽：屏蔽标签关键词与屏蔽用户（抽屉入口面板管理） */
-    val blockedTags: List<String> = emptyList(),
-    val blockedUsers: List<BlockedUser> = emptyList(),
     val adultEnabled: Boolean = false,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val historyRetentionDays: Int = 0,
@@ -203,7 +198,6 @@ class HomeViewModel @Inject constructor(
     private val selectTranslateNovelModelUseCase: SelectTranslateNovelModelUseCase,
     private val setAiTranslateEnabledUseCase: SetAiTranslateEnabledUseCase,
     private val authRepository: AuthRepository,
-    private val blockedContentRepository: BlockedContentRepository,
     private val thumbnailResolver: ThumbnailResolver,
     private val webDavSyncRepository: WebDavSyncRepository,
 ) : ViewModel() {
@@ -229,16 +223,6 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             observeFavoriteIdsUseCase().collect { ids ->
                 _uiState.update { it.copy(favoriteIds = ids) }
-            }
-        }
-        viewModelScope.launch {
-            blockedContentRepository.blockedTags.collect { tags ->
-                _uiState.update { it.copy(blockedTags = tags) }
-            }
-        }
-        viewModelScope.launch {
-            blockedContentRepository.blockedUsers.collect { users ->
-                _uiState.update { it.copy(blockedUsers = users) }
             }
         }
         viewModelScope.launch {
@@ -568,22 +552,13 @@ class HomeViewModel @Inject constructor(
         return loader
     }
 
-    private suspend fun fetchPageFor(key: FeedKey, page: Int): Result<List<Work>> {
-        val result = when {
-            key.tag != null -> loadTagFeedUseCase(key.tag, page)
-            key.tab == FeedTab.HOT -> loadPopularFeedUseCase(page)
-            key.tab == FeedTab.FOLLOW -> loadFollowFeedUseCase(page)
-            key.tab == FeedTab.RANDOM -> loadRandomFeedUseCase()
-            else -> loadFeedUseCase(page, key.category.cd)
-        }
-        return result.map { blockedContentRepository.filterWorks(it) }
+    private suspend fun fetchPageFor(key: FeedKey, page: Int): Result<List<Work>> = when {
+        key.tag != null -> loadTagFeedUseCase(key.tag, page)
+        key.tab == FeedTab.HOT -> loadPopularFeedUseCase(page)
+        key.tab == FeedTab.FOLLOW -> loadFollowFeedUseCase(page)
+        key.tab == FeedTab.RANDOM -> loadRandomFeedUseCase()
+        else -> loadFeedUseCase(page, key.category.cd)
     }
-
-    fun addBlockedTag(tag: String): Boolean = blockedContentRepository.addBlockedTag(tag)
-
-    fun removeBlockedTag(tag: String) = blockedContentRepository.removeBlockedTag(tag)
-
-    fun unblockUser(authorId: Long) = blockedContentRepository.unblockUser(authorId)
 
     /** 把当前 loader 的快照合并进对外 UI 状态（错误在此处映射成文案资源） */
     private fun applySnapshot(snap: FeedSnapshot) {

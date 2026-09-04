@@ -158,7 +158,6 @@ fun HomeScreen(
     var showCatalogSource by rememberSaveable { mutableStateOf(false) }
     var showAboutSheet by rememberSaveable { mutableStateOf(false) }
     var showWebDavSettings by rememberSaveable { mutableStateOf(false) }
-    var showBlockedContent by rememberSaveable { mutableStateOf(false) }
     var showHistoryPage by rememberSaveable { mutableStateOf(false) }
     var showCollectionPage by rememberSaveable { mutableStateOf(false) }
     var showTagsPage by rememberSaveable { mutableStateOf(false) }
@@ -166,8 +165,7 @@ fun HomeScreen(
     var showLogoutConfirm by rememberSaveable { mutableStateOf(false) }
     var showProfileEdit by rememberSaveable { mutableStateOf(false) }
     val anyOverlayActive = showHistoryPage ||
-        showCollectionPage || showTagsPage || showFollowUsersPage ||
-        showWebDavSettings || showBlockedContent
+        showCollectionPage || showTagsPage || showFollowUsersPage || showWebDavSettings
     val isScrolling = remember { mutableStateOf(false) }
     val gridState = rememberLazyStaggeredGridState()
     val scope = rememberCoroutineScope()
@@ -297,10 +295,6 @@ fun HomeScreen(
         onWebDavClick = {
             scope.launch { drawerState.close() }
             showWebDavSettings = true
-        },
-        onBlockedContentClick = {
-            scope.launch { drawerState.close() }
-            showBlockedContent = true
         },
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -834,27 +828,6 @@ fun HomeScreen(
                         onClearTestResult = viewModel::clearTestConnectionState,
                         onSyncNow = viewModel::syncNow,
                         onBack = { showWebDavSettings = false; scope.launch { drawerState.open() } },
-                        dark = dark,
-                    )
-                }
-            }
-
-            if (showBlockedContent) {
-                Dialog(
-                    onDismissRequest = { showBlockedContent = false },
-                    properties = DialogProperties(
-                        usePlatformDefaultWidth = false,
-                        decorFitsSystemWindows = false,
-                        dismissOnClickOutside = false,
-                    ),
-                ) {
-                    BlockedContentScreen(
-                        tags = state.blockedTags,
-                        users = state.blockedUsers,
-                        onAddTag = viewModel::addBlockedTag,
-                        onRemoveTag = viewModel::removeBlockedTag,
-                        onUnblockUser = viewModel::unblockUser,
-                        onBack = { showBlockedContent = false; scope.launch { drawerState.open() } },
                         dark = dark,
                     )
                 }
