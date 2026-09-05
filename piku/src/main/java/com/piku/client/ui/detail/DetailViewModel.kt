@@ -76,6 +76,7 @@ data class DetailUiState(
     val workFavoriteFolderIds: Set<Long> = emptySet(),
     val shareUrl: String = "",
     val password: String = "",
+    val passwordPrefilled: Boolean = false,
     val passwordLoading: Boolean = false,
     val loggedIn: Boolean = false,
     val reactionSending: Boolean = false,
@@ -799,12 +800,15 @@ class DetailViewModel @Inject constructor(
     fun retry() = load()
 
     fun updatePassword(value: String) {
-        _uiState.update { it.copy(password = value) }
+        // 用户动过输入框，内容即为本人输入，不再是预填建议
+        _uiState.update { it.copy(password = value, passwordPrefilled = false) }
     }
 
     fun submitPassword() {
         val pwd = _uiState.value.password
         if (pwd.isBlank() || _uiState.value.passwordLoading) return
+        // 点了「解锁」即视为用户认可这个值，此后刷新可带上它重试
+        _uiState.update { it.copy(passwordPrefilled = false) }
         // 复用已解析的锁页 detail，跳过重复的详情页 HTML 请求；解锁只发一次 append POST
         val existing = _uiState.value.detail
         viewModelScope.launch {
@@ -842,6 +846,7 @@ class DetailViewModel @Inject constructor(
      * 自动进入：密码作品 + 未解锁 + 用户未在手动输入 + 存在已保存密码（仅服务端验证
      * 成功时写入，不可被查看/修改）→ 自动解锁。失败（-2，作者已改密码）时清除失效
      * 记录并显示密码框，由用户手动输入新密码，成功后重新保存（自愈，不会死循环）。
+     * 无已保存密码时改为预填 [COMMON_WORK_PASSWORD]，只省掉输入、不代为提交。
      */
     private fun maybeAutoUnlock(detail: WorkDetail) {
         val state = _uiState.value
@@ -852,12 +857,19 @@ class DetailViewModel @Inject constructor(
         )
         if (!detail.passwordProtected) return
         if (detail.imageUrls.isNotEmpty() || detail.novelText.isNotBlank()) return // 已解锁（图片作品看图列表，文字作品看正文）
-        if (state.password.isNotBlank()) return // 用户正在输入，不打扰
+        if (state.password.isNotBlank() && !state.passwordPrefilled) return // 用户正在输入，不打扰
         if (state.passwordLoading || state.loading) return
         viewModelScope.launch {
             val saved = workPasswordRepository.getPassword(workId)
             Log.d("PikuDiag", "maybeAutoUnlock work=$workId saved=${saved != null}")
-            if (saved.isNullOrBlank()) return@launch
+            if (saved.isNullOrBlank()) {
+                // 没有可复用的历史密码：预填最常见的作品密码，用户只需点一下「解锁」。
+                // 只能在这里预填——提前写进 state 会被上面的「用户正在输入」判断挡掉自动解锁
+                _uiState.update {
+                    it.copy(password = COMMON_WORK_PASSWORD, passwordPrefilled = true)
+                }
+                return@launch
+            }
             _uiState.update { it.copy(passwordLoading = true) }
             loadWorkDetailUseCase(work, saved, detail)
                 .onSuccess { unlocked ->
@@ -1121,8 +1133,13 @@ class DetailViewModel @Inject constructor(
             _uiState.update {
                 it.copy(loading = true, errorRes = null, errorHintRes = null, errorRetryable = true)
             }
-            // 保留已输入的密码：自动重登/刷新详情后已解锁作品不会重新锁回
-            val retainedPassword = _uiState.value.password
+            // 保留已输入的密码：自动重登/刷新详情后已解锁作品不会重新锁回。
+            // 预填值不算——用户还没确认过，不能替他发出去
+            val retainedPassword = if (_uiState.value.passwordPrefilled) {
+                ""
+            } else {
+                _uiState.value.password
+            }
             loadWorkDetailUseCase(work, retainedPassword)
                 .onSuccess { detail ->
                     _uiState.update {
@@ -1166,6 +1183,9 @@ class DetailViewModel @Inject constructor(
     }
 
     private companion object {
+        /** 预填进解锁框的常见作品密码（Poipiku 上大量作品沿用 Pixiv 的 `yes` 惯例） */
+        const val COMMON_WORK_PASSWORD = "yes"
+
         /** 长按保存时等待原图加载的最长时间*/
         const val IMAGE_WAIT_MILLIS = 8_000L
 
