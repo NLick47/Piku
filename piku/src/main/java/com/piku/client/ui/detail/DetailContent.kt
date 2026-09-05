@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -441,11 +442,19 @@ private fun ImagePager(
         else -> EMPTY_HEIGHT_DP
     }
 
+    // 密码框的高度随错误/封禁提示自适应：写死高度时，提示文字超出部分会被整体裁掉
+    val passwordOnly = detail.imageUrls.isEmpty() && detail.passwordProtected
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .animateContentSize()
-            .height(boxHeightDp.dp)
+            .then(
+                if (passwordOnly) {
+                    Modifier.heightIn(min = PASSWORD_HEIGHT_DP.dp)
+                } else {
+                    Modifier.height(boxHeightDp.dp)
+                },
+            )
             .clip(RoundedCornerShape(4.dp))
             .background(PikuColors.surfaceSoft),
     ) {
@@ -676,7 +685,8 @@ private fun PasswordBox(
 ) {
     Column(
         modifier = Modifier
-            .fillMaxSize()
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = PASSWORD_HEIGHT_DP.dp)
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
