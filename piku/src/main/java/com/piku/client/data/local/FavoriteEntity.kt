@@ -2,9 +2,10 @@ package com.piku.client.data.local
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "favorites")
+@Entity(tableName = "favorites", indices = [Index("addedAt")])
 data class FavoriteEntity(
     @PrimaryKey val workId: String,
     val authorId: Long,

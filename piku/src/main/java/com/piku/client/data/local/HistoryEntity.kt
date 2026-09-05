@@ -1,9 +1,10 @@
 package com.piku.client.data.local
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "history")
+@Entity(tableName = "history", indices = [Index("visitedAt")])
 data class HistoryEntity(
     @PrimaryKey val workId: String,
     val authorId: Long,
