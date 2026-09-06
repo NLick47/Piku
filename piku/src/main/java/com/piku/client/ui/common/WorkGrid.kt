@@ -229,7 +229,7 @@ fun WorkCard(
                 )
                 if (work.categoryName.isNotBlank()) {
                     Text(
-                        text = work.categoryName,
+                        text = localizedCategoryName(work.categoryCd, work.categoryName),
                         color = PikuColors.textFaint,
                         fontSize = 9.sp,
                         maxLines = 1,

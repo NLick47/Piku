@@ -64,7 +64,10 @@ import coil3.compose.AsyncImage
 import coil3.compose.SubcomposeAsyncImage
 import com.piku.client.ui.common.rememberAnimatedImage
 import com.piku.client.R
+import com.piku.client.ui.theme.OverlayScrim
 import com.piku.client.ui.theme.PikuColors
+import com.piku.client.ui.theme.TranslateActiveBlue
+import com.piku.client.ui.theme.TranslateActiveBlueTint
 import com.piku.client.ui.theme.ViewerBackgroundDark
 import androidx.compose.ui.graphics.asImageBitmap
 import kotlinx.coroutines.Job
@@ -487,7 +490,7 @@ fun FullScreenViewer(
                     fontSize = 12.sp,
                     modifier = Modifier
                         .clip(RoundedCornerShape(10.dp))
-                        .background(Color(0x66000000))
+                        .background(OverlayScrim)
                         .padding(horizontal = 10.dp, vertical = 4.dp),
                 )
             }
@@ -508,8 +511,8 @@ fun FullScreenViewer(
                             .size(40.dp)
                             .clip(CircleShape)
                             .background(
-                                if (imageTranslated) Color(0x442196F3)
-                                else Color(0x66000000),
+                                if (imageTranslated) TranslateActiveBlueTint
+                                else OverlayScrim,
                             )
                             .clickable(
                                 enabled = !imageTranslating,
@@ -527,7 +530,7 @@ fun FullScreenViewer(
                             Icon(
                                 imageVector = Icons.Outlined.PhotoLibrary,
                                 contentDescription = stringResource(R.string.detail_image_translate),
-                                tint = if (imageTranslated) Color(0xFF4FC3F7) else Color.White,
+                                tint = if (imageTranslated) TranslateActiveBlue else Color.White,
                                 modifier = Modifier.size(20.dp),
                             )
                         }
@@ -544,7 +547,7 @@ fun FullScreenViewer(
                         fontSize = 12.sp,
                         modifier = Modifier
                             .clip(RoundedCornerShape(10.dp))
-                            .background(Color(0x66000000))
+                            .background(OverlayScrim)
                             .padding(horizontal = 10.dp, vertical = 4.dp),
                     )
                 }

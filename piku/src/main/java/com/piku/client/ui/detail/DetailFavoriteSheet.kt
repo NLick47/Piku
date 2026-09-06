@@ -48,6 +48,7 @@ import com.piku.client.R
 import com.piku.client.domain.model.FavoriteFolder
 import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.AccentSolid
+import com.piku.client.ui.theme.ControlAccentDark
 import com.piku.client.ui.theme.LoginBackgroundDark
 import com.piku.client.ui.theme.LoginBackgroundLight
 import com.piku.client.ui.theme.LoginTextPrimaryDark
@@ -56,6 +57,12 @@ import com.piku.client.ui.theme.LoginTextSecondaryDark
 import com.piku.client.ui.theme.PikuColors
 import com.piku.client.ui.theme.StarDark
 import com.piku.client.ui.theme.StarLight
+import com.piku.client.ui.theme.ShadowAmbient
+import com.piku.client.ui.theme.ShadowSpot
+
+/** 「默认」徽标底：玻璃上的弱化选中色 */
+internal val DefaultBadgeBgDark = Color(0x22FFFFFF)
+internal val DefaultBadgeBgLight = Color(0x142C2C2C)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -179,11 +186,16 @@ private fun FavoriteFolderRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .shadow(if (selected && dark) 4.dp else 0.dp, shape, ambientColor = Color(0x33000000), spotColor = Color(0x40000000))
+            .shadow(
+                if (selected && dark) 4.dp else 0.dp,
+                shape,
+                ambientColor = ShadowAmbient,
+                spotColor = ShadowSpot,
+            )
             .clip(shape)
             .background(
                 when {
-                    selected && dark -> Color(0x26E0E0E0)
+                    selected && dark -> ControlAccentDark.copy(alpha = 0.15f)
                     selected -> AccentDark.copy(alpha = 0.12f)
                     else -> Color.Transparent
                 },
@@ -246,7 +258,7 @@ internal fun DefaultFolderBadge(dark: Boolean) {
         fontWeight = FontWeight.Medium,
         modifier = Modifier
             .clip(RoundedCornerShape(6.dp))
-            .background(if (dark) Color(0x22FFFFFF) else Color(0x142C2C2C))
+            .background(if (dark) DefaultBadgeBgDark else DefaultBadgeBgLight)
             .padding(horizontal = 5.dp, vertical = 2.dp),
     )
 }

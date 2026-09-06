@@ -64,6 +64,12 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.piku.client.R
 import com.piku.client.ui.common.LoaderDots
+import com.piku.client.ui.theme.BlobPinkDark
+import com.piku.client.ui.theme.BlobPinkLight
+import com.piku.client.ui.theme.BlobPurpleDark
+import com.piku.client.ui.theme.BlobPurpleLight
+import com.piku.client.ui.theme.BlobWarmDark
+import com.piku.client.ui.theme.BlobWarmLight
 import com.piku.client.ui.theme.HomeBgBottomDark
 import com.piku.client.ui.theme.HomeBgBottomLight
 import com.piku.client.ui.theme.HomeBgTopDark
@@ -219,9 +225,9 @@ fun DetailScreen(
             ),
     ) {
         Canvas(Modifier.fillMaxSize()) {
-            val blobPurple = if (dark) Color(0x409A7FC9) else Color(0x4D9A7FC9)
-            val blobWarm = if (dark) Color(0x33C98A2D) else Color(0x4DC98A2D)
-            val blobPink = if (dark) Color(0x33D8A8B8) else Color(0x4DD8A8B8)
+            val blobPurple = if (dark) BlobPurpleDark else BlobPurpleLight
+            val blobWarm = if (dark) BlobWarmDark else BlobWarmLight
+            val blobPink = if (dark) BlobPinkDark else BlobPinkLight
             fun blob(color: Color, cx: Float, cy: Float, radius: Float) {
                 drawCircle(
                     brush = Brush.radialGradient(
@@ -303,6 +309,7 @@ fun DetailScreen(
         DetailBottomBar(
             isFavorite = state.isFavorite,
             reactionCount = state.detail?.reactionCount ?: 0,
+            reacted = state.hasReacted,
             followed = state.detail?.followed == true,
             onFavoriteClick = { if (state.detail != null) viewModel.quickFavorite() },
             onFavoriteLongPress = { if (state.detail != null) favoriteSheetVisible = true },

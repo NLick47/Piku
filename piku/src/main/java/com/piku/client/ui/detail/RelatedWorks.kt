@@ -39,9 +39,14 @@ import com.piku.client.ui.common.isAnimatedImage
 import com.piku.client.R
 import com.piku.client.domain.model.Work
 import com.piku.client.ui.theme.AccentDark
+import com.piku.client.ui.theme.BlurScrimDark
+import com.piku.client.ui.theme.BlurScrimLight
 import com.piku.client.ui.theme.ControlAccentDark
 import com.piku.client.ui.theme.LoginTextFaintDark
 import com.piku.client.ui.theme.LoginTextFaintLight
+import com.piku.client.ui.theme.OverlayBorder
+import com.piku.client.ui.theme.OverlayScrim
+import com.piku.client.ui.theme.OverlayScrimHeavy
 import com.piku.client.ui.theme.PikuColors
 
 internal const val COLS = 2
@@ -89,9 +94,10 @@ internal fun RelatedWorksSection(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(10.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(Color(0x99000000))
-                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(OverlayScrim)
+                        .border(BorderStroke(0.5.dp, OverlayBorder), RoundedCornerShape(999.dp))
+                        .padding(horizontal = 10.dp, vertical = 3.dp),
                 )
             }
         }
@@ -189,7 +195,7 @@ private fun RelatedWorkCard(
             Box(
                 Modifier
                     .fillMaxSize()
-                    .background(if (dark) Color(0x59000000) else Color(0x40000000)),
+                    .background(if (dark) BlurScrimDark else BlurScrimLight),
             )
             // 顶层：原图完整呈现，不裁剪
             AsyncImage(
@@ -211,7 +217,7 @@ private fun RelatedWorkCard(
                         .align(Alignment.TopStart)
                         .padding(6.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0x99000000))
+                        .background(OverlayScrimHeavy)
                         .padding(horizontal = 6.dp, vertical = 2.dp),
                 )
             }
@@ -224,7 +230,7 @@ private fun RelatedWorkCard(
                         .align(Alignment.BottomEnd)
                         .padding(6.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0x99000000))
+                        .background(OverlayScrimHeavy)
                         .padding(horizontal = 6.dp, vertical = 2.dp),
                 )
             }

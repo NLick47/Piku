@@ -97,6 +97,8 @@ data class DetailUiState(
     val loggedIn: Boolean = false,
     val reactionSending: Boolean = false,
     val reactionFeedbackRes: Int? = null,
+    /** 仅内存：本会话发过反应，重进页面重置 */
+    val hasReacted: Boolean = false,
     val followSending: Boolean = false,
     val followFeedbackRes: Int? = null,
     val favoriteFeedbackRes: Int? = null,
@@ -1183,6 +1185,7 @@ class DetailViewModel @Inject constructor(
                                 (emoji to ((detail.reactionCounts[emoji] ?: 0) + 1)),
                             reactionCount = detail.reactionCount + 1,
                         ),
+                        hasReacted = true,
                     )
                 }
             }

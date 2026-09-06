@@ -87,6 +87,8 @@ internal val NovelReaderTextDark = Color(0xFFD6D0C4)
 
 /** 亮色底部栏底色：比正文更实、更白的暖白，与浅米正文拉开层次 */
 internal val NovelReaderControlBgLight = Color(0xFFFAF5EC)
+/** 暗色底部栏底色：正文底色加一层透明度 */
+internal val NovelReaderControlBgDark = Color(0xCC141312)
 /** 亮色底部栏顶部分隔线 */
 internal val NovelReaderControlDividerLight = Color(0xFFE7E0D3)
 /** 亮色进度条强调色：醒目暖棕（独立于正文链接色 linkColor） */
@@ -170,7 +172,7 @@ fun FullNovelViewer(
     val bg = if (light) NovelReaderBgLight else NovelReaderBgDark
     val fg = if (light) NovelReaderTextLight else NovelReaderTextDark
     val linkColor = if (light) ControlAccentLight else ControlAccentDark
-    val controlBg = if (light) NovelReaderControlBgLight else Color(0xCC141312)
+    val controlBg = if (light) NovelReaderControlBgLight else NovelReaderControlBgDark
     val progressAccent = if (light) NovelReaderProgressAccentLight else linkColor
     val progressTrack = if (light) NovelReaderProgressTrackLight else fg.copy(alpha = 0.25f)
 

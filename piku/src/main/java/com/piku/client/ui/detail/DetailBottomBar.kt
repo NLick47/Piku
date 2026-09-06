@@ -1,5 +1,6 @@
 package com.piku.client.ui.detail
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -16,7 +17,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -53,13 +56,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.piku.client.R
-import com.piku.client.ui.theme.BadgeBgDark
-import com.piku.client.ui.theme.BadgeBgLight
+import com.piku.client.ui.theme.ErrorRedDark
+import com.piku.client.ui.theme.ErrorRedLight
 import com.piku.client.ui.theme.FollowDark
 import com.piku.client.ui.theme.FollowLight
 import com.piku.client.ui.theme.FollowTintDark
 import com.piku.client.ui.theme.FollowTintLight
+import com.piku.client.ui.theme.GlassBarBgDark
+import com.piku.client.ui.theme.GlassBarBgLight
+import com.piku.client.ui.theme.GuideHintBgDark
+import com.piku.client.ui.theme.GuideHintBgLight
 import com.piku.client.ui.theme.PikuColors
+import com.piku.client.ui.theme.ShadowAmbient
+import com.piku.client.ui.theme.ShadowSpot
 import com.piku.client.ui.theme.SoftBorderDark
 import com.piku.client.ui.theme.SoftBorderLight
 import com.piku.client.ui.theme.StarDark
@@ -76,6 +85,7 @@ private const val GUIDE_HINT_MILLIS = 6_000L
 internal fun DetailBottomBar(
     isFavorite: Boolean,
     reactionCount: Int,
+    reacted: Boolean,
     followed: Boolean,
     onFavoriteClick: () -> Unit,
     onFavoriteLongPress: () -> Unit,
@@ -111,9 +121,9 @@ internal fun DetailBottomBar(
     ) {
         Row(
             modifier = Modifier
-                .shadow(10.dp, pill, ambientColor = Color(0x33000000), spotColor = Color(0x40000000))
+                .shadow(10.dp, pill, ambientColor = ShadowAmbient, spotColor = ShadowSpot)
                 .clip(pill)
-                .background(if (dark) Color(0xE63A3834) else Color(0xE6FFFFFF))
+                .background(if (dark) GlassBarBgDark else GlassBarBgLight)
                 .border(
                     BorderStroke(0.5.dp, if (dark) SoftBorderDark else SoftBorderLight),
                     pill,
@@ -125,7 +135,6 @@ internal fun DetailBottomBar(
             DetailBarAction(
                 onClick = onFavoriteClick,
                 onLongPress = onFavoriteLongPress,
-                dark = dark,
                 active = isFavorite,
                 activeTint = if (dark) StarTintDark else StarTintLight,
             ) {
@@ -147,7 +156,6 @@ internal fun DetailBottomBar(
             }
             DetailBarAction(
                 onClick = onFollowClick,
-                dark = dark,
                 active = followed,
                 activeTint = if (dark) FollowTintDark else FollowTintLight,
             ) {
@@ -162,23 +170,15 @@ internal fun DetailBottomBar(
                     modifier = Modifier.size(22.dp),
                 )
             }
-            DetailBarAction(
-                onClick = onReactionClick,
+            ReactionAction(
+                count = reactionCount,
+                reacted = reacted,
                 dark = dark,
-                // 0 个反应时不挂徽标，否则一个"0"会常驻在图标角上变成纯噪音
-                badge = if (reactionCount > 0) formatReactionCount(reactionCount) else null,
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Favorite,
-                    contentDescription = stringResource(R.string.detail_reaction_title),
-                    tint = PikuColors.textSecondary,
-                    modifier = Modifier.size(22.dp),
-                )
-            }
+                onClick = onReactionClick,
+            )
             Box {
                 DetailBarAction(
                     onClick = { menuExpanded = true },
-                    dark = dark,
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.MoreVert,
@@ -219,10 +219,8 @@ internal fun DetailBottomBar(
 @Composable
 private fun DetailBarAction(
     onClick: () -> Unit,
-    dark: Boolean,
     active: Boolean = false,
     activeTint: Color = Color.Transparent,
-    badge: String? = null,
     onLongPress: (() -> Unit)? = null,
     icon: @Composable () -> Unit,
 ) {
@@ -261,26 +259,63 @@ private fun DetailBarAction(
         ) {
             icon()
         }
-        if (badge != null) {
+    }
+}
+
+@Composable
+private fun ReactionAction(
+    count: Int,
+    reacted: Boolean,
+    dark: Boolean,
+    onClick: () -> Unit,
+) {
+    val shape = RoundedCornerShape(18.dp)
+    val redTint = if (dark) ErrorRedDark else ErrorRedLight
+    val bg by animateColorAsState(
+        targetValue = if (reacted) {
+            redTint.copy(alpha = if (dark) 0.22f else 0.14f)
+        } else {
+            Color.Transparent
+        },
+        label = "reactionPillBg",
+    )
+    Row(
+        modifier = Modifier
+            // 可撑大：固定 size 会把 44dp 当上限传给内容，数字会被挤没
+            .defaultMinSize(minWidth = 44.dp)
+            .height(36.dp)
+            .clip(shape)
+            .background(bg)
+            .then(
+                if (reacted) {
+                    Modifier.border(BorderStroke(0.5.dp, redTint.copy(alpha = 0.45f)), shape)
+                } else {
+                    Modifier
+                },
+            )
+                .clickable(onClick = onClick)
+                .padding(
+                    // 心形字形自带留白，起点少给 2dp 两侧才均衡
+                    start = if (reacted) 8.dp else 0.dp,
+                    end = if (reacted) 10.dp else 0.dp,
+                ),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Favorite,
+            contentDescription = stringResource(R.string.detail_reaction_title),
+            tint = if (reacted) redTint else PikuColors.textSecondary,
+            modifier = Modifier.size(22.dp),
+        )
+        if (count > 0) {
+            Spacer(Modifier.width(4.dp))
             Text(
-                text = badge,
-                fontSize = 11.sp,
-                lineHeight = 15.sp,
+                text = formatReactionCount(count),
+                color = if (reacted) redTint else PikuColors.textPrimary,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
-                color = PikuColors.textPrimary,
                 maxLines = 1,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 1.dp, end = 1.dp)
-                    .clip(RoundedCornerShape(9.dp))
-                    .background(
-                        if (dark) BadgeBgDark else BadgeBgLight,
-                    )
-                    .border(
-                        BorderStroke(0.5.dp, if (dark) SoftBorderDark else SoftBorderLight),
-                        RoundedCornerShape(9.dp),
-                    )
-                    .padding(horizontal = 5.dp, vertical = 1.5.dp),
             )
         }
     }
@@ -324,11 +359,11 @@ internal fun BottomBarGuideHint(
             .navigationBarsPadding()
             .padding(bottom = 72.dp)
             .graphicsLayer { this.alpha = alpha }
-            .shadow(6.dp, shape, ambientColor = Color(0x33000000), spotColor = Color(0x40000000))
+            .shadow(6.dp, shape, ambientColor = ShadowAmbient, spotColor = ShadowSpot)
             .clip(shape)
-            .background(if (dark) Color(0xE6242321) else Color(0xF2FFFFFF))
+            .background(if (dark) GuideHintBgDark else GuideHintBgLight)
             .border(
-                BorderStroke(0.5.dp, if (dark) Color(0x59FFFFFF) else Color(0x59C8C2B8)),
+                BorderStroke(0.5.dp, if (dark) SoftBorderDark else SoftBorderLight),
                 shape,
             )
             .clickable(onClick = onDismiss)

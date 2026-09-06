@@ -18,4 +18,11 @@ enum class PoipikuCategory(val cd: Int, val nameRes: Int) {
     NETABARE(23, R.string.category_netabare),
     SHIRIWOTATAKU(30, R.string.category_shiriwotataku),
     OSHINAGAKI(32, R.string.category_oshinagaki),
+    ;
+
+    companion object {
+        /** 按站点 CD 查分类（不含「全部」），未知 CD 返回 null */
+        fun fromCd(cd: Int): PoipikuCategory? =
+            entries.firstOrNull { it != ALL && it.cd == cd }
+    }
 }

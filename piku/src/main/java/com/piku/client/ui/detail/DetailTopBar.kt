@@ -44,6 +44,7 @@ import com.piku.client.ui.theme.LoginTextPrimaryDark
 import com.piku.client.ui.theme.PikuColors
 import com.piku.client.ui.theme.PillBorderDark
 import com.piku.client.ui.theme.PillBorderLight
+import com.piku.client.ui.theme.TranslateActiveBlue
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -154,7 +155,7 @@ internal fun DetailTopBar(
                     ),
                     tint = when {
                         translating -> PikuColors.textFaint
-                        showTranslation -> Color(0xFF4FC3F7)
+                        showTranslation -> TranslateActiveBlue
                         // 暗色下按下去提亮到纯白（LoginTextPrimaryDark #E8E4DE 再往上只有白色了）。
                         // 亮色主题下不改色：图标本来就是深色 #2C2C2C，往浅改反而像禁用态，
                         // 按压反馈交给下面的缩放即可

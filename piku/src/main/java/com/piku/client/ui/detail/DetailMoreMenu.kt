@@ -44,7 +44,13 @@ import androidx.compose.ui.window.PopupProperties
 import com.piku.client.R
 import com.piku.client.data.remote.translation.ModelEntry
 import com.piku.client.data.remote.translation.Role
+import com.piku.client.ui.theme.MenuPopupBgDark
+import com.piku.client.ui.theme.MenuPopupBgLight
 import com.piku.client.ui.theme.PikuColors
+import com.piku.client.ui.theme.ShadowSpot
+import com.piku.client.ui.theme.ShadowSpotHeavy
+import com.piku.client.ui.theme.SoftBorderDark
+import com.piku.client.ui.theme.SoftBorderLight
 
 @Composable
 internal fun ModelPickerRow(
@@ -121,11 +127,11 @@ internal fun MoreMenuPopup(
                 .onSizeChanged { size ->
                     offsetY = -size.height - with(density) { 8.dp.roundToPx() }
                 }
-                .shadow(14.dp, shape, ambientColor = Color(0x40000000), spotColor = Color(0x55000000))
+                .shadow(14.dp, shape, ambientColor = ShadowSpot, spotColor = ShadowSpotHeavy)
                 .clip(shape)
-                .background(if (dark) Color(0xF2262421) else Color(0xF7FFFFFF))
+                .background(if (dark) MenuPopupBgDark else MenuPopupBgLight)
                 .border(
-                    BorderStroke(0.5.dp, if (dark) Color(0x59FFFFFF) else Color(0x59C8C2B8)),
+                    BorderStroke(0.5.dp, if (dark) SoftBorderDark else SoftBorderLight),
                     shape,
                 )
                 .padding(vertical = 6.dp),

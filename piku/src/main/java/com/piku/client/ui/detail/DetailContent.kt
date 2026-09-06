@@ -3,10 +3,12 @@ package com.piku.client.ui.detail
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -83,11 +85,21 @@ import com.piku.client.common.LinkSegment
 import com.piku.client.common.LinkText
 import com.piku.client.domain.model.WorkDetail
 import com.piku.client.ui.common.ExpandableIconAction
+import com.piku.client.ui.common.localizedCategoryName
 import com.piku.client.ui.common.rememberAnimatedImage
 import com.piku.client.ui.theme.AccentSolid
 import com.piku.client.ui.theme.LoginBackgroundDark
 import com.piku.client.ui.theme.LoginTextPrimaryDark
+import com.piku.client.ui.theme.OverlayBorder
+import com.piku.client.ui.theme.OverlayScrim
+import com.piku.client.ui.theme.OverlayScrimFaint
+import com.piku.client.ui.theme.OverlayScrimLight
+import com.piku.client.ui.theme.OverlayTipDark
+import com.piku.client.ui.theme.OverlayTipLight
 import com.piku.client.ui.theme.PikuColors
+import com.piku.client.ui.theme.TranslateActiveBlue
+import com.piku.client.ui.theme.TranslateActiveBlueTint
+import com.piku.client.ui.theme.ViewerBackgroundDark
 import kotlin.math.roundToInt
 
 /** 描述折叠阈值：全文行数超过该值才折叠为 3 行，避免展开只多出一两行的尴尬 */
@@ -226,7 +238,7 @@ internal fun DetailContent(
                     Text(
                         text = linkify(titleText, dark, onRelatedWorkClick),
                         color = PikuColors.textPrimary,
-                        fontSize = 15.sp,
+                        fontSize = 17.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
                 }
@@ -378,7 +390,7 @@ private fun AuthorRow(detail: WorkDetail, dark: Boolean, onAuthorClick: () -> Un
         )
         if (detail.categoryName.isNotBlank()) {
             Text(
-                text = detail.categoryName,
+                text = localizedCategoryName(detail.categoryCd, detail.categoryName),
                 color = PikuColors.textSecondary,
                 fontSize = 11.sp,
                 modifier = Modifier
@@ -454,7 +466,7 @@ private fun ImagePager(
                     Modifier.height(boxHeightDp.dp)
                 },
             )
-            .clip(RoundedCornerShape(4.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(PikuColors.surfaceSoft),
     ) {
         if (detail.imageUrls.isEmpty()) {
@@ -558,9 +570,10 @@ private fun ImagePager(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(10.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(Color(0x99000000))
-                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(OverlayScrim)
+                        .border(BorderStroke(0.5.dp, OverlayBorder), RoundedCornerShape(999.dp))
+                        .padding(horizontal = 10.dp, vertical = 3.dp),
                 )
             }
             if (hasImageModel && onImageTranslateClick != null) {
@@ -574,13 +587,13 @@ private fun ImagePager(
                     onAutoExpandShown = onImageHintShown,
                     expandDurationMillis = IMAGE_HINT_EXPAND_MILLIS,
                     containerColor = when {
-                        isCurrentPageTranslating -> Color(0x44000000)
-                        imageTranslated -> Color(0x442196F3)
-                        dark -> Color(0x66000000)
-                        else -> Color(0x66FFFFFF)
+                        isCurrentPageTranslating -> OverlayScrimFaint
+                        imageTranslated -> TranslateActiveBlueTint
+                        dark -> OverlayScrim
+                        else -> OverlayScrimLight
                     },
                     // 展开时把底色压到近实色：文字是压在图片上的，半透明底会读不清
-                    expandedContainerColor = if (dark) Color(0xCC000000) else Color(0xCCFFFFFF),
+                    expandedContainerColor = if (dark) OverlayTipDark else OverlayTipLight,
                     height = 28.dp,
                     horizontalPadding = 6.dp,
                     modifier = Modifier
@@ -597,7 +610,7 @@ private fun ImagePager(
                             Icon(
                                 imageVector = Icons.Outlined.PhotoLibrary,
                                 contentDescription = stringResource(R.string.detail_image_translate),
-                                tint = if (imageTranslated) Color(0xFF4FC3F7)
+                                tint = if (imageTranslated) TranslateActiveBlue
                                 else PikuColors.textPrimary,
                                 modifier = Modifier.size(16.dp),
                             )
@@ -657,7 +670,7 @@ private fun NovelReaderEntryButton(
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(14.dp))
-            .background(if (dark) Color(0xCC141312) else Color(0xCCFFFFFF))
+            .background(if (dark) ViewerBackgroundDark.copy(alpha = 0.8f) else OverlayTipLight)
             .clickable(onClick = onOpen)
             .padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,

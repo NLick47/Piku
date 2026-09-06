@@ -70,11 +70,39 @@ val SwitchUncheckedTrackDark = SurfaceVariantDark
 
 val SoftBorderLight = Color(0x59C8C2B8)
 val SoftBorderDark = Color(0x59FFFFFF)
-val BadgeBgLight = Color(0xF2FFFFFF)
-val BadgeBgDark = Color(0xCC5C5852)
 
 val LoginButtonLight = Color(0xFF4A453F)
 val LoginButtonDark = LoginTextPrimaryDark
+
+// 详情页图上浮层：盖在任意图片上，不随主题
+val OverlayScrim = Color(0x66000000)
+val OverlayScrimLight = Color(0x66FFFFFF)
+val OverlayScrimHeavy = Color(0x99000000)
+val OverlayScrimFaint = Color(0x44000000)
+val OverlayBorder = Color(0x33FFFFFF)
+val OverlayTipDark = Color(0xCC000000)
+val OverlayTipLight = Color(0xCCFFFFFF)
+val TranslateActiveBlue = Color(0xFF4FC3F7)
+val TranslateActiveBlueTint = Color(0x442196F3)
+
+// 详情页浮窗玻璃与弹层，多页共用同一对值
+val GlassBarBgDark = Color(0xE63A3834)
+val GlassBarBgLight = Color(0xE6FFFFFF)
+val GuideHintBgDark = Color(0xE6242321)
+val GuideHintBgLight = Color(0xF2FFFFFF)
+val MenuPopupBgDark = Color(0xF2262421)
+val MenuPopupBgLight = Color(0xF7FFFFFF)
+val ShadowSpotHeavy = Color(0x55000000)
+val BlurScrimDark = Color(0x59000000)
+val BlurScrimLight = Color(0x40000000)
+
+// 背景装饰光斑（登录/抽屉/详情底衬共用）
+val BlobPurpleLight = Color(0x4D9A7FC9)
+val BlobPurpleDark = Color(0x409A7FC9)
+val BlobWarmLight = Color(0x4DC98A2D)
+val BlobWarmDark = Color(0x33C98A2D)
+val BlobPinkLight = Color(0x4DD8A8B8)
+val BlobPinkDark = Color(0x33D8A8B8)
 
 val HomeBgTopLight = Color(0xFFF5F3F0)
 val HomeBgBottomLight = Color(0xFFF0EFED)
