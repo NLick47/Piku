@@ -23,7 +23,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -52,6 +51,7 @@ import com.piku.client.ui.common.FollowPillButton
 import com.piku.client.ui.common.GlassCard
 import com.piku.client.ui.common.LoaderDots
 import com.piku.client.ui.common.LoginPrompt
+import com.piku.client.ui.common.PikuBackButton
 import com.piku.client.ui.common.UserAvatar
 import com.piku.client.ui.theme.GlassHeaderTintDark
 import com.piku.client.ui.theme.GlassHeaderTintLight
@@ -178,14 +178,11 @@ private fun FollowTopBar(
             .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(onClick = onBack) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                contentDescription = stringResource(R.string.back),
-                tint = PikuColors.textPrimary,
-                modifier = Modifier.size(20.dp),
-            )
-        }
+        PikuBackButton(
+            onClick = onBack,
+            dark = dark,
+            contentDescription = stringResource(R.string.back),
+        )
         Column(Modifier.weight(1f)) {
             Text(
                 text = title,

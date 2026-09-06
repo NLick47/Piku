@@ -3,10 +3,8 @@ package com.piku.client.ui.login
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -15,13 +13,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -41,7 +35,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.piku.client.R
 import com.piku.client.ui.theme.PikuColors
 
 internal val LoginErrorRed = Color(0xFFD64545)
@@ -95,34 +88,6 @@ internal fun LoginBlobs(dark: Boolean) {
         blob(blobPurple, size.width - 40.dp.toPx(), 96.dp.toPx(), 120.dp.toPx())
         blob(blobWarm, 0f, 400.dp.toPx(), 100.dp.toPx())
         blob(blobPink, size.width, 620.dp.toPx(), 90.dp.toPx())
-    }
-}
-
-@Composable
-internal fun GlassBackButton(
-    onClick: () -> Unit,
-    dark: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    Box(
-        modifier = modifier
-            .size(42.dp)
-            .shadow(6.dp, CircleShape, ambientColor = Color(0x26000000), spotColor = Color(0x33000000))
-            .background(if (dark) Color(0xF2262421) else Color(0xF2FFFFFF))
-            .clip(CircleShape)
-            .border(
-                BorderStroke(0.5.dp, if (dark) Color(0x3DFFFFFF) else Color(0x59C8C2B8)),
-                CircleShape,
-            )
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-            contentDescription = stringResource(R.string.back),
-            tint = PikuColors.textPrimary,
-            modifier = Modifier.size(20.dp),
-        )
     }
 }
 

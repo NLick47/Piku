@@ -27,7 +27,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -51,6 +50,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.piku.client.R
 import com.piku.client.domain.model.Work
 import com.piku.client.ui.common.LoaderDots
+import com.piku.client.ui.common.PikuBackButton
 import com.piku.client.ui.common.WorkCard
 import com.piku.client.ui.home.CustomTagSection
 import com.piku.client.ui.theme.HomeBgBottomDark
@@ -176,14 +176,11 @@ private fun TagDetailContent(
                 .padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onBack) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                    contentDescription = stringResource(R.string.back),
-                    tint = PikuColors.textPrimary,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
+            PikuBackButton(
+                onClick = onBack,
+                dark = dark,
+                contentDescription = stringResource(R.string.back),
+            )
             Column(Modifier.weight(1f)) {
                 Text(
                     text = "#${state.selectedTag}",
@@ -324,13 +321,11 @@ private fun TopBar(
             .padding(horizontal = 20.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(onClick = onBack) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                contentDescription = stringResource(R.string.back),
-                tint = PikuColors.textPrimary,
-            )
-        }
+        PikuBackButton(
+            onClick = onBack,
+            dark = dark,
+            contentDescription = stringResource(R.string.back),
+        )
         Text(
             text = title,
             color = PikuColors.textPrimary,

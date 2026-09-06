@@ -24,7 +24,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material3.Icon
@@ -59,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.piku.client.R
 import com.piku.client.common.LinkSegment
+import com.piku.client.ui.common.PikuBackButton
 import com.piku.client.common.LinkText
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.ui.theme.ControlAccentDark
@@ -217,14 +217,12 @@ fun FullNovelViewer(
                     .padding(start = 4.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = onClose) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = stringResource(R.string.detail_fullscreen_close),
-                        tint = fg,
-                        modifier = Modifier.size(22.dp),
-                    )
-                }
+                PikuBackButton(
+                    onClick = onClose,
+                    dark = !light,
+                    contentDescription = stringResource(R.string.detail_fullscreen_close),
+                    tint = fg,
+                )
                 Text(
                     text = title,
                     color = fg,

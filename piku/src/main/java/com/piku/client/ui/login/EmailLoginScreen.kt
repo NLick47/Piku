@@ -61,6 +61,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.piku.client.R
+import com.piku.client.ui.common.PikuBackButton
 import com.piku.client.ui.theme.HomeBgBottomDark
 import com.piku.client.ui.theme.HomeBgBottomLight
 import com.piku.client.ui.theme.HomeBgTopDark
@@ -151,12 +152,13 @@ fun EmailLoginScreen(
         // 全屏 verticalScroll 的指针输入层会挡住其下方兄弟节点的点击
         // （历史 bug：登录页返回按钮点了无效）
         if (canGoBack) {
-            GlassBackButton(
+            PikuBackButton(
                 onClick = {
                     android.util.Log.d("PikuDiag", "login glass back button clicked")
                     onBack()
                 },
                 dark = dark,
+                glass = true,
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .statusBarsPadding()

@@ -27,7 +27,6 @@ import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridS
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material3.AlertDialog
@@ -56,6 +55,7 @@ import com.piku.client.R
 import com.piku.client.domain.model.HistoryTimeRange
 import com.piku.client.domain.model.Work
 import com.piku.client.ui.common.LoaderDots
+import com.piku.client.ui.common.PikuBackButton
 import com.piku.client.ui.common.WorkCard
 import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.GlassCardBgDark
@@ -206,13 +206,11 @@ private fun HistoryTopBar(
             .padding(horizontal = 4.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(onClick = onBack) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                contentDescription = stringResource(R.string.back),
-                tint = primary,
-            )
-        }
+        PikuBackButton(
+            onClick = onBack,
+            dark = dark,
+            contentDescription = stringResource(R.string.back),
+        )
         Text(
             text = stringResource(R.string.history_title),
             color = primary,

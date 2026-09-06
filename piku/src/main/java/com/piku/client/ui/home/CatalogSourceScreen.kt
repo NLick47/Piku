@@ -24,7 +24,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
@@ -56,6 +55,7 @@ import androidx.compose.ui.unit.sp
 import com.piku.client.data.local.CatalogSource
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.R
+import com.piku.client.ui.common.PikuBackButton
 import androidx.compose.animation.animateColorAsState
 import com.piku.client.ui.theme.LoginBackgroundDark
 import com.piku.client.ui.theme.PikuColors
@@ -132,14 +132,11 @@ fun CatalogSourceScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(top = 10.dp, bottom = 6.dp),
             ) {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                        contentDescription = null,
-                        tint = secondary,
-                        modifier = Modifier.size(22.dp),
-                    )
-                }
+                PikuBackButton(
+                    onClick = onBack,
+                    dark = dark,
+                    contentDescription = stringResource(R.string.back),
+                )
                 Text(
                     text = stringResource(R.string.ai_translate_catalog_source),
                     color = primary,

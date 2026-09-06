@@ -38,7 +38,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Link
@@ -89,6 +88,7 @@ import com.piku.client.data.repository.SyncResult
 import com.piku.client.data.repository.SyncState
 import com.piku.client.data.repository.TestConnectionState
 import com.piku.client.ui.common.GlassCard
+import com.piku.client.ui.common.PikuBackButton
 import com.piku.client.ui.theme.FollowDark
 import com.piku.client.ui.theme.FollowLight
 import com.piku.client.ui.theme.HomeBgBottomDark
@@ -224,7 +224,7 @@ fun WebDavSettingsScreen(
                 .imePadding()
                 .verticalScroll(rememberScrollState()),
         ) {
-            SettingsTopBar(title = stringResource(R.string.webdav_settings_title), primary = primary, onBack = onBack)
+            SettingsTopBar(title = stringResource(R.string.webdav_settings_title), primary = primary, dark = dark, onBack = onBack)
 
             Column(modifier = Modifier.padding(horizontal = PagePaddingH)) {
                 Spacer(Modifier.height(4.dp))
@@ -330,6 +330,7 @@ fun WebDavSettingsScreen(
 private fun SettingsTopBar(
     title: String,
     primary: Color,
+    dark: Boolean,
     onBack: () -> Unit,
 ) {
     Row(
@@ -339,13 +340,11 @@ private fun SettingsTopBar(
             .height(48.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(onClick = onBack) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                contentDescription = stringResource(R.string.back),
-                tint = primary,
-            )
-        }
+        PikuBackButton(
+            onClick = onBack,
+            dark = dark,
+            contentDescription = stringResource(R.string.back),
+        )
         Text(
             text = title,
             color = primary,

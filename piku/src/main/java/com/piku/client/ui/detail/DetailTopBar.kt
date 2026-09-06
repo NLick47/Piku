@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -37,6 +36,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.piku.client.R
+import com.piku.client.ui.common.PikuBackButton
 import com.piku.client.ui.theme.GlassHeaderTintDark
 import com.piku.client.ui.theme.GlassHeaderTintLight
 import com.piku.client.ui.theme.HomeFrameIcon
@@ -88,14 +88,11 @@ internal fun DetailTopBar(
             .padding(start = 4.dp, end = 8.dp, top = 4.dp, bottom = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(onClick = onBack) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                contentDescription = stringResource(R.string.detail_back),
-                tint = PikuColors.textPrimary,
-                modifier = Modifier.size(20.dp),
-            )
-        }
+        PikuBackButton(
+            onClick = onBack,
+            dark = dark,
+            contentDescription = stringResource(R.string.detail_back),
+        )
         IconButton(onClick = onHomeClick) {
             Icon(
                 imageVector = HomeFrameIcon,

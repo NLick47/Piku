@@ -31,7 +31,6 @@ import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridS
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.DeleteOutline
@@ -77,6 +76,7 @@ import com.piku.client.R
 import com.piku.client.domain.model.FavoriteFolder
 import com.piku.client.domain.model.Work
 import com.piku.client.ui.common.LoaderDots
+import com.piku.client.ui.common.PikuBackButton
 import com.piku.client.ui.common.WorkCard
 import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.HomeBgBottomDark
@@ -322,13 +322,11 @@ private fun FolderListContent(
                 .padding(horizontal = 20.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onBack) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                    contentDescription = stringResource(R.string.back),
-                    tint = PikuColors.textPrimary,
-                )
-            }
+            PikuBackButton(
+                onClick = onBack,
+                dark = dark,
+                contentDescription = stringResource(R.string.back),
+            )
             Text(
                 text = stringResource(R.string.collection_title),
                 color = PikuColors.textPrimary,
@@ -640,14 +638,11 @@ private fun FolderDetailContent(
                 .padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onBack) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                    contentDescription = stringResource(R.string.detail_back),
-                    tint = PikuColors.textPrimary,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
+            PikuBackButton(
+                onClick = onBack,
+                dark = dark,
+                contentDescription = stringResource(R.string.detail_back),
+            )
             Column(Modifier.weight(1f)) {
                 Text(
                     text = folderName,

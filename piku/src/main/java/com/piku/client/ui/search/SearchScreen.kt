@@ -37,7 +37,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
@@ -88,6 +87,7 @@ import com.piku.client.domain.model.Work
 import com.piku.client.ui.common.FollowPillButton
 import com.piku.client.ui.common.GlassCard
 import com.piku.client.ui.common.LoaderDots
+import com.piku.client.ui.common.PikuBackButton
 import com.piku.client.ui.common.LoginPrompt
 import com.piku.client.ui.common.UserAvatar
 import com.piku.client.ui.common.WorkCard
@@ -279,14 +279,11 @@ private fun SearchTopBar(
             .padding(start = 4.dp, end = 16.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(onClick = onBack) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                contentDescription = stringResource(R.string.back),
-                tint = primary,
-                modifier = Modifier.size(20.dp),
-            )
-        }
+        PikuBackButton(
+            onClick = onBack,
+            dark = dark,
+            contentDescription = stringResource(R.string.back),
+        )
         Row(
             modifier = Modifier
                 .weight(1f)
@@ -929,14 +926,11 @@ private fun TagWorksHeader(
             .padding(horizontal = 4.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(onClick = onBack) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                contentDescription = stringResource(R.string.back),
-                tint = primary,
-                modifier = Modifier.size(20.dp),
-            )
-        }
+        PikuBackButton(
+            onClick = onBack,
+            dark = dark,
+            contentDescription = stringResource(R.string.back),
+        )
         Text(
             text = "#$tag",
             color = primary,

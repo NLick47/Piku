@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.piku.client.R
+import com.piku.client.ui.common.PikuBackButton
 import com.piku.client.ui.theme.HomeBgBottomDark
 import com.piku.client.ui.theme.HomeBgBottomLight
 import com.piku.client.ui.theme.HomeBgTopDark
@@ -153,12 +154,13 @@ fun RegisterScreen(
         }
 
         if (canGoBack) {
-            GlassBackButton(
+            PikuBackButton(
                 onClick = {
                     android.util.Log.d("PikuDiag", "register glass back button clicked")
                     onBack()
                 },
                 dark = dark,
+                glass = true,
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .statusBarsPadding()

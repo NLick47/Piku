@@ -29,7 +29,6 @@ import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridS
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.OpenInBrowser
@@ -84,6 +83,7 @@ import com.piku.client.R
 import com.piku.client.domain.model.UserPageInfo
 import com.piku.client.domain.model.Work
 import com.piku.client.ui.common.LoaderDots
+import com.piku.client.ui.common.PikuBackButton
 import com.piku.client.ui.common.WorkCard
 import com.piku.client.ui.theme.HomeBgBottomDark
 import com.piku.client.ui.theme.HomeBgBottomLight
@@ -265,11 +265,6 @@ private fun parseHexColor(hex: String): Color? = try {
     null
 }
 
-/**
- * 无背景设置时的兜底渐变：梦幻粉紫对角混合（亮/暗共用）——
- * 左上粉 → 紫罗兰/蓝紫过渡 → 右下暖杏，左上角到右下角的对角方向，
- * 配合顶部径向柔光呈现小红书式梦幻氛围。
- */
 private fun dreamyHeaderBrush(size: Size): Brush {
     return Brush.linearGradient(
         colors = listOf(
@@ -312,14 +307,11 @@ private fun UserWorksTopBar(
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onBack) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                    contentDescription = stringResource(R.string.back),
-                    tint = PikuColors.textPrimary,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
+            PikuBackButton(
+                onClick = onBack,
+                dark = dark,
+                contentDescription = stringResource(R.string.back),
+            )
             Box(Modifier.weight(1f)) {
                 // 常规模式：标题 + ID
                 Column(Modifier.alpha(normalAlpha)) {
