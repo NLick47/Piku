@@ -288,7 +288,11 @@
     <string name="detail_save_permission_denied">需要存储权限才能保存图片</string>
     <string name="detail_save_confirm_title">保存图片</string>
     <string name="detail_save_confirm_message">将图片保存到相册？</string>
+    <string name="detail_save_confirm_message_multi">共 %1$d 张图片，保存到相册？</string>
     <string name="detail_save_confirm">保存</string>
+    <string name="detail_save_all">保存全部</string>
+    <string name="detail_save_all_success">已保存全部 %1$d 张图片</string>
+    <string name="detail_save_all_partial">成功 %1$d 张，失败 %2$d 张</string>
     <string name="detail_tag_added">已添加到个人标签</string>
     <string name="detail_tag_removed">已从个人标签移除</string>
     <string name="detail_tag_add_to_my_tags">添加到个人标签</string>

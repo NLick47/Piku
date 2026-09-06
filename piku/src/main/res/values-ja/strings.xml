@@ -288,7 +288,11 @@
     <string name="detail_save_permission_denied">画像の保存にはストレージ権限が必要です</string>
     <string name="detail_save_confirm_title">画像を保存</string>
     <string name="detail_save_confirm_message">この画像をアルバムに保存しますか？</string>
+    <string name="detail_save_confirm_message_multi">全%1$d枚です。アルバムに保存しますか？</string>
     <string name="detail_save_confirm">保存</string>
+    <string name="detail_save_all">すべて保存</string>
+    <string name="detail_save_all_success">全 %1$d 枚を保存しました</string>
+    <string name="detail_save_all_partial">%1$d 枚成功、%2$d 枚失敗</string>
     <string name="detail_tag_added">マイタグに追加しました</string>
     <string name="detail_tag_removed">マイタグから削除しました</string>
     <string name="detail_tag_add_to_my_tags">マイタグに追加</string>

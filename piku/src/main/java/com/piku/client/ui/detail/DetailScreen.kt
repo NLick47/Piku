@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -129,6 +130,20 @@ fun DetailScreen(
         snackbarHostState = snackbarHostState,
         onConsumed = viewModel::clearSaveFeedback,
     )
+    // 批量保存完成：带数字的结果文案（全失败沿用单张保存的静态失败文案）
+    val saveAllMessage = state.saveAllFeedback?.let { fb ->
+        val failed = fb.total - fb.ok
+        when {
+            fb.ok == 0 -> stringResource(R.string.detail_save_failed)
+            failed == 0 -> stringResource(R.string.detail_save_all_success, fb.total)
+            else -> stringResource(R.string.detail_save_all_partial, fb.ok, failed)
+        }
+    }
+    FeedbackSnackbar(
+        message = saveAllMessage,
+        snackbarHostState = snackbarHostState,
+        onConsumed = viewModel::clearSaveAllFeedback,
+    )
     FeedbackSnackbar(
         message = state.tagFeedbackRes?.let { stringResource(it) },
         snackbarHostState = snackbarHostState,
@@ -146,27 +161,39 @@ fun DetailScreen(
     // 长按图片 → 先确认再保存；确认后 API 29+ 免权限直接存，API 26-28 需申请 WRITE_EXTERNAL_STORAGE
     val savePermissionMessage = stringResource(R.string.detail_save_permission_denied)
     var pendingSavePage by rememberSaveable { mutableIntStateOf(-1) }
+    var pendingSaveAll by rememberSaveable { mutableStateOf(false) }
     var confirmSavePage by rememberSaveable { mutableIntStateOf(-1) }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
-        if (granted && pendingSavePage >= 0) {
-            viewModel.saveImage(pendingSavePage)
-        } else if (!granted && pendingSavePage >= 0) {
-            scope.launch { snackbarHostState.showSnackbar(savePermissionMessage) }
+        when {
+            granted && pendingSavePage >= 0 -> viewModel.saveImage(pendingSavePage)
+            granted && pendingSaveAll -> viewModel.saveAllImages()
+            !granted && (pendingSavePage >= 0 || pendingSaveAll) ->
+                scope.launch { snackbarHostState.showSnackbar(savePermissionMessage) }
         }
         pendingSavePage = -1
+        pendingSaveAll = false
     }
-    fun requestSaveImage(page: Int) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ||
+    fun hasSavePermission(): Boolean =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ||
             ContextCompat.checkSelfPermission(
                 context,
                 Manifest.permission.WRITE_EXTERNAL_STORAGE,
             ) == PackageManager.PERMISSION_GRANTED
-        ) {
+    fun requestSaveImage(page: Int) {
+        if (hasSavePermission()) {
             viewModel.saveImage(page)
         } else {
             pendingSavePage = page
+            permissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        }
+    }
+    fun requestSaveAllImages() {
+        if (hasSavePermission()) {
+            viewModel.saveAllImages()
+        } else {
+            pendingSaveAll = true
             permissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
         }
     }
@@ -415,6 +442,7 @@ fun DetailScreen(
             )
         }
         if (confirmSavePage >= 0) {
+            val imageCount = state.detail?.imageUrls?.size ?: 0
             AlertDialog(
                 onDismissRequest = { confirmSavePage = -1 },
                 containerColor = PikuColors.surface,
@@ -427,22 +455,44 @@ fun DetailScreen(
                     )
                 },
                 text = {
+                    // 多图把张数放正文，按钮保持短文案
                     Text(
-                        text = stringResource(R.string.detail_save_confirm_message),
+                        text = if (imageCount > 1) {
+                            stringResource(R.string.detail_save_confirm_message_multi, imageCount)
+                        } else {
+                            stringResource(R.string.detail_save_confirm_message)
+                        },
                         color = PikuColors.textSecondary,
                         fontSize = 13.sp,
                     )
                 },
                 confirmButton = {
-                    TextButton(onClick = {
-                        val page = confirmSavePage
-                        confirmSavePage = -1
-                        requestSaveImage(page)
-                    }) {
-                        Text(
-                            text = stringResource(R.string.detail_save_confirm),
-                            color = PikuColors.accent,
-                        )
+                    Row {
+                        if (imageCount > 1) {
+                            TextButton(
+                                onClick = {
+                                    confirmSavePage = -1
+                                    requestSaveAllImages()
+                                },
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.detail_save_all),
+                                    color = PikuColors.accent,
+                                )
+                            }
+                        }
+                        TextButton(
+                            onClick = {
+                                val page = confirmSavePage
+                                confirmSavePage = -1
+                                requestSaveImage(page)
+                            },
+                        ) {
+                            Text(
+                                text = stringResource(R.string.detail_save_confirm),
+                                color = PikuColors.accent,
+                            )
+                        }
                     }
                 },
                 dismissButton = {

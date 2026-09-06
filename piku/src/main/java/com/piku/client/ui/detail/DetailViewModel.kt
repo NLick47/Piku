@@ -42,6 +42,7 @@ import com.piku.client.R
 import com.piku.client.ui.common.toFeedErrorRes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -53,6 +54,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import com.piku.client.di.ApplicationScope
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 
 /** 可独立切换原文/译文的文本字段 */
@@ -86,6 +89,8 @@ data class DetailUiState(
     val favoriteFeedbackRes: Int? = null,
     val savingImage: Boolean = false,
     val saveFeedbackRes: Int? = null,
+    /** 批量保存完成的一次性结果事件（全量完成后置位，UI 弹 snackbar）；过程静默无进度 */
+    val saveAllFeedback: SaveAllFeedback? = null,
     /** 个人自定义标签（用于详情页把作品标签收藏进个人标签） */
     val customTags: List<String> = emptyList(),
     val tagFeedbackRes: Int? = null,
@@ -178,6 +183,12 @@ data class ViewerImage(
     val fullUrl: String?,
 )
 
+/** 批量保存全部的一次性结果：失败数 = total - ok */
+data class SaveAllFeedback(
+    val ok: Int,
+    val total: Int,
+)
+
 @HiltViewModel
 class DetailViewModel @Inject constructor(
     private val loadWorkDetailUseCase: LoadWorkDetailUseCase,
@@ -201,6 +212,7 @@ class DetailViewModel @Inject constructor(
     private val imageTranslateEngine: ImageTranslateEngine,
     private val prefs: SharedPreferences,
     savedStateHandle: SavedStateHandle,
+    @ApplicationScope private val appScope: CoroutineScope,
 ) : ViewModel() {
 
     val authorId: Long = savedStateHandle["authorId"] ?: -1L
@@ -1005,6 +1017,39 @@ class DetailViewModel @Inject constructor(
         _uiState.update { it.copy(saveFeedbackRes = null) }
     }
 
+
+    fun saveAllImages() {
+        val state = _uiState.value
+        val detail = state.detail ?: return
+        val total = detail.imageUrls.size
+        if (total == 0) return
+        if (!runningSaveAlls.add(workId)) return
+        appScope.launch {
+            try {
+                val needFull = !detail.passwordProtected && !detail.warning && state.fullImageUrls.isEmpty()
+                if (needFull) {
+                    loadFullImages()
+                    withTimeoutOrNull(IMAGE_WAIT_MILLIS) {
+                        _uiState.filter { it.fullImageUrls.isNotEmpty() }.first()
+                    }
+                }
+                var ok = 0
+                for (page in 0 until total) {
+                    val url = _uiState.value.fullImageUrls.getOrNull(page) ?: detail.imageUrls[page]
+                    runCatching { imageSaver.save(url, "Piku_${workId}_${page + 1}") }
+                        .onSuccess { ok++ }
+                }
+                _uiState.update { it.copy(saveAllFeedback = SaveAllFeedback(ok = ok, total = total)) }
+            } finally {
+                runningSaveAlls.remove(workId)
+            }
+        }
+    }
+
+    fun clearSaveAllFeedback() {
+        _uiState.update { it.copy(saveAllFeedback = null) }
+    }
+
     fun toggleFavoriteFolder(folderId: Long) {
         val detail = _uiState.value.detail ?: return
         viewModelScope.launch {
@@ -1183,6 +1228,9 @@ class DetailViewModel @Inject constructor(
     }
 
     private companion object {
+        /** 批量保存进行中的作品集合：跨 VM 实例防重入 */
+        val runningSaveAlls: MutableSet<Long> = ConcurrentHashMap.newKeySet()
+
         /** 预填进解锁框的常见作品密码（Poipiku 上大量作品沿用 Pixiv 的 `yes` 惯例） */
         const val COMMON_WORK_PASSWORD = "yes"
 
