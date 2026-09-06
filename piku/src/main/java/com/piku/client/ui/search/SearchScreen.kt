@@ -32,20 +32,21 @@ import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.Label
+import androidx.compose.material.icons.outlined.People
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -66,6 +67,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -99,6 +101,7 @@ import com.piku.client.ui.theme.LocalDarkTheme
 import com.piku.client.ui.theme.LoginBackgroundDark
 import com.piku.client.ui.theme.LoginTextFaintLight
 import com.piku.client.ui.theme.LoginTextSecondaryDark
+import com.piku.client.ui.theme.LoginTextSecondaryLight
 import com.piku.client.ui.theme.PikuColors
 import com.piku.client.ui.theme.WorkCardBgDark
 import com.piku.client.ui.theme.WorkCardBorderDark
@@ -284,61 +287,67 @@ private fun SearchTopBar(
                 modifier = Modifier.size(20.dp),
             )
         }
-        OutlinedTextField(
-            value = query,
-            onValueChange = onQueryChange,
-            placeholder = {
-                Text(
-                    text = stringResource(R.string.search_placeholder),
-                    color = if (dark) LoginTextSecondaryDark else LoginTextFaintLight,
-                    fontSize = 14.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            },
-            leadingIcon = {
-                Icon(
-                    imageVector = Icons.Filled.Search,
-                    contentDescription = null,
-                    tint = secondary,
-                    modifier = Modifier.size(17.dp),
-                )
-            },
-            trailingIcon = {
-                // 固定占位，避免清空按钮出现/消失时输入框跳动
-                Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
-                    if (query.isNotEmpty()) {
-                        IconButton(
-                            onClick = { onQueryChange("") },
-                            modifier = Modifier.size(28.dp),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Close,
-                                contentDescription = stringResource(R.string.search_clear),
-                                tint = if (dark) LoginTextSecondaryDark else LoginTextFaintLight,
-                                modifier = Modifier.size(16.dp),
-                            )
-                        }
-                    }
-                }
-            },
-            singleLine = true,
-            shape = RoundedCornerShape(18.dp),
-            textStyle = TextStyle(fontSize = 15.sp, color = primary),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = if (dark) Color(0x40FFFFFF) else Color(0xD9FFFFFF),
-                unfocusedContainerColor = if (dark) Color(0x40FFFFFF) else Color(0xD9FFFFFF),
-                focusedBorderColor = if (dark) Color(0x66FFFFFF) else Color(0x59A09A92),
-                unfocusedBorderColor = if (dark) Color(0x40FFFFFF) else Color(0x40A09A92),
-                cursorColor = PikuColors.accent,
-            ),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(onSearch = { onSubmit() }),
+        Row(
             modifier = Modifier
                 .weight(1f)
-                .focusRequester(focusRequester),
-        )
-        Spacer(Modifier.width(6.dp))
+                .clip(RoundedCornerShape(50))
+                .background(if (dark) Color.White.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.9f))
+                .border(
+                    BorderStroke(
+                        0.5.dp,
+                        if (dark) Color.White.copy(alpha = 0.3f) else LoginTextSecondaryLight.copy(alpha = 0.15f),
+                    ),
+                    RoundedCornerShape(50),
+                )
+                .height(42.dp)
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Search,
+                contentDescription = null,
+                tint = secondary,
+                modifier = Modifier.size(16.dp),
+            )
+            Spacer(Modifier.width(6.dp))
+            Box(Modifier.weight(1f)) {
+                if (query.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.search_placeholder),
+                        color = if (dark) LoginTextSecondaryDark else LoginTextFaintLight,
+                        fontSize = 14.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                BasicTextField(
+                    value = query,
+                    onValueChange = onQueryChange,
+                    singleLine = true,
+                    textStyle = TextStyle(fontSize = 15.sp, color = primary),
+                    cursorBrush = SolidColor(PikuColors.accent),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { onSubmit() }),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester),
+                )
+            }
+            if (query.isNotEmpty()) {
+                IconButton(
+                    onClick = { onQueryChange("") },
+                    modifier = Modifier.size(24.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = stringResource(R.string.search_clear),
+                        tint = if (dark) LoginTextSecondaryDark else LoginTextFaintLight,
+                        modifier = Modifier.size(14.dp),
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.width(8.dp))
         Text(
             text = stringResource(if (isLink) R.string.search_open_link else R.string.search_action),
             color = PikuColors.accent,
@@ -347,7 +356,7 @@ private fun SearchTopBar(
             modifier = Modifier
                 .clip(RoundedCornerShape(10.dp))
                 .clickable(onClick = onSubmit)
-                .padding(horizontal = 10.dp, vertical = 8.dp),
+                .padding(horizontal = 8.dp, vertical = 10.dp),
         )
     }
 }
@@ -365,7 +374,8 @@ private fun IdleContent(
     onClearHistory: () -> Unit,
     dark: Boolean,
 ) {
-    val label = if (dark) LoginTextSecondaryDark else LoginTextFaintLight
+    val title = PikuColors.textSecondary
+    val label = PikuColors.textFaint
     Column(
         Modifier
             .fillMaxSize()
@@ -387,13 +397,13 @@ private fun IdleContent(
             Icon(
                 imageVector = Icons.Outlined.History,
                 contentDescription = null,
-                tint = label,
+                tint = title,
                 modifier = Modifier.size(14.dp),
             )
             Spacer(Modifier.width(6.dp))
             Text(
                 text = stringResource(R.string.search_recent),
-                color = label,
+                color = title,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier.weight(1f),
@@ -409,13 +419,13 @@ private fun IdleContent(
                     Icon(
                         imageVector = Icons.Outlined.DeleteSweep,
                         contentDescription = null,
-                        tint = label,
+                        tint = title,
                         modifier = Modifier.size(16.dp),
                     )
                     Spacer(Modifier.width(4.dp))
                     Text(
                         text = stringResource(R.string.search_clear),
-                        color = label,
+                        color = title,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
                     )
@@ -447,7 +457,7 @@ private fun IdleContent(
         Spacer(Modifier.height(24.dp))
         Text(
             text = stringResource(R.string.search_hot_tags),
-            color = label,
+            color = title,
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium,
         )
@@ -493,22 +503,23 @@ private fun MyTagsRow(
     dark: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val label = if (dark) LoginTextSecondaryDark else LoginTextFaintLight
+    val title = PikuColors.textSecondary
+    val label = PikuColors.textFaint
     Column(modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                imageVector = Icons.Outlined.Label,
+                imageVector = Icons.AutoMirrored.Outlined.Label,
                 contentDescription = null,
-                tint = label,
+                tint = title,
                 modifier = Modifier.size(14.dp),
             )
             Spacer(Modifier.width(6.dp))
             Text(
                 text = stringResource(R.string.menu_my_tags),
-                color = label,
+                color = title,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier.weight(1f),
@@ -522,7 +533,7 @@ private fun MyTagsRow(
             ) {
                 Text(
                     text = stringResource(R.string.search_manage_tags),
-                    color = label,
+                    color = title,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                 )
@@ -559,29 +570,37 @@ private fun SearchTabRow(
     onSelect: (SearchTab) -> Unit,
     dark: Boolean,
 ) {
+    val shape = RoundedCornerShape(50)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(24.dp),
+            .padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 6.dp)
+            .clip(shape)
+            .background(if (dark) Color.White.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.9f))
+            .border(BorderStroke(0.5.dp, PikuColors.border), shape)
+            .padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         SearchTabItem(
             text = stringResource(R.string.search_tab_works),
             active = selected == SearchTab.WORKS,
             onClick = { onSelect(SearchTab.WORKS) },
             dark = dark,
+            modifier = Modifier.weight(1f),
         )
         SearchTabItem(
             text = stringResource(R.string.search_tab_users),
             active = selected == SearchTab.USERS,
             onClick = { onSelect(SearchTab.USERS) },
             dark = dark,
+            modifier = Modifier.weight(1f),
         )
         SearchTabItem(
             text = stringResource(R.string.search_tab_tags),
             active = selected == SearchTab.TAGS,
             onClick = { onSelect(SearchTab.TAGS) },
             dark = dark,
+            modifier = Modifier.weight(1f),
         )
     }
 }
@@ -592,30 +611,24 @@ private fun SearchTabItem(
     active: Boolean,
     onClick: () -> Unit,
     dark: Boolean,
+    modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(50))
+            .background(if (active) PikuColors.accent else Color.Transparent)
             .clickable(onClick = onClick)
-            .padding(horizontal = 4.dp, vertical = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .padding(vertical = 7.dp),
+        contentAlignment = Alignment.Center,
     ) {
         Text(
             text = text,
             color = when {
-                active -> PikuColors.accent
-                else -> if (dark) LoginTextSecondaryDark else Color(0xFF8A8A8A)
+                active -> if (dark) LoginBackgroundDark else Color.White
+                else -> PikuColors.textSecondary
             },
-            fontSize = 15.sp,
-            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-        )
-        Spacer(Modifier.height(2.dp))
-        Box(
-            modifier = Modifier
-                .width(if (active) 18.dp else 0.dp)
-                .height(2.dp)
-                .clip(RoundedCornerShape(1.dp))
-                .background(PikuColors.accent),
+            fontSize = 14.sp,
+            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
         )
     }
 }
@@ -695,7 +708,7 @@ private fun SearchKeywordChip(
         )
         Box(
             modifier = Modifier
-                .padding(start = 2.dp)
+                .padding(start = 8.dp)
                 .size(22.dp)
                 .clip(RoundedCornerShape(11.dp))
                 .clickable(onClick = onDelete),
@@ -744,11 +757,20 @@ private fun WorksTabContent(
             }
             state.works.isEmpty() -> {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        text = stringResource(R.string.search_empty),
-                        color = PikuColors.textFaint,
-                        fontSize = 14.sp,
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            imageVector = Icons.Outlined.Search,
+                            contentDescription = null,
+                            tint = PikuColors.textFaint,
+                            modifier = Modifier.size(32.dp),
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            text = stringResource(R.string.search_empty),
+                            color = PikuColors.textSecondary,
+                            fontSize = 14.sp,
+                        )
+                    }
                 }
             }
             else -> {
@@ -812,11 +834,20 @@ private fun TagsTabContent(
                     }
                     state.tagSuggestions.isEmpty() -> {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text(
-                                text = stringResource(R.string.search_tags_not_found),
-                                color = PikuColors.textFaint,
-                                fontSize = 14.sp,
-                            )
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Outlined.Label,
+                                    contentDescription = null,
+                                    tint = PikuColors.textFaint,
+                                    modifier = Modifier.size(32.dp),
+                                )
+                                Spacer(Modifier.height(12.dp))
+                                Text(
+                                    text = stringResource(R.string.search_tags_not_found),
+                                    color = PikuColors.textSecondary,
+                                    fontSize = 14.sp,
+                                )
+                            }
                         }
                     }
                     else -> {
@@ -847,11 +878,20 @@ private fun TagsTabContent(
                     }
                     state.tagWorks.isEmpty() -> {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text(
-                                text = stringResource(R.string.search_tags_empty),
-                                color = PikuColors.textFaint,
-                                fontSize = 14.sp,
-                            )
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Outlined.Label,
+                                    contentDescription = null,
+                                    tint = PikuColors.textFaint,
+                                    modifier = Modifier.size(32.dp),
+                                )
+                                Spacer(Modifier.height(12.dp))
+                                Text(
+                                    text = stringResource(R.string.search_tags_empty),
+                                    color = PikuColors.textSecondary,
+                                    fontSize = 14.sp,
+                                )
+                            }
                         }
                     }
                     else -> {
@@ -1028,7 +1068,7 @@ private fun TagCardItem(
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
-                        imageVector = Icons.Outlined.Label,
+                        imageVector = Icons.AutoMirrored.Outlined.Label,
                         contentDescription = "#${card.name}",
                         tint = PikuColors.textFaint,
                         modifier = Modifier.size(32.dp),
@@ -1180,12 +1220,21 @@ private fun UsersTabContent(
         }
         state.users.isEmpty() -> {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    text = stringResource(R.string.search_users_empty),
-                    color = PikuColors.textFaint,
-                    fontSize = 14.sp,
-                    lineHeight = 22.sp,
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        imageVector = Icons.Outlined.People,
+                        contentDescription = null,
+                        tint = PikuColors.textFaint,
+                        modifier = Modifier.size(32.dp),
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = stringResource(R.string.search_users_empty),
+                        color = PikuColors.textSecondary,
+                        fontSize = 14.sp,
+                        lineHeight = 22.sp,
+                    )
+                }
             }
         }
         else -> {
@@ -1244,6 +1293,7 @@ private fun SearchUserList(
                 dark = dark,
                 onClick = { onUserClick(user) },
                 onToggleFollow = { onToggleFollow(user.userId) },
+                modifier = Modifier.animateItem(),
             )
         }
         when {
@@ -1282,12 +1332,13 @@ private fun SearchUserRow(
     dark: Boolean,
     onClick: () -> Unit,
     onToggleFollow: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(20.dp)
     GlassCard(
         dark = dark,
         shape = shape,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
     ) {
