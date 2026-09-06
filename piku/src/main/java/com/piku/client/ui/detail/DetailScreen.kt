@@ -363,6 +363,9 @@ fun DetailScreen(
                         ?.takeIf { text -> novelTranslated && text.isNotBlank() }
                         ?: it.novelText
                 }
+                val showingTranslation = novelTranslated && (
+                    translatedNovel?.isNotBlank() == true || state.novelStreamProgress != null
+                )
                 FullNovelViewer(
                     text = novelBody,
                     title = it.translated?.title
@@ -378,7 +381,7 @@ fun DetailScreen(
                     onWorkClick = onRelatedWorkClick,
                     // 有原文正文就给原/译切换：没翻过时点击会在阅读器内触发拉取（长篇唯一入口）
                     translationAvailable = !it.novelText.isNullOrBlank(),
-                    showTranslation = novelTranslated,
+                    showTranslation = showingTranslation,
                     // 只有本轮真的在拉正文才显示加载态，元数据拉取不误标
                     translating = state.fetchingNovelText,
                     busy = state.translating,

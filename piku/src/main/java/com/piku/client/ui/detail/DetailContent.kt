@@ -44,6 +44,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -104,10 +105,8 @@ private const val IMAGE_HEIGHT_MAX_DP = 520
 private const val EMPTY_HEIGHT_DP = 160
 /** 密码解锁框高度：标签 + 输入框 + 按钮 + 错误提示 */
 private const val PASSWORD_HEIGHT_DP = 220
-/** 小说预览高度 */
-private const val NOVEL_PREVIEW_HEIGHT_DP = 320
-/** 小说预览最多展示的行数，其余走全屏阅读器 */
-private const val NOVEL_PREVIEW_MAX_LINES = 12
+/** 小说预览高度：正文全文流入，限高卡片内可滚动阅读 */
+private const val NOVEL_PREVIEW_HEIGHT_DP = 480
 /** 首次进入时，图片翻译按钮自动展开文字的停留时间：比普通点击反馈久，留出看清的余裕 */
 private const val IMAGE_HINT_EXPAND_MILLIS = 5_000L
 
@@ -609,36 +608,41 @@ private fun ImagePager(
         }
     }
 }
-
 /**
- * 小说正文预览：只展示开头若干行，底部渐隐提示还有更多。
- * 刻意不做内层滚动——外层 DetailContent 已是垂直滚动容器，嵌套同向滚动会让滑动手势归属随机。
- * 完整阅读统一走右上角的全屏阅读器。
+ * 小说正文预览：正文全文流入限高卡片，卡片内可垂直滚动（内层滚动），
+ * 底部渐隐提示「还有更多」，滚到底后渐隐消失。
+ * 内层滚到底后剩余手势交给外层页面继续滚动（Compose 嵌套滚动默认接力）。
+ * 完整阅读仍走右上角的全屏阅读器。
  */
 @Composable
 private fun NovelPreview(detail: WorkDetail, dark: Boolean, onWorkClick: (Long, Long, String) -> Unit) {
     val backdrop = PikuColors.surfaceSoft
+    val previewScrollState = rememberScrollState()
+    val atBottom by remember {
+        derivedStateOf { previewScrollState.value >= previewScrollState.maxValue }
+    }
     Box(modifier = Modifier.fillMaxSize()) {
         Text(
             text = linkify(detail.novelText, dark, onWorkClick),
             color = PikuColors.textSecondary,
             fontSize = 13.sp,
             lineHeight = 22.sp,
-            maxLines = NOVEL_PREVIEW_MAX_LINES,
-            overflow = TextOverflow.Ellipsis,
             modifier = Modifier
                 .fillMaxSize()
+                .verticalScroll(previewScrollState)
                 .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 28.dp),
         )
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .align(Alignment.BottomCenter)
-                .height(32.dp)
-                .background(
-                    Brush.verticalGradient(listOf(Color.Transparent, backdrop)),
-                ),
-        )
+        if (!atBottom) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+                    .height(32.dp)
+                    .background(
+                        Brush.verticalGradient(listOf(Color.Transparent, backdrop)),
+                    ),
+            )
+        }
     }
 }
 
