@@ -615,6 +615,13 @@ class HomeViewModel @Inject constructor(
         authRepository.logout()
     }
 
+    /** 已登录但资料缺失（如启动时离线）时，打开抽屉触发重试 */
+    fun retryUserProfile() {
+        if (_uiState.value.loggedIn && _uiState.value.userProfile == null) {
+            viewModelScope.launch { authRepository.refreshUserProfile() }
+        }
+    }
+
     fun toggleAdultContent() {
         val target = !_uiState.value.adultEnabled
         val old = _uiState.value.adultEnabled

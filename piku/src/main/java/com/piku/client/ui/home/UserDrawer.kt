@@ -1,5 +1,11 @@
 package com.piku.client.ui.home
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -47,6 +53,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -77,6 +84,7 @@ import com.piku.client.ui.theme.themedSwitchColors
 fun UserDrawer(
     drawerState: DrawerState,
     userProfile: UserProfile?,
+    loggedIn: Boolean,
     adultEnabled: Boolean,
     themeMode: ThemeMode,
     customBackgroundPath: String?,
@@ -114,6 +122,7 @@ fun UserDrawer(
         drawerContent = {
             DrawerPanel(
                 userProfile = userProfile,
+                loggedIn = loggedIn,
                 adultEnabled = adultEnabled,
                 themeMode = themeMode,
                 customBackgroundPath = customBackgroundPath,
@@ -155,6 +164,7 @@ fun UserDrawer(
 @Composable
 private fun DrawerPanel(
     userProfile: UserProfile?,
+    loggedIn: Boolean,
     adultEnabled: Boolean,
     themeMode: ThemeMode,
     customBackgroundPath: String?,
@@ -213,6 +223,7 @@ private fun DrawerPanel(
     ) {
         DrawerHeader(
             userProfile = userProfile,
+            loggedIn = loggedIn,
             onProfileOpen = onProfileOpen,
             onLoginClick = onLoginClick,
             dark = dark,
@@ -270,7 +281,7 @@ private fun DrawerPanel(
                 dark = dark,
                 accent = iconAccent,
             )
-            if (userProfile != null) {
+            if (loggedIn) {
                 DrawerMenuRow(
                     icon = Icons.Outlined.Group,
                     label = stringResource(R.string.menu_follow_users),
@@ -407,7 +418,7 @@ private fun DrawerPanel(
         )
         Spacer(Modifier.height(6.dp))
         // 退出登录
-        if (userProfile != null) {
+        if (loggedIn) {
             DrawerMenuRow(
                 icon = Icons.AutoMirrored.Outlined.Logout,
                 label = stringResource(R.string.logout),
@@ -423,6 +434,7 @@ private fun DrawerPanel(
 @Composable
 private fun DrawerHeader(
     userProfile: UserProfile?,
+    loggedIn: Boolean,
     onProfileOpen: () -> Unit,
     onLoginClick: () -> Unit,
     dark: Boolean,
@@ -433,8 +445,17 @@ private fun DrawerHeader(
     val blobPink = if (dark) Color(0x30D8A8B8) else Color(0x3DD8A8B8)
     val ring = if (dark) Color(0x66FFFFFF) else AccentDark.copy(alpha = 0.5f)
 
-    val loggedIn = userProfile != null
-    val headerClickable = if (loggedIn) userProfile?.uid != null else true
+    // 三态：未登录 / 骨架（已登录但资料未到）/ 就绪
+    val profileReady = userProfile != null
+    val skeleton = loggedIn && !profileReady
+    val headerClickable = when {
+        !loggedIn -> true
+        profileReady -> userProfile?.uid != null
+        else -> false
+    }
+
+    val pulseState = if (skeleton) rememberSkeletonPulse() else null
+    val skelColor = faint.copy(alpha = 0.16f + 0.2f * (pulseState?.value ?: 0f))
 
     Box(
         modifier = Modifier
@@ -475,58 +496,117 @@ private fun DrawerHeader(
                     .border(BorderStroke(1.5.dp, ring), CircleShape)
                     .padding(3.dp),
             ) {
-                UserAvatar(
-                    avatarUrl = userProfile?.avatarUrl,
-                    onClick = {},
-                    dark = dark,
-                    size = 54.dp,
-                )
+                if (!skeleton) {
+                    UserAvatar(
+                        avatarUrl = userProfile?.avatarUrl,
+                        onClick = {},
+                        dark = dark,
+                        size = 54.dp,
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(54.dp)
+                            .clip(CircleShape)
+                            .background(skelColor),
+                    )
+                }
             }
             Spacer(Modifier.width(15.dp))
-            Column(Modifier.weight(1f)) {
-                val displayName = userProfile?.name
-                Text(
-                    text = when {
-                        !displayName.isNullOrBlank() -> displayName
-                        loggedIn -> stringResource(R.string.account_logged_in)
-                        else -> stringResource(R.string.account_logged_out)
-                    },
-                    color = primary,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (userProfile?.uid != null) {
-                    Spacer(Modifier.size(3.dp))
-                    Text(
-                        text = "ID: ${userProfile.uid}",
-                        color = faint,
-                        fontSize = 11.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+            when {
+                profileReady -> {
+                    Column(Modifier.weight(1f)) {
+                        val displayName = userProfile?.name
+                        Text(
+                            text = if (!displayName.isNullOrBlank()) {
+                                displayName
+                            } else {
+                                stringResource(R.string.account_logged_in)
+                            },
+                            color = primary,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        if (userProfile?.uid != null) {
+                            Spacer(Modifier.size(3.dp))
+                            Text(
+                                text = "ID: ${userProfile.uid}",
+                                color = faint,
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
                 }
-                if (!loggedIn) {
-                    Spacer(Modifier.size(3.dp))
-                    Text(
-                        text = stringResource(R.string.drawer_login_hint),
-                        color = PikuColors.accent,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                skeleton -> {
+                    Column(Modifier.weight(1f)) {
+                        Box(
+                            modifier = Modifier
+                                .height(15.dp)
+                                .fillMaxWidth(0.55f)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(skelColor),
+                        )
+                        Spacer(Modifier.size(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .height(11.dp)
+                                .fillMaxWidth(0.35f)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(skelColor),
+                        )
+                    }
+                }
+                else -> {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.account_logged_out),
+                            color = primary,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Spacer(Modifier.size(3.dp))
+                        Text(
+                            text = stringResource(R.string.drawer_login_hint),
+                            color = PikuColors.accent,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
-            Icon(
-                imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-                contentDescription = null,
-                tint = faint,
-                modifier = Modifier.size(18.dp),
-            )
+            if (!skeleton) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = faint,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
         }
     }
+}
+
+/** 骨架占位的呼吸动画 */
+@Composable
+private fun rememberSkeletonPulse(): State<Float> {
+    val transition = rememberInfiniteTransition(label = "drawerHeaderSkeleton")
+    return transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "drawerHeaderPulse",
+    )
 }
 
 @Composable

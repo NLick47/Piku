@@ -207,6 +207,10 @@ fun HomeScreen(
         }
     }
 
+    LaunchedEffect(drawerState.isOpen) {
+        if (drawerState.isOpen) viewModel.retryUserProfile()
+    }
+
     var seenFeedEpoch by remember { mutableIntStateOf(state.feedEpoch) }
     LaunchedEffect(state.feedEpoch) {
         if (state.feedEpoch != seenFeedEpoch) {
@@ -231,6 +235,7 @@ fun HomeScreen(
     UserDrawer(
         drawerState = drawerState,
         userProfile = state.userProfile,
+        loggedIn = state.loggedIn,
         adultEnabled = state.adultEnabled,
         themeMode = state.themeMode,
         customBackgroundPath = state.customBackgroundPath,

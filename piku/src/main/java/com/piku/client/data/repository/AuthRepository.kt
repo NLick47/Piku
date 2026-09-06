@@ -64,7 +64,8 @@ class AuthRepository @Inject constructor(
         // 否则 refreshUserProfile 会因 uid 为 null 而跳过（头像/昵称都拿不到）
         if (hasSession()) {
             uid = credentialStore.loadUid()
-            Log.d(TAG, "cold start: restored uid=$uid")
+            _userProfile.value = credentialStore.loadProfile()
+            Log.d(TAG, "cold start: restored uid=$uid profile=${_userProfile.value != null}")
         }
         scope.launch {
             sessionMonitor.sessionCleared.collect {
@@ -188,7 +189,11 @@ class AuthRepository @Inject constructor(
             )
         }.getOrNull()
         Log.d(TAG, "profile=$profile")
-        _userProfile.value = profile
+        // 失败保留旧缓存；校验会话与 uid，防登出/换号后在途请求写回
+        if (profile != null && _authStatus.value == AuthStatus.LOGGED_IN && uid == myUid) {
+            _userProfile.value = profile
+            credentialStore.saveProfile(profile)
+        }
     }
 
     /**
@@ -246,6 +251,7 @@ class AuthRepository @Inject constructor(
         Log.d(TAG, "updateNickName: result=${response.result}")
         return if (response.result > 0) {
             _userProfile.value = _userProfile.value?.copy(name = name)
+            _userProfile.value?.let { credentialStore.saveProfile(it) }
             Result.success(Unit)
         } else {
             Result.failure(UpdateRejected(response.result))

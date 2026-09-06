@@ -5,6 +5,7 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import android.util.Log
+import com.piku.client.domain.model.UserProfile
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -80,10 +81,36 @@ class CredentialStore(
 
     fun loadUid(): Long? = storage.get(KEY_UID)?.toLongOrNull()
 
+    /** 缓存公开资料，冷启动先显示缓存再后台刷新 */
+    fun saveProfile(profile: UserProfile) {
+        storage.put(KEY_PROFILE_UID, profile.uid ?: "")
+        storage.put(KEY_PROFILE_NAME, profile.name ?: "")
+        storage.put(KEY_PROFILE_AVATAR, profile.avatarUrl ?: "")
+        storage.put(KEY_PROFILE_URL, profile.profileUrl ?: "")
+    }
+
+    fun loadProfile(): UserProfile? {
+        val uid = storage.get(KEY_PROFILE_UID)?.takeIf { it.isNotBlank() } ?: return null
+        return UserProfile(
+            uid = uid,
+            avatarUrl = storage.get(KEY_PROFILE_AVATAR)?.takeIf { it.isNotBlank() },
+            profileUrl = storage.get(KEY_PROFILE_URL)?.takeIf { it.isNotBlank() },
+            name = storage.get(KEY_PROFILE_NAME)?.takeIf { it.isNotBlank() },
+        )
+    }
+
     fun clear() {
         storage.remove(KEY_EMAIL)
         storage.remove(KEY_PASSWORD)
         storage.remove(KEY_UID)
+        removeProfile()
+    }
+
+    private fun removeProfile() {
+        storage.remove(KEY_PROFILE_UID)
+        storage.remove(KEY_PROFILE_NAME)
+        storage.remove(KEY_PROFILE_AVATAR)
+        storage.remove(KEY_PROFILE_URL)
     }
 
     private companion object {
@@ -91,6 +118,10 @@ class CredentialStore(
         const val KEY_EMAIL = "email_enc"
         const val KEY_PASSWORD = "password_enc"
         const val KEY_UID = "uid"
+        const val KEY_PROFILE_UID = "profile_uid"
+        const val KEY_PROFILE_NAME = "profile_name"
+        const val KEY_PROFILE_AVATAR = "profile_avatar"
+        const val KEY_PROFILE_URL = "profile_url"
     }
 }
 

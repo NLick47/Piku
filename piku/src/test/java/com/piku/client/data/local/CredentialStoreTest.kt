@@ -1,5 +1,6 @@
 package com.piku.client.data.local
 
+import com.piku.client.domain.model.UserProfile
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -85,6 +86,50 @@ class CredentialStoreTest {
 
         assertEquals("ENC:user@example.com", storage.get("email_enc"))
         assertEquals("ENC:secret123", storage.get("password_enc"))
+    }
+
+    @Test
+    fun profileCacheRoundTrip() {
+        val store = CredentialStore(InMemoryStorage(), FakeCipher())
+        val profile = UserProfile(
+            uid = "12345",
+            avatarUrl = "https://poipiku.com/img/12345_120.jpg",
+            profileUrl = "https://poipiku.com/12345/",
+            name = "测试昵称",
+        )
+
+        store.saveProfile(profile)
+
+        assertEquals(profile, store.loadProfile())
+    }
+
+    @Test
+    fun profileCacheReturnsNullWhenNothingSaved() {
+        val store = CredentialStore(InMemoryStorage(), FakeCipher())
+
+        assertNull(store.loadProfile())
+    }
+
+    @Test
+    fun profileCacheIgnoresBlankUid() {
+        val store = CredentialStore(InMemoryStorage(), FakeCipher())
+
+        store.saveProfile(UserProfile(uid = null, avatarUrl = null, profileUrl = null, name = "x"))
+
+        assertNull(store.loadProfile())
+    }
+
+    @Test
+    fun clearRemovesCachedProfile() {
+        val store = CredentialStore(InMemoryStorage(), FakeCipher())
+        store.saveProfile(
+            UserProfile(uid = "1", avatarUrl = null, profileUrl = null, name = "n"),
+        )
+
+        store.clear()
+
+        assertNull(store.loadProfile())
+        assertNull(store.load())
     }
 
     private class AlwaysFailCipher : CredentialCipher {
