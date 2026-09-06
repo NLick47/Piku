@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -130,7 +131,9 @@ fun CatalogSourceScreen(
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(start = (-16).dp, top = 8.dp, bottom = 8.dp),
+                modifier = Modifier
+                    .offset(x = (-16).dp)
+                    .padding(start = 4.dp, top = 8.dp, bottom = 8.dp),
             ) {
                 PikuBackButton(
                     onClick = onBack,
