@@ -130,7 +130,7 @@ fun CatalogSourceScreen(
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(top = 10.dp, bottom = 6.dp),
+                modifier = Modifier.padding(start = (-16).dp, top = 8.dp, bottom = 8.dp),
             ) {
                 PikuBackButton(
                     onClick = onBack,

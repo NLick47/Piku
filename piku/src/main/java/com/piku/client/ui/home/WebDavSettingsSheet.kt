@@ -336,7 +336,7 @@ private fun SettingsTopBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 4.dp, vertical = 6.dp)
+            .padding(horizontal = 4.dp, vertical = 8.dp)
             .height(48.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

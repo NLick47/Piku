@@ -203,7 +203,7 @@ private fun HistoryTopBar(
         modifier = Modifier
             .fillMaxWidth()
             .statusBarsPadding()
-            .padding(horizontal = 4.dp, vertical = 6.dp),
+            .padding(start = 4.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         PikuBackButton(

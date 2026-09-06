@@ -175,7 +175,7 @@ private fun FollowTopBar(
             .background(if (dark) GlassHeaderTintDark else GlassHeaderTintLight)
             .border(BorderStroke(0.5.dp, PikuColors.border))
             .statusBarsPadding()
-            .padding(horizontal = 8.dp, vertical = 8.dp),
+            .padding(start = 4.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         PikuBackButton(

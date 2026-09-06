@@ -85,7 +85,7 @@ internal fun DetailTopBar(
                 )
             }
             .statusBarsPadding()
-            .padding(start = 4.dp, end = 8.dp, top = 4.dp, bottom = 2.dp),
+            .padding(start = 4.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         PikuBackButton(

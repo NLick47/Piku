@@ -276,7 +276,7 @@ private fun SearchTopBar(
             .fillMaxWidth()
             .background(if (dark) GlassHeaderTintDark else GlassHeaderTintLight)
             .statusBarsPadding()
-            .padding(start = 4.dp, end = 16.dp, top = 6.dp, bottom = 6.dp),
+            .padding(start = 4.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         PikuBackButton(
@@ -923,7 +923,7 @@ private fun TagWorksHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 4.dp, vertical = 4.dp),
+            .padding(start = 4.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         PikuBackButton(

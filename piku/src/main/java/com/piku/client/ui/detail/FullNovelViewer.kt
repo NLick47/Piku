@@ -214,7 +214,7 @@ fun FullNovelViewer(
                     .fillMaxWidth()
                     .statusBarsPadding()
                     .background(controlBg)
-                    .padding(start = 4.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
+                    .padding(start = 4.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 PikuBackButton(

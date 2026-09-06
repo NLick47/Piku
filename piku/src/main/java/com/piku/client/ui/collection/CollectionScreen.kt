@@ -319,7 +319,7 @@ private fun FolderListContent(
                 .fillMaxWidth()
                 .background(if (dark) Color(0xF2262421) else Color(0xF7FFFFFF))
                 .statusBarsPadding()
-                .padding(horizontal = 20.dp, vertical = 14.dp),
+                .padding(start = 4.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             PikuBackButton(
@@ -635,7 +635,7 @@ private fun FolderDetailContent(
                 .fillMaxWidth()
                 .background(if (dark) Color(0xF2262421) else Color(0xF7FFFFFF))
                 .statusBarsPadding()
-                .padding(horizontal = 8.dp, vertical = 8.dp),
+                .padding(start = 4.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             PikuBackButton(
