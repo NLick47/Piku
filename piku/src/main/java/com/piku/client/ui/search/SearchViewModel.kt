@@ -25,6 +25,7 @@ import com.piku.client.domain.usecase.ObserveSearchHistoryUseCase
 import com.piku.client.domain.usecase.RecordSearchKeywordUseCase
 import com.piku.client.domain.usecase.RemoveSearchKeywordUseCase
 import com.piku.client.domain.usecase.ToggleFavoriteUseCase
+import com.piku.client.domain.usecase.TranslateSearchKeywordUseCase
 import com.piku.client.ui.common.toFeedErrorRes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -95,6 +96,7 @@ class SearchViewModel @Inject constructor(
     private val recordSearchKeywordUseCase: RecordSearchKeywordUseCase,
     private val removeSearchKeywordUseCase: RemoveSearchKeywordUseCase,
     private val clearSearchHistoryUseCase: ClearSearchHistoryUseCase,
+    private val translateSearchKeywordUseCase: TranslateSearchKeywordUseCase,
     private val loadPopularTagsUseCase: LoadPopularTagsUseCase,
     private val loadKeywordFeedUseCase: LoadKeywordFeedUseCase,
     private val loadTagSuggestionsUseCase: LoadTagSuggestionsUseCase,
@@ -192,6 +194,10 @@ class SearchViewModel @Inject constructor(
     fun record(keyword: String) {
         viewModelScope.launch { recordSearchKeywordUseCase(keyword) }
     }
+
+    /** 一键译搜：纯汉字→日语、含假名→中文（保留 #/@ 前缀）；null = 翻译失败 */
+    suspend fun translateKeyword(keyword: String, toJapanese: Boolean): String? =
+        translateSearchKeywordUseCase(keyword, toJapanese)
 
     fun removeHistory(keyword: String) {
         viewModelScope.launch { removeSearchKeywordUseCase(keyword) }

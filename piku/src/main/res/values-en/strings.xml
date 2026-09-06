@@ -231,6 +231,8 @@
     <string name="search_hot_tags_empty">No popular tags yet</string>
     <string name="search_action">Search</string>
     <string name="search_open_link">Open</string>
+    <string name="search_translate_ja">To Japanese</string>
+    <string name="search_translate_zh">To Chinese</string>
     <string name="search_manage_tags">Manage</string>
     <string name="category_raku_gaki">Doodle</string>
     <string name="category_jishuren">Practice</string>

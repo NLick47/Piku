@@ -523,6 +523,56 @@ class TranslationRepository @Inject constructor(
             result
         }
 
+    /** 一键译搜：中↔日互译；译文须过字系校验，缓存键带 #search 指纹与散文通道隔离 */
+    suspend fun translateSearchKeyword(text: String, toJapanese: Boolean): String? = mutex.withLock {
+        val targetLang = if (toJapanese) LlmTranslateEngine.TARGET_JA else LlmTranslateEngine.TARGET_ZH
+        val entry = effectiveTextEntry() ?: return null
+        val searchEntry = entry.copy(
+            prompts = PromptSet(
+                single = mapOf(
+                    "ja" to TranslationPrompts.searchKeywordPrompt(targetJa = true),
+                    "zh" to TranslationPrompts.searchKeywordPrompt(targetJa = false),
+                ),
+            ),
+        )
+        val engine = engineFactory.create(
+            apiKeyFor(searchEntry), Role.TEXT, searchEntry, modelCatalogRepository.catalogDefaults.value,
+        ) ?: return null
+        val engineId = engine.engineId + "#search"
+        val cached = withContext(Dispatchers.IO) { dao.get(hash(text), targetLang, engineId) }
+        if (cached != null) return cached
+        val output = try {
+            engine.translate(listOf(text), targetLang).firstOrNull().orEmpty().trim()
+        } catch (e: TranslationApiException) {
+            return null
+        }
+        if (output.isBlank()) {
+            // 引擎把"与原文相同"判为未翻译，而同形词（女体化/百合）的正确译文就是原样，原词透传
+            return text
+        }
+        // 字系校验：日语译文须含假名或汉字；中文译文禁假名（英文专名放行）
+        val cleaned = output.trim('"', '“', '”', '「', '」', '『', '』', '\'', ' ')
+        val scriptValid = if (toJapanese) {
+            LlmTranslateEngine.containsKana(cleaned) ||
+                cleaned.any { it in '\u3400'..'\u9FFF' || it in '\uF900'..'\uFAFF' }
+        } else {
+            !LlmTranslateEngine.containsKana(cleaned)
+        }
+        if (cleaned.isEmpty() || !scriptValid) return null
+        persist(
+            listOf(
+                TranslationEntity(
+                    srcHash = hash(text),
+                    targetLang = targetLang,
+                    engineId = engineId,
+                    translated = cleaned,
+                    updatedAt = System.currentTimeMillis(),
+                ),
+            ),
+        )
+        cleaned
+    }
+
     /**
      * 文本翻译当前生效的模型条目：地址、模型名、key 三者必须同源，所以降级是整条切换。
      * key 只来自加密远程目录（debug 构建回退注入的调试 key）：

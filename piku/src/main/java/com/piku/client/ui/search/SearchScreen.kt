@@ -31,6 +31,7 @@ import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
 import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -44,6 +45,7 @@ import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.SnackbarHost
@@ -54,6 +56,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -71,6 +74,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -107,8 +112,10 @@ import com.piku.client.ui.theme.WorkCardBgDark
 import com.piku.client.ui.theme.WorkCardBorderDark
 import com.piku.client.ui.theme.WorkCardInfoBgDark
 import com.piku.client.ui.theme.WorkCardPlaceholderDark
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 
 /** 与站点输入框一致的关键词长度上限（仅普通搜索；链接识别不受此限） */
 private const val MAX_KEYWORD_LENGTH = 20
@@ -143,6 +150,13 @@ fun SearchScreen(
     // 实时识别 poipiku 链接：命中后操作按钮切换为"打开链接"，提交时直接跳转不写历史
     val link = remember(query) { parsePoipikuLink(query) }
 
+    // 一键译搜：中日互译——纯汉字→日语，含假名→中文；@ 用户搜索与链接不出现
+    val scope = rememberCoroutineScope()
+    var jaTranslateJob by remember { mutableStateOf<Job?>(null) }
+    var jaTranslating by remember { mutableStateOf(false) }
+    var jaFailed by remember { mutableStateOf(false) }
+    val jaDirection = remember(query) { translateDirection(query) }
+
     LaunchedEffect(Unit) {
         if (!hasQuery) {
             delay(FOCUS_DELAY_MS)
@@ -158,7 +172,7 @@ fun SearchScreen(
         }
     }
 
-    fun submit(raw: String) {
+    fun doSubmit(raw: String) {
         val keyword = raw.trim()
         if (keyword.isEmpty()) return
         keyboardController?.hide()
@@ -170,6 +184,32 @@ fun SearchScreen(
         }
         viewModel.record(keyword)
         onSearch(keyword.take(MAX_KEYWORD_LENGTH))
+    }
+
+    fun submit(raw: String) {
+        jaTranslateJob?.cancel()
+        jaTranslating = false
+        doSubmit(raw)
+    }
+
+    fun translateAndSearch() {
+        if (jaTranslating) return
+        val text = query
+        val toJa = jaDirection != TranslateDirection.TO_ZH
+        jaTranslateJob = scope.launch {
+            jaTranslating = true
+            jaFailed = false
+            val translated = viewModel.translateKeyword(text, toJa)
+            jaTranslating = false
+            if (translated == null) {
+                jaFailed = true
+            } else if (translated == state.keyword) {
+                // 译文就是当前已搜索词（同形词透传/缓存重复）：结果已在屏上，收键盘即可
+                keyboardController?.hide()
+            } else {
+                doSubmit(translated)
+            }
+        }
     }
 
     Box(
@@ -185,12 +225,21 @@ fun SearchScreen(
         Column(Modifier.fillMaxSize()) {
             SearchTopBar(
                 query = query,
-                onQueryChange = { query = it },
+                onQueryChange = { value ->
+                    jaTranslateJob?.cancel()
+                    jaTranslating = false
+                    jaFailed = false
+                    query = value
+                },
                 onSubmit = { submit(query) },
                 isLink = link != null,
                 onBack = onBack,
                 focusRequester = focusRequester,
                 dark = dark,
+                translateDirection = jaDirection,
+                translateBusy = jaTranslating,
+                translateFailed = jaFailed,
+                onTranslateClick = { translateAndSearch() },
             )
             if (!hasQuery) {
                 IdleContent(
@@ -267,6 +316,10 @@ private fun SearchTopBar(
     onBack: () -> Unit,
     focusRequester: FocusRequester,
     dark: Boolean,
+    translateDirection: TranslateDirection?,
+    translateBusy: Boolean,
+    translateFailed: Boolean,
+    onTranslateClick: () -> Unit,
 ) {
     val primary = PikuColors.textPrimary
     val secondary = PikuColors.textSecondary
@@ -330,6 +383,41 @@ private fun SearchTopBar(
                         .focusRequester(focusRequester),
                 )
             }
+            if (translateDirection != null) {
+                val chipTint = if (translateFailed) PikuColors.error else PikuColors.accent
+                val chipDesc = stringResource(
+                    if (translateDirection == TranslateDirection.TO_JA) {
+                        R.string.search_translate_ja
+                    } else {
+                        R.string.search_translate_zh
+                    },
+                )
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(chipTint.copy(alpha = if (dark) 0.16f else 0.10f))
+                        .clickable(enabled = !translateBusy, onClick = onTranslateClick)
+                        .semantics { contentDescription = chipDesc },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (translateBusy) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(11.dp),
+                            strokeWidth = 1.4.dp,
+                            color = chipTint,
+                        )
+                    } else {
+                        Text(
+                            text = "译",
+                            color = chipTint,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                }
+                Spacer(Modifier.width(6.dp))
+            }
             if (query.isNotEmpty()) {
                 IconButton(
                     onClick = { onQueryChange("") },
@@ -355,6 +443,29 @@ private fun SearchTopBar(
                 .clickable(onClick = onSubmit)
                 .padding(horizontal = 8.dp, vertical = 10.dp),
         )
+    }
+}
+
+private enum class TranslateDirection { TO_JA, TO_ZH }
+
+/** 方向判定：含假名按日语输入→译中文；纯汉字→译日语；英文/数字/空不给入口 */
+private fun translateDirection(text: String): TranslateDirection? {
+    val trimmed = text.trim()
+    // @ 明确是用户搜索，用户名翻译没有意义，不出现译搜入口
+    if (trimmed.startsWith("@")) return null
+    var hasKana = false
+    var hasHan = false
+    for (ch in trimmed) {
+        when (ch) {
+            in '\u3040'..'\u30FF', in '\uFF66'..'\uFF9F' -> hasKana = true
+            in '\u3400'..'\u4DBF', in '\u4E00'..'\u9FFF', in '\uF900'..'\uFAFF' -> hasHan = true
+            else -> Unit
+        }
+    }
+    return when {
+        hasKana -> TranslateDirection.TO_ZH
+        hasHan -> TranslateDirection.TO_JA
+        else -> null
     }
 }
 

@@ -231,6 +231,8 @@
     <string name="search_hot_tags_empty">暂无热门标签</string>
     <string name="search_action">搜索</string>
     <string name="search_open_link">打开</string>
+    <string name="search_translate_ja">译成日语</string>
+    <string name="search_translate_zh">译成中文</string>
     <string name="search_manage_tags">管理</string>
     <string name="category_raku_gaki">涂鸦</string>
     <string name="category_jishuren">自主练习</string>

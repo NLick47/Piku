@@ -231,6 +231,8 @@
     <string name="search_hot_tags_empty">人気タグはまだありません</string>
     <string name="search_action">検索</string>
     <string name="search_open_link">開く</string>
+    <string name="search_translate_ja">日本語へ</string>
+    <string name="search_translate_zh">中国語へ</string>
     <string name="search_manage_tags">タグ管理</string>
     <string name="category_raku_gaki">らくがき</string>
     <string name="category_jishuren">自主練</string>
