@@ -407,4 +407,12 @@
     <string name="webdav_disabled_action_hint">开启「启用同步」后即可测试连接与手动同步</string>
     <string name="webdav_help">收藏夹数据会以 JSON 与图片的形式保存在服务器的 piku/ 目录下，在另一台设备填入相同配置即可同步。</string>
     <string name="webdav_nutstore_hint">推荐使用坚果云 WebDAV，在坚果云「设置 → 安全选项 → 第三方应用管理」中开启。</string>
+
+    <!-- 图片翻译错误 -->
+    <string name="image_translate_refused">本页内容触发安全策略，无法翻译</string>
+    <string name="image_translate_rate_limited">翻译太频繁，请稍后再试</string>
+    <string name="image_translate_upstream">翻译服务暂时不可用</string>
+    <string name="image_translate_network">网络错误，请重试</string>
+    <string name="image_translate_download_failed">图片下载失败</string>
+    <string name="image_translate_no_model">没有可用的翻译模型</string>
 </resources>

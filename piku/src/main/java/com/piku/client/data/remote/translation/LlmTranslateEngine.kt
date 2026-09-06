@@ -95,8 +95,8 @@ class LlmTranslateEngine(
             }
             if (output.isBlank()) return ""
             val cleaned = stripEcho(output.trim(), context)
-            if (!looksUntranslated(text, cleaned)) return cleaned
-            Log.d(TAG, "translateSingle attempt=${attempt + 1} looks untranslated")
+            if (!looksUntranslated(text, cleaned) && !isRefusal(cleaned)) return cleaned
+            Log.d(TAG, "translateSingle attempt=${attempt + 1} untranslated/refused")
             if (attempt < MAX_ATTEMPTS - 1) delay(retryDelay(attempt))
         }
         return ""
@@ -125,10 +125,16 @@ class LlmTranslateEngine(
             }
             if (output.isBlank()) return texts.map { translateSingle(it, targetLang) }
             val parsed = parseBatch(output, texts.size)
-            if (parsed != null && parsed.indices.none { looksUntranslated(texts[it], parsed[it]) }) {
+            if (parsed != null) {
+                val bad = parsed.indices.filter {
+                    looksUntranslated(texts[it], parsed[it]) || isRefusal(parsed[it])
+                }
+                if (bad.isEmpty()) return parsed
+                // 只有部分条目坏（跑偏/拒绝）时逐条重试坏条目，好的直接保留
+                bad.forEach { i -> parsed[i] = translateSingle(texts[i], targetLang) }
                 return parsed
             }
-            Log.d(TAG, "translateBatch attempt=${attempt + 1} parse/validate failed")
+            Log.d(TAG, "translateBatch attempt=${attempt + 1} parse failed")
             if (attempt < MAX_ATTEMPTS - 1) delay(retryDelay(attempt))
         }
         // 批量不可靠时逐条重试，保证尽量有译文
@@ -425,8 +431,9 @@ class LlmTranslateEngine(
 
         /**
          * 按 [[n]] 切分批量回复。缺条、多条、序号不连续都返回 null（视为失败）。
+         * 返回可变列表：调用方会对失败条目（含拒绝）原地替换为逐条重试的结果。
          */
-        internal fun parseBatch(output: String, expected: Int): List<String>? {
+        internal fun parseBatch(output: String, expected: Int): MutableList<String>? {
             val matches = BATCH_MARKER_REGEX.findAll(output).toList()
             if (matches.size != expected) return null
             val result = MutableList(expected) { "" }
@@ -457,6 +464,37 @@ class LlmTranslateEngine(
             // 残留假名超过原文的一半，说明基本没译（允许少量保留的拟声词/专名）
             return outputKana * 2 > sourceKana
         }
+
+        /**
+         * 拒绝句式（中/英/日）：模型拒绝翻译时会吐出道歉式短语，旧逻辑把它当
+         * 正常译文展示甚至写入缓存。句式刻意收紧到句首的道歉/拒绝组合，
+         * 正文里讨论翻译的句子（"她无法翻译这句话"）不会被误杀。
+         */
+        internal fun isRefusal(output: String): Boolean {
+            val t = output.trim()
+            if (t.isEmpty()) return false
+            return REFUSAL_APOLOGY.containsMatchIn(t) || REFUSAL_DIRECT.containsMatchIn(t)
+        }
+
+        /** 道歉开头 + 拒绝动词："抱歉，我无法翻译该内容" / "I'm sorry, but I can't assist" */
+        private val REFUSAL_APOLOGY = Regex(
+            "^(?:抱歉|对不起|很抱歉|不好意思|すみません|申し訳(?:ございま|ありま)せん)[^。\\n！!]{0,30}?" +
+                "(?:无法|不能|翻译不了|協力できません|できません|できかねます|しかねます)" +
+                "|^I(?:'m| am) (?:sorry|afraid)[^\\n]{0,40}?(?:cannot|can't|unable to)",
+            RegexOption.IGNORE_CASE,
+        )
+
+        /** 无道歉前缀的直接拒绝："无法翻译该内容" / "I cannot assist with this request" */
+        private val REFUSAL_DIRECT = Regex(
+            "^无法翻译(?:该|此|这|整|全)[^。，,]{0,8}" +
+                "|^不能翻译(?:该|此|这|整|全)[^。，,]{0,8}" +
+                "|^无法(?:协助|完成此请求|处理该请求|提供翻译)|^不能(?:协助|帮忙翻译)|^恕难" +
+                "|^翻訳できません|^翻訳いたしかねます|^翻訳できかねます|^協力できません|^お手伝いできません" +
+                "|^Unable to (?:assist|help|translate|comply|process)" +
+                "|^(?:I|We) (?:cannot|can't) (?:assist|help|translate|comply|process|provide)" +
+                "|^I(?:'m| am) unable",
+            RegexOption.IGNORE_CASE,
+        )
     }
 }
 

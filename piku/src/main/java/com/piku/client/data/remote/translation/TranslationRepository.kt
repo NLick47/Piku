@@ -292,7 +292,7 @@ class TranslationRepository @Inject constructor(
                     } else {
                         val cached = withContext(Dispatchers.IO) {
                             dao.get(cacheKey(stripped, links), targetLang, engineId)
-                        }
+                        }?.takeUnless { LlmTranslateEngine.isRefusal(it) }
                         cached ?: run {
                             var translatedText: String? = null
                             repeat(1 + CHUNK_RETRY_ATTEMPTS) { attempt ->
@@ -437,7 +437,8 @@ class TranslationRepository @Inject constructor(
                         .associate { it.srcHash to it.translated }
                     toLookup.forEachIndexed { i, indexed ->
                         val cached = cachedMap[hashes[i]]
-                        if (cached != null) {
+                        // 命中值也过拒绝检测：历史污染条目（拒绝文案被当译文缓存）自动失效重翻
+                        if (cached != null && !LlmTranslateEngine.isRefusal(cached)) {
                             units[indexed.index].value = cached
                         } else {
                             pending += indexed.index
@@ -540,7 +541,7 @@ class TranslationRepository @Inject constructor(
         ) ?: return null
         val engineId = engine.engineId + "#search"
         val cached = withContext(Dispatchers.IO) { dao.get(hash(text), targetLang, engineId) }
-        if (cached != null) return cached
+        if (cached != null && !LlmTranslateEngine.isRefusal(cached)) return cached
         val output = try {
             engine.translate(listOf(text), targetLang).firstOrNull().orEmpty().trim()
         } catch (e: TranslationApiException) {

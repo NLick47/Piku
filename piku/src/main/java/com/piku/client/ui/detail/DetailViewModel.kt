@@ -21,6 +21,8 @@ import com.piku.client.data.remote.translation.ModelEntry
 import com.piku.client.data.remote.translation.Role
 import com.piku.client.data.remote.translation.ImageTranslateEngine
 import com.piku.client.data.remote.translation.ImageTranslationPrompts
+import com.piku.client.data.remote.translation.ImageTranslateError
+import com.piku.client.data.remote.translation.ImageTranslateResult
 import com.piku.client.data.remote.translation.LlmTranslateEngine
 import com.piku.client.domain.model.AppError
 import com.piku.client.domain.model.AuthStatus
@@ -45,6 +47,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -54,12 +59,20 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.random.Random
 import com.piku.client.di.ApplicationScope
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 
 /** 可独立切换原文/译文的文本字段 */
 enum class TranslateField { TITLE, DESCRIPTION, AUTHOR_PROFILE, TAGS, NOVEL }
+
+/** 图片翻译失败的轻提示（snackbar）：按错误类型给文案，[retryable] 决定是否给「重试」按钮 */
+data class ImageTranslateFeedback(
+    val errorRes: Int,
+    val page: Int,
+    val retryable: Boolean,
+)
 
 data class DetailUiState(
     val detail: WorkDetail? = null,
@@ -147,6 +160,8 @@ data class DetailUiState(
     val translatedImages: Map<Int, android.graphics.Bitmap> = emptyMap(),
     /** 当前正在翻译的页码（null = 空闲） */
     val imageTranslatingPage: Int? = null,
+    /** 图片翻译失败反馈（snackbar）；开始新翻译或成功时清空 */
+    val imageTranslateFeedback: ImageTranslateFeedback? = null,
     /** 当前页是否显示译图 */
     val showTranslatedImage: Boolean = false,
     /** 是否有可用的 image 模型 */
@@ -707,15 +722,12 @@ class DetailViewModel @Inject constructor(
         val detail = _uiState.value.detail ?: return
         val imageUrl = detail.imageUrls.getOrNull(page) ?: return
 
-        _uiState.update { it.copy(imageTranslatingPage = page) }
+        _uiState.update { it.copy(imageTranslatingPage = page, imageTranslateFeedback = null) }
         imageTranslateJob?.cancel()
         imageTranslateJob = viewModelScope.launch {
-            try {
-                val bitmap = withTimeoutOrNull(180_000L) {
-                    doTranslateImage(imageUrl, page)
-                }
-                if (bitmap != null) {
-                    _translatedImages[page] = bitmap
+            when (val result = translateImageWithRetry(imageUrl)) {
+                is ImageTranslateResult.Success -> {
+                    _translatedImages[page] = result.bitmap
                     _uiState.update {
                         it.copy(
                             translatedImages = HashMap(_translatedImages),
@@ -723,21 +735,72 @@ class DetailViewModel @Inject constructor(
                             showTranslatedImage = true,
                         )
                     }
-                } else {
-                    _uiState.update { it.copy(imageTranslatingPage = null) }
                 }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.e("ImageTranslate", "failed: ${e.message}")
-                _uiState.update { it.copy(imageTranslatingPage = null) }
+                is ImageTranslateResult.Failure -> {
+                    Log.e(
+                        "ImageTranslate",
+                        "page=$page failed: ${result.error::class.simpleName}: ${result.error.message}",
+                    )
+                    _uiState.update {
+                        it.copy(
+                            imageTranslatingPage = null,
+                            imageTranslateFeedback = ImageTranslateFeedback(
+                                errorRes = imageErrorRes(result.error),
+                                page = page,
+                                retryable = result.error.retryable,
+                            ),
+                        )
+                    }
+                }
             }
         }
     }
 
-    private suspend fun doTranslateImage(imageUrl: String, page: Int): android.graphics.Bitmap? {
+    /** 失败自动重试一次：限流按 Retry-After 退避，其余固定短退避；拒绝/无模型不重试 */
+    private suspend fun translateImageWithRetry(imageUrl: String): ImageTranslateResult {
+        val first = translateImageOnce(imageUrl)
+        val error = (first as? ImageTranslateResult.Failure)?.error ?: return first
+        if (!error.retryable) return first
+        delay(
+            when (error) {
+                is ImageTranslateError.RateLimited -> (error.retryAfterSec?.coerceIn(1L, 30L) ?: 5L) * 1000
+                else -> 1500L + Random.nextLong(500)
+            },
+        )
+        return translateImageOnce(imageUrl)
+    }
+
+    private suspend fun translateImageOnce(imageUrl: String): ImageTranslateResult {
+        val result = withTimeoutOrNull(PAGE_TRANSLATE_TIMEOUT_MS) { doTranslateImage(imageUrl) }
+        if (result != null) return result
+        // 超时与外层取消都返回 null：取消必须继续抛，否则会被误报成网络错误
+        if (!currentCoroutineContext().isActive) throw CancellationException("image translate cancelled")
+        return ImageTranslateResult.Failure(ImageTranslateError.Network())
+    }
+
+    private fun imageErrorRes(error: ImageTranslateError): Int = when (error) {
+        is ImageTranslateError.Refused -> R.string.image_translate_refused
+        is ImageTranslateError.RateLimited -> R.string.image_translate_rate_limited
+        is ImageTranslateError.DownloadFailed -> R.string.image_translate_download_failed
+        is ImageTranslateError.NoModel -> R.string.image_translate_no_model
+        is ImageTranslateError.Network -> R.string.image_translate_network
+        is ImageTranslateError.Upstream, is ImageTranslateError.BadResponse -> R.string.image_translate_upstream
+    }
+
+    fun clearImageTranslateFeedback() {
+        _uiState.update { it.copy(imageTranslateFeedback = null) }
+    }
+
+    /** snackbar「重试」：重翻失败的那一页 */
+    fun retryImageTranslate() {
+        val page = _uiState.value.imageTranslateFeedback?.page ?: return
+        onImageTranslateClick(page)
+    }
+
+    private suspend fun doTranslateImage(imageUrl: String): ImageTranslateResult {
         // 1. 下载原图
-        val imageBytes = downloadImage(imageUrl) ?: return null
+        val imageBytes = downloadImage(imageUrl)
+            ?: return ImageTranslateResult.Failure(ImageTranslateError.DownloadFailed())
 
         // 2. 获取提示词（跟随 App 语言设置）
         val language = observeLanguageUseCase().value
@@ -747,7 +810,7 @@ class DetailViewModel @Inject constructor(
         // 3. 获取 image 模型的 baseUrl
         val imageEntry = modelCatalogRepository.models.value.firstOrNull {
             Role.IMAGE in it.roles && it.available && !it.apiKey.isNullOrBlank()
-        } ?: return null
+        } ?: return ImageTranslateResult.Failure(ImageTranslateError.NoModel())
 
         // 4. 调用翻译引擎
         return imageTranslateEngine.translate(
@@ -767,6 +830,8 @@ class DetailViewModel @Inject constructor(
             imageTranslateEngine.client.newCall(request).execute().use { response ->
                 if (response.isSuccessful) response.body?.bytes() else null
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e("ImageTranslate", "download failed: ${e.message}")
             null
@@ -1236,6 +1301,9 @@ class DetailViewModel @Inject constructor(
 
         /** 长按保存时等待原图加载的最长时间*/
         const val IMAGE_WAIT_MILLIS = 8_000L
+
+        /** 单页图片翻译总超时（含下载）；超时按可重试的网络错误处理 */
+        const val PAGE_TRANSLATE_TIMEOUT_MS = 180_000L
 
         /** 底部菜单新手引导已展示标记 */
         const val KEY_BOTTOM_GUIDE_SHOWN = "detail_bottom_guide_shown_v2"

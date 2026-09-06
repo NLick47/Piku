@@ -10,10 +10,56 @@ import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import javax.inject.Inject
 import javax.inject.Named
 import javax.inject.Singleton
+
+/** 图片翻译失败原因；[retryable] 决定 ViewModel 是否自动重试 */
+sealed class ImageTranslateError(message: String? = null) : Exception(message) {
+    abstract val retryable: Boolean
+
+    /** 模型拒绝（安全策略）或未产图——重试不会变 */
+    class Refused(val detail: String?) : ImageTranslateError(detail) {
+        override val retryable get() = false
+    }
+
+    /** 限流——按上游 Retry-After 退避后可重试 */
+    class RateLimited(val retryAfterSec: Long?) : ImageTranslateError("rate limited") {
+        override val retryable get() = true
+    }
+
+    /** 上游/代理 5xx 或其他非 429/422 错误 */
+    class Upstream(val code: Int) : ImageTranslateError("upstream error $code") {
+        override val retryable get() = true
+    }
+
+    /** 网络错误 / 引擎层超时 */
+    class Network(cause: Throwable? = null) : ImageTranslateError(cause?.message) {
+        override val retryable get() = true
+    }
+
+    /** 响应 200 但解不出图片 */
+    class BadResponse : ImageTranslateError("undecodable image") {
+        override val retryable get() = true
+    }
+
+    /** 原图下载失败 */
+    class DownloadFailed : ImageTranslateError("download failed") {
+        override val retryable get() = true
+    }
+
+    /** 目录里没有可用的 image 模型 */
+    class NoModel : ImageTranslateError("no image model") {
+        override val retryable get() = false
+    }
+}
+
+sealed interface ImageTranslateResult {
+    data class Success(val bitmap: Bitmap) : ImageTranslateResult
+    data class Failure(val error: ImageTranslateError) : ImageTranslateResult
+}
 
 /**
  * 图片翻译引擎：调用代理的 /v1/translate-image 端点。
@@ -35,14 +81,13 @@ class ImageTranslateEngine @Inject constructor(
      * @param prompt 翻译提示词（来自 catalog image 模式）
      * @param targetLang 目标语言代码（zh/en/ja）
      * @param proxyBaseUrl 代理地址（如 http://47.86.19.39:43981）
-     * @return 翻译后的 Bitmap，失败返回 null
      */
     suspend fun translate(
         imageBytes: ByteArray,
         prompt: String,
         targetLang: String,
         proxyBaseUrl: String,
-    ): Bitmap? = withContext(Dispatchers.IO) {
+    ): ImageTranslateResult = withContext(Dispatchers.IO) {
         // Compress if too large (> 2MB)
         val sendBytes = if (imageBytes.size > 2 * 1024 * 1024) {
             compressImage(imageBytes) ?: imageBytes
@@ -68,16 +113,34 @@ class ImageTranslateEngine @Inject constructor(
         try {
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
-                    Log.w(TAG, "translate failed: ${response.code}")
-                    return@withContext null
+                    val retryAfter = response.header("Retry-After")?.toLongOrNull()
+                    val errorBody = runCatching { response.body?.string() }.getOrNull()
+                    Log.w(TAG, "translate failed: ${response.code} ${errorBody?.take(200)}")
+                    return@withContext ImageTranslateResult.Failure(
+                        classifyHttpError(response.code, retryAfter, errorBody),
+                    )
                 }
-                val bytes = response.body?.bytes() ?: return@withContext null
-                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                val bytes = response.body?.bytes()
+                    ?: return@withContext ImageTranslateResult.Failure(ImageTranslateError.BadResponse())
+                val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    ?: return@withContext ImageTranslateResult.Failure(ImageTranslateError.BadResponse())
+                ImageTranslateResult.Success(bitmap)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "translate error: ${e.message}")
-            null
+            Log.e(TAG, "translate error: ${e::class.simpleName}: ${e.message}")
+            ImageTranslateResult.Failure(ImageTranslateError.Network(e))
         }
+    }
+
+    /** 代理错误契约：429=限流，422=拒绝/未产图（body 带 type+detail），其余归上游错误 */
+    private fun classifyHttpError(code: Int, retryAfter: Long?, body: String?): ImageTranslateError {
+        if (code == 429) return ImageTranslateError.RateLimited(retryAfter)
+        if (code == 422) {
+            val detail = runCatching { JSONObject(body.orEmpty()).optString("detail") }
+                .getOrNull()?.takeIf { it.isNotBlank() }
+            return ImageTranslateError.Refused(detail)
+        }
+        return ImageTranslateError.Upstream(code)
     }
 
     /**

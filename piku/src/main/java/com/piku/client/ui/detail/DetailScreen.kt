@@ -157,6 +157,16 @@ fun DetailScreen(
         actionLabel = stringResource(R.string.detail_translate_retry),
         onAction = viewModel::retryLastTranslate,
     )
+    // 图片翻译失败：按错误类型给文案；拒绝/无模型是终态，不给「重试」
+    FeedbackSnackbar(
+        message = state.imageTranslateFeedback?.let { stringResource(it.errorRes) },
+        snackbarHostState = snackbarHostState,
+        onConsumed = viewModel::clearImageTranslateFeedback,
+        actionLabel = state.imageTranslateFeedback
+            ?.takeIf { it.retryable }
+            ?.let { stringResource(R.string.detail_translate_retry) },
+        onAction = viewModel::retryImageTranslate,
+    )
 
     // 长按图片 → 先确认再保存；确认后 API 29+ 免权限直接存，API 26-28 需申请 WRITE_EXTERNAL_STORAGE
     val savePermissionMessage = stringResource(R.string.detail_save_permission_denied)

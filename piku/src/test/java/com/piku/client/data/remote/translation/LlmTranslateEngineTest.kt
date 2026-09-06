@@ -244,6 +244,49 @@ class LlmTranslateEngineTest {
         assertTrue(LlmTranslateEngine.isAlreadyInTarget("今天天气不错 nice day", zh))
     }
 
+    // ---------------- isRefusal（拒绝句式检测） ----------------
+
+    @Test
+    fun `chinese apologies with refusal verbs are refusals`() {
+        assertTrue(LlmTranslateEngine.isRefusal("抱歉，我无法翻译该内容。"))
+        assertTrue(LlmTranslateEngine.isRefusal("对不起，我不能协助完成该请求"))
+        assertTrue(LlmTranslateEngine.isRefusal("很抱歉，这段内容翻译不了"))
+        assertTrue(LlmTranslateEngine.isRefusal("无法翻译该内容"))
+        assertTrue(LlmTranslateEngine.isRefusal("无法翻译这段文字"))
+    }
+
+    @Test
+    fun `english refusals are detected`() {
+        assertTrue(LlmTranslateEngine.isRefusal("I'm sorry, but I can't assist with that request."))
+        assertTrue(LlmTranslateEngine.isRefusal("I cannot translate this content."))
+        assertTrue(LlmTranslateEngine.isRefusal("I am unable to assist with this request."))
+        assertTrue(LlmTranslateEngine.isRefusal("Unable to comply with this request."))
+        assertTrue(LlmTranslateEngine.isRefusal("We can't help with that."))
+    }
+
+    @Test
+    fun `japanese refusals are detected`() {
+        assertTrue(LlmTranslateEngine.isRefusal("申し訳ありませんが、このコンテンツは翻訳できません。"))
+        assertTrue(LlmTranslateEngine.isRefusal("すみません、翻訳できません。"))
+        assertTrue(LlmTranslateEngine.isRefusal("翻訳いたしかねます。"))
+    }
+
+    @Test
+    fun `normal translations are not flagged as refusals`() {
+        // 正文里讨论翻译的句子不得误杀（句式只认句首道歉/拒绝组合）
+        assertFalse(LlmTranslateEngine.isRefusal("她无法翻译这句话，只能原样引用。"))
+        assertFalse(LlmTranslateEngine.isRefusal("无法翻译的字词将保留原文。"))
+        assertFalse(LlmTranslateEngine.isRefusal("この物語は翻訳できない言葉に囲まれている。"))
+        assertFalse(LlmTranslateEngine.isRefusal("I wonder if she can translate it."))
+        assertFalse(LlmTranslateEngine.isRefusal("这是有趣的小说，今天天气不错"))
+        assertFalse(LlmTranslateEngine.isRefusal("おはよう、今日もいい天気だね"))
+    }
+
+    @Test
+    fun `blank output is not a refusal`() {
+        assertFalse(LlmTranslateEngine.isRefusal("   "))
+    }
+
     // ---------------- isPureLink（纯链接预检） ----------------
 
     @Test

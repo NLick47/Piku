@@ -407,4 +407,12 @@
     <string name="webdav_disabled_action_hint">Enable sync first to test the connection or sync manually</string>
     <string name="webdav_help">Favorites are stored on the server as JSON and image files under piku/. Use the same settings on another device to sync.</string>
     <string name="webdav_nutstore_hint">Nutstore (坚果云) WebDAV recommended. Enable in Settings → Security → Third-party apps.</string>
+
+    <!-- 图片翻译错误 -->
+    <string name="image_translate_refused">This page was blocked by the safety policy and cannot be translated</string>
+    <string name="image_translate_rate_limited">Too many requests, please try again later</string>
+    <string name="image_translate_upstream">Translation service is temporarily unavailable</string>
+    <string name="image_translate_network">Network error, please retry</string>
+    <string name="image_translate_download_failed">Failed to download image</string>
+    <string name="image_translate_no_model">No translation model available</string>
 </resources>

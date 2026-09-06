@@ -23,6 +23,15 @@ bucket = [RATE_LIMIT, 0.0]
 bucket_lock = asyncio.Lock()
 log = logging.getLogger("proxy")
 
+# 200 但回复里没图时的粗分类：像不像模型拒绝。宁可漏判（归为 no_image）也不错杀
+REFUSAL_RE = re.compile(
+    r"i(?:'m| am) (?:sorry|afraid)|i (?:cannot|can't|am unable to)|unable to (?:assist|help|translate|process|comply)|"
+    r"cannot (?:assist|help|translate|comply|process)|content policy|safety policy|"
+    r"抱歉|对不起|无法|不能协助|不能翻译|违规|内容政策|安全政策|"
+    r"申し訳|すみません|翻訳できません|翻訳いたしかねます|協力できません",
+    re.IGNORECASE,
+)
+
 
 async def rate_ok():
     now = time.monotonic()
@@ -125,11 +134,23 @@ async def translate_image_handler(request: web.Request) -> web.StreamResponse:
                 json=api_body,
                 timeout=ClientTimeout(total=180),
             ) as resp:
+                if resp.status == 429:
+                    retry_after = resp.headers.get("Retry-After", "30")
+                    log.warning("UPSTREAM_429 retry_after=%s", retry_after)
+                    return web.json_response(
+                        {"error": "upstream rate limited", "type": "rate_limited"},
+                        status=429,
+                        headers={"Retry-After": retry_after},
+                    )
                 if resp.status != 200:
                     error_text = await resp.text()
                     log.error("UPSTREAM_ERR %s %s", resp.status, error_text[:200])
                     return web.json_response(
-                        {"error": f"upstream error: {resp.status}"},
+                        {
+                            "error": f"upstream error: {resp.status}",
+                            "type": "upstream",
+                            "detail": error_text[:200],
+                        },
                         status=502,
                     )
                 result = await resp.json()
@@ -141,10 +162,17 @@ async def translate_image_handler(request: web.Request) -> web.StreamResponse:
     content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
     match = re.search(r"data:image/(png|jpeg);base64,([A-Za-z0-9+/=]+)", content)
     if not match:
-        log.error("NO_IMAGE_IN_RESPONSE content=%s", content[:200])
+        # 上游 200 但没产图：模型拒绝（安全策略）或纯空回复。
+        # 都按 422 报给客户端——重试不会变好，附上回复片段供分类文案与排查
+        refused = REFUSAL_RE.search(content) is not None
+        log.error("NO_IMAGE_IN_RESPONSE refused=%s content=%s", refused, content[:200])
         return web.json_response(
-            {"error": "no image in response"},
-            status=500,
+            {
+                "error": "no image in response",
+                "type": "refused" if refused else "no_image",
+                "detail": content[:200],
+            },
+            status=422,
         )
 
     img_format = match.group(1)
