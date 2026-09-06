@@ -1,6 +1,8 @@
 package com.piku.client.ui.common
 
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -8,8 +10,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -27,17 +31,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.piku.client.R
+import com.piku.client.ui.theme.ErrorRedDark
+import com.piku.client.ui.theme.ErrorRedLight
+import com.piku.client.ui.theme.FollowDark
+import com.piku.client.ui.theme.FollowLight
+import com.piku.client.ui.theme.LoginBackgroundDark
 import com.piku.client.ui.theme.PikuColors
 
-/**
- *   关注列表与作者搜索页共用
- * - 已关注（[followed] = true）：柔和红玻璃，点击取消关注
- * - 未关注：中性玻璃，点击关注；[refollow] = true 时文案为"重新关注"（关注列表内取消过的用户）
- * - 操作中（[sending] = true）：转圈 + 禁用
- */
 @Composable
 fun FollowPillButton(
     followed: Boolean,
@@ -50,7 +54,7 @@ fun FollowPillButton(
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val pressScale by animateFloatAsState(
-        targetValue = if (pressed) 0.95f else 1f,
+        targetValue = if (pressed && !sending) 0.95f else 1f,
         label = "followPillPress",
     )
 
@@ -59,26 +63,34 @@ fun FollowPillButton(
         refollow -> R.string.follow_user_refollow
         else -> R.string.follow_user_follow
     }
-    val bgColor = when {
-        followed && !sending -> if (dark) Color(0x14E08A8A) else Color(0x0FC24B4B)
-        else -> if (dark) Color(0x14FFFFFF) else Color(0x0D2C2C2C)
+    val targetBg = when {
+        followed -> if (dark) ErrorRedDark.copy(alpha = 0.08f) else ErrorRedLight.copy(alpha = 0.06f)
+        refollow -> if (dark) FollowDark.copy(alpha = 0.08f) else FollowLight.copy(alpha = 0.06f)
+        else -> if (dark) FollowDark else FollowLight
     }
-    val borderColor = when {
-        followed && !sending -> if (dark) Color(0x33E08A8A) else Color(0x26C24B4B)
-        else -> if (dark) Color(0x33FFFFFF) else Color(0x242C2C2C)
+    val targetBorder = when {
+        followed -> if (dark) ErrorRedDark.copy(alpha = 0.20f) else ErrorRedLight.copy(alpha = 0.15f)
+        refollow -> if (dark) FollowDark.copy(alpha = 0.20f) else FollowLight.copy(alpha = 0.15f)
+        else -> if (dark) FollowDark else FollowLight
     }
-    val contentColor = when {
-        sending -> PikuColors.textFaint
+    val targetContent = when {
         followed -> PikuColors.error
-        else -> PikuColors.textPrimary
+        refollow -> if (dark) FollowDark else FollowLight
+        else -> if (dark) LoginBackgroundDark else Color.White
     }
+    val bgColor by animateColorAsState(targetBg, label = "followPillBg")
+    val borderColor by animateColorAsState(targetBorder, label = "followPillBorder")
+    val contentColor by animateColorAsState(targetContent, label = "followPillContent")
 
     Row(
         modifier = Modifier
             .graphicsLayer {
                 scaleX = pressScale
                 scaleY = pressScale
+                alpha = if (sending) 0.7f else 1f
             }
+            .defaultMinSize(minWidth = 96.dp)
+            .animateContentSize()
             .clip(shape)
             .background(bgColor)
             .border(BorderStroke(0.5.dp, borderColor), shape)
@@ -89,6 +101,7 @@ fun FollowPillButton(
                 onClick = onClick,
             )
             .padding(horizontal = 15.dp, vertical = 7.5.dp),
+        horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (sending) {
@@ -98,21 +111,15 @@ fun FollowPillButton(
                 strokeWidth = 1.5.dp,
             )
             Spacer(Modifier.width(6.dp))
+        }
+        Crossfade(targetState = labelRes, label = "followPillState") { res ->
             Text(
-                text = stringResource(labelRes),
+                text = stringResource(res),
                 color = contentColor,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center,
             )
-        } else {
-            Crossfade(targetState = labelRes, label = "followPillState") { res ->
-                Text(
-                    text = stringResource(res),
-                    color = contentColor,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                )
-            }
         }
     }
 }

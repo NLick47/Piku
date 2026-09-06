@@ -89,6 +89,8 @@ import com.piku.client.ui.common.LoaderDots
 import com.piku.client.ui.common.LoginPrompt
 import com.piku.client.ui.common.UserAvatar
 import com.piku.client.ui.common.WorkCard
+import com.piku.client.ui.theme.GlassHeaderTintDark
+import com.piku.client.ui.theme.GlassHeaderTintLight
 import com.piku.client.ui.theme.HomeBgBottomDark
 import com.piku.client.ui.theme.HomeBgBottomLight
 import com.piku.client.ui.theme.HomeBgTopDark
@@ -269,7 +271,7 @@ private fun SearchTopBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(if (dark) Color(0xF2262421) else Color(0xF7FFFFFF))
+            .background(if (dark) GlassHeaderTintDark else GlassHeaderTintLight)
             .statusBarsPadding()
             .padding(start = 4.dp, end = 16.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,

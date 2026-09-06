@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.People
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.SnackbarHost
@@ -38,7 +39,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -53,6 +53,8 @@ import com.piku.client.ui.common.GlassCard
 import com.piku.client.ui.common.LoaderDots
 import com.piku.client.ui.common.LoginPrompt
 import com.piku.client.ui.common.UserAvatar
+import com.piku.client.ui.theme.GlassHeaderTintDark
+import com.piku.client.ui.theme.GlassHeaderTintLight
 import com.piku.client.ui.theme.HomeBgBottomDark
 import com.piku.client.ui.theme.HomeBgBottomLight
 import com.piku.client.ui.theme.HomeBgTopDark
@@ -121,12 +123,21 @@ fun FollowUsersScreen(
                 }
                 state.users.isEmpty() -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = stringResource(R.string.follow_users_empty),
-                            color = PikuColors.textFaint,
-                            fontSize = 14.sp,
-                            lineHeight = 22.sp,
-                        )
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.Outlined.People,
+                                contentDescription = null,
+                                tint = PikuColors.textFaint,
+                                modifier = Modifier.size(32.dp),
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                text = stringResource(R.string.follow_users_empty),
+                                color = PikuColors.textSecondary,
+                                fontSize = 14.sp,
+                                lineHeight = 22.sp,
+                            )
+                        }
                     }
                 }
                 else -> {
@@ -161,7 +172,8 @@ private fun FollowTopBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(if (dark) Color(0xF2262421) else Color(0xF7FFFFFF))
+            .background(if (dark) GlassHeaderTintDark else GlassHeaderTintLight)
+            .border(BorderStroke(0.5.dp, PikuColors.border))
             .statusBarsPadding()
             .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -233,6 +245,7 @@ private fun FollowUserList(
                 dark = dark,
                 onClick = { onUserClick(user) },
                 onUnfollow = { onUnfollow(user.userId) },
+                modifier = Modifier.animateItem(),
             )
         }
         when {
@@ -271,12 +284,13 @@ private fun FollowUserRow(
     dark: Boolean,
     onClick: () -> Unit,
     onUnfollow: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(20.dp)
     GlassCard(
         dark = dark,
         shape = shape,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
     ) {
