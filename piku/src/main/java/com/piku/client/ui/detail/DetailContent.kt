@@ -608,6 +608,7 @@ private fun ImagePager(
         }
     }
 }
+
 /**
  * 小说正文预览：正文全文流入限高卡片，卡片内可垂直滚动（内层滚动），
  * 底部渐隐提示「还有更多」，滚到底后渐隐消失。
@@ -628,7 +629,7 @@ private fun NovelPreview(detail: WorkDetail, dark: Boolean, onWorkClick: (Long, 
             fontSize = 13.sp,
             lineHeight = 22.sp,
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
                 .verticalScroll(previewScrollState)
                 .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 28.dp),
         )

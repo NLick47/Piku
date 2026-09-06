@@ -348,6 +348,7 @@ fun DetailScreen(
             }
             if (state.novelReaderOpen && it.novelText.isNotBlank()) {
                 val novelTranslated = state.showTranslation(TranslateField.NOVEL)
+                val titleTranslated = state.showTranslation(TranslateField.TITLE)
                 val translatedNovel = it.translated?.novelText
                 // 边翻边读：流式进行中把未译剩余原文拼接在已译前缀之后；
                 // 首块完成前（remainder 为空）显示纯原文，避免重复拼接
@@ -369,7 +370,7 @@ fun DetailScreen(
                 FullNovelViewer(
                     text = novelBody,
                     title = it.translated?.title
-                        ?.takeIf { t -> novelTranslated && t.isNotBlank() }
+                        ?.takeIf { t -> titleTranslated && t.isNotBlank() }
                         ?: it.title,
                     fontSize = state.novelFontSize,
                     light = state.novelReaderLight,

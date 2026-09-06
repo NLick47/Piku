@@ -7,11 +7,15 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -80,6 +84,15 @@ internal val NovelReaderTextLight = Color(0xFF2E2A23)
 /** 阅读器深色配色 */
 internal val NovelReaderBgDark = ViewerBackgroundDark
 internal val NovelReaderTextDark = Color(0xFFD6D0C4)
+
+/** 亮色底部栏底色：比正文更实、更白的暖白，与浅米正文拉开层次 */
+internal val NovelReaderControlBgLight = Color(0xFFFAF5EC)
+/** 亮色底部栏顶部分隔线 */
+internal val NovelReaderControlDividerLight = Color(0xFFE7E0D3)
+/** 亮色进度条强调色：醒目暖棕（独立于正文链接色 linkColor） */
+internal val NovelReaderProgressAccentLight = Color(0xFFB08A52)
+/** 亮色进度条轨道色 */
+internal val NovelReaderProgressTrackLight = Color(0xFFE6DFD2)
 
 /**
  * 全屏小说阅读器：
@@ -157,7 +170,9 @@ fun FullNovelViewer(
     val bg = if (light) NovelReaderBgLight else NovelReaderBgDark
     val fg = if (light) NovelReaderTextLight else NovelReaderTextDark
     val linkColor = if (light) ControlAccentLight else ControlAccentDark
-    val controlBg = if (light) Color(0xE6F3EEDA) else Color(0xCC141312)
+    val controlBg = if (light) NovelReaderControlBgLight else Color(0xCC141312)
+    val progressAccent = if (light) NovelReaderProgressAccentLight else linkColor
+    val progressTrack = if (light) NovelReaderProgressTrackLight else fg.copy(alpha = 0.25f)
 
     Box(
         modifier = Modifier
@@ -221,71 +236,91 @@ fun FullNovelViewer(
             }
         }
 
-        // 底部设置栏：原/译切换 | 字号 A− · 状态 · A+（居中成组） | 配色切换
+        // 底部设置栏：进度条 | 原/译切换 · 字号 A− 状态 A+（居中成组） · 配色切换
         if (controlsVisible) {
-            Row(
+            Column(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .navigationBarsPadding()
-                    .background(controlBg)
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                    .background(controlBg),
             ) {
-                ReaderTranslateChip(
-                    translationAvailable = translationAvailable,
-                    translating = translating,
-                    busy = busy,
-                    showTranslation = showTranslation,
-                    streamProgress = novelStreamProgress,
-                    fg = fg,
-                    accent = linkColor,
-                    onClick = onToggleTranslation,
-                )
-                Box(Modifier.weight(1f))
-                ReaderFontButton(
-                    label = "A−",
-                    enabled = fontSize > NOVEL_FONT_MIN,
-                    onClick = { onFontSizeChange(fontSize - 1f) },
-                    fg = fg,
-                )
-                Text(
-                    // 流式期间中间信息位临时切换为翻译进度（宽度与原状态相当，不挤压布局）；
-                    // 钳到 99 避免"翻译中 100%"闪现，终态由 Completed 事件收尾
-                    text = if (novelStreamProgress != null) {
-                        stringResource(
-                            R.string.detail_translating_progress,
-                            minOf(novelStreamProgress, 99),
-                        )
-                    } else {
-                        stringResource(
-                            R.string.detail_novel_status,
-                            fontSize.toInt(),
-                            progressPercent(scrollState),
-                        )
-                    },
-                    color = fg.copy(alpha = 0.8f),
-                    fontSize = 12.sp,
-                    maxLines = 1,
-                    modifier = Modifier.padding(horizontal = 2.dp),
-                )
-                ReaderFontButton(
-                    label = "A+",
-                    enabled = fontSize < NOVEL_FONT_MAX,
-                    onClick = { onFontSizeChange(fontSize + 1f) },
-                    fg = fg,
-                )
-                Box(Modifier.weight(1f))
-                IconButton(onClick = { onLightChange(!light) }) {
-                    Icon(
-                        imageVector = if (light) Icons.Filled.DarkMode else Icons.Filled.LightMode,
-                        contentDescription = stringResource(
-                            if (light) R.string.detail_novel_theme_dark
-                            else R.string.detail_novel_theme_light,
-                        ),
-                        tint = fg,
-                        modifier = Modifier.size(20.dp),
+                if (light) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(0.5.dp)
+                            .background(NovelReaderControlDividerLight),
                     )
+                }
+                ReaderProgressBar(
+                    scrollState = scrollState,
+                    accent = progressAccent,
+                    track = progressTrack,
+                    onDragStart = { autoHideJob?.cancel() },
+                    onDragEnd = { refreshAutoHide() },
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    ReaderTranslateChip(
+                        translationAvailable = translationAvailable,
+                        translating = translating,
+                        busy = busy,
+                        showTranslation = showTranslation,
+                        streamProgress = novelStreamProgress,
+                        fg = fg,
+                        accent = linkColor,
+                        onClick = onToggleTranslation,
+                    )
+                    Box(Modifier.weight(1f))
+                    ReaderFontButton(
+                        label = "A−",
+                        enabled = fontSize > NOVEL_FONT_MIN,
+                        onClick = { onFontSizeChange(fontSize - 1f) },
+                        fg = fg,
+                    )
+                    Text(
+                        // 流式期间中间信息位临时切换为翻译进度（宽度与原状态相当，不挤压布局）；
+                        // 钳到 99 避免"翻译中 100%"闪现，终态由 Completed 事件收尾
+                        text = if (novelStreamProgress != null) {
+                            stringResource(
+                                R.string.detail_translating_progress,
+                                minOf(novelStreamProgress, 99),
+                            )
+                        } else {
+                            stringResource(
+                                R.string.detail_novel_status,
+                                fontSize.toInt(),
+                                progressPercent(scrollState),
+                            )
+                        },
+                        color = fg.copy(alpha = 0.8f),
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        modifier = Modifier.padding(horizontal = 2.dp),
+                    )
+                    ReaderFontButton(
+                        label = "A+",
+                        enabled = fontSize < NOVEL_FONT_MAX,
+                        onClick = { onFontSizeChange(fontSize + 1f) },
+                        fg = fg,
+                    )
+                    Box(Modifier.weight(1f))
+                    IconButton(onClick = { onLightChange(!light) }) {
+                        Icon(
+                            imageVector = if (light) Icons.Filled.DarkMode else Icons.Filled.LightMode,
+                            contentDescription = stringResource(
+                                if (light) R.string.detail_novel_theme_dark
+                                else R.string.detail_novel_theme_light,
+                            ),
+                            tint = fg,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
                 }
             }
         }
@@ -297,6 +332,70 @@ private fun progressPercent(scrollState: ScrollState): Int {
     val max = scrollState.maxValue
     if (max <= 0) return 100
     return ((scrollState.value.toFloat() / max) * 100).toInt().coerceIn(0, 100)
+}
+
+/**
+ * 阅读进度条：点击或拖动快速定位，正文不足一屏时隐藏。
+ * 按下时回调 [onDragStart]（暂停控制栏自动隐藏），松手时回调 [onDragEnd]（重新计时），
+ * 避免拖动途中控制栏（连同进度条）自己消失。
+ */
+@Composable
+private fun ReaderProgressBar(
+    scrollState: ScrollState,
+    accent: Color,
+    track: Color,
+    onDragStart: () -> Unit,
+    onDragEnd: () -> Unit,
+) {
+    val max = scrollState.maxValue
+    if (max <= 0) return
+    val scope = rememberCoroutineScope()
+    val progress = (scrollState.value.toFloat() / max).coerceIn(0f, 1f)
+
+    fun seek(ratio: Float) {
+        scope.launch { scrollState.scrollTo((ratio * max).toInt().coerceIn(0, max)) }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(18.dp)
+            .pointerInput(max) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    onDragStart()
+                    seek(down.position.x / size.width.toFloat())
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull()
+                        if (change == null || !change.pressed) {
+                            onDragEnd()
+                            break
+                        }
+                        if (change.position != change.previousPosition) {
+                            seek(change.position.x / size.width.toFloat())
+                            change.consume()
+                        }
+                    }
+                }
+            },
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(2.dp)
+                .clip(RoundedCornerShape(1.dp))
+                .background(track),
+        )
+        Box(
+            Modifier
+                .fillMaxWidth(progress)
+                .height(2.dp)
+                .clip(RoundedCornerShape(1.dp))
+                .background(accent),
+        )
+    }
 }
 
 @Composable
