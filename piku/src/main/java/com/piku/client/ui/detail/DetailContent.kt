@@ -92,6 +92,7 @@ import com.piku.client.ui.theme.LoginBackgroundDark
 import com.piku.client.ui.theme.LoginTextPrimaryDark
 import com.piku.client.ui.theme.OverlayBorder
 import com.piku.client.ui.theme.OverlayScrim
+import com.piku.client.ui.theme.OverlayScrimHeavy
 import com.piku.client.ui.theme.OverlayScrimFaint
 import com.piku.client.ui.theme.OverlayScrimLight
 import com.piku.client.ui.theme.OverlayTipDark
@@ -587,7 +588,7 @@ private fun ImagePager(
                     onAutoExpandShown = onImageHintShown,
                     expandDurationMillis = IMAGE_HINT_EXPAND_MILLIS,
                     containerColor = when {
-                        isCurrentPageTranslating -> OverlayScrimFaint
+                        isCurrentPageTranslating -> OverlayScrimHeavy
                         imageTranslated -> TranslateActiveBlueTint
                         dark -> OverlayScrim
                         else -> OverlayScrimLight
@@ -596,15 +597,17 @@ private fun ImagePager(
                     expandedContainerColor = if (dark) OverlayTipDark else OverlayTipLight,
                     height = 28.dp,
                     horizontalPadding = 6.dp,
+                    loading = isCurrentPageTranslating,
+                    loadingLabel = stringResource(R.string.detail_translating),
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(8.dp),
                     icon = {
                         if (isCurrentPageTranslating) {
                             CircularProgressIndicator(
-                                modifier = Modifier.size(14.dp),
+                                modifier = Modifier.size(16.dp),
                                 strokeWidth = 2.dp,
-                                color = Color.White,
+                                color = if (dark) Color.White else TranslateActiveBlue,
                             )
                         } else {
                             Icon(
