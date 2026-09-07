@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.piku.client.R
 import com.piku.client.data.local.CatalogSource
 import com.piku.client.data.local.CatalogSourceCodec
+import com.piku.client.data.local.ImageSaver
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.data.local.newCatalogSourceId
 import com.piku.client.data.remote.GitHubRelease
@@ -200,6 +201,7 @@ class HomeViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val thumbnailResolver: ThumbnailResolver,
     private val webDavSyncRepository: WebDavSyncRepository,
+    private val imageSaver: ImageSaver,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -613,6 +615,11 @@ class HomeViewModel @Inject constructor(
 
     fun logout() {
         authRepository.logout()
+    }
+
+    suspend fun saveAvatar(url: String?): Boolean {
+        if (url.isNullOrBlank()) return false
+        return runCatching { imageSaver.save(url, "Piku_avatar") }.isSuccess
     }
 
     /** 已登录但资料缺失（如启动时离线）时，打开抽屉触发重试 */

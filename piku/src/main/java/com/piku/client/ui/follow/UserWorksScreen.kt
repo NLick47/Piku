@@ -47,6 +47,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -85,6 +86,7 @@ import com.piku.client.domain.model.Work
 import com.piku.client.ui.common.LoaderDots
 import com.piku.client.ui.common.PikuBackButton
 import com.piku.client.ui.common.WorkCard
+import com.piku.client.ui.common.AvatarViewerDialog
 import com.piku.client.ui.theme.HomeBgBottomDark
 import com.piku.client.ui.theme.HomeBgBottomLight
 import com.piku.client.ui.theme.HomeBgTopDark
@@ -128,6 +130,8 @@ fun UserWorksScreen(
             viewModel.clearFollowFeedback()
         }
     }
+
+    var showAvatarViewer by rememberSaveable { mutableStateOf(false) }
 
     // 折叠进度：0=完全展开，1=头部卡片完全滚出（顶栏接管）
     val gridState = rememberLazyStaggeredGridState()
@@ -188,6 +192,7 @@ fun UserWorksScreen(
                             loggedIn = state.loggedIn,
                             isSelf = state.isSelf,
                             onToggleFollow = viewModel::toggleFollow,
+                            onAvatarClick = { showAvatarViewer = true },
                             dark = dark,
                         )
                         Box(
@@ -219,9 +224,19 @@ fun UserWorksScreen(
                         onToggleFavorite = viewModel::toggleFavorite,
                         onToggleFollow = viewModel::toggleFollow,
                         onWorkClick = onWorkClick,
+                        onAvatarClick = { showAvatarViewer = true },
                     )
                 }
             }
+        }
+        if (showAvatarViewer) {
+            val avatarUrl = state.pageInfo?.avatarUrl
+                ?: state.works.firstOrNull()?.authorAvatarUrl
+            AvatarViewerDialog(
+                avatarUrl = avatarUrl,
+                onDismiss = { showAvatarViewer = false },
+                onSave = { url -> viewModel.saveAvatar(url) },
+            )
         }
         SnackbarHost(
             hostState = snackbarHostState,
@@ -524,6 +539,7 @@ private fun UserWorksHeaderCard(
     loggedIn: Boolean,
     isSelf: Boolean,
     onToggleFollow: () -> Unit,
+    onAvatarClick: () -> Unit,
     dark: Boolean,
 ) {
     val headerUrl = pageInfo?.headerUrl
@@ -651,7 +667,11 @@ private fun UserWorksHeaderCard(
                     }
                     .clip(CircleShape)
                     .background(PikuColors.textFaint)
-                    .border(2.dp, Color.White, CircleShape),
+                    .border(2.dp, Color.White, CircleShape)
+                    .then(
+                        if (avatarUrl != null) Modifier.clickable(onClick = onAvatarClick)
+                        else Modifier,
+                    ),
                 contentAlignment = Alignment.Center,
             ) {
                 if (avatarUrl != null) {
@@ -763,6 +783,7 @@ private fun UserWorksGrid(
     onToggleFavorite: (Work) -> Unit,
     onToggleFollow: () -> Unit,
     onWorkClick: (Work) -> Unit,
+    onAvatarClick: () -> Unit,
 ) {
     LaunchedEffect(gridState, state.works.size) {
         snapshotFlow {
@@ -800,6 +821,7 @@ private fun UserWorksGrid(
                     loggedIn = state.loggedIn,
                     isSelf = state.isSelf,
                     onToggleFollow = onToggleFollow,
+                    onAvatarClick = onAvatarClick,
                     dark = dark,
                 )
             }

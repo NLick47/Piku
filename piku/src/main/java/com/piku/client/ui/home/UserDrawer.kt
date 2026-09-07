@@ -105,6 +105,7 @@ fun UserDrawer(
     onProfileOpen: () -> Unit,
     onLoginClick: () -> Unit,
     onLogout: () -> Unit,
+    onAvatarClick: () -> Unit,
     dark: Boolean,
     gesturesEnabled: Boolean = true,
     aiTranslateEnabled: Boolean = false,
@@ -145,6 +146,7 @@ fun UserDrawer(
                 onProfileOpen = onProfileOpen,
                 onLoginClick = onLoginClick,
                 onLogout = onLogout,
+                onAvatarClick = onAvatarClick,
                 dark = dark,
                 settingsExpanded = settingsExpanded,
                 aiTranslateEnabled = aiTranslateEnabled,
@@ -184,6 +186,7 @@ private fun DrawerPanel(
     onProfileOpen: () -> Unit,
     onLoginClick: () -> Unit,
     onLogout: () -> Unit,
+    onAvatarClick: () -> Unit,
     dark: Boolean,
     settingsExpanded: Boolean,
     aiTranslateEnabled: Boolean,
@@ -226,6 +229,7 @@ private fun DrawerPanel(
             loggedIn = loggedIn,
             onProfileOpen = onProfileOpen,
             onLoginClick = onLoginClick,
+            onAvatarClick = onAvatarClick,
             dark = dark,
         )
         val scrollState = rememberScrollState()
@@ -437,6 +441,7 @@ private fun DrawerHeader(
     loggedIn: Boolean,
     onProfileOpen: () -> Unit,
     onLoginClick: () -> Unit,
+    onAvatarClick: () -> Unit,
     dark: Boolean,
 ) {
     val faint = PikuColors.textFaint
@@ -497,9 +502,11 @@ private fun DrawerHeader(
                     .padding(3.dp),
             ) {
                 if (!skeleton) {
+                    val hasAvatar = !userProfile?.avatarUrl.isNullOrBlank() &&
+                        !(userProfile?.avatarUrl ?: "").contains("default_user")
                     UserAvatar(
                         avatarUrl = userProfile?.avatarUrl,
-                        onClick = {},
+                        onClick = { if (hasAvatar) onAvatarClick() },
                         dark = dark,
                         size = 54.dp,
                     )

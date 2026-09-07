@@ -50,6 +50,8 @@ import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDrawerState
@@ -89,6 +91,7 @@ import com.piku.client.data.local.CatalogSource
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.domain.model.Work
 import com.piku.client.ui.profile.ProfileEditSheet
+import com.piku.client.ui.common.AvatarViewerDialog
 import com.piku.client.ui.collection.CollectionScreen
 import com.piku.client.ui.follow.FollowUsersScreen
 import com.piku.client.ui.history.HistoryScreen
@@ -164,6 +167,8 @@ fun HomeScreen(
     var showFollowUsersPage by rememberSaveable { mutableStateOf(false) }
     var showLogoutConfirm by rememberSaveable { mutableStateOf(false) }
     var showProfileEdit by rememberSaveable { mutableStateOf(false) }
+    var showAvatarViewer by rememberSaveable { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
     val anyOverlayActive = showHistoryPage ||
         showCollectionPage || showTagsPage || showFollowUsersPage || showWebDavSettings
     val isScrolling = remember { mutableStateOf(false) }
@@ -284,6 +289,7 @@ fun HomeScreen(
             onLoginClick()
         },
         onLogout = onLogout,
+        onAvatarClick = { showAvatarViewer = true },
         gesturesEnabled = !anyOverlayActive,
         dark = dark,
         aiTranslateEnabled = state.aiTranslateEnabled,
@@ -784,6 +790,14 @@ fun HomeScreen(
                 )
             }
 
+            if (showAvatarViewer) {
+                AvatarViewerDialog(
+                    avatarUrl = state.userProfile?.avatarUrl,
+                    onDismiss = { showAvatarViewer = false },
+                    onSave = { url -> viewModel.saveAvatar(url) },
+                )
+            }
+
             if (showAboutSheet) {
                 AboutSheet(
                     currentVersion = displayVersionName(),
@@ -866,6 +880,13 @@ fun HomeScreen(
                 onProfileOpen = onProfileOpen,
                 state = state,
                 dark = dark,
+            )
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(16.dp),
             )
         }
     }

@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.piku.client.R
+import com.piku.client.data.local.ImageSaver
 import com.piku.client.data.repository.AuthRepository
 import com.piku.client.data.repository.DetailRepository
 import com.piku.client.data.repository.FollowResult
@@ -54,6 +55,7 @@ class UserWorksViewModel @Inject constructor(
     private val toggleFavoriteUseCase: ToggleFavoriteUseCase,
     private val detailRepository: DetailRepository,
     private val authRepository: AuthRepository,
+    private val imageSaver: ImageSaver,
 ) : ViewModel() {
 
     private val userId: Long = savedStateHandle["userId"] ?: -1L
@@ -128,6 +130,11 @@ class UserWorksViewModel @Inject constructor(
 
     fun clearFollowFeedback() {
         _uiState.update { it.copy(followFeedbackRes = null) }
+    }
+
+    suspend fun saveAvatar(url: String?): Boolean {
+        if (url.isNullOrBlank()) return false
+        return runCatching { imageSaver.save(url, "Piku_avatar") }.isSuccess
     }
 
     fun retry() {
