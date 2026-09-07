@@ -54,6 +54,7 @@ private val LABEL_GAP_DP = 6.dp
  * - 展开期间再次点击会重置计时；**每次点击都触发一次 [onClick]**——先执行业务逻辑再处理
  *   展开/重置，所以点击既不会被吞掉，也不会因为展开而重复调用。
  * - [autoExpand] 用于首次进入的功能引导：进入组合即自动展开一次，不必等用户先点。
+ * - [loading] 为 true 时自动展开并显示 [loadingLabel]，同时禁用点击，直到 loading 结束。
  * - 容器高度恒定；收起时文字宽度压到 0，是真正移除占位而非留一块透明区域；
  *   展开时左边缘向左伸展、右边缘固定，图标位置保持稳定。
  * - 计时跑在 `LaunchedEffect` 里，组件卸载或 key 变化时旧协程自动取消，不会残留或多重计时。
@@ -85,6 +86,10 @@ fun ExpandableIconAction(
     onLongClick: (() -> Unit)? = null,
     height: Dp = 40.dp,
     horizontalPadding: Dp = 10.dp,
+    /** 加载中状态：自动展开并显示 [loadingLabel]，同时禁用点击 */
+    loading: Boolean = false,
+    /** 加载中时显示的文字，如"翻译中..." */
+    loadingLabel: String? = null,
 ) {
     val reducedMotion = rememberReducedMotion()
 
@@ -106,13 +111,21 @@ fun ExpandableIconAction(
             currentOnAutoExpandShown?.invoke()
         }
     }
+    // loading 状态：自动展开并保持展开，直到 loading 结束
+    LaunchedEffect(loading) {
+        if (loading) {
+            expanded = true
+        }
+    }
 
+    // loading 时显示 loadingLabel，否则显示 label
+    val displayLabel = if (loading && loadingLabel != null) loadingLabel else label
     // 文字宽度参与动画，收起时压到 0 —— 不是留一块透明区域，而是真正没有占位
     val textMeasurer = rememberTextMeasurer()
     val density = LocalDensity.current
-    val textWidthDp = remember(label, density) {
+    val textWidthDp = remember(displayLabel, density) {
         val widthPx = textMeasurer.measure(
-            AnnotatedString(label),
+            AnnotatedString(displayLabel),
             style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium),
         ).size.width
         with(density) { widthPx.toDp() }
@@ -148,6 +161,8 @@ fun ExpandableIconAction(
     } else {
         containerColor
     }
+    // loading 时禁用点击
+    val clickableEnabled = enabled && !loading
     val pill = RoundedCornerShape(50)
     Box(
         modifier = modifier
@@ -159,7 +174,7 @@ fun ExpandableIconAction(
             .clip(pill)
             .background(resolvedColor)
             .combinedClickable(
-                enabled = enabled,
+                enabled = clickableEnabled,
                 onClick = {
                     onClick()
                     if (expanded) resetToken++ else expanded = true
@@ -172,7 +187,7 @@ fun ExpandableIconAction(
         Row(verticalAlignment = Alignment.CenterVertically) {
             // 刻意不用 Arrangement.spacedBy：收起时文字宽度为 0，固定间距会把图标推离中心
             Text(
-                text = label,
+                text = displayLabel,
                 color = PikuColors.textPrimary,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,

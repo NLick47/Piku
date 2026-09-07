@@ -743,6 +743,7 @@ fun HomeScreen(
                     onToggleEnabled = viewModel::setAiTranslateEnabled,
                     onSelectModel = viewModel::selectTranslateModel,
                     onSelectNovelModel = viewModel::selectTranslateNovelModel,
+                    onSelectImageModel = viewModel::selectTranslateImageModel,
                     onSaveCatalog = viewModel::saveCatalog,
                     onResetCatalog = viewModel::resetCatalogUrl,
                     onActivateSource = viewModel::activateCatalogSource,

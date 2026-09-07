@@ -9,8 +9,10 @@ import com.piku.client.data.local.ImageSaver
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.data.local.newCatalogSourceId
 import com.piku.client.data.remote.GitHubRelease
+import com.piku.client.data.remote.translation.ModelCatalog
 import com.piku.client.data.remote.translation.ModelCatalogRepository
 import com.piku.client.data.remote.translation.ModelEntry
+import com.piku.client.data.remote.translation.Role
 import com.piku.client.data.remote.translation.RoleDefaultIds
 import com.piku.client.data.remote.translation.TranslationRepository
 import com.piku.client.data.repository.AuthRepository
@@ -41,6 +43,7 @@ import com.piku.client.domain.usecase.ObserveHistoryRetentionUseCase
 import com.piku.client.domain.usecase.ObserveLanguageUseCase
 import com.piku.client.domain.usecase.ObserveThemeModeUseCase
 import com.piku.client.domain.usecase.RestoreAdultContentUseCase
+import com.piku.client.domain.usecase.SelectTranslateImageModelUseCase
 import com.piku.client.domain.usecase.SelectTranslateModelUseCase
 import com.piku.client.domain.usecase.SelectTranslateNovelModelUseCase
 import com.piku.client.domain.usecase.SetAdultContentUseCase
@@ -140,6 +143,9 @@ data class HomeUiState(
     /** 小说正文专用模型（空串表示跟随文本翻译模型） */
     val llmNovelBaseUrl: String = "",
     val llmNovelModel: String = "",
+    /** 图片翻译专用模型，空串走目录默认 */
+    val llmImageBaseUrl: String = "",
+    val llmImageModel: String = "",
     /** 可选模型列表（内置默认 + 远程覆盖） */
     val translateModels: List<ModelEntry> = emptyList(),
     /** 各场景当前生效的默认模型 id，选择器据此高亮"未手动选择的默认项" */
@@ -197,6 +203,7 @@ class HomeViewModel @Inject constructor(
     private val translationRepository: TranslationRepository,
     private val selectTranslateModelUseCase: SelectTranslateModelUseCase,
     private val selectTranslateNovelModelUseCase: SelectTranslateNovelModelUseCase,
+    private val selectTranslateImageModelUseCase: SelectTranslateImageModelUseCase,
     private val setAiTranslateEnabledUseCase: SetAiTranslateEnabledUseCase,
     private val authRepository: AuthRepository,
     private val thumbnailResolver: ThumbnailResolver,
@@ -366,8 +373,28 @@ class HomeViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
+            settingsRepository.llmImageBaseUrl.collect { url ->
+                _uiState.update { it.copy(llmImageBaseUrl = url) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.llmImageModel.collect { model ->
+                _uiState.update { it.copy(llmImageModel = model) }
+            }
+        }
+        viewModelScope.launch {
             modelCatalogRepository.models.collect { models ->
                 _uiState.update { it.copy(translateModels = models) }
+                // 校验已选模型是否还在新目录中，失效则清空回退到角色默认
+                val textOk = _uiState.value.llmModel.isBlank() ||
+                    ModelCatalog.resolveStoredSelection(_uiState.value.llmModel, models, Role.TEXT) != null
+                if (!textOk) settingsRepository.setLlmModel("")
+                val novelOk = _uiState.value.llmNovelModel.isBlank() ||
+                    ModelCatalog.resolveStoredSelection(_uiState.value.llmNovelModel, models, Role.NOVEL) != null
+                if (!novelOk) settingsRepository.setLlmNovelModel("")
+                val imageOk = _uiState.value.llmImageModel.isBlank() ||
+                    ModelCatalog.resolveStoredSelection(_uiState.value.llmImageModel, models, Role.IMAGE) != null
+                if (!imageOk) settingsRepository.setLlmImageModel("")
             }
         }
         viewModelScope.launch {
@@ -727,6 +754,11 @@ class HomeViewModel @Inject constructor(
     /** 小说正文模型：传 null 表示跟随文本翻译模型 */
     fun selectTranslateNovelModel(entry: ModelEntry?) {
         selectTranslateNovelModelUseCase(entry)
+    }
+
+    /** 图片翻译模型，null 走目录默认 */
+    fun selectTranslateImageModel(entry: ModelEntry?) {
+        selectTranslateImageModelUseCase(entry)
     }
 
     /**

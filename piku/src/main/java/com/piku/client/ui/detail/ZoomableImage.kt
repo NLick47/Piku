@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -56,6 +57,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastAny
@@ -65,6 +67,7 @@ import coil3.compose.SubcomposeAsyncImage
 import com.piku.client.ui.common.rememberAnimatedImage
 import com.piku.client.R
 import com.piku.client.ui.theme.OverlayScrim
+import com.piku.client.ui.theme.OverlayScrimHeavy
 import com.piku.client.ui.theme.PikuColors
 import com.piku.client.ui.theme.TranslateActiveBlue
 import com.piku.client.ui.theme.TranslateActiveBlueTint
@@ -506,33 +509,57 @@ fun FullScreenViewer(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 if (hasImageModel) {
+                    // 翻译按钮：loading时展开显示"翻译中..."文字，否则显示图标
                     Box(
                         modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
+                            .height(40.dp)
+                            .clip(RoundedCornerShape(20.dp))
                             .background(
-                                if (imageTranslated) TranslateActiveBlueTint
-                                else OverlayScrim,
+                                when {
+                                    imageTranslating -> OverlayScrimHeavy
+                                    imageTranslated -> TranslateActiveBlueTint
+                                    else -> OverlayScrim
+                                },
                             )
                             .clickable(
                                 enabled = !imageTranslating,
                                 onClick = { onImageTranslateClick(pagerState.currentPage) },
-                            ),
+                            )
+                            .padding(horizontal = if (imageTranslating) 12.dp else 0.dp),
                         contentAlignment = Alignment.Center,
                     ) {
                         if (imageTranslating) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp,
-                                color = Color.White,
-                            )
+                            // loading状态：显示转圈 + "翻译中..."文字
+                            val translatingColor = if (dark) Color.White else TranslateActiveBlue
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = translatingColor,
+                                )
+                                Text(
+                                    text = stringResource(R.string.detail_translating),
+                                    color = translatingColor,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                            }
                         } else {
-                            Icon(
-                                imageVector = Icons.Outlined.PhotoLibrary,
-                                contentDescription = stringResource(R.string.detail_image_translate),
-                                tint = if (imageTranslated) TranslateActiveBlue else Color.White,
-                                modifier = Modifier.size(20.dp),
-                            )
+                            // 正常状态：显示图标
+                            Box(
+                                modifier = Modifier.size(40.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.PhotoLibrary,
+                                    contentDescription = stringResource(R.string.detail_image_translate),
+                                    tint = if (imageTranslated) TranslateActiveBlue else Color.White,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
                         }
                     }
                 }

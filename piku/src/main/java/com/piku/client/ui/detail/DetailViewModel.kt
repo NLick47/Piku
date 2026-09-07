@@ -809,10 +809,9 @@ class DetailViewModel @Inject constructor(
         val targetLang = TranslationRepository.targetLangName(language)
         val prompt = getImagePrompt(targetLang)
 
-        // 3. 获取 image 模型的 baseUrl
-        val imageEntry = modelCatalogRepository.models.value.firstOrNull {
-            Role.IMAGE in it.roles && it.available && !it.apiKey.isNullOrBlank()
-        } ?: return ImageTranslateResult.Failure(ImageTranslateError.NoModel())
+        // 3. 获取 image 模型的 baseUrl（优先用户选择，降级到目录默认）
+        val imageEntry = translationRepository.effectiveImageEntry()
+            ?: return ImageTranslateResult.Failure(ImageTranslateError.NoModel())
 
         // 4. 调用翻译引擎
         return imageTranslateEngine.translate(
@@ -847,9 +846,7 @@ class DetailViewModel @Inject constructor(
         if (!catalogPrompt.isNullOrBlank()) return catalogPrompt
 
         // 2. 尝试从 image 模型自带的 prompts 读取
-        val imageEntry = modelCatalogRepository.models.value.firstOrNull {
-            Role.IMAGE in it.roles && it.available && !it.apiKey.isNullOrBlank()
-        }
+        val imageEntry = translationRepository.effectiveImageEntry()
         val modelPrompt = imageEntry?.prompts?.image?.get(langKey(targetLang))
         if (!modelPrompt.isNullOrBlank()) return modelPrompt
 

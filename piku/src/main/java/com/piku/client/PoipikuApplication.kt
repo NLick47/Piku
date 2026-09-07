@@ -61,10 +61,8 @@ class PoipikuApplication : Application() {
                 .build()
         }
 
-        // 每次冷启动静默拉取远程模型目录并整体替换当前列表
-        // （解密后得到内置免费模型的共享 key，已下架条目随之消失）。
-        // 目录只存内存：进程重启即回退无 key 的内置默认，因此必须重新拉取。
-        // 失败静默沿用内置默认，下次冷启动自动重试。
+        // 冷启动静默拉取远程模型目录：init 时已从磁盘缓存加载，此处后台刷新最新版本。
+        // 成功后写入磁盘缓存，下次启动立即可用；失败静默保留上次缓存。
         val catalogRepository = entryPoint.modelCatalogRepository()
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             catalogRepository.refresh()

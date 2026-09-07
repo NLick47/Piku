@@ -85,6 +85,7 @@ internal fun AiTranslateSheet(
     onToggleEnabled: (Boolean) -> Unit,
     onSelectModel: (ModelEntry) -> Unit,
     onSelectNovelModel: (ModelEntry?) -> Unit,
+    onSelectImageModel: (ModelEntry?) -> Unit,
     onSaveCatalog: (String, String) -> Unit,
     onResetCatalog: () -> Unit,
     onActivateSource: (CatalogSource) -> Unit,
@@ -116,6 +117,7 @@ internal fun AiTranslateSheet(
                 onToggleEnabled = onToggleEnabled,
                 onSelectModel = onSelectModel,
                 onSelectNovelModel = onSelectNovelModel,
+                onSelectImageModel = onSelectImageModel,
                 onOpenSources = onOpenSources,
                 dark = dark,
             )
@@ -129,6 +131,7 @@ private fun AiTranslateMainPage(
     onToggleEnabled: (Boolean) -> Unit,
     onSelectModel: (ModelEntry) -> Unit,
     onSelectNovelModel: (ModelEntry?) -> Unit,
+    onSelectImageModel: (ModelEntry?) -> Unit,
     onOpenSources: () -> Unit,
     dark: Boolean,
 ) {
@@ -293,7 +296,20 @@ private fun AiTranslateMainPage(
         Spacer(Modifier.height(10.dp))
 
         val imageModels = usableModels.filter { Role.IMAGE in it.roles }
-        val imageSummary = stringResource(R.string.ai_translate_image_count, imageModels.size)
+        val isImageSelected: (ModelEntry) -> Boolean = { entry ->
+            val imageStoredAlive =
+                imageModels.any { it.model == state.llmImageModel && it.baseUrl == state.llmImageBaseUrl }
+            if (imageStoredAlive) {
+                entry.model == state.llmImageModel && entry.baseUrl == state.llmImageBaseUrl
+            } else {
+                entry.id == state.roleDefaultIds.image
+            }
+        }
+        val imageSummary = when {
+            imageModels.isEmpty() -> stringResource(R.string.ai_translate_image_model_empty)
+            imageModels.any(isImageSelected) -> imageModels.first(isImageSelected).label
+            else -> stringResource(R.string.ai_translate_not_selected)
+        }
 
         CollapsibleSection(
             title = stringResource(R.string.ai_translate_image_model),
@@ -310,48 +326,12 @@ private fun AiTranslateMainPage(
                     modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
                 )
             } else {
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .border(
-                            BorderStroke(0.5.dp, PikuColors.border),
-                            RoundedCornerShape(14.dp),
-                        ),
-                ) {
-                    imageModels.forEachIndexed { index, entry ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Text(
-                                    text = entry.label,
-                                    color = primary,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Medium,
-                                )
-                                if (entry.hint.isNotBlank()) {
-                                    Spacer(Modifier.height(2.dp))
-                                    Text(
-                                        text = entry.hint,
-                                        color = secondary,
-                                        fontSize = 11.sp,
-                                    )
-                                }
-                            }
-                        }
-                        if (index < imageModels.lastIndex) {
-                            HorizontalDivider(
-                                color = PikuColors.border,
-                                thickness = 0.5.dp,
-                                modifier = Modifier.padding(start = 14.dp),
-                            )
-                        }
-                    }
-                }
+                ModelListCard(
+                    entries = imageModels,
+                    isSelected = isImageSelected,
+                    onSelect = onSelectImageModel,
+                    dark = dark,
+                )
             }
         }
 

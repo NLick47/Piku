@@ -430,6 +430,18 @@ class SettingsRepository @Inject constructor(
     )
     val llmNovelModel: StateFlow<String> = _llmNovelModel.asStateFlow()
 
+    /** 图片翻译专用模型地址，空串走目录默认 */
+    private val _llmImageBaseUrl = MutableStateFlow(
+        prefs.getString(KEY_LLM_IMAGE_BASE_URL, null)?.takeIf { it.isNotBlank() } ?: "",
+    )
+    val llmImageBaseUrl: StateFlow<String> = _llmImageBaseUrl.asStateFlow()
+
+    /** 图片翻译专用模型 id，空串走目录默认 */
+    private val _llmImageModel = MutableStateFlow(
+        prefs.getString(KEY_LLM_IMAGE_MODEL, null)?.takeIf { it.isNotBlank() } ?: "",
+    )
+    val llmImageModel: StateFlow<String> = _llmImageModel.asStateFlow()
+
     /**
      * 远程模型目录地址：默认即内置加密目录（jsDelivr 分发，见 [CATALOG_URL_DEFAULT]），
      * 启动时自动拉取以获得内置免费模型的共享 key 与模型修正；
@@ -449,6 +461,32 @@ class SettingsRepository @Inject constructor(
         prefs.getString(KEY_CATALOG_ENC_KEY, null)?.trim()?.lowercase() ?: "",
     )
     val catalogEncKey: StateFlow<String> = _catalogEncKey.asStateFlow()
+
+    /** 读取磁盘缓存的目录密文（body, url, version），启动时用于立即展示，避免白屏等待网络 */
+    fun loadCatalogCache(): Triple<String, String, Int>? {
+        val body = prefs.getString(KEY_CATALOG_CACHE_BODY, null)?.takeIf { it.isNotBlank() }
+        val url = prefs.getString(KEY_CATALOG_CACHE_URL, null).orEmpty()
+        val version = prefs.getInt(KEY_CATALOG_CACHE_VERSION, 0)
+        return if (body != null) Triple(body, url, version) else null
+    }
+
+    /** 保存目录密文到磁盘缓存 */
+    fun saveCatalogCache(body: String, url: String, version: Int) {
+        prefs.edit()
+            .putString(KEY_CATALOG_CACHE_BODY, body)
+            .putString(KEY_CATALOG_CACHE_URL, url)
+            .putInt(KEY_CATALOG_CACHE_VERSION, version)
+            .apply()
+    }
+
+    /** 清空目录磁盘缓存（切换源时调用，避免旧源数据残留） */
+    fun clearCatalogCache() {
+        prefs.edit()
+            .remove(KEY_CATALOG_CACHE_BODY)
+            .remove(KEY_CATALOG_CACHE_URL)
+            .remove(KEY_CATALOG_CACHE_VERSION)
+            .apply()
+    }
 
     /**
      * 已保存的自定义目录源列表（官方默认不入库，UI 固定首行渲染）。
@@ -524,6 +562,20 @@ class SettingsRepository @Inject constructor(
         val value = model.trim()
         prefs.edit().putString(KEY_LLM_NOVEL_MODEL, value).apply()
         _llmNovelModel.value = value
+    }
+
+    /** 空串走目录默认 */
+    fun setLlmImageBaseUrl(url: String) {
+        val value = url.trim()
+        prefs.edit().putString(KEY_LLM_IMAGE_BASE_URL, value).apply()
+        _llmImageBaseUrl.value = value
+    }
+
+    /** 空串走目录默认 */
+    fun setLlmImageModel(model: String) {
+        val value = model.trim()
+        prefs.edit().putString(KEY_LLM_IMAGE_MODEL, value).apply()
+        _llmImageModel.value = value
     }
 
     fun setCatalogRemoteUrl(url: String) {
@@ -684,6 +736,8 @@ class SettingsRepository @Inject constructor(
         const val KEY_LLM_MODEL = "llm_model"
         const val KEY_LLM_NOVEL_BASE_URL = "llm_novel_base_url"
         const val KEY_LLM_NOVEL_MODEL = "llm_novel_model"
+        const val KEY_LLM_IMAGE_BASE_URL = "llm_image_base_url"
+        const val KEY_LLM_IMAGE_MODEL = "llm_image_model"
         const val KEY_CATALOG_REMOTE_URL = "llm_catalog_remote_url"
         const val KEY_CATALOG_ENC_KEY = "llm_catalog_enc_key"
         const val KEY_CATALOG_SOURCES = "llm_catalog_sources"
@@ -708,5 +762,10 @@ class SettingsRepository @Inject constructor(
          */
         const val CATALOG_URL_DEFAULT = "https://cdn.jsdelivr.net/gh/NLick47/piku-models@catalog/models.enc.json"
         const val CATALOG_URL_FALLBACK = "https://raw.githubusercontent.com/NLick47/piku-models/catalog/models.enc.json"
+
+        /** 远程目录的磁盘缓存 key：保存上次成功拉取的原始密文，启动时先加载再后台刷新 */
+        private const val KEY_CATALOG_CACHE_BODY = "catalog_cache_body"
+        private const val KEY_CATALOG_CACHE_URL = "catalog_cache_url"
+        private const val KEY_CATALOG_CACHE_VERSION = "catalog_cache_version"
     }
 }

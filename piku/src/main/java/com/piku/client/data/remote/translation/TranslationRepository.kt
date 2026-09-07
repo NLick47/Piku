@@ -605,6 +605,16 @@ class TranslationRepository @Inject constructor(
         return defaultRoleEntry(Role.NOVEL)
     }
 
+    /**
+     * 图片翻译当前生效的模型条目：
+     * 有选中且带 key 就用选中项，否则走目录图片默认。
+     */
+    internal fun effectiveImageEntry(): ModelEntry? {
+        val imageSelected = selectedImageEntry()
+        if (imageSelected != null && !imageSelected.apiKey.isNullOrBlank()) return imageSelected
+        return defaultRoleEntry(Role.IMAGE)
+    }
+
     /** 场景默认模型：目录 defaults.roles[role] 优先，退到首个该 role 的可用带 key 条目 */
     private fun defaultRoleEntry(role: String): ModelEntry? =
         ModelCatalog.resolveRoleDefault(
@@ -649,6 +659,14 @@ class TranslationRepository @Inject constructor(
             settingsRepository.llmNovelModel.value,
             modelCatalogRepository.models.value,
             Role.NOVEL,
+        )
+
+    /** 图片专用模型同规则匹配；空串或失效值走目录图片默认 */
+    private fun selectedImageEntry(): ModelEntry? =
+        ModelCatalog.resolveStoredSelection(
+            settingsRepository.llmImageModel.value,
+            modelCatalogRepository.models.value,
+            Role.IMAGE,
         )
 
     companion object {
