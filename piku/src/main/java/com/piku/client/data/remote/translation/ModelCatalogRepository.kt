@@ -29,14 +29,14 @@ class ModelCatalogRepository @Inject constructor(
     private val _defaults = MutableStateFlow<CatalogDefaults?>(null)
     val catalogDefaults: StateFlow<CatalogDefaults?> = _defaults.asStateFlow()
 
-    /** 当前已加载的目录版本号，用于对比远程版本决定是否更新 */
+    /** 缓存的目录版本号 */
     private var cachedVersion: Int = 0
 
-    /** 远程目录 URL 上次写入缓存时的地址，用于检测源切换 */
+    /** 缓存对应的 URL，变化时重置版本号 */
     private var cachedUrl: String = ""
 
     init {
-        // 启动时先从磁盘缓存加载，UI 立即有数据展示
+        // 启动从缓存加载，秒开
         val cached = settingsRepository.loadCatalogCache()
         val cachedModels = cached?.let { (body, _, _) -> decode(body)?.takeIf { it.models.isNotEmpty() } }
         _models = MutableStateFlow(cachedModels?.models ?: ModelCatalog.DEFAULTS)
@@ -48,17 +48,17 @@ class ModelCatalogRepository @Inject constructor(
         }
     }
 
-    /** 拉取远程目录并整体替换当前列表，成功后写入磁盘缓存；版本号低于等于缓存时跳过更新。 */
+    /** 拉取远程目录并替换；版本旧则跳过。 */
     suspend fun refresh(): Boolean = withContext(Dispatchers.IO) {
         val url = settingsRepository.catalogRemoteUrl.value.trim()
         if (url.isBlank()) return@withContext false
-        // 检测源切换：URL 变化时清空旧缓存和版本号，避免跨源版本对比误跳过
+        // 源切换：重置版本和缓存
         if (url != cachedUrl) {
             Log.d(TAG, "catalog source changed: $cachedUrl -> $url, clearing cache")
             settingsRepository.clearCatalogCache()
             cachedVersion = 0
             cachedUrl = url
-            // 清空旧源的模型数据，回退到内置默认，避免 UI 短暂展示不属于当前源的模型
+            // 回退到内置默认，避免展示旧源数据
             _models.value = ModelCatalog.DEFAULTS
             _defaults.value = null
         }
@@ -71,7 +71,7 @@ class ModelCatalogRepository @Inject constructor(
             val body = fetch(candidate) ?: continue
             val dto = decode(body) ?: continue
             if (dto.models.isEmpty()) continue
-            // 版本号对比：远程 <= 本地缓存则跳过此源，继续尝试下一个
+            // 版本旧则跳过，继续下一个源
             if (dto.version in 1..cachedVersion) {
                 Log.d(TAG, "catalog skip $candidate: remote v${dto.version} <= cached v$cachedVersion")
                 continue
@@ -80,7 +80,6 @@ class ModelCatalogRepository @Inject constructor(
             _defaults.value = dto.defaults
             cachedVersion = dto.version
             cachedUrl = candidate
-            // 写入磁盘缓存，下次启动立即可用
             settingsRepository.saveCatalogCache(body, candidate, dto.version)
             Log.d(TAG, "catalog refreshed from $candidate v${dto.version}: ${dto.models.size} entries")
             return@withContext true
@@ -96,7 +95,7 @@ class ModelCatalogRepository @Inject constructor(
         }
     }.onFailure { Log.d(TAG, "catalog fetch failed ($url): ${it.message}") }.getOrNull()
 
-    /** 加密信封解密，否则按明文 JSON 解析（兼容自定义地址）。 */
+    /** 信封解密，无信封则按明文解析 */
     private fun decode(body: String): ModelCatalogDto? = runCatching {
         val envelope = runCatching { json.decodeFromString<CryptoHelper.Envelope>(body) }.getOrNull()
             ?.takeIf { it.alg.isNotBlank() && it.iv.isNotBlank() && it.data.isNotBlank() }

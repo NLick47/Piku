@@ -61,8 +61,7 @@ class PoipikuApplication : Application() {
                 .build()
         }
 
-        // 冷启动静默拉取远程模型目录：init 时已从磁盘缓存加载，此处后台刷新最新版本。
-        // 成功后写入磁盘缓存，下次启动立即可用；失败静默保留上次缓存。
+        // 冷启动后台刷新目录
         val catalogRepository = entryPoint.modelCatalogRepository()
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             catalogRepository.refresh()

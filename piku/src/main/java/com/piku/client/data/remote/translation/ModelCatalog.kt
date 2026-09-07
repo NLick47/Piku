@@ -60,15 +60,17 @@ data class ModelEntry(
     val roles: List<String> = listOf(Role.TEXT),
 )
 
-/** 翻译提示词集：单条 / 批量 / 小说分块 / 图片，各目标语言（zh/en/ja）一套。远程下发实现热更新。 */
+/** 提示词集：单条 / 批量 / 小说 / 图片 / 搜索，各目标语言一套。远程下发热更新。 */
 @Serializable
 data class PromptSet(
     val single: Map<String, String> = emptyMap(),
     val batch: Map<String, String> = emptyMap(),
-    /** 小说正文分块翻译（含上下文标记规则）；缺省回退内置 [TranslationPrompts.novelSystemPrompt] */
+    /** 小说分块；缺省回退 [TranslationPrompts.novelSystemPrompt] */
     val novel: Map<String, String> = emptyMap(),
-    /** 图片翻译（擦除原文→翻译→写回）；缺省回退内置 [ImageTranslationPrompts] */
+    /** 图片翻译；缺省回退 [ImageTranslationPrompts] */
     val image: Map<String, String> = emptyMap(),
+    /** 搜索关键词；无兜底，目录缺少时不可用 */
+    val search: Map<String, String> = emptyMap(),
 )
 
 /** 目录全局默认：请求参数、提示词与各场景默认模型，供未自带覆盖的模型继承。 */
@@ -170,13 +172,8 @@ object ModelCatalog {
     }.randomOrNull()
 
     /**
-     * 解析存储的历史选中值（设置里的 id 或裸模型名），限 [role] 场景内匹配。
-     *
-     * role 过滤是两条通道的选中值隔离：不同条目的裸模型名撞车（或同一模型
-     * 声明多个场景）时，文本通道与小说通道各解析各的，绝不跨场景命中。
-     *
-     * 由 HomeViewModel 在目录刷新时主动校验并清空失效选中值，
-     * 此处仅做翻译时的兜底校验，防止冷启动竞态等边界情况。
+     * 解析存储的选中值（id 或裸模型名），限 [role] 内匹配。
+     * HomeViewModel 在目录刷新时已清空失效选中值，此处仅做翻译时兜底。
      */
     fun resolveStoredSelection(
         stored: String,

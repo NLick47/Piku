@@ -524,17 +524,14 @@ class TranslationRepository @Inject constructor(
             result
         }
 
-    /** 一键译搜：中↔日互译；译文须过字系校验，缓存键带 #search 指纹与散文通道隔离 */
+    /** 一键译搜：中↔日互译，缓存键带 #search 隔离 */
     suspend fun translateSearchKeyword(text: String, toJapanese: Boolean): String? = mutex.withLock {
         val targetLang = if (toJapanese) LlmTranslateEngine.TARGET_JA else LlmTranslateEngine.TARGET_ZH
         val entry = effectiveTextEntry() ?: return null
+        val searchPrompts = modelCatalogRepository.catalogDefaults.value?.prompts?.search
+            ?: return null
         val searchEntry = entry.copy(
-            prompts = PromptSet(
-                single = mapOf(
-                    "ja" to TranslationPrompts.searchKeywordPrompt(targetJa = true),
-                    "zh" to TranslationPrompts.searchKeywordPrompt(targetJa = false),
-                ),
-            ),
+            prompts = PromptSet(single = searchPrompts),
         )
         val engine = engineFactory.create(
             apiKeyFor(searchEntry), Role.TEXT, searchEntry, modelCatalogRepository.catalogDefaults.value,

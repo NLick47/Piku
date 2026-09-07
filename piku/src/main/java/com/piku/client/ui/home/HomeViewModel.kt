@@ -385,7 +385,7 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             modelCatalogRepository.models.collect { models ->
                 _uiState.update { it.copy(translateModels = models) }
-                // 校验已选模型是否还在新目录中，失效则清空回退到角色默认
+                // 失效选中值清空，回退到角色默认
                 val textOk = _uiState.value.llmModel.isBlank() ||
                     ModelCatalog.resolveStoredSelection(_uiState.value.llmModel, models, Role.TEXT) != null
                 if (!textOk) settingsRepository.setLlmModel("")

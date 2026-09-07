@@ -89,20 +89,6 @@ internal object TranslationPrompts {
             else -> chineseRules()
         } + "\n" + batchInstruction(targetLang) + batchExample(targetLang)
 
-    // ---- 搜索关键词专用（一键译搜）：目标只可能是日语或中文 ----
-
-    /** 规则从简：小模型遵循力有限，译文合法性由调用方字系校验兜底 */
-    fun searchKeywordPrompt(targetJa: Boolean): String =
-        if (targetJa) {
-            "把用户给的中文短语改写成日本插画/同人圈常用的日语标签词，用来搜索作品。\n" +
-                "只输出一个日语词（假名或日文汉字），不要英文、罗马字、解释或标点。\n" +
-                "例：原创→オリジナル，插画→イラスト；中日同形词（女体化、百合）保留原字。"
-        } else {
-            "把用户给的日语短语改写成中文同好圈常用的中文标签词，用来搜索作品。\n" +
-                "只输出一个中文词，不要假名、解释或标点；专有名可保留原文或英文名。\n" +
-                "例：オリジナル→原创，先輩→前辈；中日同形词（女体化、百合）保留原字。"
-        }
-
     // ---- 小说分块提示词：single 基础上去掉 [[n]] 批量规则，
     //      加上下文标记规则与同人设定条款；目录可下发 prompts.novel 覆盖 ----
 

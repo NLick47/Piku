@@ -479,7 +479,7 @@ class SettingsRepository @Inject constructor(
             .apply()
     }
 
-    /** 清空目录磁盘缓存（切换源时调用，避免旧源数据残留） */
+    /** 清空目录缓存 */
     fun clearCatalogCache() {
         prefs.edit()
             .remove(KEY_CATALOG_CACHE_BODY)
