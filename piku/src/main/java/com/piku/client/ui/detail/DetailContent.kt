@@ -451,7 +451,8 @@ private fun ImagePager(
     }
 
     // 密码框的高度随错误/封禁提示自适应：写死高度时，提示文字超出部分会被整体裁掉
-    val passwordOnly = detail.imageUrls.isEmpty() && detail.passwordProtected
+    // 有正文时走下面的固定高度分支：heightIn 没有上限，小说预览的 verticalScroll 会拿到无限高度直接崩
+    val passwordOnly = detail.imageUrls.isEmpty() && detail.passwordProtected && detail.novelText.isBlank()
     Box(
         modifier = Modifier
             .fillMaxWidth()
