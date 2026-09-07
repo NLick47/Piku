@@ -21,6 +21,7 @@ data class UserPageInfo(
     val bgColorHex: String? = null,
     val bgImageUrl: String? = null,
     val followed: Boolean = false,
+    val twitterUrl: String? = null,
 ) {
     val hasBackground: Boolean
         get() = !bgColorHex.isNullOrBlank() || !bgImageUrl.isNullOrBlank()

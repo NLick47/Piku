@@ -393,11 +393,7 @@ private fun AuthorRow(detail: WorkDetail, dark: Boolean, onAuthorClick: () -> Un
             Text(
                 text = localizedCategoryName(detail.categoryCd, detail.categoryName),
                 color = PikuColors.textSecondary,
-                fontSize = 11.sp,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(PikuColors.surfaceSoft)
-                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                fontSize = 13.sp,
             )
         }
     }

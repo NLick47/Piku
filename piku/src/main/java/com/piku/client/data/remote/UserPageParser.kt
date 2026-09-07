@@ -35,6 +35,9 @@ object UserPageParser {
     /** 背景图：`background: url(...)` / `background-image: url(...)` */
     private val BG_IMAGE = Regex("""background(?:-image)?\s*:\s*url\('?([^')]+)'?\)""")
 
+    /** Twitter 链接：`<a class="fab fa-twitter" ... href="...">` */
+    private val TWITTER_LINK = Regex("""<a[^>]*class="[^"]*fa-twitter[^"]*"[^>]*href="([^"]+)"""")
+
     /** 关注状态：`UserInfoCmdFollow` 按钮 class 含 Selected = 当前登录用户已关注（匿名恒无） */
     private val FOLLOW_BTN = Regex("""class="([^"]*UserInfoCmdFollow[^"]*)"""")
 
@@ -55,6 +58,8 @@ object UserPageParser {
             ?.groupValues?.get(1)
             ?.split(" ")
             ?.any { it == "Selected" } == true
+
+        val twitterUrl = TWITTER_LINK.find(html)?.groupValues?.get(1)
 
         // 整页背景：提取 style 块中 .UserInfo 规则之外的 background 属性（Poipass 背景色/背景图）
         var bgColorHex: String? = null
@@ -78,6 +83,7 @@ object UserPageParser {
             bgColorHex = bgColorHex,
             bgImageUrl = bgImageUrl,
             followed = followed,
+            twitterUrl = twitterUrl,
         )
     }
 }

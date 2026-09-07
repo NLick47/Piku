@@ -542,6 +542,7 @@ private fun UserWorksHeaderCard(
     onAvatarClick: () -> Unit,
     dark: Boolean,
 ) {
+    val context = LocalContext.current
     val headerUrl = pageInfo?.headerUrl
     val avatarUrl = pageInfo?.avatarUrl ?: fallbackAvatarUrl
     val name = userName
@@ -721,6 +722,20 @@ private fun UserWorksHeaderCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                val twitterUrl = pageInfo?.twitterUrl
+                if (!twitterUrl.isNullOrBlank()) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = "Twitter: @${twitterUrl.substringAfterLast("/")}",
+                        color = Color.White.copy(alpha = 0.88f),
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.clickable {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(twitterUrl)))
+                        },
+                    )
+                }
             }
             // 关注按钮（玻璃胶囊）：未登录或自己的主页不显示
             if (loggedIn && !isSelf) {
