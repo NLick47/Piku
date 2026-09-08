@@ -371,6 +371,24 @@
     <string name="detail_model_kind_text">文本</string>
     <string name="detail_model_kind_novel">小说</string>
     <string name="detail_model_kind_image">图片</string>
+    <string name="detail_action_save">保存到相册</string>
+    <string name="detail_action_share">分享给好友</string>
+    <string name="detail_action_save_all">全部保存（%1$d张）</string>
+    <string name="detail_share_title">保存与分享</string>
+    <string name="detail_share_section">分享给好友</string>
+    <string name="detail_share_wechat">微信</string>
+    <string name="detail_share_qq">QQ</string>
+    <string name="detail_share_more">更多</string>
+    <string name="detail_share_to_wechat">分享到微信</string>
+    <string name="detail_share_to_qq">分享到QQ</string>
+    <string name="detail_share_to_more">更多分享方式</string>
+    <string name="detail_share_not_installed">未安装</string>
+    <string name="detail_share_preparing">正在准备图片…</string>
+    <string name="detail_share_failed">分享失败，请重试</string>
+    <string name="detail_share_target_missing">未检测到%1$s，已打开系统分享</string>
+    <string name="detail_save_section">保存到相册</string>
+    <string name="detail_save_current_sub">保存当前高清原图</string>
+    <string name="detail_save_all_sub">共%1$d张 · 逐张保存</string>
 
     <!-- WebDAV 同步 -->
     <string name="menu_webdav_sync">WebDAV 同步</string>

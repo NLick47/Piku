@@ -371,6 +371,24 @@
     <string name="detail_model_kind_text">テキスト</string>
     <string name="detail_model_kind_novel">小説</string>
     <string name="detail_model_kind_image">画像</string>
+    <string name="detail_action_save">アルバムに保存</string>
+    <string name="detail_action_share">シェアする</string>
+    <string name="detail_action_save_all">すべて保存（%1$d枚）</string>
+    <string name="detail_share_title">保存と共有</string>
+    <string name="detail_share_section">友達に共有</string>
+    <string name="detail_share_wechat">WeChat</string>
+    <string name="detail_share_qq">QQ</string>
+    <string name="detail_share_more">その他</string>
+    <string name="detail_share_to_wechat">WeChatに共有</string>
+    <string name="detail_share_to_qq">QQに共有</string>
+    <string name="detail_share_to_more">その他の共有方法</string>
+    <string name="detail_share_not_installed">未インストール</string>
+    <string name="detail_share_preparing">画像を準備中…</string>
+    <string name="detail_share_failed">共有に失敗しました。もう一度お試しください</string>
+    <string name="detail_share_target_missing">%1$sが見つからないため、システム共有を開きました</string>
+    <string name="detail_save_section">アルバムに保存</string>
+    <string name="detail_save_current_sub">現在の高画質画像を保存</string>
+    <string name="detail_save_all_sub">%1$d枚を1枚ずつ保存</string>
 
     <!-- WebDAV同期 -->
     <string name="menu_webdav_sync">WebDAV 同期</string>

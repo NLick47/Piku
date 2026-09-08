@@ -1,6 +1,7 @@
 package com.piku.client.ui.detail
 
 import android.Manifest
+import android.content.ClipData
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -19,21 +20,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -63,6 +61,7 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.piku.client.R
+import com.piku.client.data.local.ShareTargets
 import com.piku.client.ui.common.LoaderDots
 import com.piku.client.ui.theme.BlobPinkDark
 import com.piku.client.ui.theme.BlobPinkLight
@@ -93,6 +92,7 @@ fun DetailScreen(
     val viewModel: DetailViewModel = hiltViewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val catalogModels by viewModel.catalogModels.collectAsStateWithLifecycle()
+    val shareRequest by viewModel.shareRequest.collectAsStateWithLifecycle()
     val dark = LocalDarkTheme.current
     val scrollState = rememberScrollState()
     val density = LocalDensity.current
@@ -110,12 +110,78 @@ fun DetailScreen(
     var viewerPage by rememberSaveable { mutableIntStateOf(-1) }
     var reactionSheetVisible by rememberSaveable { mutableStateOf(false) }
     var favoriteSheetVisible by rememberSaveable { mutableStateOf(false) }
+    // 长按命中的页码：分享期间面板保持打开（loading 转圈），成功/失败后才关闭；
+    // 必须声明在分享 LaunchedEffect 之前，effect 内要把它置 -1 关面板
+    var imageActionPage by rememberSaveable { mutableIntStateOf(-1) }
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val linkCopiedMessage = stringResource(R.string.detail_link_copied)
     val descriptionCopiedMessage = stringResource(R.string.detail_description_copied)
+
+    // 分享图片：面板在下载期间保持打开（loading 转圈在被点的那一行），
+    // 下载完成后才拉起分享；定向先查可解析（微信常不接通用 ACTION_SEND），
+    // 不可解析时静静回落系统面板——只有确认未安装才提示，避免装了也误报。
+    // 成功/失败（含 chooser 都打不开）一律 finally 关面板清请求，不卡死。
+    LaunchedEffect(shareRequest) {
+        val request = shareRequest ?: return@LaunchedEffect
+        val target = request.targetPackage
+        fun baseIntent(): Intent = Intent(Intent.ACTION_SEND).apply {
+            type = "image/*"
+            putExtra(Intent.EXTRA_STREAM, request.uri)
+            // 部分应用（比如微信）带图分享时会吞掉 EXTRA_TEXT，链接可能发不过去；
+            // 先带上（能接的则接），不做强保证
+            if (request.shareText.isNotBlank()) putExtra(Intent.EXTRA_TEXT, request.shareText)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            clipData = ClipData.newUri(context.contentResolver, "shared_image", request.uri)
+        }
+        // ClipData + FLAG 授权已足够定向目标读取，不再手动 grantUriPermission（免泄漏）
+        fun openChooser(): Boolean = runCatching {
+            context.startActivity(Intent.createChooser(baseIntent(), null))
+            true
+        }.getOrDefault(false)
+        fun failedMessage(): String = context.getString(R.string.detail_share_failed)
+        try {
+            if (target != null) {
+                val targeted = baseIntent().apply { setPackage(target) }
+                val launched = if (ShareTargets.isResolvable(context, targeted)) {
+                    runCatching {
+                        context.startActivity(targeted)
+                        true
+                    }.getOrDefault(false)
+                } else {
+                    false
+                }
+                if (!launched) {
+                    if (!ShareTargets.isInstalled(context, target)) {
+                        val appName = when (target) {
+                            ShareTargets.WECHAT -> context.getString(R.string.detail_share_wechat)
+                            ShareTargets.QQ -> context.getString(R.string.detail_share_qq)
+                            else -> target
+                        }
+                        scope.launch {
+                            snackbarHostState.showSnackbar(
+                                context.getString(R.string.detail_share_target_missing, appName),
+                            )
+                        }
+                    }
+                    if (!openChooser()) {
+                        scope.launch { snackbarHostState.showSnackbar(failedMessage()) }
+                    }
+                }
+            } else {
+                if (!openChooser()) {
+                    scope.launch { snackbarHostState.showSnackbar(failedMessage()) }
+                }
+            }
+        } finally {
+            imageActionPage = -1
+            viewModel.clearShareRequest()
+        }
+    }
+
     FeedbackSnackbar(
         message = state.reactionFeedbackRes?.let { stringResource(it) },
         snackbarHostState = snackbarHostState,
@@ -136,6 +202,17 @@ fun DetailScreen(
         snackbarHostState = snackbarHostState,
         onConsumed = viewModel::clearSaveFeedback,
     )
+    // 分享下载失败：面板已关闭，用 snackbar 给重试入口（成功时直接拉起分享面板不打扰）
+    FeedbackSnackbar(
+        message = state.shareFeedbackRes?.let { stringResource(it) },
+        snackbarHostState = snackbarHostState,
+        onConsumed = viewModel::clearShareFeedback,
+    )
+    // 下载失败时面板还开着（loading 刚消失），snackbar 会被 BottomSheet 盖住：
+    // 先关面板再弹提示，用户重长按即可重试
+    LaunchedEffect(state.shareFeedbackRes) {
+        if (state.shareFeedbackRes != null) imageActionPage = -1
+    }
     // 批量保存完成：带数字的结果文案（全失败沿用单张保存的静态失败文案）
     val saveAllMessage = state.saveAllFeedback?.let { fb ->
         val failed = fb.total - fb.ok
@@ -174,11 +251,10 @@ fun DetailScreen(
         onAction = viewModel::retryImageTranslate,
     )
 
-    // 长按图片 → 先确认再保存；确认后 API 29+ 免权限直接存，API 26-28 需申请 WRITE_EXTERNAL_STORAGE
+    // 长按图片 → 弹出操作面板；面板中保存/分享时处理权限
     val savePermissionMessage = stringResource(R.string.detail_save_permission_denied)
     var pendingSavePage by rememberSaveable { mutableIntStateOf(-1) }
     var pendingSaveAll by rememberSaveable { mutableStateOf(false) }
-    var confirmSavePage by rememberSaveable { mutableIntStateOf(-1) }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
@@ -278,7 +354,7 @@ fun DetailScreen(
                         dark = dark,
                         scrollState = scrollState,
                         onImageClick = { page -> viewerPage = page },
-                        onImageLongPress = { page -> confirmSavePage = page },
+                        onImageLongPress = { page -> imageActionPage = page },
                         password = state.password,
                         onPasswordChange = viewModel::updatePassword,
                         onPasswordSubmit = viewModel::submitPassword,
@@ -352,7 +428,7 @@ fun DetailScreen(
                         images = images,
                         startPage = viewerPage.coerceAtMost(images.lastIndex),
                         onClose = { viewerPage = -1 },
-                        onSaveImage = { page -> confirmSavePage = page },
+                        onLongPressImage = { page -> imageActionPage = page },
                         dark = dark,
                         hasImageModel = state.hasImageModel,
                         imageTranslating = state.imageTranslatingPage != null,
@@ -462,67 +538,44 @@ fun DetailScreen(
                 onDismiss = { reactionSheetVisible = false },
             )
         }
-        if (confirmSavePage >= 0) {
+        if (imageActionPage >= 0) {
             val imageCount = state.detail?.imageUrls?.size ?: 0
-            AlertDialog(
-                onDismissRequest = { confirmSavePage = -1 },
-                containerColor = PikuColors.surface,
-                title = {
-                    Text(
-                        text = stringResource(R.string.detail_save_confirm_title),
-                        color = PikuColors.textPrimary,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
+            val wechatInstalled = remember(context) { ShareTargets.isInstalled(context, ShareTargets.WECHAT) }
+            val qqInstalled = remember(context) { ShareTargets.isInstalled(context, ShareTargets.QQ) }
+            val wechatIcon = remember(context) { ShareTargets.appIcon(context, ShareTargets.WECHAT) }
+            val qqIcon = remember(context) { ShareTargets.appIcon(context, ShareTargets.QQ) }
+            ImageActionSheet(
+                dark = dark,
+                imageCount = imageCount,
+                sharingImage = state.sharingImage,
+                sharingTargetPackage = state.sharingTargetPackage,
+                wechatInstalled = wechatInstalled,
+                qqInstalled = qqInstalled,
+                wechatIcon = wechatIcon,
+                qqIcon = qqIcon,
+                // 用户中途划掉面板 = 取消分享：中断下载，避免关了面板分享面板又弹出来
+                onDismiss = {
+                    if (state.sharingImage) viewModel.cancelShare()
+                    imageActionPage = -1
                 },
-                text = {
-                    // 多图把张数放正文，按钮保持短文案
-                    Text(
-                        text = if (imageCount > 1) {
-                            stringResource(R.string.detail_save_confirm_message_multi, imageCount)
-                        } else {
-                            stringResource(R.string.detail_save_confirm_message)
-                        },
-                        color = PikuColors.textSecondary,
-                        fontSize = 13.sp,
-                    )
+                onSave = {
+                    val page = imageActionPage
+                    imageActionPage = -1
+                    requestSaveImage(page)
                 },
-                confirmButton = {
-                    Row {
-                        if (imageCount > 1) {
-                            TextButton(
-                                onClick = {
-                                    confirmSavePage = -1
-                                    requestSaveAllImages()
-                                },
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.detail_save_all),
-                                    color = PikuColors.accent,
-                                )
-                            }
-                        }
-                        TextButton(
-                            onClick = {
-                                val page = confirmSavePage
-                                confirmSavePage = -1
-                                requestSaveImage(page)
-                            },
-                        ) {
-                            Text(
-                                text = stringResource(R.string.detail_save_confirm),
-                                color = PikuColors.accent,
-                            )
-                        }
-                    }
+                // 分享行不预关面板：保持打开显示 loading，LaunchedEffect 拉起分享后才关
+                onShareToWechat = {
+                    if (imageActionPage >= 0) viewModel.shareImage(imageActionPage, ShareTargets.WECHAT)
                 },
-                dismissButton = {
-                    TextButton(onClick = { confirmSavePage = -1 }) {
-                        Text(
-                            text = stringResource(R.string.search_cancel),
-                            color = PikuColors.textSecondary,
-                        )
-                    }
+                onShareToQQ = {
+                    if (imageActionPage >= 0) viewModel.shareImage(imageActionPage, ShareTargets.QQ)
+                },
+                onShareMore = {
+                    if (imageActionPage >= 0) viewModel.shareImage(imageActionPage, null)
+                },
+                onSaveAll = {
+                    imageActionPage = -1
+                    requestSaveAllImages()
                 },
             )
         }

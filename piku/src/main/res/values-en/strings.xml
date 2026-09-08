@@ -371,6 +371,24 @@
     <string name="detail_model_kind_text">Text</string>
     <string name="detail_model_kind_novel">Novel</string>
     <string name="detail_model_kind_image">Image</string>
+    <string name="detail_action_save">Save to album</string>
+    <string name="detail_action_share">Share</string>
+    <string name="detail_action_save_all">Save all (%1$d)</string>
+    <string name="detail_share_title">Save &amp; share</string>
+    <string name="detail_share_section">Share with friends</string>
+    <string name="detail_share_wechat">WeChat</string>
+    <string name="detail_share_qq">QQ</string>
+    <string name="detail_share_more">More</string>
+    <string name="detail_share_to_wechat">Share to WeChat</string>
+    <string name="detail_share_to_qq">Share to QQ</string>
+    <string name="detail_share_to_more">More options</string>
+    <string name="detail_share_not_installed">Not installed</string>
+    <string name="detail_share_preparing">Preparing image…</string>
+    <string name="detail_share_failed">Share failed, please try again</string>
+    <string name="detail_share_target_missing">%1$s not found, opened system share instead</string>
+    <string name="detail_save_section">Save to album</string>
+    <string name="detail_save_current_sub">Save current image in HD</string>
+    <string name="detail_save_all_sub">%1$d images, saved one by one</string>
 
     <!-- WebDAV Sync -->
     <string name="menu_webdav_sync">WebDAV Sync</string>

@@ -389,7 +389,7 @@ fun FullScreenViewer(
     startPage: Int,
     dark: Boolean,
     onClose: () -> Unit,
-    onSaveImage: (Int) -> Unit,
+    onLongPressImage: (Int) -> Unit,
     hasImageModel: Boolean = false,
     imageTranslating: Boolean = false,
     imageTranslated: Boolean = false,
@@ -442,7 +442,7 @@ fun FullScreenViewer(
                             refreshAutoHide()
                         }
                     },
-                    onLongPress = { onSaveImage(page) },
+                    onLongPress = { onLongPressImage(page) },
                 )
             } else {
                 ZoomableImage(
@@ -457,7 +457,7 @@ fun FullScreenViewer(
                             refreshAutoHide()
                         }
                     },
-                    onLongPress = { onSaveImage(page) },
+                    onLongPress = { onLongPressImage(page) },
                 )
             }
         }

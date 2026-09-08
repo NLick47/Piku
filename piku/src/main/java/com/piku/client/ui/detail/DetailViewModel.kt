@@ -6,6 +6,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.piku.client.data.local.ImageSaver
+import com.piku.client.data.local.ImageShareHelper
 import com.piku.client.data.local.WorkPasswordRepository
 import com.piku.client.data.repository.AuthRepository
 import com.piku.client.data.repository.DetailRepository
@@ -168,6 +169,12 @@ data class DetailUiState(
     val showTranslatedImage: Boolean = false,
     /** 是否有可用的 image 模型 */
     val hasImageModel: Boolean = false,
+    /** 分享图片时的 loading 状态 */
+    val sharingImage: Boolean = false,
+    /** 正在分享的目标包名（null = 系统面板）：loading 只转圈在被点的那一行 */
+    val sharingTargetPackage: String? = null,
+    /** 分享失败的轻提示（snackbar，可重试）；成功时直接拉起分享面板不需要提示 */
+    val shareFeedbackRes: Int? = null,
 ) {
     /** 该字段当前是否显示译文：全局态异或单字段覆盖 */
     fun showTranslation(field: TranslateField): Boolean =
@@ -218,6 +225,7 @@ class DetailViewModel @Inject constructor(
     private val thumbnailResolver: ThumbnailResolver,
     private val workPasswordRepository: WorkPasswordRepository,
     private val imageSaver: ImageSaver,
+    private val imageShareHelper: ImageShareHelper,
     private val recordHistoryUseCase: RecordHistoryUseCase,
     private val observeCustomTagsUseCase: ObserveCustomTagsUseCase,
     private val addCustomTagUseCase: AddCustomTagUseCase,
@@ -274,6 +282,20 @@ class DetailViewModel @Inject constructor(
     /** 目录模型列表（用于"换模型重翻"弹窗），不含分类硬限制，全部可用模型都可选 */
     private val _catalogModels = MutableStateFlow(modelCatalogRepository.models.value)
     val catalogModels: StateFlow<List<ModelEntry>> = _catalogModels.asStateFlow()
+
+
+    data class ImageShareRequest(
+        val uri: android.net.Uri,
+        val targetPackage: String?,
+        val shareText: String,
+    )
+
+    private val _shareRequest = MutableStateFlow<ImageShareRequest?>(null)
+    val shareRequest: StateFlow<ImageShareRequest?> = _shareRequest.asStateFlow()
+
+    fun clearShareRequest() {
+        _shareRequest.value = null
+    }
 
     /** 关闭底部菜单新手引导 */
     fun dismissGuide() {
@@ -1079,6 +1101,74 @@ class DetailViewModel @Inject constructor(
 
     fun clearSaveFeedback() {
         _uiState.update { it.copy(saveFeedbackRes = null) }
+    }
+
+    /**
+     * 分享第 [page] 张图片：下载到缓存 → 生成 content URI → 通过 [shareRequest] 触发分享。
+     * [targetPackage] 为 null 时走系统分享面板，否则先检查定向 Intent 可解析才直跳，
+     * 不可解析时由 UI 层回落到系统面板（微信/QQ 不一定接通用 ACTION_SEND）。
+     * 原图未就绪时先触发全尺寸加载并限时等待，超时/拿不到原图则退回缩略图。
+     *
+     * 面板在分享期间保持打开（loading 转圈在被点的那一行），成功后 UI 层拉起
+     * 分享面板并关闭；失败则通过 [DetailUiState.shareFeedbackRes] 给 snackbar。
+     * 用户中途划掉面板可调 [cancelShare] 中断下载。
+     */
+    private var shareJob: Job? = null
+
+    fun shareImage(page: Int, targetPackage: String? = null) {
+        val state = _uiState.value
+        if (state.sharingImage) return
+        val detail = state.detail ?: return
+        val fallbackUrl = detail.imageUrls.getOrNull(page) ?: return
+        shareJob?.cancel()
+        shareJob = viewModelScope.launch {
+            _uiState.update {
+                it.copy(sharingImage = true, sharingTargetPackage = targetPackage, shareFeedbackRes = null)
+            }
+            try {
+                if (!detail.passwordProtected && !detail.warning) {
+                    if (state.viewerImages.getOrNull(page)?.fullUrl == null) {
+                        loadFullImages()
+                        withTimeoutOrNull(IMAGE_WAIT_MILLIS) {
+                            _uiState.filter { it.fullImageUrls.isNotEmpty() }.first()
+                        }
+                    }
+                }
+                val url = _uiState.value.viewerImages.getOrNull(page)?.fullUrl ?: fallbackUrl
+                val uri = imageShareHelper.getImageUri(url, workId, page)
+                _uiState.update { it.copy(sharingImage = false, sharingTargetPackage = null) }
+                _shareRequest.value = ImageShareRequest(
+                    uri = uri,
+                    targetPackage = targetPackage,
+                    shareText = _uiState.value.shareUrl,
+                )
+            } catch (e: CancellationException) {
+                _uiState.update { it.copy(sharingImage = false, sharingTargetPackage = null) }
+                throw e
+            } catch (e: Exception) {
+                Log.d("PikuDiag", "shareImage fail work=$workId page=$page: ${e.message}", e)
+                _uiState.update {
+                    it.copy(
+                        sharingImage = false,
+                        sharingTargetPackage = null,
+                        shareFeedbackRes = R.string.detail_share_failed,
+                    )
+                }
+            }
+        }
+    }
+
+    /** 用户划掉面板时中断正在进行的分享下载，避免关了面板分享面板又弹出来。 */
+    fun cancelShare() {
+        shareJob?.cancel()
+        shareJob = null
+        if (_uiState.value.sharingImage) {
+            _uiState.update { it.copy(sharingImage = false, sharingTargetPackage = null) }
+        }
+    }
+
+    fun clearShareFeedback() {
+        _uiState.update { it.copy(shareFeedbackRes = null) }
     }
 
 
