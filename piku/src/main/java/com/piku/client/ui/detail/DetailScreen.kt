@@ -8,6 +8,12 @@ import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -16,15 +22,19 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.SnackbarHost
@@ -35,6 +45,7 @@ import com.piku.client.ui.common.PikuBottomSheet
 import com.piku.client.ui.common.PikuSheetTitle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -56,6 +67,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -63,7 +75,6 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.piku.client.R
 import com.piku.client.data.local.ShareTargets
-import com.piku.client.ui.common.LoaderDots
 import com.piku.client.ui.theme.BlobPinkDark
 import com.piku.client.ui.theme.BlobPinkLight
 import com.piku.client.ui.theme.BlobPurpleDark
@@ -336,9 +347,7 @@ fun DetailScreen(
             )
             when {
                 state.loading && state.detail == null -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        LoaderDots(dark = dark)
-                    }
+                    DetailSkeleton()
                 }
                 state.errorRes != null && state.detail == null -> {
                     DetailError(
@@ -602,6 +611,115 @@ private fun FeedbackSnackbar(
         if (result == SnackbarResult.ActionPerformed) currentOnAction?.invoke()
         currentOnConsumed()
     }
+}
+
+@Composable
+private fun DetailSkeleton() {
+    val pulse = rememberSkeletonPulse()
+    val block = PikuColors.textFaint.copy(alpha = 0.22f + 0.34f * pulse.value)
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(start = 20.dp, end = 20.dp),
+    ) {
+        // 作者行：头像 + 昵称 + 右侧分类位
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(block),
+            )
+            Spacer(Modifier.width(10.dp))
+            Box(
+                Modifier
+                    .width(132.dp)
+                    .height(12.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(block),
+            )
+            Spacer(Modifier.weight(1f))
+            Box(
+                Modifier
+                    .width(52.dp)
+                    .height(11.dp)
+                    .clip(RoundedCornerShape(5.dp))
+                    .background(block),
+            )
+        }
+        Spacer(Modifier.height(14.dp))
+        // 图区：与图片未量出时的默认占位高一致
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(320.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(block),
+        )
+        Spacer(Modifier.height(16.dp))
+        // 标题 + 描述三行
+        Box(
+            Modifier
+                .fillMaxWidth(0.62f)
+                .height(16.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(block),
+        )
+        Spacer(Modifier.height(12.dp))
+        SkeletonLine(block, Modifier.fillMaxWidth())
+        Spacer(Modifier.height(6.dp))
+        SkeletonLine(block, Modifier.fillMaxWidth(0.94f))
+        Spacer(Modifier.height(6.dp))
+        SkeletonLine(block, Modifier.fillMaxWidth(0.52f))
+        Spacer(Modifier.height(16.dp))
+        // 标签两行
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SkeletonTag(block, 68.dp)
+            SkeletonTag(block, 96.dp)
+            SkeletonTag(block, 72.dp)
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SkeletonTag(block, 56.dp)
+            SkeletonTag(block, 84.dp)
+        }
+    }
+}
+
+@Composable
+private fun SkeletonLine(block: Color, modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .height(10.dp)
+            .clip(RoundedCornerShape(5.dp))
+            .background(block),
+    )
+}
+
+@Composable
+private fun SkeletonTag(block: Color, width: Dp) {
+    Box(
+        Modifier
+            .width(width)
+            .height(28.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(block),
+    )
+}
+
+/** 骨架占位的呼吸动画（与抽屉头部骨架同款时序） */
+@Composable
+private fun rememberSkeletonPulse(): State<Float> {
+    val transition = rememberInfiniteTransition(label = "detailSkeleton")
+    return transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "detailSkeletonPulse",
+    )
 }
 
 /**
