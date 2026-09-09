@@ -33,7 +33,6 @@ import androidx.compose.material.icons.outlined.GTranslate
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalBottomSheetProperties
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -62,6 +61,7 @@ import com.piku.client.R
 import com.piku.client.data.local.CatalogSource
 import com.piku.client.data.remote.translation.ModelEntry
 import com.piku.client.data.remote.translation.Role
+import com.piku.client.ui.common.PikuBottomSheet
 import com.piku.client.ui.theme.LoginBackgroundDark
 import com.piku.client.ui.theme.PikuColors
 import com.piku.client.ui.theme.themedSwitchColors
@@ -101,17 +101,13 @@ internal fun AiTranslateSheet(
 
     val sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    ModalBottomSheet(
+    PikuBottomSheet(
         onDismissRequest = onDismiss,
+        dark = dark,
         sheetState = sheetState,
         properties = ModalBottomSheetProperties(shouldDismissOnBackPress = false),
-        containerColor = if (dark) LoginBackgroundDark else Color.White,
+        scrollable = false,
     ) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .padding(start = 20.dp, end = 20.dp, bottom = 32.dp),
-        ) {
             AiTranslateMainPage(
                 state = state,
                 onToggleEnabled = onToggleEnabled,
@@ -121,7 +117,6 @@ internal fun AiTranslateSheet(
                 onOpenSources = onOpenSources,
                 dark = dark,
             )
-        }
     }
 }
 

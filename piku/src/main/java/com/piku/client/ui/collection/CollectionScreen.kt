@@ -41,13 +41,14 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import com.piku.client.ui.common.PikuBottomSheet
+import com.piku.client.ui.common.PikuSheetTitle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -553,23 +554,11 @@ private fun FolderActionSheet(
     onDelete: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(
+    PikuBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = if (dark) LoginBackgroundDark else Color.White,
+        dark = dark,
     ) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .padding(start = 20.dp, end = 20.dp, bottom = 32.dp),
-        ) {
-            Text(
-                text = folder.name,
-                color = PikuColors.textPrimary,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            PikuSheetTitle(text = folder.name)
             if (folder.isDefault) {
                 Spacer(Modifier.height(4.dp))
                 DefaultFolderBadge(dark = dark)
@@ -593,7 +582,6 @@ private fun FolderActionSheet(
                     onClick = onDelete,
                 )
             }
-        }
     }
 }
 
@@ -781,23 +769,11 @@ private fun WorkActionSheet(
     onRemove: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(
+    PikuBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = if (dark) LoginBackgroundDark else Color.White,
+        dark = dark,
     ) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .padding(start = 20.dp, end = 20.dp, bottom = 32.dp),
-        ) {
-            Text(
-                text = work.title.ifBlank { stringResource(R.string.collection_work_actions) },
-                color = PikuColors.textPrimary,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            PikuSheetTitle(text = work.title.ifBlank { stringResource(R.string.collection_work_actions) })
             if (work.authorName.isNotBlank()) {
                 Spacer(Modifier.height(2.dp))
                 Text(
@@ -825,7 +801,6 @@ private fun WorkActionSheet(
                 danger = true,
                 onClick = onRemove,
             )
-        }
     }
 }
 
@@ -840,21 +815,12 @@ private fun MoveWorkSheet(
     onMove: (FavoriteFolder) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(
+    PikuBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = if (dark) LoginBackgroundDark else Color.White,
+        dark = dark,
+        scrollable = true,
     ) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .padding(start = 20.dp, end = 20.dp, bottom = 32.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.collection_move_title),
-                color = PikuColors.textPrimary,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
+            PikuSheetTitle(text = stringResource(R.string.collection_move_title))
             Spacer(Modifier.height(4.dp))
             Text(
                 text = work.title,
@@ -881,7 +847,6 @@ private fun MoveWorkSheet(
                     Spacer(Modifier.height(6.dp))
                 }
             }
-        }
     }
 }
 

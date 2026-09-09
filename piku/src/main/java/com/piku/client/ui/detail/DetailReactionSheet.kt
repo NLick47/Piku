@@ -30,7 +30,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -49,6 +48,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.piku.client.R
 import com.piku.client.domain.model.WorkDetail
+import com.piku.client.ui.common.PikuBottomSheet
+import com.piku.client.ui.common.PikuSheetTitle
 import com.piku.client.ui.theme.LoginBackgroundDark
 import com.piku.client.ui.theme.LoginBackgroundLight
 import com.piku.client.ui.theme.PikuColors
@@ -69,29 +70,18 @@ internal fun ReactionSheet(
     onSend: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(
+    PikuBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = if (dark) LoginBackgroundDark else LoginBackgroundLight,
+        dark = dark,
+        scrollable = true,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .navigationBarsPadding()
-                .padding(bottom = 28.dp)
-                .verticalScroll(rememberScrollState()),
-        ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = stringResource(R.string.detail_reaction_title),
-                    color = PikuColors.textPrimary,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f),
-                )
+                Box(modifier = Modifier.weight(1f)) {
+                    PikuSheetTitle(text = stringResource(R.string.detail_reaction_title))
+                }
                 if (detail.reactionCount > 0) {
                     Text(
                         text = stringResource(R.string.detail_reaction_total, detail.reactionCount),
@@ -160,7 +150,6 @@ internal fun ReactionSheet(
                     )
                 }
             }
-        }
     }
 }
 

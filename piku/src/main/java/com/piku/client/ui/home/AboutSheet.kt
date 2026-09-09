@@ -23,7 +23,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -39,6 +38,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.piku.client.R
 import com.piku.client.data.remote.GitHubRelease
+import com.piku.client.ui.common.PikuBottomSheet
+import com.piku.client.ui.common.PikuSheetTitle
 import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.FollowDark
 import com.piku.client.ui.theme.FollowLight
@@ -63,21 +64,11 @@ internal fun AboutSheet(
     val primary = PikuColors.textPrimary
     val faint = PikuColors.textFaint
     val divider = PikuColors.border
-    ModalBottomSheet(
+    PikuBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = if (dark) LoginBackgroundDark else Color.White,
+        dark = dark,
     ) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .padding(start = 20.dp, end = 20.dp, bottom = 28.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.menu_about),
-                color = primary,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
+            PikuSheetTitle(text = stringResource(R.string.menu_about))
             Spacer(Modifier.height(16.dp))
             AboutUpdateButton(
                 state = updateCheckState,
@@ -117,7 +108,6 @@ internal fun AboutSheet(
                 onClick = onOpenFeedback,
                 dark = dark,
             )
-        }
     }
 }
 

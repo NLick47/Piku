@@ -28,7 +28,6 @@ import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -52,6 +51,9 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.piku.client.R
 import com.piku.client.domain.model.UserProfile
+import com.piku.client.ui.common.PikuBottomSheet
+import com.piku.client.ui.common.PikuSheetSubtitle
+import com.piku.client.ui.common.PikuSheetTitle
 import com.piku.client.ui.common.UserAvatar
 import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.LoginBackgroundDark
@@ -95,31 +97,18 @@ fun ProfileEditSheet(
         }
     }
 
-    ModalBottomSheet(
+    PikuBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = if (dark) LoginBackgroundDark else Color.White,
+        dark = dark,
+        scrollable = true,
     ) {
         Column(
-            Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .navigationBarsPadding()
-                .padding(start = 20.dp, end = 20.dp, bottom = 28.dp),
+            Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(
-                text = stringResource(R.string.profile_edit_title),
-                color = PikuColors.textPrimary,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
+            PikuSheetTitle(text = stringResource(R.string.profile_edit_title))
             Spacer(Modifier.height(4.dp))
-            Text(
-                text = stringResource(R.string.profile_edit_hint),
-                color = PikuColors.textFaint,
-                fontSize = 12.sp,
-                textAlign = TextAlign.Center,
-            )
+            PikuSheetSubtitle(text = stringResource(R.string.profile_edit_hint))
             Spacer(Modifier.height(20.dp))
 
             // 头像区

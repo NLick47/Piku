@@ -24,7 +24,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -41,6 +40,8 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.piku.client.R
 import com.piku.client.data.local.ShareTargets
+import com.piku.client.ui.common.PikuBottomSheet
+import com.piku.client.ui.common.PikuSheetTitle
 import com.piku.client.ui.theme.PikuColors
 
 private val WechatGreen = Color(0xFF07C160)
@@ -71,9 +72,6 @@ fun ImageActionSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    // 通透拟态：面板底半透明透出后方页面，卡片用浅色罩衫托底保证层级，
-    // 只收敛在这个面板内，不动全局 MenuPopupBg 等主题 token
-    val sheetBg = if (dark) Color(0xDE262421) else Color(0xEDFFFFFF)
     val cardBg = if (dark) Color.White.copy(alpha = 0.07f) else Color.White.copy(alpha = 0.65f)
     val cardBorder = PikuColors.border.copy(alpha = 0.5f)
     val dividerColor = PikuColors.border.copy(alpha = 0.5f)
@@ -83,43 +81,13 @@ fun ImageActionSheet(
         onDismiss()
     }
 
-    ModalBottomSheet(
+    PikuBottomSheet(
         onDismissRequest = onDismiss,
+        dark = dark,
         sheetState = sheetState,
-        containerColor = sheetBg,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        dragHandle = null,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp)
-                .navigationBarsPadding()
-                .padding(bottom = 12.dp, top = 6.dp),
-        ) {
-            // 顶部拖拽手柄
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 10.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .width(34.dp)
-                        .height(4.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(PikuColors.textSecondary.copy(alpha = 0.3f)),
-                )
-            }
-
             // 标题行：下滑/点遮罩/返回键关闭，不再放关闭按钮
-            Text(
-                text = stringResource(R.string.detail_share_title),
-                color = PikuColors.textPrimary,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
+            PikuSheetTitle(text = stringResource(R.string.detail_share_title))
 
             // ---- 高频的保存置顶 ----
             Spacer(Modifier.height(12.dp))
@@ -263,7 +231,6 @@ fun ImageActionSheet(
                     )
                 }
             }
-        }
     }
 }
 

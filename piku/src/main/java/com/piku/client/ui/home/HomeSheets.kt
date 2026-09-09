@@ -26,7 +26,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -45,6 +44,9 @@ import com.piku.client.R
 import com.piku.client.domain.model.AppLanguage
 import com.piku.client.domain.model.PoipikuCategory
 import com.piku.client.domain.model.ThemeMode
+import com.piku.client.ui.common.PikuBottomSheet
+import com.piku.client.ui.common.PikuSheetSubtitle
+import com.piku.client.ui.common.PikuSheetTitle
 import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.LoginBackgroundDark
 import com.piku.client.ui.theme.LoginCardDark
@@ -110,29 +112,18 @@ internal fun CategorySheet(
     onDismiss: () -> Unit,
     dark: Boolean,
 ) {
-    ModalBottomSheet(
+    PikuBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = if (dark) LoginBackgroundDark else Color.White,
+        dark = dark,
+        scrollable = true,
     ) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .padding(start = 20.dp, end = 20.dp, bottom = 32.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.home_category_select),
-                color = PikuColors.textPrimary,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
+            PikuSheetTitle(text = stringResource(R.string.home_category_select))
             Spacer(Modifier.height(4.dp))
-            Text(
+            PikuSheetSubtitle(
                 text = stringResource(
                     R.string.home_category_current,
                     stringResource(selected.nameRes),
                 ),
-                color = PikuColors.textFaint,
-                fontSize = 12.sp,
             )
             Spacer(Modifier.height(16.dp))
             AllCategoriesButton(
@@ -165,7 +156,6 @@ internal fun CategorySheet(
                 }
                 Spacer(Modifier.height(16.dp))
             }
-        }
     }
 }
 
@@ -177,21 +167,11 @@ internal fun ThemeModeSheet(
     onDismiss: () -> Unit,
     dark: Boolean,
 ) {
-    ModalBottomSheet(
+    PikuBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = if (dark) LoginBackgroundDark else Color.White,
+        dark = dark,
     ) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .padding(start = 20.dp, end = 20.dp, bottom = 32.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.theme_select_title),
-                color = PikuColors.textPrimary,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
+            PikuSheetTitle(text = stringResource(R.string.theme_select_title))
             Spacer(Modifier.height(16.dp))
             SettingsOptionRow(
                 text = stringResource(R.string.theme_mode_system),
@@ -213,7 +193,6 @@ internal fun ThemeModeSheet(
                 onClick = { onSelect(ThemeMode.DARK) },
                 dark = dark,
             )
-        }
     }
 }
 
@@ -225,27 +204,13 @@ internal fun RetentionSheet(
     onDismiss: () -> Unit,
     dark: Boolean,
 ) {
-    ModalBottomSheet(
+    PikuBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = if (dark) LoginBackgroundDark else Color.White,
+        dark = dark,
     ) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .padding(start = 20.dp, end = 20.dp, bottom = 32.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.retention_select_title),
-                color = PikuColors.textPrimary,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
+            PikuSheetTitle(text = stringResource(R.string.retention_select_title))
             Spacer(Modifier.height(4.dp))
-            Text(
-                text = stringResource(R.string.retention_select_hint),
-                color = PikuColors.textFaint,
-                fontSize = 12.sp,
-            )
+            PikuSheetSubtitle(text = stringResource(R.string.retention_select_hint))
             Spacer(Modifier.height(16.dp))
             listOf(7, 30, 90, 0).forEach { days ->
                 SettingsOptionRow(
@@ -256,7 +221,6 @@ internal fun RetentionSheet(
                 )
                 Spacer(Modifier.height(8.dp))
             }
-        }
     }
 }
 
@@ -268,21 +232,11 @@ internal fun LanguageSheet(
     onDismiss: () -> Unit,
     dark: Boolean,
 ) {
-    ModalBottomSheet(
+    PikuBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = if (dark) LoginBackgroundDark else Color.White,
+        dark = dark,
     ) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .padding(start = 20.dp, end = 20.dp, bottom = 32.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.language_select_title),
-                color = PikuColors.textPrimary,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
+            PikuSheetTitle(text = stringResource(R.string.language_select_title))
             Spacer(Modifier.height(16.dp))
             AppLanguage.entries.forEach { language ->
                 SettingsOptionRow(
@@ -293,7 +247,6 @@ internal fun LanguageSheet(
                 )
                 Spacer(Modifier.height(8.dp))
             }
-        }
     }
 }
 

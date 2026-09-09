@@ -24,7 +24,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -46,6 +45,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.piku.client.R
 import com.piku.client.domain.model.FavoriteFolder
+import com.piku.client.ui.common.PikuBottomSheet
+import com.piku.client.ui.common.PikuSheetSubtitle
+import com.piku.client.ui.common.PikuSheetTitle
 import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.AccentSolid
 import com.piku.client.ui.theme.ControlAccentDark
@@ -77,30 +79,14 @@ internal fun FavoriteSheet(
     var newFolderName by rememberSaveable { mutableStateOf("") }
     var creatingNew by rememberSaveable { mutableStateOf(false) }
 
-    ModalBottomSheet(
+    PikuBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = if (dark) LoginBackgroundDark else LoginBackgroundLight,
+        dark = dark,
+        scrollable = true,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .navigationBarsPadding()
-                .padding(bottom = 28.dp)
-                .verticalScroll(rememberScrollState()),
-        ) {
-            Text(
-                text = stringResource(R.string.detail_favorite_sheet_title),
-                color = PikuColors.textPrimary,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
+            PikuSheetTitle(text = stringResource(R.string.detail_favorite_sheet_title))
             Spacer(Modifier.height(6.dp))
-            Text(
-                text = stringResource(R.string.detail_favorite_sheet_hint),
-                color = PikuColors.textSecondary,
-                fontSize = 12.sp,
-            )
+            PikuSheetSubtitle(text = stringResource(R.string.detail_favorite_sheet_hint))
             Spacer(Modifier.height(14.dp))
             folders.forEach { folder ->
                 FavoriteFolderRow(
@@ -171,7 +157,6 @@ internal fun FavoriteSheet(
                     )
                 }
             }
-        }
     }
 }
 
