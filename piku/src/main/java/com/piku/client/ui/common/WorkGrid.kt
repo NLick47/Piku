@@ -9,9 +9,13 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -70,10 +74,14 @@ fun WorkCard(
     onClick: (Work) -> Unit,
     dark: Boolean,
     onLongClick: ((Work) -> Unit)? = null,
+    /** 作者区（头像 + 昵称）点击：进该作者作品页。null 表示作者区不可点，整卡仍进详情 */
+    onAuthorClick: ((Work) -> Unit)? = null,
 ) {
     val shape = RoundedCornerShape(12.dp)
     var heartVisible by remember { mutableStateOf(false) }
     val heartScale = remember { Animatable(0f) }
+    val authorInteraction = remember { MutableInteractionSource() }
+    val authorPressed by authorInteraction.collectIsPressedAsState()
 
     LaunchedEffect(heartVisible) {
         if (heartVisible) {
@@ -198,7 +206,12 @@ fun WorkCard(
             Modifier
                 .fillMaxWidth()
                 .background(if (dark) WorkCardInfoBgDark else Color(0xF2FFFFFF))
-                .padding(horizontal = 10.dp, vertical = 8.dp),
+                .padding(
+                    start = 10.dp,
+                    end = 10.dp,
+                    top = 8.dp,
+                    bottom = if (onAuthorClick != null) 0.dp else 8.dp,
+                ),
         ) {
             Text(
                 text = work.title,
@@ -207,26 +220,47 @@ fun WorkCard(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            Spacer(Modifier.height(6.dp))
+            // 热区自带 8dp 上下内距，标题与头像之间留 0dp 即可（实际 = 8dp）；不可点时维持 6dp
+            Spacer(Modifier.height(if (onAuthorClick != null) 0.dp else 6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                AsyncImage(
-                    model = work.authorAvatarUrl,
-                    contentDescription = null,
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
-                        .size(16.dp)
-                        .clip(CircleShape),
-                    contentScale = ContentScale.Crop,
-                )
-                Spacer(Modifier.width(5.dp))
-                Text(
-                    text = work.authorName,
-                    color = PikuColors.textPrimary,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
+                        .weight(1f)
+                        .then(
+                            if (onAuthorClick != null) {
+                                Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable(
+                                        interactionSource = authorInteraction,
+                                        indication = LocalIndication.current,
+                                        onClick = { onAuthorClick(work) },
+                                    )
+                                    .padding(vertical = 8.dp)
+                            } else {
+                                Modifier
+                            },
+                        ),
+                ) {
+                    AsyncImage(
+                        model = work.authorAvatarUrl,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(16.dp)
+                            .clip(CircleShape),
+                        contentScale = ContentScale.Crop,
+                    )
+                    Spacer(Modifier.width(5.dp))
+                    Text(
+                        text = work.authorName,
+                        color = if (authorPressed) PikuColors.accent else PikuColors.textPrimary,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
                 if (work.categoryName.isNotBlank()) {
                     Text(
                         text = localizedCategoryName(work.categoryCd, work.categoryName),

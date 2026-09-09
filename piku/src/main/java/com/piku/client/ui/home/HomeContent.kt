@@ -131,6 +131,7 @@ internal fun HomeContent(
     onShuffle: () -> Unit,
     onToggleFavorite: (Work) -> Unit,
     onWorkClick: (Work) -> Unit,
+    onAuthorClick: ((Work) -> Unit)?,
     onLoginClick: () -> Unit,
     onDismissRefreshNotice: () -> Unit,
     onGoTop: () -> Unit,
@@ -211,6 +212,7 @@ internal fun HomeContent(
                         onGoTop = onGoTop,
                         onToggleFavorite = onToggleFavorite,
                         onWorkClick = onWorkClick,
+                        onAuthorClick = onAuthorClick,
                         dark = dark,
                         isScrolling = isScrolling,
                         gridState = gridState,
@@ -383,6 +385,7 @@ private fun WorkWaterfall(
     onGoTop: () -> Unit,
     onToggleFavorite: (Work) -> Unit,
     onWorkClick: (Work) -> Unit,
+    onAuthorClick: ((Work) -> Unit)?,
     dark: Boolean,
     isScrolling: MutableState<Boolean>,
     gridState: LazyStaggeredGridState,
@@ -470,6 +473,7 @@ private fun WorkWaterfall(
                     onToggleFavorite = onToggleFavorite,
                     onClick = onWorkClick,
                     dark = dark,
+                    onAuthorClick = onAuthorClick,
                 )
             }
             if (loadMoreErrorRes != null) {

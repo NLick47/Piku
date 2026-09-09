@@ -119,6 +119,7 @@ fun HomeScreen(
     onTagsClick: () -> Unit,
     onFollowUsersClick: () -> Unit,
     onSearchClick: () -> Unit,
+    onAuthorClick: (Work) -> Unit,
     onProfileOpen: (Long, String) -> Unit,
 ) {
     val viewModel: HomeViewModel = hiltViewModel()
@@ -392,6 +393,7 @@ fun HomeScreen(
                                 onShuffle = viewModel::shuffleRandom,
                                 onToggleFavorite = viewModel::toggleFavorite,
                                 onWorkClick = onWorkClick,
+                                onAuthorClick = onAuthorClick,
                                 onLoginClick = onLoginClick,
                                 onDismissRefreshNotice = viewModel::dismissRefreshNotice,
                                 onGoTop = { gridState.scrollToTopSmart(scope) },
@@ -427,6 +429,7 @@ fun HomeScreen(
                             onShuffle = viewModel::shuffleRandom,
                             onToggleFavorite = viewModel::toggleFavorite,
                             onWorkClick = onWorkClick,
+                            onAuthorClick = onAuthorClick,
                             onLoginClick = onLoginClick,
                             onDismissRefreshNotice = viewModel::dismissRefreshNotice,
                             onGoTop = { gridState.scrollToTopSmart(scope) },

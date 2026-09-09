@@ -225,7 +225,14 @@ fun AppNavHost() {
                     navController.navigate(Routes.followUsers())
                 },
                 onSearchClick = { navController.navigate(Routes.search()) },
+                onAuthorClick = { work: Work ->
+                    // 卡片作者区：不写 SHOULD_REOPEN_DRAWER，避免回到首页时抽屉被自动弹出
+                    navController.navigate(Routes.userWorks(work.authorId, work.authorName)) {
+                        launchSingleTop = true
+                    }
+                },
                 onProfileOpen = { uid, name ->
+                    // 抽屉里"我的资料"点击：保留重开抽屉的语义，便于连续切换抽屉菜单项
                     backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = true
                     navController.navigate(Routes.userWorks(uid, name))
                 },
