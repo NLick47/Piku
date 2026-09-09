@@ -11,6 +11,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.lifecycleScope
+import com.piku.client.data.local.ImageShareHelper
 import com.piku.client.data.local.LanguageStore
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.domain.model.AppLanguage
@@ -18,6 +20,7 @@ import com.piku.client.domain.model.ThemeMode
 import com.piku.client.ui.navigation.AppNavHost
 import com.piku.client.ui.theme.PoipikuTheme
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 import java.util.Locale
 import javax.inject.Inject
 
@@ -26,6 +29,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var settingsRepository: SettingsRepository
+
+    @Inject
+    lateinit var imageShareHelper: ImageShareHelper
 
     override fun attachBaseContext(newBase: Context) {
         val prefs = newBase.getSharedPreferences(LanguageStore.PREFS_NAME, Context.MODE_PRIVATE)
@@ -46,6 +52,11 @@ class MainActivity : ComponentActivity() {
                 AppNavHost()
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        lifecycleScope.launch { imageShareHelper.cleanupCache() }
     }
 
     private fun Context.withLocale(code: String): Context {

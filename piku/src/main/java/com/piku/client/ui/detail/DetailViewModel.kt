@@ -1104,14 +1104,14 @@ class DetailViewModel @Inject constructor(
     }
 
     /**
-     * 分享第 [page] 张图片：下载到缓存 → 生成 content URI → 通过 [shareRequest] 触发分享。
+     * 分享第 [page] 张图片，直接用作品页当前显示的缩略图。刻意不等原图：
+     * 全尺寸图要额外请求且受 append 限速，等它分享就慢了。
      * [targetPackage] 为 null 时走系统分享面板，否则先检查定向 Intent 可解析才直跳，
      * 不可解析时由 UI 层回落到系统面板（微信/QQ 不一定接通用 ACTION_SEND）。
-     * 原图未就绪时先触发全尺寸加载并限时等待，超时/拿不到原图则退回缩略图。
      *
-     * 面板在分享期间保持打开（loading 转圈在被点的那一行），成功后 UI 层拉起
+     * 面板在准备期间保持打开（loading 转圈在被点的那一行），成功后 UI 层拉起
      * 分享面板并关闭；失败则通过 [DetailUiState.shareFeedbackRes] 给 snackbar。
-     * 用户中途划掉面板可调 [cancelShare] 中断下载。
+     * 用户中途划掉面板可调 [cancelShare] 中断。
      */
     private var shareJob: Job? = null
 
@@ -1119,22 +1119,16 @@ class DetailViewModel @Inject constructor(
         val state = _uiState.value
         if (state.sharingImage) return
         val detail = state.detail ?: return
-        val fallbackUrl = detail.imageUrls.getOrNull(page) ?: return
+        val item = state.viewerImages.getOrNull(page) ?: return
+        // 原图页数多于缩略图时，越界的页只能用原图，否则会分享到重复的最后一张
+        val url = if (page < detail.imageUrls.size) item.thumbnailUrl
+        else item.fullUrl ?: item.thumbnailUrl
         shareJob?.cancel()
         shareJob = viewModelScope.launch {
             _uiState.update {
                 it.copy(sharingImage = true, sharingTargetPackage = targetPackage, shareFeedbackRes = null)
             }
             try {
-                if (!detail.passwordProtected && !detail.warning) {
-                    if (state.viewerImages.getOrNull(page)?.fullUrl == null) {
-                        loadFullImages()
-                        withTimeoutOrNull(IMAGE_WAIT_MILLIS) {
-                            _uiState.filter { it.fullImageUrls.isNotEmpty() }.first()
-                        }
-                    }
-                }
-                val url = _uiState.value.viewerImages.getOrNull(page)?.fullUrl ?: fallbackUrl
                 val uri = imageShareHelper.getImageUri(url, workId, page)
                 _uiState.update { it.copy(sharingImage = false, sharingTargetPackage = null) }
                 _shareRequest.value = ImageShareRequest(
