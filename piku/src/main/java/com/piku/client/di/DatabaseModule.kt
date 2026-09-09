@@ -15,6 +15,7 @@ import com.piku.client.data.local.TranslationDao
 import com.piku.client.data.local.WorkPasswordDao
 import com.piku.client.data.local.WorkPasswordRepository
 import com.piku.client.data.local.CredentialCipher
+import com.piku.client.data.local.DraftWorkDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -45,6 +46,7 @@ object DatabaseModule {
                 AppDatabase.MIGRATION_7_8,
                 AppDatabase.MIGRATION_8_9,
                 AppDatabase.MIGRATION_9_10,
+                AppDatabase.MIGRATION_10_11,
             )
             .build()
 
@@ -69,6 +71,10 @@ object DatabaseModule {
     @Provides
     fun provideTranslationDao(database: AppDatabase): TranslationDao =
         database.translationDao()
+
+    @Provides
+    fun provideDraftWorkDao(database: AppDatabase): DraftWorkDao =
+        database.draftWorkDao()
 
     @Provides
     @Singleton

@@ -91,6 +91,7 @@ import com.piku.client.data.local.CatalogSource
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.domain.model.Work
 import com.piku.client.ui.profile.ProfileEditSheet
+import com.piku.client.ui.publish.PublishScreen
 import com.piku.client.ui.common.AvatarViewerDialog
 import com.piku.client.ui.collection.CollectionScreen
 import com.piku.client.ui.follow.FollowUsersScreen
@@ -168,10 +169,12 @@ fun HomeScreen(
     var showFollowUsersPage by rememberSaveable { mutableStateOf(false) }
     var showLogoutConfirm by rememberSaveable { mutableStateOf(false) }
     var showProfileEdit by rememberSaveable { mutableStateOf(false) }
+    var showPublishPage by rememberSaveable { mutableStateOf(false) }
     var showAvatarViewer by rememberSaveable { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val anyOverlayActive = showHistoryPage ||
-        showCollectionPage || showTagsPage || showFollowUsersPage || showWebDavSettings
+        showCollectionPage || showTagsPage || showFollowUsersPage || showWebDavSettings ||
+        showPublishPage
     val isScrolling = remember { mutableStateOf(false) }
     val gridState = rememberLazyStaggeredGridState()
     val scope = rememberCoroutineScope()
@@ -277,6 +280,10 @@ fun HomeScreen(
         },
         onFollowUsersClick = {
             showFollowUsersPage = true
+        },
+        onPublishClick = {
+            scope.launch { drawerState.close() }
+            showPublishPage = true
         },
         onProfileClick = { showProfileEdit = true },
         onProfileOpen = {
@@ -885,6 +892,55 @@ fun HomeScreen(
                 state = state,
                 dark = dark,
             )
+
+            if (showPublishPage) {
+                val profile = state.userProfile
+                // 与浏览记录等抽屉页一致：全屏 Dialog 浮层，独立窗口天然挡住首页点击
+                val publishEnter = slideInHorizontally(
+                    initialOffsetX = { it },
+                    animationSpec = tween(250),
+                ) + fadeIn(animationSpec = tween(250))
+                Dialog(
+                    onDismissRequest = {
+                        showPublishPage = false
+                        scope.launch { drawerState.open() }
+                    },
+                    properties = DialogProperties(
+                        usePlatformDefaultWidth = false,
+                        decorFitsSystemWindows = false,
+                        dismissOnClickOutside = false,
+                    ),
+                ) {
+                    AnimatedVisibility(visible = true, enter = publishEnter) {
+                        PublishScreen(
+                            onBack = {
+                                showPublishPage = false
+                                scope.launch { drawerState.open() }
+                            },
+                            onPublished = { workId ->
+                                showPublishPage = false
+                                val uid = profile?.uid?.toLongOrNull()
+                                if (uid != null) {
+                                    onWorkClick(
+                                        Work(
+                                            id = workId,
+                                            authorId = uid,
+                                            authorName = profile.name.orEmpty(),
+                                            authorAvatarUrl = null,
+                                            categoryCd = 0,
+                                            categoryName = "",
+                                            title = "",
+                                            thumbnailUrl = "",
+                                            imageCount = 0,
+                                            r18 = false,
+                                        ),
+                                    )
+                                }
+                            },
+                        )
+                    }
+                }
+            }
             SnackbarHost(
                 hostState = snackbarHostState,
                 modifier = Modifier

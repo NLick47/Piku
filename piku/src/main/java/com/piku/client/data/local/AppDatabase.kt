@@ -14,8 +14,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         SearchKeywordEntity::class,
         WorkPasswordEntity::class,
         TranslationEntity::class,
+        DraftWorkEntity::class,
     ],
-    version = 10,
+    version = 11,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -25,6 +26,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun searchKeywordDao(): SearchKeywordDao
     abstract fun workPasswordDao(): WorkPasswordDao
     abstract fun translationDao(): TranslationDao
+    abstract fun draftWorkDao(): DraftWorkDao
 
     companion object {
         val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -149,6 +151,18 @@ abstract class AppDatabase : RoomDatabase() {
                 // search_keywords 有 MAX_KEYWORDS=20 的硬上限，建索引纯亏。
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_history_visitedAt ON history(visitedAt)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_favorites_addedAt ON favorites(addedAt)")
+            }
+        }
+
+        val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // 发布草稿单槽位：payload 存 PublishDraft JSON，图片在 filesDir 由代码管理
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS draft_works (" +
+                        "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "payload TEXT NOT NULL, " +
+                        "updatedAt INTEGER NOT NULL)",
+                )
             }
         }
     }
