@@ -2,6 +2,12 @@ package com.piku.client.ui.follow
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -12,6 +18,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -41,6 +48,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -93,6 +101,9 @@ import com.piku.client.ui.theme.HomeBgTopDark
 import com.piku.client.ui.theme.HomeBgTopLight
 import com.piku.client.ui.theme.LocalDarkTheme
 import com.piku.client.ui.theme.PikuColors
+import com.piku.client.ui.theme.WorkCardBgDark
+import com.piku.client.ui.theme.WorkCardBorderDark
+import com.piku.client.ui.theme.WorkCardPlaceholderDark
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
@@ -171,9 +182,7 @@ fun UserWorksScreen(
             )
             when {
                 state.loading && state.works.isEmpty() -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        LoaderDots(dark = dark)
-                    }
+                    UserWorksSkeletonGrid(dark = dark, isTablet = isTablet)
                 }
                 state.errorRes != null && state.works.isEmpty() -> {
                     val errorRes = state.errorRes
@@ -958,5 +967,158 @@ private fun UserWorksLoadMoreError(
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
         )
+    }
+}
+
+@Composable
+private fun rememberSkeletonPulse(): State<Float> {
+    val transition = rememberInfiniteTransition(label = "userWorksSkeleton")
+    return transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "userWorksSkeletonPulse",
+    )
+}
+
+@Composable
+private fun UserWorksSkeletonHeaderCard(dark: Boolean) {
+    val pulse by rememberSkeletonPulse()
+    val alpha = 0.3f + pulse * 0.4f
+    val shape = RoundedCornerShape(18.dp)
+    val placeholder = if (dark) WorkCardPlaceholderDark else Color(0xFFE8E4DE)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(HeaderCardHeight)
+            .shadow(
+                elevation = 8.dp,
+                shape = shape,
+                ambientColor = Color(0x1F000000),
+                spotColor = Color(0x33000000),
+            )
+            .clip(shape)
+            .border(
+                BorderStroke(0.5.dp, if (dark) Color(0x26FFFFFF) else Color(0x66FFFFFF)),
+                shape,
+            ),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(if (dark) Color(0xFF1A1A1A) else Color(0xFFF5F5F5)),
+        )
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(start = 16.dp, end = 12.dp, bottom = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .graphicsLayer { this.alpha = alpha }
+                    .clip(CircleShape)
+                    .background(placeholder),
+            )
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Box(
+                    modifier = Modifier
+                        .width(120.dp)
+                        .height(19.dp)
+                        .graphicsLayer { this.alpha = alpha }
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(placeholder),
+                )
+                Spacer(Modifier.height(6.dp))
+                Box(
+                    modifier = Modifier
+                        .width(80.dp)
+                        .height(12.dp)
+                        .graphicsLayer { this.alpha = alpha }
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(placeholder),
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .size(width = 72.dp, height = 32.dp)
+                    .graphicsLayer { this.alpha = alpha }
+                    .clip(RoundedCornerShape(50))
+                    .background(placeholder),
+            )
+        }
+    }
+}
+
+@Composable
+private fun UserWorksSkeletonWorkCard(dark: Boolean) {
+    val pulse by rememberSkeletonPulse()
+    val alpha = 0.3f + pulse * 0.4f
+    val shape = RoundedCornerShape(12.dp)
+    val placeholder = if (dark) WorkCardPlaceholderDark else Color(0xFFE8E4DE)
+
+    Column(
+        modifier = Modifier
+            .clip(shape)
+            .background(if (dark) WorkCardBgDark else Color(0xCCFFFFFF))
+            .border(
+                BorderStroke(1.dp, if (dark) WorkCardBorderDark else Color(0x59C8C2B8)),
+                shape,
+            )
+            .padding(6.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .graphicsLayer { this.alpha = alpha }
+                .clip(RoundedCornerShape(10.dp))
+                .background(placeholder),
+        )
+        Spacer(Modifier.height(8.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(10.dp)
+                .graphicsLayer { this.alpha = alpha }
+                .clip(RoundedCornerShape(5.dp))
+                .background(placeholder),
+        )
+        Spacer(Modifier.height(4.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.6f)
+                .height(10.dp)
+                .graphicsLayer { this.alpha = alpha }
+                .clip(RoundedCornerShape(5.dp))
+                .background(placeholder),
+        )
+    }
+}
+
+@Composable
+private fun UserWorksSkeletonGrid(
+    dark: Boolean,
+    isTablet: Boolean,
+) {
+    LazyVerticalStaggeredGrid(
+        columns = if (isTablet) StaggeredGridCells.Adaptive(220.dp) else StaggeredGridCells.Fixed(2),
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 96.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalItemSpacing = 12.dp,
+    ) {
+        item(span = StaggeredGridItemSpan.FullLine) {
+            UserWorksSkeletonHeaderCard(dark = dark)
+        }
+        items(6) {
+            UserWorksSkeletonWorkCard(dark = dark)
+        }
     }
 }

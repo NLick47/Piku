@@ -123,7 +123,7 @@
     <string name="follow_user_unfollow">Unfollow</string>
     <string name="follow_user_refollow">Follow again</string>
     <string name="follow_user_follow">Follow</string>
-    <string name="user_works_title">%1$s's Profile</string>
+    <string name="user_works_title">%1$s\'s Profile</string>
     <string name="user_works_empty">No posts by this user yet</string>
     <string name="user_works_empty_self">You haven\'t published any posts yet</string>
     <string name="user_works_count">%1$d posts</string>
