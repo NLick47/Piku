@@ -3,27 +3,21 @@ package com.piku.client.data.local
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import com.piku.client.domain.model.NsfwLevel
 import com.piku.client.domain.model.PublishDraft
+import com.piku.client.domain.model.ShowVisibility
+import com.piku.client.domain.model.UploadKind
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * 发布草稿仓库（多份草稿箱）。
- *
- * 每份草稿一个独立目录 drafts/<id>/，图片在选中/恢复那一刻拷贝进该目录
- * （Photo Picker 的 URI 授权不跨重启，所以必须在编辑期落盘）。
- * payload 记图片绝对路径；删除草稿/丢弃编辑 = 删行 + 删整目录。
- */
 @Singleton
 class DraftRepository @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val dao: DraftWorkDao,
-    private val json: Json,
+    private val dao: DraftDao,
 ) {
     private val draftsDir = File(context.filesDir, "drafts")
 
@@ -60,20 +54,31 @@ class DraftRepository @Inject constructor(
         runCatching { File(draftsDir, "$DIR_PREFIX$draftId").deleteRecursively() }
     }
 
-    /** 保存/更新草稿（upsert 按 id，客户端分配时间戳 id） */
-    suspend fun save(draft: PublishDraft): Long = withContext(Dispatchers.IO) {
-        val id = draft.draftId ?: System.currentTimeMillis()
+    suspend fun createEmpty(kind: UploadKind): Long = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
-        dao.upsert(
-            DraftWorkEntity(
-                id = id,
-                payload = json.encodeToString(
-                    PublishDraft.serializer(),
-                    draft.copy(draftId = id, savedAt = now),
-                ),
-                updatedAt = now,
-            ),
+        dao.insert(
+            DraftEntity(kind = kind.ordinal, createdAt = now, updatedAt = now),
         )
+    }
+
+    /** 保存/更新草稿（密码由调用方提前清空，不落盘） */
+    suspend fun save(draft: PublishDraft): Long = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        val prev = draft.draftId?.let { dao.byId(it) }
+        val id = when {
+            prev != null -> {
+                dao.update(draft.toEntity(prev.id, createdAt = prev.createdAt, updatedAt = now))
+                prev.id
+            }
+            draft.draftId != null ->
+                dao.insert(draft.toEntity(draft.draftId, createdAt = now, updatedAt = now))
+            else -> dao.insert(
+                DraftEntity(kind = draft.kind.ordinal, createdAt = now, updatedAt = now),
+            ).also { newId ->
+                dao.update(draft.toEntity(newId, createdAt = now, updatedAt = now))
+            }
+        }
+        syncImages(id, draft.imageFiles)
         id
     }
 
@@ -88,29 +93,90 @@ class DraftRepository @Inject constructor(
                 }
             }
         }
-        rows.mapNotNull { decodeEntity(it) }
+        rows.map { toDraft(it, dao.imagesFor(it.id).sortedBy { img -> img.sortOrder }.map { img -> img.path }) }
     }
 
-    /** 继续编辑某份草稿；图片文件若已丢失则剔除引用 */
+    /** 读取某份草稿；图片文件若已丢失则剔除引用并回写 */
     suspend fun load(id: Long): PublishDraft? = withContext(Dispatchers.IO) {
         val entity = dao.byId(id) ?: return@withContext null
-        val draft = decodeEntity(entity) ?: return@withContext null
-        val alive = draft.imageFiles.filter { File(it).exists() }
-        if (alive.size != draft.imageFiles.size) {
-            save(draft.copy(draftId = id, imageFiles = alive))
-        }
-        draft.copy(draftId = id, imageFiles = alive)
+        val paths = dao.imagesFor(id).sortedBy { it.sortOrder }.map { it.path }
+        val alive = paths.filter { File(it).exists() }
+        if (alive.size != paths.size) syncImages(id, alive)
+        toDraft(entity, alive)
     }
 
-    private fun decodeEntity(entity: DraftWorkEntity): PublishDraft? = runCatching {
-        json.decodeFromString(PublishDraft.serializer(), entity.payload)
-    }.getOrNull()
-
-    /** 删除一份草稿（行 + 图片目录） */
     suspend fun delete(id: Long) = withContext(Dispatchers.IO) {
         dao.deleteById(id)
+        runCatching { dao.clearImages(id) }
         deleteImagesOf(id)
     }
+
+    suspend fun duplicate(id: Long): Long? = withContext(Dispatchers.IO) {
+        val entity = dao.byId(id) ?: return@withContext null
+        val paths = dao.imagesFor(id).sortedBy { it.sortOrder }.map { it.path }
+        val now = System.currentTimeMillis()
+        val newId = dao.insert(entity.copy(id = 0, createdAt = now, updatedAt = now))
+        if (paths.isNotEmpty()) {
+            val newDir = dirFor(newId)
+            val newPaths = paths.mapNotNull { p ->
+                val src = File(p)
+                if (!src.exists()) return@mapNotNull null
+                val dst = File(newDir, src.name)
+                runCatching { src.copyTo(dst, overwrite = true) }.getOrNull()?.absolutePath
+            }
+            dao.insertImages(newPaths.mapIndexed { i, p -> DraftImageEntity(draftId = newId, path = p, sortOrder = i) })
+        }
+        newId
+    }
+
+    /** 图片行与传入路径同步（路径一致则跳过，避免每次打字都重写） */
+    private suspend fun syncImages(draftId: Long, paths: List<String>) {
+        val current = dao.imagesFor(draftId).sortedBy { it.sortOrder }.map { it.path }
+        if (current == paths) return
+        dao.clearImages(draftId)
+        if (paths.isNotEmpty()) {
+            dao.insertImages(paths.mapIndexed { i, p -> DraftImageEntity(draftId = draftId, path = p, sortOrder = i) })
+        }
+    }
+
+    private fun toDraft(e: DraftEntity, imagePaths: List<String>): PublishDraft = PublishDraft(
+        draftId = e.id,
+        savedAt = e.updatedAt,
+        kind = UploadKind.entries.getOrNull(e.kind) ?: UploadKind.ILLUST,
+        categoryCd = e.categoryCd,
+        tags = e.tags,
+        description = e.description,
+        publish = e.publish,
+        nsfw = NsfwLevel.entries.firstOrNull { it.wire == e.nsfwWire } ?: NsfwLevel.ALL,
+        visibility = ShowVisibility.entries.getOrNull(e.visibility) ?: ShowVisibility.ANYONE,
+        password = e.password,
+        showRecent = e.showRecent,
+        showFirstOnly = e.showFirstOnly,
+        title = e.title,
+        body = e.body,
+        novelDirection = e.novelDirection,
+        imageFiles = imagePaths,
+    )
+
+    private fun PublishDraft.toEntity(id: Long, createdAt: Long, updatedAt: Long): DraftEntity = DraftEntity(
+        id = id,
+        kind = kind.ordinal,
+        categoryCd = categoryCd,
+        tags = tags,
+        description = description,
+        publish = publish,
+        nsfwWire = nsfw.wire,
+        visibility = visibility.ordinal,
+        // 密码不落盘：调用方保存前已清空，这里不再额外处理
+        password = password,
+        showRecent = showRecent,
+        showFirstOnly = showFirstOnly,
+        title = title,
+        body = body,
+        novelDirection = novelDirection,
+        createdAt = createdAt,
+        updatedAt = updatedAt,
+    )
 
     private fun extOf(type: String?): String? = when (type?.lowercase()) {
         "image/jpeg" -> "jpg"

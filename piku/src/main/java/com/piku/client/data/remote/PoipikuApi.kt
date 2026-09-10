@@ -28,6 +28,13 @@ data class SendEmojiResponse(val result_num: Int = 0, val result: String = "", v
 @Serializable
 data class UpdateFollowUserResponse(val result: Int = 0, val btn_label: String = "", val err_msg: String = "")
 
+@Serializable
+data class TagSuggestionResponse(
+    val result: Int = 0,
+    val input: String = "",
+    val tags: List<String> = emptyList(),
+)
+
 interface PoipikuApi {
 
     @GET("NewArrivalPcV.jsp")
@@ -144,4 +151,10 @@ interface PoipikuApi {
         @Field("UID") uid: Long,
         @Field("IID") targetUserId: Long,
     ): UpdateFollowUserResponse
+
+    @GET("f/GetTagSuggestionF.jsp")
+    suspend fun getTagAutoComplete(
+        @Query("type") type: String = "tag",
+        @Query("input") input: String,
+    ): TagSuggestionResponse
 }

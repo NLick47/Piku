@@ -169,12 +169,12 @@ fun HomeScreen(
     var showFollowUsersPage by rememberSaveable { mutableStateOf(false) }
     var showLogoutConfirm by rememberSaveable { mutableStateOf(false) }
     var showProfileEdit by rememberSaveable { mutableStateOf(false) }
-    var showPublishPage by rememberSaveable { mutableStateOf(false) }
+    var publishDraftId by rememberSaveable { mutableStateOf<Long?>(null) }
     var showAvatarViewer by rememberSaveable { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val anyOverlayActive = showHistoryPage ||
         showCollectionPage || showTagsPage || showFollowUsersPage || showWebDavSettings ||
-        showPublishPage
+        publishDraftId != null
     val isScrolling = remember { mutableStateOf(false) }
     val gridState = rememberLazyStaggeredGridState()
     val scope = rememberCoroutineScope()
@@ -283,7 +283,7 @@ fun HomeScreen(
         },
         onPublishClick = {
             scope.launch { drawerState.close() }
-            showPublishPage = true
+            publishDraftId = -1L
         },
         onProfileClick = { showProfileEdit = true },
         onProfileOpen = {
@@ -893,7 +893,8 @@ fun HomeScreen(
                 dark = dark,
             )
 
-            if (showPublishPage) {
+            val initialPublishId = publishDraftId
+            if (initialPublishId != null) {
                 val profile = state.userProfile
                 // 与浏览记录等抽屉页一致：全屏 Dialog 浮层，独立窗口天然挡住首页点击
                 val publishEnter = slideInHorizontally(
@@ -902,7 +903,7 @@ fun HomeScreen(
                 ) + fadeIn(animationSpec = tween(250))
                 Dialog(
                     onDismissRequest = {
-                        showPublishPage = false
+                        publishDraftId = null
                         scope.launch { drawerState.open() }
                     },
                     properties = DialogProperties(
@@ -913,12 +914,13 @@ fun HomeScreen(
                 ) {
                     AnimatedVisibility(visible = true, enter = publishEnter) {
                         PublishScreen(
+                            initialDraftId = initialPublishId,
                             onBack = {
-                                showPublishPage = false
+                                publishDraftId = null
                                 scope.launch { drawerState.open() }
                             },
                             onPublished = { workId ->
-                                showPublishPage = false
+                                publishDraftId = null
                                 val uid = profile?.uid?.toLongOrNull()
                                 if (uid != null) {
                                     onWorkClick(

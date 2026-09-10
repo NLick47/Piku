@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.piku.client.R
 import com.piku.client.domain.model.AppLanguage
+import com.piku.client.domain.model.CATEGORY_GROUPS
 import com.piku.client.domain.model.PoipikuCategory
 import com.piku.client.domain.model.ThemeMode
 import com.piku.client.ui.common.PikuBottomSheet
@@ -55,47 +56,7 @@ import com.piku.client.ui.theme.LoginTextPrimaryLight
 import com.piku.client.ui.theme.LoginTextSecondaryDark
 import com.piku.client.ui.theme.PikuColors
 
-internal data class CategoryGroup(
-    val titleRes: Int,
-    val categories: List<PoipikuCategory>,
-)
 
-private val CATEGORY_GROUPS = listOf(
-    CategoryGroup(
-        R.string.category_group_practice,
-        listOf(
-            PoipikuCategory.RAKUGAKI,
-            PoipikuCategory.JISHUREN,
-            PoipikuCategory.RIHABIRI,
-        ),
-    ),
-    CategoryGroup(
-        R.string.category_group_share,
-        listOf(
-            PoipikuCategory.DEKITA,
-            PoipikuCategory.KAKO_WO_SARASU,
-            PoipikuCategory.KUYOU,
-        ),
-    ),
-    CategoryGroup(
-        R.string.category_group_wip,
-        listOf(
-            PoipikuCategory.SAGYOSHINCHOKU,
-            PoipikuCategory.KAKIKAKE,
-            PoipikuCategory.KAKENEE,
-        ),
-    ),
-    CategoryGroup(
-        R.string.category_group_community,
-        listOf(
-            PoipikuCategory.OSHIRASE,
-            PoipikuCategory.MEMO,
-            PoipikuCategory.NETABARE,
-            PoipikuCategory.SHIRIWOTATAKU,
-            PoipikuCategory.OSHINAGAKI,
-        ),
-    ),
-)
 
 private fun retentionDaysRes(days: Int): Int = when (days) {
     7 -> R.string.retention_7d

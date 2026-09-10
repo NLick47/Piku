@@ -433,7 +433,7 @@
     <string name="image_translate_network">网络错误，请重试</string>
     <string name="image_translate_download_failed">图片下载失败</string>
     <string name="image_translate_no_model">没有可用的翻译模型</string>
-    <string name="menu_publish">发布作品</string>
+    <string name="menu_publish">投稿</string>
     <string name="menu_draft_box">草稿箱</string>
     <string name="draft_box_title">草稿箱</string>
     <string name="draft_box_empty">还没有草稿，编辑到一半离开时会帮你保存</string>
@@ -447,7 +447,7 @@
     <string name="publish_novel_preview">预览</string>
     <string name="publish_novel_edit_full">全屏编辑</string>
     <string name="publish_novel_edit_exit">退出预览</string>
-    <string name="publish_novel_insert_break">插入空段</string>
+    <string name="publish_novel_insert_break">分段</string>
     <string name="publish_novel_chars">%1$d 字 · %2$d 段</string>
     <string name="publish_options_password_enabled_hint">输入浏览密码（≤16 位）</string>
     <string name="publish_error_password_empty">已开启浏览密码，请输入内容</string>
@@ -458,6 +458,8 @@
     <string name="publish_add_images">添加图片</string>
     <string name="publish_add_images_hint">从相册选择，顺序即发布顺序</string>
     <string name="publish_images_limit">免费账号最多 200 张 / 50MB</string>
+    <string name="publish_images_count">%1$d 张</string>
+    <string name="publish_images_count_size">%1$d 张 · %2$sMB</string>
     <string name="publish_image_action_prev">前移</string>
     <string name="publish_image_action_next">后移</string>
     <string name="publish_image_action_remove">移除</string>
@@ -466,6 +468,14 @@
     <string name="publish_novel_title_hint">作品标题</string>
     <string name="publish_novel_body">正文</string>
     <string name="publish_novel_body_hint">正文…</string>
+    <string name="publish_novel_line_count">%1$d 行</string>
+    <string name="publish_novel_stat_chars">字数</string>
+    <string name="publish_novel_stat_paragraphs">段落</string>
+    <string name="publish_novel_stat_lines">行数</string>
+    <string name="publish_novel_undo">撤销</string>
+    <string name="publish_novel_redo">重做</string>
+    <string name="publish_novel_insert_quote">引号</string>
+    <string name="publish_novel_toggle_theme">切换主题</string>
     <string name="publish_novel_direction">排版方向</string>
     <string name="publish_novel_horizontal">横排</string>
     <string name="publish_novel_vertical">竖排</string>
@@ -474,8 +484,11 @@
     <string name="publish_category_title">选择分类</string>
     <string name="publish_tags">标签</string>
     <string name="publish_tags_hint">空格分隔，最长 100 字符</string>
-    <string name="publish_tags_input">输入标签</string>
+    <string name="publish_tags_input">输入标签，空格或逗号分隔</string>
+    <string name="publish_tags_add_more">继续添加标签…</string>
     <string name="publish_tags_mine">我的标签</string>
+    <string name="publish_tags_count">%1$d 个 · %2$d/100</string>
+    <string name="publish_tags_tap_hint">点击添加/移除</string>
     <string name="publish_description">说明</string>
     <string name="publish_description_hint">介绍一下作品…（选填）</string>
     <string name="publish_options">发布选项</string>
@@ -489,6 +502,7 @@
     <string name="publish_options_password_off_hint">未设置 · 开启后需输入密码才能浏览</string>
     <string name="publish_options_recent">出现在最新动向</string>
     <string name="publish_options_first_only">仅公开第一张</string>
+    <string name="publish_options_first_only_hint">仅公开第一张 · ≥2 图且限定可见</string>
     <string name="publish_options_public_row">作为公开作品发布</string>
     <string name="publish_options_public_off_hint">关闭后仅自己可见</string>
     <string name="publish_options_rating">年龄分级</string>
@@ -532,4 +546,21 @@
     <string name="publish_success">已发布</string>
     <string name="publish_ok">确定</string>
     <string name="publish_cancel">取消</string>
+    <string name="draft_preview_novel">文</string>
+    <string name="draft_preview_image">图</string>
+    <string name="draft_type_novel">小说</string>
+    <string name="draft_type_images">%1$d 张</string>
+    <string name="draft_unnamed_novel">未命名小说</string>
+    <string name="draft_unnamed_images">未命名图集</string>
+    <string name="draft_autosaved">已自动保存 · %1$s</string>
+    <string name="draft_box_new">新创作</string>
+    <string name="draft_box_count">%1$d 份 · 小说 %2$d · 图集 %3$d</string>
+    <string name="draft_box_search_hint">搜索标题 / 标签 / 正文</string>
+    <string name="draft_box_filter_all">全部 %1$d</string>
+    <string name="draft_box_filter_novel">小说 %1$d</string>
+    <string name="draft_box_filter_illust">图集 %1$d</string>
+    <string name="draft_box_editing">编辑中</string>
+    <string name="draft_box_duplicate">复制</string>
+    <string name="draft_box_empty_search">没有匹配的草稿</string>
+    <string name="draft_novel_stat">%1$d 字</string>
 </resources>

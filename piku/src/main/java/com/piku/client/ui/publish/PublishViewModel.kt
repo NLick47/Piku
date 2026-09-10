@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.piku.client.R
 import com.piku.client.data.local.CustomTagRepository
 import com.piku.client.data.local.DraftRepository
+import com.piku.client.data.repository.FeedRepository
 import com.piku.client.data.repository.PublishFailure
 import com.piku.client.data.repository.PublishRepository
 import com.piku.client.data.repository.UploadTarget
@@ -16,6 +17,8 @@ import com.piku.client.domain.model.ShowVisibility
 import com.piku.client.domain.model.UploadKind
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -31,6 +34,8 @@ import javax.inject.Inject
 /** 免费账号本地硬上限：200 张 / 50MB（POIPASS 更高，未接入判定前按免费档拦） */
 const val FREE_IMAGE_LIMIT = 200
 const val FREE_BYTES_LIMIT = 50L * 1024 * 1024
+
+private const val AUTO_SAVE_DEBOUNCE_MS = 1500L
 
 sealed interface PublishPhase {
     data object Idle : PublishPhase
@@ -86,7 +91,8 @@ data class PublishUiState(
 class PublishViewModel @Inject constructor(
     private val publishRepository: PublishRepository,
     private val draftRepository: DraftRepository,
-    val customTagRepository: CustomTagRepository,
+    private val customTagRepository: CustomTagRepository,
+    private val feedRepository: FeedRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PublishUiState())
@@ -95,26 +101,88 @@ class PublishViewModel @Inject constructor(
     private val _published = MutableSharedFlow<Long>(extraBufferCapacity = 1)
     val published: SharedFlow<Long> = _published.asSharedFlow()
 
-    /** 草稿箱数据直接内嵌发布页：进入/删除后刷新 */
-    private val _drafts = MutableStateFlow<List<PublishDraft>>(emptyList())
-    val drafts: StateFlow<List<PublishDraft>> = _drafts.asStateFlow()
+    private val _sessionId = MutableStateFlow<Long?>(null)
+    val sessionId: StateFlow<Long?> = _sessionId.asStateFlow()
+
+    private val _lastSavedAt = MutableStateFlow<Long?>(null)
+    val lastSavedAt: StateFlow<Long?> = _lastSavedAt.asStateFlow()
+
+    private var currentDraftId: Long?
+        get() = _sessionId.value
+        set(v) { _sessionId.value = v }
+
+    private var autoSaveJob: Job? = null
 
     val myTags: StateFlow<List<String>> get() = customTagRepository.customTags
 
-    /** 正在编辑的草稿行 id；null = 全新创作（首次存草稿时才分配） */
-    private var currentDraftId: Long? = null
+    /** 标签自动补全建议 */
+    private val _tagSuggestions = MutableStateFlow<List<String>>(emptyList())
+    val tagSuggestions: StateFlow<List<String>> = _tagSuggestions.asStateFlow()
+
+    /** 标签建议防抖 Job */
+    private var tagSuggestionJob: Job? = null
 
     private var resume: Resume? = null
 
-    init {
-        refreshDrafts()
+    // ---- 会话（单份）：打开 / 切换 / 新建 ----
+
+    /**
+     * 打开会话：id==null 或 <0 = 全新创作；否则载入该草稿独占编辑。
+     * 由 PublishScreen 在进入时调用一次；切稿走 [switchTo]。
+     */
+    fun openSession(draftId: Long?) = viewModelScope.launch {
+        autoSaveJob?.cancel()
+        if (draftId == null || draftId < 0) {
+            resetState()
+            return@launch
+        }
+        val draft = draftRepository.load(draftId) ?: run {
+            resetState()
+            return@launch
+        }
+        currentDraftId = draftId
+        _lastSavedAt.value = draft.savedAt
+        _uiState.value = PublishUiState(
+            kind = draft.kind,
+            categoryCd = draft.categoryCd.takeIf { it != 0 },
+            tagsText = draft.tags,
+            description = draft.description,
+            title = draft.title,
+            body = draft.body,
+            novelDirection = draft.novelDirection,
+            publish = draft.publish,
+            nsfw = draft.nsfw,
+            visibility = draft.visibility,
+            passwordEnabled = draft.password.isNotEmpty(),
+            password = draft.password,
+            showRecent = draft.showRecent,
+            showFirstOnly = draft.showFirstOnly,
+            images = draft.imageFiles,
+            totalBytes = draft.imageFiles.sumOf { File(it).length() },
+        )
     }
 
-    fun refreshDrafts() = viewModelScope.launch {
-        _drafts.value = draftRepository.drafts()
+    /** 切到另一份草稿：先把当前落盘（刷掉防抖尾巴），再独占载入目标 */
+    fun switchTo(id: Long, onReady: () -> Unit = {}) = viewModelScope.launch {
+        if (id == currentDraftId) {
+            onReady()
+            return@launch
+        }
+        autoSaveJob?.cancel()
+        persistSnapshot()
+        openSession(id)
+        onReady()
     }
 
-    // ---- 表单编辑（全部标记 dirty）----
+    /** 新创作：当前已自动存过，直接重置为空白会话（不删已存的稿） */
+    fun startNew(onReady: () -> Unit = {}) = viewModelScope.launch {
+        autoSaveJob?.cancel()
+        persistSnapshot()
+        resetState()
+        onReady()
+    }
+
+    // ---- 表单编辑（全部标记 dirty + 触发自动保存）----
 
     fun setKind(kind: UploadKind) = edit { it.copy(kind = kind) }
     fun setCategory(cd: Int?) = edit { it.copy(categoryCd = cd) }
@@ -140,8 +208,10 @@ class PublishViewModel @Inject constructor(
     fun setShowRecent(v: Boolean) = edit { it.copy(showRecent = v) }
     fun setShowFirstOnly(v: Boolean) = edit { it.copy(showFirstOnly = v) }
 
-    private inline fun edit(transform: (PublishUiState) -> PublishUiState) =
+    private inline fun edit(transform: (PublishUiState) -> PublishUiState) {
         _uiState.update { transform(it).let { n -> if (n == it) n else n.copy(dirty = true) } }
+        scheduleAutoSave()
+    }
 
     fun appendTag(tag: String) {
         val t = tag.trim().removePrefix("#").trim()
@@ -159,6 +229,28 @@ class PublishViewModel @Inject constructor(
                 .filter { it.isNotBlank() && it != tag }
                 .joinToString(" "),
         )
+    }
+
+    /** 输入标签时调用，防抖 300ms 后请求自动补全建议 */
+    fun onTagInputChange(input: String) {
+        tagSuggestionJob?.cancel()
+        val query = input.trim().split(Regex("\\s+")).lastOrNull() ?: ""
+        if (query.length < 2) {
+            _tagSuggestions.value = emptyList()
+            return
+        }
+        tagSuggestionJob = viewModelScope.launch {
+            delay(300)
+            feedRepository.getTagAutoComplete(query)
+                .onSuccess { _tagSuggestions.value = it }
+                .onFailure { _tagSuggestions.value = emptyList() }
+        }
+    }
+
+    /** 清空标签建议 */
+    fun clearTagSuggestions() {
+        tagSuggestionJob?.cancel()
+        _tagSuggestions.value = emptyList()
     }
 
     // ---- 图集 ----
@@ -191,26 +283,30 @@ class PublishViewModel @Inject constructor(
                 setNotice(R.string.publish_images_limit)
             }
         }
+        scheduleAutoSave()
     }
 
-    /** 首次加图时分配草稿 id（后续存草稿就落同一行/目录） */
-    private fun ensureDraftId(): Long {
+    /** 首次需要落盘时建行（自增 id），后续自动保存都落同一行 */
+    private suspend fun ensureDraftId(): Long {
         currentDraftId?.let { return it }
-        val id = System.currentTimeMillis()
+        val id = draftRepository.createEmpty(_uiState.value.kind)
         currentDraftId = id
         return id
     }
 
     fun removeImage(index: Int) {
-        val file = _uiState.value.images.getOrNull(index) ?: return
-        draftRepository.deleteImage(File(file))
+        val path = _uiState.value.images.getOrNull(index) ?: return
+        val file = File(path)
+        val fileSize = file.length()
+        draftRepository.deleteImage(file)
         _uiState.update {
             it.copy(
                 images = it.images.filterIndexed { i, _ -> i != index },
-                totalBytes = (it.totalBytes - File(file).length()).coerceAtLeast(0),
+                totalBytes = (it.totalBytes - fileSize).coerceAtLeast(0),
                 dirty = true,
             )
         }
+        scheduleAutoSave()
     }
 
     fun moveImage(index: Int, delta: Int) {
@@ -223,65 +319,59 @@ class PublishViewModel @Inject constructor(
             list[target] = tmp
             state.copy(images = list, dirty = true)
         }
+        scheduleAutoSave()
     }
 
-    // ---- 草稿箱 ----
+    // ---- 自动保存 ----
 
-    /** 从草稿箱恢复一份草稿继续编辑 */
-    fun loadDraft(id: Long) = viewModelScope.launch {
-        val draft = draftRepository.load(id) ?: return@launch
-        currentDraftId = id
-        _uiState.value = PublishUiState(
-            kind = draft.kind,
-            categoryCd = draft.categoryCd.takeIf { it != 0 },
-            tagsText = draft.tags,
-            description = draft.description,
-            title = draft.title,
-            body = draft.body,
-            novelDirection = draft.novelDirection,
-            publish = draft.publish,
-            nsfw = draft.nsfw,
-            visibility = draft.visibility,
-            passwordEnabled = draft.password.isNotEmpty(),
-            password = draft.password,
-            showRecent = draft.showRecent,
-            showFirstOnly = draft.showFirstOnly,
-            images = draft.imageFiles,
-            totalBytes = draft.imageFiles.sumOf { File(it).length() },
-        )
-    }
-
-    /** 删除草稿箱里的一份（行 + 图片目录），随后刷新内嵌列表 */
-    fun deleteDraft(id: Long) = viewModelScope.launch {
-        draftRepository.delete(id)
-        refreshDrafts()
-    }
-
-    /** 离开三选之「保存草稿」：写入草稿箱（新稿分配行 id，继续编辑则覆盖原行）。
-     *  密码不落盘（敏感），恢复后需重新设置。 */
-    fun saveDraftToBoxAndExit(onExited: () -> Unit) = viewModelScope.launch {
-        val id = currentDraftId ?: System.currentTimeMillis()
-        draftRepository.save(buildDraft().copy(draftId = id, password = ""))
-        resetToFresh()
-        refreshDrafts()
-        onExited()
-    }
-
-    /** 离开三选之「丢弃」：删行（若来自草稿箱）并清掉本会话拷贝的图片 */
-    fun discardDraftAndExit(onExited: () -> Unit) = viewModelScope.launch {
-        val id = currentDraftId
-        if (id != null) {
-            if (draftRepository.load(id) != null) draftRepository.delete(id)
-            else draftRepository.deleteImagesOf(id)
+    private fun scheduleAutoSave() {
+        autoSaveJob?.cancel()
+        autoSaveJob = viewModelScope.launch {
+            delay(AUTO_SAVE_DEBOUNCE_MS)
+            persistSnapshot()
         }
-        resetToFresh()
-        refreshDrafts()
+    }
+
+    /**
+     * 立刻落盘当前快照（防抖尾巴的同步刷盘；密码不落盘）。
+     * 无实质内容时不留行：已有行则删除（用户清空全部内容的情况）。
+     */
+    private suspend fun persistSnapshot() {
+        val draft = buildDraft(_uiState.value).copy(password = "")
+        if (!draft.hasContent) {
+            currentDraftId?.let { id ->
+                draftRepository.delete(id)
+                currentDraftId = null
+                _lastSavedAt.value = null
+            }
+            return
+        }
+        val id = draftRepository.save(draft.copy(draftId = currentDraftId))
+        currentDraftId = id
+        _lastSavedAt.value = System.currentTimeMillis()
+    }
+
+    /** 离开之「保存并退出」：自动保存早已落盘，这里只刷防抖尾巴后直接退；无改动则不碰 DB */
+    fun saveAndExit(onExited: () -> Unit) = viewModelScope.launch {
+        autoSaveJob?.cancel()
+        if (_uiState.value.dirty) persistSnapshot()
+        resetState()
         onExited()
     }
 
-    /** 离开/发布成功后回到全新编辑态（VM 随 Activity 存活，必须显式复位） */
-    private fun resetToFresh() {
+    /** 离开三选之「丢弃」：删本会话草稿行与其图片，再退 */
+    fun discardAndExit(onExited: () -> Unit) = viewModelScope.launch {
+        autoSaveJob?.cancel()
+        currentDraftId?.let { draftRepository.delete(it) }
+        resetState()
+        onExited()
+    }
+
+    /** 离开/发布成功后回到全新编辑态（VM 随浮层存活，必须显式复位） */
+    fun resetState() {
+        autoSaveJob?.cancel()
         currentDraftId = null
+        _lastSavedAt.value = null
         resume = null
         _uiState.value = PublishUiState()
     }
@@ -393,14 +483,11 @@ class PublishViewModel @Inject constructor(
         _published.tryEmit(target.contentId)
     }
 
-    /** 发布成功：删除对应草稿行与其图片目录，回到全新状态 */
+    /** 发布成功：删除本会话草稿行与其图片目录，回到全新状态 */
     private suspend fun clearAfterPublished() {
-        val id = currentDraftId
-        if (id != null) {
-            if (draftRepository.load(id) != null) draftRepository.delete(id)
-            else draftRepository.deleteImagesOf(id)
-        }
-        resetToFresh()
+        autoSaveJob?.cancel()
+        currentDraftId?.let { draftRepository.delete(it) }
+        resetState()
     }
 
     private fun handlePublishFailure(error: Throwable) {

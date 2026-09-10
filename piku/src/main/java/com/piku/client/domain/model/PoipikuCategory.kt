@@ -26,3 +26,45 @@ enum class PoipikuCategory(val cd: Int, val nameRes: Int) {
             entries.firstOrNull { it != ALL && it.cd == cd }
     }
 }
+
+data class CategoryGroup(
+    val titleRes: Int,
+    val categories: List<PoipikuCategory>,
+)
+
+val CATEGORY_GROUPS = listOf(
+    CategoryGroup(
+        R.string.category_group_practice,
+        listOf(
+            PoipikuCategory.RAKUGAKI,
+            PoipikuCategory.JISHUREN,
+            PoipikuCategory.RIHABIRI,
+        ),
+    ),
+    CategoryGroup(
+        R.string.category_group_share,
+        listOf(
+            PoipikuCategory.DEKITA,
+            PoipikuCategory.KAKO_WO_SARASU,
+            PoipikuCategory.KUYOU,
+        ),
+    ),
+    CategoryGroup(
+        R.string.category_group_wip,
+        listOf(
+            PoipikuCategory.SAGYOSHINCHOKU,
+            PoipikuCategory.KAKIKAKE,
+            PoipikuCategory.KAKENEE,
+        ),
+    ),
+    CategoryGroup(
+        R.string.category_group_community,
+        listOf(
+            PoipikuCategory.OSHIRASE,
+            PoipikuCategory.MEMO,
+            PoipikuCategory.NETABARE,
+            PoipikuCategory.SHIRIWOTATAKU,
+            PoipikuCategory.OSHINAGAKI,
+        ),
+    ),
+)

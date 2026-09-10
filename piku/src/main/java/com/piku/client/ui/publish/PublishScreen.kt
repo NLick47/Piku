@@ -29,24 +29,32 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.Article
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AddPhotoAlternate
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.FolderOpen
-import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -61,6 +69,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -75,7 +84,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -84,6 +98,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.piku.client.R
+import com.piku.client.domain.model.CATEGORY_GROUPS
 import com.piku.client.domain.model.NsfwLevel
 import com.piku.client.domain.model.PoipikuCategory
 import com.piku.client.domain.model.PublishDraft
@@ -94,9 +109,6 @@ import com.piku.client.ui.common.PikuBottomSheet
 import com.piku.client.ui.common.PikuSheetHandle
 import com.piku.client.ui.common.PikuSheetTitle
 import com.piku.client.ui.theme.ErrorRedDark
-import com.piku.client.ui.theme.ErrorRedLight
-import com.piku.client.ui.theme.FollowDark
-import com.piku.client.ui.theme.FollowLight
 import com.piku.client.ui.theme.GlassCardBgDark
 import com.piku.client.ui.theme.GlassCardBgLight
 import com.piku.client.ui.theme.GlassCardBorderDark
@@ -107,12 +119,15 @@ import com.piku.client.ui.theme.HomeBgTopDark
 import com.piku.client.ui.theme.HomeBgTopLight
 import com.piku.client.ui.theme.LocalDarkTheme
 import com.piku.client.ui.theme.LoginBackgroundDark
+import com.piku.client.ui.theme.LoginTextSecondaryDark
 import com.piku.client.ui.theme.PikuColors
+import com.piku.client.ui.theme.ViewerBackgroundDark
 import com.piku.client.ui.theme.themedSwitchColors
+import kotlinx.coroutines.launch
 import java.io.File
 
 /** 分类卡上的"常用"快捷集（其余走"全部分类"） */
-private val CURATED_CATEGORY_CDS = listOf(4, 15, 6, 9, 10, 14)
+private val CURATED_CATEGORY_CDS = listOf(4, 6, 15, 9)
 
 /** accent 按钮上的文字色：暗色主题 accent 是浅色，需深色文字 */
 @Composable
@@ -122,12 +137,19 @@ private fun onAccent(): Color = if (LocalDarkTheme.current) LoginBackgroundDark 
 fun PublishScreen(
     onBack: () -> Unit,
     onPublished: (Long) -> Unit,
+    initialDraftId: Long? = null,
 ) {
     val viewModel: PublishViewModel = hiltViewModel()
+    val draftBoxViewModel: DraftBoxViewModel = hiltViewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val drafts by viewModel.drafts.collectAsStateWithLifecycle()
+    val sessionId by viewModel.sessionId.collectAsStateWithLifecycle()
+    val lastSavedAt by viewModel.lastSavedAt.collectAsStateWithLifecycle()
+    val boxDrafts by draftBoxViewModel.drafts.collectAsStateWithLifecycle()
+    val boxQuery by draftBoxViewModel.query.collectAsStateWithLifecycle()
+    val boxFilter by draftBoxViewModel.filter.collectAsStateWithLifecycle()
     val dark = LocalDarkTheme.current
     val snackbar = remember { SnackbarHostState() }
+    val boxScope = rememberCoroutineScope()
     val context = LocalContext.current
 
     var showCategorySheet by remember { mutableStateOf(false) }
@@ -137,7 +159,6 @@ fun PublishScreen(
     var showNovelComposer by remember { mutableStateOf(false) }
     var showDraftSheet by remember { mutableStateOf(false) }
     var deleteDraftTarget by remember { mutableStateOf<PublishDraft?>(null) }
-    var overwriteDraftTarget by remember { mutableStateOf<PublishDraft?>(null) }
 
     val pickImages = rememberLauncherForActivityResult(
         ActivityResultContracts.PickMultipleVisualMedia(),
@@ -148,15 +169,29 @@ fun PublishScreen(
     LaunchedEffect(Unit) {
         viewModel.published.collect { workId -> onPublished(workId) }
     }
+    // 进入会话：新创作(null/-1)或编辑某份草稿；只执行一次，后续切稿走 switchTo
+    LaunchedEffect(initialDraftId) {
+        viewModel.openSession(initialDraftId)
+    }
+    // 每次打开草稿箱刷新独立列表
+    LaunchedEffect(showDraftSheet) {
+        if (showDraftSheet) draftBoxViewModel.refresh()
+    }
     LaunchedEffect(state.noticeRes) {
         val res = state.noticeRes ?: return@LaunchedEffect
         viewModel.consumeNotice()
         snackbar.showSnackbar(context.getString(res))
     }
 
-    // 发布中不可退出；有改动先问是否存草稿
-    BackHandler(enabled = !state.isBusy) {
-        if (state.dirty) showExitDialog = true else onBack()
+    // 拦截返回键：busy 时空处理（消费事件，不让 HomeScreen 的 onDismissRequest 关掉浮层）；
+    // 非 busy 时有改动弹确认，无改动直接退
+    BackHandler(enabled = true) {
+        if (state.isBusy) return@BackHandler
+        if (state.dirty && state.hasContent) {
+            showExitDialog = true
+        } else {
+            viewModel.saveAndExit(onBack)
+        }
     }
 
     Box(
@@ -173,14 +208,27 @@ fun PublishScreen(
             PublishTopBar(
                 onBack = {
                     if (state.isBusy) return@PublishTopBar
-                    if (state.dirty) showExitDialog = true else onBack()
+                    if (state.dirty && state.hasContent) {
+                        showExitDialog = true
+                    } else {
+                        viewModel.saveAndExit(onBack)
+                    }
                 },
-                draftCount = drafts.size,
+                draftCount = boxDrafts.size,
                 onOpenDrafts = { showDraftSheet = true },
                 canPublish = !state.isBusy,
                 onPublish = viewModel::publish,
                 dark = dark,
             )
+            // 会话指示：正在编辑哪份草稿 + 自动保存时刻（独立模块，切稿不再互相覆盖）
+            if (sessionId != null && lastSavedAt != null) {
+                Text(
+                    text = stringResource(R.string.draft_autosaved, draftTime(lastSavedAt ?: 0L)),
+                    color = PikuColors.textFaint,
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(start = 18.dp, top = 2.dp, bottom = 2.dp),
+                )
+            }
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -228,7 +276,9 @@ fun PublishScreen(
                 TagsSection(
                     tags = state.tagsText,
                     myTags = viewModel.myTags.collectAsStateWithLifecycle().value,
+                    tagSuggestions = viewModel.tagSuggestions.collectAsStateWithLifecycle().value,
                     onTagText = viewModel::setTags,
+                    onTagInputChange = viewModel::onTagInputChange,
                     onAppend = viewModel::appendTag,
                     onRemove = viewModel::removeTagWord,
                     dark = dark,
@@ -242,7 +292,9 @@ fun PublishScreen(
                 Spacer(Modifier.height(12.dp))
                 OptionsSummaryCard(
                     state = state,
-                    onClick = { showOptionsSheet = true },
+                    onPublic = viewModel::setPublish,
+                    onNsfw = viewModel::setNsfw,
+                    onClickMore = { showOptionsSheet = true },
                     dark = dark,
                 )
             }
@@ -293,13 +345,27 @@ fun PublishScreen(
 
     if (showDraftSheet) {
         DraftSheet(
-            drafts = drafts,
+            drafts = draftBoxViewModel.visible(boxDrafts, boxQuery, boxFilter),
+            totalCount = boxDrafts.size,
+            novelCount = boxDrafts.count { it.kind == UploadKind.NOVEL },
+            imageCount = boxDrafts.count { it.kind == UploadKind.ILLUST },
+            query = boxQuery,
+            filter = boxFilter,
+            sessionId = sessionId,
+            onQuery = draftBoxViewModel::setQuery,
+            onFilter = draftBoxViewModel::setFilter,
+            onNew = {
+                showDraftSheet = false
+                viewModel.startNew { boxScope.launch { draftBoxViewModel.refresh() } }
+            },
             onResume = { draft ->
                 showDraftSheet = false
-                if (state.dirty || state.hasContent) {
-                    overwriteDraftTarget = draft
-                } else {
-                    draft.draftId?.let(viewModel::loadDraft)
+                // 独立会话切换：当前已自动保存，直接载入目标，不再弹窗问覆盖
+                draft.draftId?.let { id -> viewModel.switchTo(id) { boxScope.launch { draftBoxViewModel.refresh() } } }
+            },
+            onDuplicate = { draft ->
+                draft.draftId?.let {
+                    boxScope.launch { draftBoxViewModel.duplicate(it) }
                 }
             },
             onDelete = { deleteDraftTarget = it },
@@ -352,33 +418,13 @@ fun PublishScreen(
         ExitDraftDialog(
             onSave = {
                 showExitDialog = false
-                viewModel.saveDraftToBoxAndExit(onBack)
+                viewModel.saveAndExit(onBack)
             },
             onDiscard = {
                 showExitDialog = false
-                viewModel.discardDraftAndExit(onBack)
+                viewModel.discardAndExit(onBack)
             },
             onStay = { showExitDialog = false },
-        )
-    }
-    overwriteDraftTarget?.let { target ->
-        AlertDialog(
-            onDismissRequest = { overwriteDraftTarget = null },
-            title = { Text(stringResource(R.string.publish_draft_overwrite_title)) },
-            text = { Text(stringResource(R.string.publish_draft_overwrite_body)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    target.draftId?.let(viewModel::loadDraft)
-                    overwriteDraftTarget = null
-                }) {
-                    Text(stringResource(R.string.publish_draft_restore), color = PikuColors.accent)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { overwriteDraftTarget = null }) {
-                    Text(stringResource(R.string.publish_cancel), color = PikuColors.textSecondary)
-                }
-            },
         )
     }
     deleteDraftTarget?.let { target ->
@@ -389,7 +435,9 @@ fun PublishScreen(
             text = { Text(stringResource(R.string.draft_box_delete_confirm_body)) },
             confirmButton = {
                 TextButton(onClick = {
-                    viewModel.deleteDraft(id)
+                    // 先终止会话（取消防抖、清 session id），再删行+删目录，杜绝复活竞态
+                    if (id == sessionId) viewModel.resetState()
+                    draftBoxViewModel.delete(id)
                     deleteDraftTarget = null
                 }) {
                     Text(stringResource(R.string.draft_box_delete), color = PikuColors.error)
@@ -431,9 +479,10 @@ private fun SectionCard(
 private fun SectionHeader(
     label: String,
     trailing: (@Composable RowScope.() -> Unit)? = null,
+    modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -461,6 +510,8 @@ private fun PublishField(
     singleLine: Boolean = false,
     minLines: Int = 1,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
 ) {
     val accent = PikuColors.accent
     val fieldBg = PikuColors.textSecondary.copy(alpha = 0.08f)
@@ -469,6 +520,8 @@ private fun PublishField(
         onValueChange = onChange,
         singleLine = singleLine,
         minLines = minLines,
+        enabled = enabled,
+        visualTransformation = visualTransformation,
         placeholder = placeholder?.let { {
             Text(it, fontSize = 13.sp, color = PikuColors.textFaint)
         } },
@@ -536,65 +589,60 @@ private fun PublishTopBar(
                 .weight(1f)
                 .padding(start = 2.dp),
         )
-        DraftEntryButton(count = draftCount, onClick = onOpenDrafts)
-        Spacer(Modifier.width(8.dp))
+        // 草稿箱
         Box(
             modifier = Modifier
-                .height(36.dp)
                 .clip(RoundedCornerShape(999.dp))
-                .background(accent.copy(alpha = if (canPublish) 0.16f else 0.08f))
-                .clickable(enabled = canPublish, onClick = onPublish)
-                .padding(horizontal = 18.dp),
+                .clickable(onClick = onOpenDrafts)
+                .padding(horizontal = 8.dp, vertical = 6.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Text(
-                text = stringResource(R.string.publish_publish),
-                color = accent.copy(alpha = if (canPublish) 1f else 0.4f),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = 0.3.sp,
-            )
-        }
-    }
-}
-
-@Composable
-private fun DraftEntryButton(count: Int, onClick: () -> Unit) {
-    Box {
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .clip(CircleShape)
-                .background(PikuColors.textSecondary.copy(alpha = 0.10f))
-                .clickable(onClick = onClick),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.FolderOpen,
-                contentDescription = stringResource(R.string.menu_draft_box),
-                tint = PikuColors.textPrimary,
-                modifier = Modifier.size(18.dp),
-            )
-        }
-        if (count > 0) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 2.dp, end = 2.dp)
-                    .height(16.dp)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(PikuColors.accent)
-                    .padding(horizontal = 4.dp),
-                contentAlignment = Alignment.Center,
-            ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = if (count > 99) "99+" else "$count",
-                    color = onAccent(),
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold,
+                    text = stringResource(R.string.menu_draft_box),
+                    color = PikuColors.textSecondary,
+                    fontSize = 13.sp,
                 )
+                if (draftCount > 0) {
+                    Spacer(Modifier.width(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .height(16.dp)
+                            .widthIn(min = 16.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(accent)
+                            .padding(horizontal = 4.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = if (draftCount > 99) "99+" else "$draftCount",
+                            color = onAccent(),
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            // 9sp 小字自带 font padding 会视觉偏上：去掉内边距并收紧行高来居中
+                            style = androidx.compose.ui.text.TextStyle(
+                                lineHeight = 10.sp,
+                                platformStyle = androidx.compose.ui.text.PlatformTextStyle(
+                                    includeFontPadding = false,
+                                ),
+                            ),
+                        )
+                    }
+                }
             }
         }
+        Spacer(Modifier.width(8.dp))
+        // 发布按钮（无背景）
+        Text(
+            text = stringResource(R.string.publish_publish),
+            color = if (canPublish) accent else accent.copy(alpha = 0.4f),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier
+                .clickable(enabled = canPublish, onClick = onPublish)
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+        )
     }
 }
 
@@ -614,7 +662,6 @@ private fun KindSegmented(
             .padding(4.dp),
     ) {
         KindSegmentItem(
-            icon = Icons.Outlined.Image,
             text = stringResource(R.string.publish_kind_image),
             selected = kind == UploadKind.ILLUST,
             enabled = enabled,
@@ -622,7 +669,6 @@ private fun KindSegmented(
             modifier = Modifier.weight(1f),
         )
         KindSegmentItem(
-            icon = Icons.AutoMirrored.Outlined.Article,
             text = stringResource(R.string.publish_kind_novel),
             selected = kind == UploadKind.NOVEL,
             enabled = enabled,
@@ -634,29 +680,20 @@ private fun KindSegmented(
 
 @Composable
 private fun KindSegmentItem(
-    icon: ImageVector,
     text: String,
     selected: Boolean,
     enabled: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
+    Box(
         modifier = modifier
             .clip(RoundedCornerShape(999.dp))
             .background(if (selected) PikuColors.accent else Color.Transparent)
             .clickable(enabled = enabled, onClick = onClick)
             .padding(vertical = 9.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
+        contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = if (selected) onAccent() else PikuColors.textSecondary,
-            modifier = Modifier.size(15.dp),
-        )
-        Spacer(Modifier.width(6.dp))
         Text(
             text = text,
             color = if (selected) onAccent() else PikuColors.textSecondary,
@@ -684,8 +721,11 @@ private fun ImageSection(
                 if (images.isNotEmpty()) {
                     val mb = totalBytes / 1024f / 1024f
                     HeaderMeta(
-                        text = if (mb >= 1f) "${images.size} 张 · ${"%.1f".format(mb)}MB"
-                        else "${images.size} 张",
+                        text = if (mb >= 1f) {
+                            stringResource(R.string.publish_images_count_size, images.size, "%.1f".format(mb))
+                        } else {
+                            stringResource(R.string.publish_images_count, images.size)
+                        },
                     )
                 }
             },
@@ -834,19 +874,92 @@ private fun ImageTile(
 
 // ---------- 草稿箱弹层 ----------
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun DraftSheet(
     drafts: List<PublishDraft>,
+    totalCount: Int,
+    novelCount: Int,
+    imageCount: Int,
+    query: String,
+    filter: DraftFilter,
+    sessionId: Long?,
+    onQuery: (String) -> Unit,
+    onFilter: (DraftFilter) -> Unit,
+    onNew: () -> Unit,
     onResume: (PublishDraft) -> Unit,
+    onDuplicate: (PublishDraft) -> Unit,
     onDelete: (PublishDraft) -> Unit,
     onDismiss: () -> Unit,
     dark: Boolean,
 ) {
     PikuBottomSheet(onDismissRequest = onDismiss, dark = dark, scrollable = true) {
         PikuSheetHandle()
-        PikuSheetTitle(text = stringResource(R.string.menu_draft_box))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            PikuSheetTitle(text = stringResource(R.string.menu_draft_box))
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = stringResource(R.string.draft_box_new),
+                color = PikuColors.accent,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .clickable(onClick = onNew)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            )
+        }
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text = stringResource(R.string.draft_box_count, totalCount, novelCount, imageCount),
+            color = PikuColors.textFaint,
+            fontSize = 11.sp,
+        )
         Spacer(Modifier.height(10.dp))
+        OutlinedTextField(
+            value = query,
+            onValueChange = onQuery,
+            singleLine = true,
+            placeholder = { Text(stringResource(R.string.draft_box_search_hint), fontSize = 13.sp, color = PikuColors.textFaint) },
+            shape = RoundedCornerShape(14.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = PikuColors.accent.copy(alpha = 0.6f),
+                unfocusedBorderColor = Color.Transparent,
+                focusedContainerColor = PikuColors.textSecondary.copy(alpha = 0.08f),
+                unfocusedContainerColor = PikuColors.textSecondary.copy(alpha = 0.08f),
+                cursorColor = PikuColors.accent,
+            ),
+            textStyle = androidx.compose.ui.text.TextStyle(
+                fontSize = 14.sp,
+                color = PikuColors.textPrimary,
+            ),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(10.dp))
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            SelectableChip(
+                text = stringResource(R.string.draft_box_filter_all, totalCount),
+                selected = filter == DraftFilter.ALL,
+                onClick = { onFilter(DraftFilter.ALL) },
+            )
+            SelectableChip(
+                text = stringResource(R.string.draft_box_filter_novel, novelCount),
+                selected = filter == DraftFilter.NOVEL,
+                onClick = { onFilter(DraftFilter.NOVEL) },
+            )
+            SelectableChip(
+                text = stringResource(R.string.draft_box_filter_illust, imageCount),
+                selected = filter == DraftFilter.ILLUST,
+                onClick = { onFilter(DraftFilter.ILLUST) },
+            )
+        }
+        Spacer(Modifier.height(6.dp))
         if (drafts.isEmpty()) {
             Column(
                 modifier = Modifier
@@ -862,7 +975,10 @@ private fun DraftSheet(
                 )
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    text = stringResource(R.string.draft_box_empty),
+                    text = stringResource(
+                        if (query.isBlank() && filter == DraftFilter.ALL) R.string.draft_box_empty
+                        else R.string.draft_box_empty_search,
+                    ),
                     color = PikuColors.textFaint,
                     fontSize = 12.sp,
                 )
@@ -871,7 +987,9 @@ private fun DraftSheet(
             drafts.forEach { draft ->
                 DraftRow(
                     draft = draft,
+                    isEditing = draft.draftId != null && draft.draftId == sessionId,
                     onResume = { onResume(draft) },
+                    onDuplicate = { onDuplicate(draft) },
                     onDelete = { onDelete(draft) },
                 )
             }
@@ -882,7 +1000,9 @@ private fun DraftSheet(
 @Composable
 private fun DraftRow(
     draft: PublishDraft,
+    isEditing: Boolean,
     onResume: () -> Unit,
+    onDuplicate: () -> Unit,
     onDelete: () -> Unit,
 ) {
     val accent = PikuColors.accent
@@ -911,7 +1031,10 @@ private fun DraftRow(
                 )
             } else {
                 Text(
-                    text = if (draft.kind == UploadKind.NOVEL) "文" else "图",
+                    text = stringResource(
+                        if (draft.kind == UploadKind.NOVEL) R.string.draft_preview_novel
+                        else R.string.draft_preview_image,
+                    ),
                     color = accent,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -920,47 +1043,108 @@ private fun DraftRow(
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(
-                text = draft.kindPreview(),
-                color = PikuColors.textPrimary,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = draft.kindPreview(),
+                    color = PikuColors.textPrimary,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (isEditing) {
+                    Spacer(Modifier.width(6.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(accent.copy(alpha = 0.14f))
+                            .padding(horizontal = 7.dp, vertical = 2.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.draft_box_editing),
+                            color = accent,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                }
+            }
             Spacer(Modifier.height(3.dp))
             val timeTs = draft.savedAt ?: draft.draftId
             Text(
                 text = (timeTs?.let { draftTime(it) } ?: "") + " · " +
-                    if (draft.kind == UploadKind.NOVEL) "小说" else "${draft.imageFiles.size} 张",
+                    if (draft.kind == UploadKind.NOVEL) {
+                        stringResource(R.string.draft_novel_stat, draft.body.length)
+                    } else {
+                        stringResource(R.string.draft_type_images, draft.imageFiles.size)
+                    },
                 color = PikuColors.textFaint,
                 fontSize = 11.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            val snippet = draft.snippet()
+            if (snippet.isNotBlank()) {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = snippet,
+                    color = PikuColors.textSecondary,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
-        Box(
-            modifier = Modifier
-                .size(34.dp)
-                .clip(CircleShape)
-                .background(PikuColors.error.copy(alpha = 0.10f))
-                .clickable(onClick = onDelete),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.DeleteOutline,
-                contentDescription = stringResource(R.string.draft_box_delete),
-                tint = PikuColors.error,
-                modifier = Modifier.size(17.dp),
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = stringResource(R.string.draft_box_duplicate),
+                color = accent,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = onDuplicate)
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
             )
+            Spacer(Modifier.height(2.dp))
+            Box(
+                modifier = Modifier
+                    .size(30.dp)
+                    .clip(CircleShape)
+                    .background(PikuColors.error.copy(alpha = 0.10f))
+                    .clickable(onClick = onDelete),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.DeleteOutline,
+                    contentDescription = stringResource(R.string.draft_box_delete),
+                    tint = PikuColors.error,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
         }
     }
 }
 
+@Composable
+private fun PublishDraft.snippet(): String = when {
+    kind == UploadKind.NOVEL && body.isNotBlank() ->
+        body.trim().replace(Regex("\\s+"), " ").take(60)
+    tags.isNotBlank() -> tags
+    description.isNotBlank() -> description
+    else -> ""
+}
+
+@Composable
 private fun PublishDraft.kindPreview(): String = when {
     kind == UploadKind.NOVEL && title.isNotBlank() -> title
     tags.isNotBlank() -> tags
-    else -> if (kind == UploadKind.NOVEL) "未命名小说" else "未命名图集"
+    else -> if (kind == UploadKind.NOVEL) {
+        stringResource(R.string.draft_unnamed_novel)
+    } else {
+        stringResource(R.string.draft_unnamed_images)
+    }
 }
 
 private fun draftTime(ts: Long): String =
@@ -1095,6 +1279,25 @@ private fun BodySummaryCard(body: String, onClick: () -> Unit) {
 
 // ---------- 全屏小说编辑器 ----------
 
+/** 中文小说常用标点符号 */
+private val NOVEL_PUNCTUATIONS = listOf(
+    "。", "，", "！", "？", "、",
+    "「", "」", "『", "』",
+    "——", "……", "…",
+    "（", "）", "【", "】",
+    "：", "；",
+)
+
+// 阅读器配色（与 FullNovelViewer 共享）
+private val NovelReaderBgLight = Color(0xFFF3EEDA)
+private val NovelReaderTextLight = Color(0xFF2E2A23)
+private val NovelReaderBgDark = ViewerBackgroundDark
+private val NovelReaderTextDark = Color(0xFFD6D0C4)
+private val NovelReaderControlBgLight = Color(0xFFFAF5EC)
+private val NovelReaderControlBgDark = Color(0xCC141312)
+private val NovelReaderProgressAccentLight = Color(0xFFB08A52)
+private val NovelReaderProgressTrackLight = Color(0xFFE6DFD2)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NovelComposer(
@@ -1104,44 +1307,82 @@ private fun NovelComposer(
     dark: Boolean,
 ) {
     var preview by remember { mutableStateOf(false) }
+    var editorDark by remember { mutableStateOf(dark) }
     val accent = PikuColors.accent
-    val faint = PikuColors.textFaint
-    val paragraphs = body.trim().split(Regex("\\n\\s*\\n")).filter { it.isNotBlank() }
-    val chars = body.length
+
+    // 使用 TextFieldValue 追踪光标位置
+    var textFieldValue by remember {
+        mutableStateOf(
+            TextFieldValue(
+                text = body,
+                selection = TextRange(body.length),
+            ),
+        )
+    }
+    // 同步外部 body 变化
+    LaunchedEffect(body) {
+        if (textFieldValue.text != body) {
+            textFieldValue = textFieldValue.copy(text = body)
+        }
+    }
+
+    val currentText = textFieldValue.text
+    val paragraphs = remember(currentText) { currentText.trim().split(Regex("\\n\\s*\\n")).filter { it.isNotBlank() } }
+    val chars = currentText.length
+
+    val previewScrollState = rememberScrollState()
+    val scope = rememberCoroutineScope()
+
+    // 在光标位置插入文字
+    fun insertAtCursor(text: String) {
+        val pos = textFieldValue.selection.start
+        val newText = currentText.substring(0, pos) + text + currentText.substring(pos)
+        val newPos = pos + text.length
+        textFieldValue = TextFieldValue(
+            text = newText,
+            selection = TextRange(newPos),
+        )
+        onChange(newText)
+    }
+
+    // 阅读器配色
+    val bg = if (editorDark) NovelReaderBgDark else NovelReaderBgLight
+    val fg = if (editorDark) NovelReaderTextDark else NovelReaderTextLight
+    val controlBg = if (editorDark) NovelReaderControlBgDark else NovelReaderControlBgLight
+    val progressAccent = if (editorDark) accent else NovelReaderProgressAccentLight
+    val progressTrack = if (editorDark) fg.copy(alpha = 0.25f) else NovelReaderProgressTrackLight
 
     BackHandler(onBack = onClose)
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    if (dark) listOf(HomeBgTopDark, HomeBgBottomDark)
-                    else listOf(HomeBgTopLight, HomeBgBottomLight),
-                ),
-            ),
+            .background(bg),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .imePadding(),
         ) {
+            // 顶栏
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .statusBarsPadding()
-                    .padding(start = 4.dp, end = 16.dp, top = 8.dp, bottom = 6.dp),
+                    .background(controlBg)
+                    .padding(start = 4.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 PikuBackButton(
                     onClick = onClose,
-                    dark = dark,
+                    dark = editorDark,
                     contentDescription = stringResource(R.string.back),
+                    tint = fg,
                 )
                 Text(
                     text = stringResource(R.string.publish_novel_edit_full),
-                    color = PikuColors.textPrimary,
-                    fontSize = 17.sp,
+                    color = fg,
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier
                         .weight(1f)
@@ -1149,17 +1390,62 @@ private fun NovelComposer(
                 )
                 Text(
                     text = stringResource(R.string.publish_novel_chars, chars, paragraphs.size),
-                    color = faint,
+                    color = fg.copy(alpha = 0.7f),
                     fontSize = 12.sp,
+                    modifier = Modifier.padding(end = 8.dp),
                 )
+                IconButton(onClick = { editorDark = !editorDark }, modifier = Modifier.size(32.dp)) {
+                    Icon(
+                        imageVector = if (editorDark) Icons.Filled.LightMode else Icons.Filled.DarkMode,
+                        contentDescription = null,
+                        tint = fg,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
             }
 
+            // 预览模式进度条
+            if (preview) {
+                val max = previewScrollState.maxValue
+                if (max > 0) {
+                    val progress = (previewScrollState.value.toFloat() / max).coerceIn(0f, 1f)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(18.dp)
+                            .pointerInput(max) {
+                                awaitEachGesture {
+                                    val down = awaitFirstDown(requireUnconsumed = false)
+                                    scope.launch { previewScrollState.scrollTo((down.position.x / size.width * max).toInt().coerceIn(0, max)) }
+                                    while (true) {
+                                        val event = awaitPointerEvent()
+                                        val change = event.changes.firstOrNull()
+                                        if (change == null || !change.pressed) break
+                                        if (change.position != change.previousPosition) {
+                                            scope.launch { previewScrollState.scrollTo((change.position.x / size.width * max).toInt().coerceIn(0, max)) }
+                                            change.consume()
+                                        }
+                                    }
+                                }
+                            },
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        Box(Modifier.fillMaxWidth().height(2.dp).clip(RoundedCornerShape(1.dp)).background(progressTrack))
+                        Box(Modifier.fillMaxWidth(progress).height(2.dp).clip(RoundedCornerShape(1.dp)).background(progressAccent))
+                    }
+                }
+            }
+
+            // 编辑/预览区域
             if (!preview) {
                 OutlinedTextField(
-                    value = body,
-                    onValueChange = onChange,
+                    value = textFieldValue,
+                    onValueChange = { newValue ->
+                        textFieldValue = newValue
+                        onChange(newValue.text)
+                    },
                     placeholder = {
-                        Text(stringResource(R.string.publish_novel_body_hint), fontSize = 14.sp, color = faint)
+                        Text(stringResource(R.string.publish_novel_body_hint), fontSize = 14.sp, color = fg.copy(alpha = 0.4f))
                     },
                     shape = RoundedCornerShape(0.dp),
                     colors = OutlinedTextFieldDefaults.colors(
@@ -1172,7 +1458,7 @@ private fun NovelComposer(
                     textStyle = androidx.compose.ui.text.TextStyle(
                         fontSize = 16.sp,
                         lineHeight = 27.sp,
-                        color = PikuColors.textPrimary,
+                        color = fg,
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1183,85 +1469,97 @@ private fun NovelComposer(
                 Column(
                     modifier = Modifier
                         .weight(1f)
-                        .verticalScroll(rememberScrollState())
+                        .verticalScroll(previewScrollState)
                         .padding(horizontal = 20.dp, vertical = 8.dp),
                 ) {
-                    paragraphs.forEachIndexed { i, para ->
-                        Text(
-                            text = para,
-                            color = PikuColors.textPrimary,
-                            fontSize = 16.sp,
-                            lineHeight = 27.sp,
-                        )
-                        if (i != paragraphs.lastIndex) Spacer(Modifier.height(14.dp))
-                    }
-                    if (paragraphs.isEmpty()) {
+                    if (currentText.isBlank()) {
                         Text(
                             text = stringResource(R.string.publish_novel_body_hint),
-                            color = faint,
+                            color = fg.copy(alpha = 0.4f),
                             fontSize = 14.sp,
                         )
+                    } else {
+                        paragraphs.forEachIndexed { i, para ->
+                            Text(
+                                text = para,
+                                color = fg,
+                                fontSize = 16.sp,
+                                lineHeight = 27.sp,
+                            )
+                            if (i != paragraphs.lastIndex) Spacer(Modifier.height(14.dp))
+                        }
                     }
                 }
             }
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                MiniChip(
-                    text = stringResource(R.string.publish_novel_insert_break),
-                    selected = false,
-                    onClick = { onChange(appendParagraphBreak(body)) },
-                )
-                Spacer(Modifier.width(8.dp))
-                MiniChip(
-                    text = stringResource(
-                        if (preview) R.string.publish_novel_edit_exit else R.string.publish_novel_preview,
-                    ),
-                    selected = preview,
-                    onClick = { preview = !preview },
-                )
-                Spacer(Modifier.weight(1f))
-                Text(
-                    text = "${body.count { it == '\n' } + 1} 行",
-                    color = faint,
-                    fontSize = 11.sp,
-                )
+            // 底部工具栏（标点 + 预览）
+            if (!preview) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(controlBg)
+                        .navigationBarsPadding()
+                        .padding(horizontal = 6.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    // 标点符号（横向滚动）
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        NOVEL_PUNCTUATIONS.forEach { punct ->
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable { insertAtCursor(punct) },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(text = punct, color = fg, fontSize = 15.sp)
+                            }
+                        }
+                    }
+                    // 预览按钮
+                    Text(
+                        text = stringResource(R.string.publish_novel_preview),
+                        color = accent,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable { preview = true }
+                            .padding(horizontal = 8.dp, vertical = 5.dp),
+                    )
+                }
+            } else {
+                // 预览模式底部
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(controlBg)
+                        .navigationBarsPadding()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        text = stringResource(R.string.publish_novel_edit_exit),
+                        color = accent,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable { preview = false }
+                            .padding(horizontal = 10.dp, vertical = 5.dp),
+                    )
+                    Spacer(Modifier.weight(1f))
+                }
             }
         }
-    }
-}
-
-private fun appendParagraphBreak(body: String): String {
-    if (body.isBlank()) return body
-    val trimmed = body.trimEnd()
-    return if (trimmed.endsWith("\n\n")) body else "$trimmed\n\n"
-}
-
-@Composable
-private fun MiniChip(text: String, selected: Boolean, onClick: () -> Unit) {
-    val accent = PikuColors.accent
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(999.dp))
-            .background(if (selected) accent.copy(alpha = 0.16f) else Color.Transparent)
-            .border(
-                BorderStroke(1.dp, if (selected) accent.copy(alpha = 0.7f) else PikuColors.border),
-                RoundedCornerShape(999.dp),
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 13.dp, vertical = 5.dp),
-    ) {
-        Text(
-            text = text,
-            color = if (selected) accent else PikuColors.textSecondary,
-            fontSize = 12.sp,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-        )
     }
 }
 
@@ -1351,7 +1649,7 @@ private fun MoreChip(text: String, onClick: () -> Unit) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun CategorySheet(
     selected: Int?,
@@ -1362,27 +1660,67 @@ private fun CategorySheet(
     PikuBottomSheet(onDismissRequest = onDismiss, dark = dark, scrollable = true) {
         PikuSheetHandle()
         PikuSheetTitle(text = stringResource(R.string.publish_category_full_title))
-        Spacer(Modifier.height(8.dp))
-        PoipikuCategory.entries.filter { it != PoipikuCategory.ALL }.forEach { category ->
-            val accent = PikuColors.accent
-            val chosen = selected == category.cd
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .clickable { onSelect(category.cd) }
-                    .padding(horizontal = 8.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
+        Spacer(Modifier.height(12.dp))
+        CATEGORY_GROUPS.forEach { group ->
+            Text(
+                text = stringResource(group.titleRes),
+                color = PikuColors.textFaint,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Medium,
+                letterSpacing = 1.sp,
+            )
+            Spacer(Modifier.height(8.dp))
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text(
-                    text = stringResource(category.nameRes),
-                    color = if (chosen) accent else PikuColors.textPrimary,
-                    fontSize = 14.sp,
-                    fontWeight = if (chosen) FontWeight.SemiBold else FontWeight.Normal,
-                    modifier = Modifier.weight(1f),
-                )
-                if (chosen) Text("✓", color = accent, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                group.categories.forEach { category ->
+                    val accent = PikuColors.accent
+                    val chosen = selected == category.cd
+                    val shape = RoundedCornerShape(20.dp)
+                    Row(
+                        modifier = Modifier
+                            .clip(shape)
+                            .background(
+                                if (chosen) PikuColors.textPrimary
+                                else if (dark) GlassCardBgDark else Color(0xFF000000).copy(alpha = 0.04f),
+                            )
+                            .border(
+                                BorderStroke(0.5.dp, PikuColors.border),
+                                shape,
+                            )
+                            .clickable { onSelect(category.cd) }
+                            .padding(
+                                start = 14.dp,
+                                end = if (chosen) 9.dp else 14.dp,
+                                top = 10.dp,
+                                bottom = 10.dp,
+                            ),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = stringResource(category.nameRes),
+                            color = if (chosen) {
+                                if (dark) LoginBackgroundDark else Color.White
+                            } else {
+                                if (dark) LoginTextSecondaryDark else Color(0xFF5A5A5A)
+                            },
+                            fontSize = 13.sp,
+                        )
+                        if (chosen) {
+                            Icon(
+                                imageVector = Icons.Filled.Check,
+                                contentDescription = null,
+                                tint = if (dark) LoginBackgroundDark else Color.White,
+                                modifier = Modifier
+                                    .padding(start = 4.dp)
+                                    .size(14.dp),
+                            )
+                        }
+                    }
+                }
             }
+            Spacer(Modifier.height(16.dp))
         }
     }
 }
@@ -1394,23 +1732,35 @@ private fun CategorySheet(
 private fun TagsSection(
     tags: String,
     myTags: List<String>,
+    tagSuggestions: List<String>,
     onTagText: (String) -> Unit,
+    onTagInputChange: (String) -> Unit,
     onAppend: (String) -> Unit,
     onRemove: (String) -> Unit,
     dark: Boolean,
 ) {
-    val list = tags.split(Regex("\\s+")).filter { it.isNotBlank() }
+    val list = remember(tags) { tags.split(Regex("\\s+")).filter { it.isNotBlank() } }
     val accent = PikuColors.accent
+    val faint = PikuColors.textFaint
+    var inputText by remember { mutableStateOf("") }
+
     SectionCard(dark = dark) {
         SectionHeader(
             label = stringResource(R.string.publish_tags),
-            trailing = { HeaderMeta(text = "${tags.length}/100") },
+            trailing = {
+                HeaderMeta(
+                    text = stringResource(R.string.publish_tags_count, list.size, tags.length),
+                )
+            },
         )
         Spacer(Modifier.height(12.dp))
+
+        // 已选标签 chips
         if (list.isNotEmpty()) {
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 list.forEach { tag ->
                     Row(
@@ -1423,41 +1773,168 @@ private fun TagsSection(
                     ) {
                         Text(tag, color = accent, fontSize = 12.sp)
                         Spacer(Modifier.width(5.dp))
-                        Text("×", color = accent.copy(alpha = 0.7f), fontSize = 12.sp)
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = null,
+                            tint = accent.copy(alpha = 0.7f),
+                            modifier = Modifier.size(14.dp),
+                        )
                     }
                 }
             }
             Spacer(Modifier.height(10.dp))
         }
-        PublishField(
-            value = tags,
-            onChange = onTagText,
-            placeholder = stringResource(R.string.publish_tags_input),
+
+        // 标签输入框（Tag Chips 模式）
+        OutlinedTextField(
+            value = inputText,
+            onValueChange = { newValue ->
+                // 检测空格或逗号，自动添加标签
+                if (newValue.contains(" ") || newValue.contains("、") || newValue.contains(",")) {
+                    val newTag = newValue.replace(Regex("[,、\\s]"), "").trim()
+                    if (newTag.isNotEmpty()) {
+                        onAppend(newTag)
+                    }
+                    inputText = ""
+                    onTagInputChange("")
+                } else {
+                    inputText = newValue
+                    onTagInputChange(newValue)
+                }
+            },
+            placeholder = {
+                Text(
+                    text = if (list.isEmpty()) {
+                        stringResource(R.string.publish_tags_input)
+                    } else {
+                        stringResource(R.string.publish_tags_add_more)
+                    },
+                    fontSize = 13.sp,
+                    color = faint,
+                )
+            },
             singleLine = true,
+            textStyle = androidx.compose.ui.text.TextStyle(
+                fontSize = 14.sp,
+                color = PikuColors.textPrimary,
+            ),
+            shape = RoundedCornerShape(14.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = accent.copy(alpha = 0.6f),
+                unfocusedBorderColor = Color.Transparent,
+                focusedContainerColor = PikuColors.textSecondary.copy(alpha = 0.08f),
+                unfocusedContainerColor = PikuColors.textSecondary.copy(alpha = 0.08f),
+                cursorColor = accent,
+            ),
             modifier = Modifier.fillMaxWidth(),
         )
-        if (myTags.isNotEmpty()) {
-            Spacer(Modifier.height(12.dp))
-            Text(
-                text = stringResource(R.string.publish_tags_mine),
-                color = PikuColors.textFaint,
-                fontSize = 10.sp,
-                letterSpacing = 0.8.sp,
-            )
+
+        // 标签自动补全建议
+        if (tagSuggestions.isNotEmpty()) {
             Spacer(Modifier.height(8.dp))
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                myTags.take(12).forEach { tag ->
-                    Box(
+                tagSuggestions.take(6).forEach { suggestion ->
+                    val isAlreadyAdded = suggestion in list
+                    Row(
                         modifier = Modifier
                             .clip(RoundedCornerShape(999.dp))
-                            .background(PikuColors.textSecondary.copy(alpha = 0.1f))
-                            .clickable { onAppend(tag) }
-                            .padding(horizontal = 11.dp, vertical = 5.dp),
+                            .background(
+                                if (isAlreadyAdded) accent.copy(alpha = 0.08f)
+                                else PikuColors.textSecondary.copy(alpha = 0.06f),
+                            )
+                            .border(
+                                BorderStroke(
+                                    0.5.dp,
+                                    if (isAlreadyAdded) accent.copy(alpha = 0.3f)
+                                    else PikuColors.border,
+                                ),
+                                RoundedCornerShape(999.dp),
+                            )
+                            .clickable {
+                                if (!isAlreadyAdded) {
+                                    onAppend(suggestion)
+                                    inputText = ""
+                                }
+                            }
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(tag, color = PikuColors.textSecondary, fontSize = 12.sp)
+                        Text(
+                            text = suggestion,
+                            color = if (isAlreadyAdded) accent else PikuColors.textSecondary,
+                            fontSize = 11.sp,
+                        )
+                        if (isAlreadyAdded) {
+                            Spacer(Modifier.width(4.dp))
+                            Text("✓", color = accent, fontSize = 9.sp)
+                        }
+                    }
+                }
+            }
+        }
+
+        // 我的标签
+        if (myTags.isNotEmpty()) {
+            Spacer(Modifier.height(16.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.publish_tags_mine),
+                    color = PikuColors.textSecondary,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+                Spacer(Modifier.weight(1f))
+                Text(
+                    text = stringResource(R.string.publish_tags_tap_hint),
+                    color = faint,
+                    fontSize = 11.sp,
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                myTags.forEach { tag ->
+                    val isSelected = tag in list
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(
+                                if (isSelected) accent.copy(alpha = 0.08f)
+                                else PikuColors.textSecondary.copy(alpha = 0.08f),
+                            )
+                            .border(
+                                BorderStroke(
+                                    0.5.dp,
+                                    if (isSelected) accent.copy(alpha = 0.3f)
+                                    else PikuColors.border,
+                                ),
+                                RoundedCornerShape(999.dp),
+                            )
+                            .clickable {
+                                if (isSelected) onRemove(tag) else {
+                                    onAppend(tag)
+                                    inputText = ""
+                                }
+                            }
+                            .padding(horizontal = 11.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = tag,
+                            color = if (isSelected) accent else PikuColors.textSecondary,
+                            fontSize = 12.sp,
+                        )
+                        if (isSelected) {
+                            Spacer(Modifier.width(4.dp))
+                            Text("✓", color = accent, fontSize = 10.sp)
+                        }
                     }
                 }
             }
@@ -1493,11 +1970,15 @@ private fun DescriptionSection(text: String, onChange: (String) -> Unit, dark: B
 @Composable
 private fun OptionsSummaryCard(
     state: PublishUiState,
-    onClick: () -> Unit,
+    onPublic: (Boolean) -> Unit,
+    onNsfw: (NsfwLevel) -> Unit,
+    onClickMore: () -> Unit,
     dark: Boolean,
 ) {
     val faint = PikuColors.textFaint
-    SectionCard(dark = dark, clickable = onClick) {
+    val accent = PikuColors.accent
+
+    SectionCard(dark = dark) {
         SectionHeader(
             label = stringResource(R.string.publish_options),
             trailing = {
@@ -1508,49 +1989,80 @@ private fun OptionsSummaryCard(
                     modifier = Modifier.size(18.dp),
                 )
             },
+            modifier = Modifier.clickable(onClick = onClickMore),
         )
         Spacer(Modifier.height(12.dp))
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+
+        // 公开/私密开关
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            SummaryChip(
-                text = stringResource(
-                    if (state.publish) R.string.publish_options_summary_public
-                    else R.string.publish_options_summary_private,
-                ),
-                bg = if (state.publish) FollowLight.copy(alpha = 0.3f) else faint.copy(alpha = 0.16f),
-                fg = if (state.publish) FollowDark else faint,
+            Text(
+                text = stringResource(R.string.publish_options_public_row),
+                color = PikuColors.textPrimary,
+                fontSize = 14.sp,
+                modifier = Modifier.weight(1f),
             )
-            SummaryChip(
-                text = when (state.nsfw) {
-                    NsfwLevel.ALL -> stringResource(R.string.publish_options_rating_all)
-                    NsfwLevel.CUSHION -> stringResource(R.string.publish_options_rating_cushion)
-                    NsfwLevel.R18 -> "R18"
-                    NsfwLevel.R18PLUS -> "R18+"
-                },
-                bg = if (state.nsfw == NsfwLevel.ALL) faint.copy(alpha = 0.16f) else ErrorRedLight.copy(alpha = 0.3f),
-                fg = if (state.nsfw == NsfwLevel.ALL) faint else ErrorRedDark,
+            Switch(
+                checked = state.publish,
+                onCheckedChange = onPublic,
+                colors = themedSwitchColors(dark),
             )
-            if (state.visibility != ShowVisibility.ANYONE) {
-                SummaryChip(
-                    text = stringResource(
-                        when (state.visibility) {
-                            ShowVisibility.POIPIKU_LOGIN -> R.string.publish_options_visibility_login
-                            ShowVisibility.FOLLOWER -> R.string.publish_options_visibility_follower
-                            ShowVisibility.ANYONE -> R.string.publish_options_visibility_anyone
-                        },
-                    ),
-                    bg = PikuColors.accent.copy(alpha = 0.14f),
-                    fg = PikuColors.accent,
-                )
-            }
-            if (state.publish && state.passwordEnabled) {
-                SummaryChip(
-                    text = stringResource(R.string.publish_options_password_on),
-                    bg = PikuColors.accent.copy(alpha = 0.14f),
-                    fg = PikuColors.accent,
-                )
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        // 年龄分级
+        Text(
+            text = stringResource(R.string.publish_options_rating),
+            color = PikuColors.textSecondary,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+        )
+        Spacer(Modifier.height(8.dp))
+        RatingSegmented(
+            nsfw = state.nsfw,
+            red = ErrorRedDark,
+            onPick = onNsfw,
+        )
+
+        // 其他选项提示
+        if (state.visibility != ShowVisibility.ANYONE || state.passwordEnabled || state.showRecent || state.showFirstOnly) {
+            Spacer(Modifier.height(8.dp))
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                if (state.visibility != ShowVisibility.ANYONE) {
+                    SummaryChip(
+                        text = stringResource(
+                            when (state.visibility) {
+                                ShowVisibility.POIPIKU_LOGIN -> R.string.publish_options_visibility_login
+                                ShowVisibility.FOLLOWER -> R.string.publish_options_visibility_follower
+                                ShowVisibility.ANYONE -> R.string.publish_options_visibility_anyone
+                            },
+                        ),
+                        bg = accent.copy(alpha = 0.14f),
+                        fg = accent,
+                    )
+                }
+                if (state.passwordEnabled) {
+                    SummaryChip(
+                        text = stringResource(R.string.publish_options_password_on),
+                        bg = accent.copy(alpha = 0.14f),
+                        fg = accent,
+                    )
+                }
+                if (state.showRecent) {
+                    SummaryChip(
+                        text = stringResource(R.string.publish_options_recent),
+                        bg = accent.copy(alpha = 0.14f),
+                        fg = accent,
+                    )
+                }
             }
         }
     }
@@ -1633,41 +2145,22 @@ private fun PublishOptionsSheet(
     onDismiss: () -> Unit,
     dark: Boolean,
 ) {
-    var warnR18Plus by remember { mutableStateOf(false) }
     val faint = PikuColors.textFaint
     val accent = PikuColors.accent
-    val red = ErrorRedDark
 
     PikuBottomSheet(onDismissRequest = onDismiss, dark = dark, scrollable = true) {
         PikuSheetHandle()
         PikuSheetTitle(text = stringResource(R.string.publish_options))
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(12.dp))
 
-        SwitchRow(
-            label = stringResource(R.string.publish_options_public_row),
-            hint = stringResource(R.string.publish_options_public_off_hint),
-            checked = state.publish,
-            onChange = onPublic,
-            dark = dark,
+        // 可见范围
+        Text(
+            text = stringResource(R.string.publish_options_visibility_title),
+            color = PikuColors.textSecondary,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
         )
         Spacer(Modifier.height(8.dp))
-        Text(stringResource(R.string.publish_options_rating), color = faint, fontSize = 11.sp)
-        Spacer(Modifier.height(6.dp))
-        RatingSegmented(
-            nsfw = state.nsfw,
-            red = red,
-            onPick = { level ->
-                if (level == NsfwLevel.R18PLUS && state.nsfw != NsfwLevel.R18PLUS) {
-                    warnR18Plus = true
-                } else {
-                    onNsfw(level)
-                }
-            },
-        )
-
-        Spacer(Modifier.height(14.dp))
-        Text(stringResource(R.string.publish_options_visibility_title), color = faint, fontSize = 11.sp)
-        Spacer(Modifier.height(2.dp))
         VisibilityOption(
             label = stringResource(R.string.publish_options_visibility_anyone),
             selected = state.visibility == ShowVisibility.ANYONE,
@@ -1687,19 +2180,19 @@ private fun PublishOptionsSheet(
             onClick = { onVisibility(ShowVisibility.FOLLOWER) },
         )
 
-        Spacer(Modifier.height(10.dp))
-        HorizontalDivider(color = PikuColors.border)
-        if (!state.publish) {
+        Spacer(Modifier.height(12.dp))
+
+        // 密码（公开时显示）
+        if (state.publish) {
             Text(
-                text = stringResource(R.string.publish_options_public_off_hint) + "，无需浏览密码",
-                color = faint,
-                fontSize = 12.sp,
-                modifier = Modifier.padding(vertical = 8.dp),
+                text = stringResource(R.string.publish_options_password),
+                color = PikuColors.textSecondary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
             )
-        } else {
+            Spacer(Modifier.height(8.dp))
             SwitchRow(
-                label = stringResource(R.string.publish_options_password),
-                hint = if (state.passwordEnabled) {
+                label = if (state.passwordEnabled) {
                     stringResource(R.string.publish_options_password_enabled_hint)
                 } else {
                     stringResource(R.string.publish_options_password_off_hint)
@@ -1709,19 +2202,20 @@ private fun PublishOptionsSheet(
                 dark = dark,
             )
             if (state.passwordEnabled) {
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(8.dp))
                 PublishField(
                     value = state.password,
                     onChange = onPassword,
                     placeholder = stringResource(R.string.publish_options_password_hint),
                     singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
+            Spacer(Modifier.height(12.dp))
         }
 
-        Spacer(Modifier.height(10.dp))
-        HorizontalDivider(color = PikuColors.border)
+        // 其他选项
         SwitchRow(
             label = stringResource(R.string.publish_options_recent),
             checked = state.showRecent,
@@ -1735,16 +2229,9 @@ private fun PublishOptionsSheet(
                 onChange = onFirstOnly,
                 dark = dark,
             )
-        } else {
-            Text(
-                text = stringResource(R.string.publish_options_first_only) + " · ≥2 图且限定可见",
-                color = faint,
-                fontSize = 11.sp,
-                modifier = Modifier.padding(vertical = 8.dp),
-            )
         }
 
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(16.dp))
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1761,25 +2248,6 @@ private fun PublishOptionsSheet(
                 fontWeight = FontWeight.SemiBold,
             )
         }
-    }
-
-    if (warnR18Plus) {
-        AlertDialog(
-            onDismissRequest = { warnR18Plus = false },
-            title = { Text(stringResource(R.string.publish_options_r18plus_warn_title)) },
-            text = { Text(stringResource(R.string.publish_options_r18plus_warn_body)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    onNsfw(NsfwLevel.R18PLUS)
-                    warnR18Plus = false
-                }) { Text(stringResource(R.string.publish_ok), color = red) }
-            },
-            dismissButton = {
-                TextButton(onClick = { warnR18Plus = false }) {
-                    Text(stringResource(R.string.publish_cancel), color = PikuColors.textSecondary)
-                }
-            },
-        )
     }
 }
 
