@@ -367,7 +367,7 @@ private fun AuthorRow(detail: WorkDetail, dark: Boolean, onAuthorClick: () -> Un
     Row(verticalAlignment = Alignment.CenterVertically) {
         AsyncImage(
             model = detail.authorAvatarUrl,
-            contentDescription = stringResource(R.string.detail_author_home),
+            contentDescription = stringResource(R.string.detail_user_home),
             modifier = Modifier
                 .size(36.dp)
                 .clip(CircleShape)

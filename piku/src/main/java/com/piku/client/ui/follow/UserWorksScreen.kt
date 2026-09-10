@@ -293,7 +293,7 @@ private fun dreamyHeaderBrush(size: Size): Brush {
     )
 }
 
-/** 顶栏：默认显示「X 的作品 + ID」，头部卡片折叠时渐变为「小头像 + 昵称」紧凑模式 */
+/** 顶栏：默认显示「X 的主页 + ID」，头部卡片折叠时渐变为「小头像 + 昵称」紧凑模式 */
 @Composable
 private fun UserWorksTopBar(
     userName: String,
