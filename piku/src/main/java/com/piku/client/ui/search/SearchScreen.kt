@@ -93,6 +93,7 @@ import com.piku.client.ui.common.FollowPillButton
 import com.piku.client.ui.common.GlassCard
 import com.piku.client.ui.common.LoaderDots
 import com.piku.client.ui.common.PikuBackButton
+import com.piku.client.ui.common.PikuSegmented
 import com.piku.client.ui.common.LoginPrompt
 import com.piku.client.ui.common.UserAvatar
 import com.piku.client.ui.common.WorkCard
@@ -257,7 +258,6 @@ fun SearchScreen(
                 SearchTabRow(
                     selected = state.tab,
                     onSelect = viewModel::selectTab,
-                    dark = dark,
                 )
                 when (state.tab) {
                     SearchTab.WORKS -> WorksTabContent(
@@ -676,69 +676,18 @@ private fun MyTagsRow(
 private fun SearchTabRow(
     selected: SearchTab,
     onSelect: (SearchTab) -> Unit,
-    dark: Boolean,
 ) {
-    val shape = RoundedCornerShape(50)
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 6.dp)
-            .clip(shape)
-            .background(if (dark) Color.White.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.9f))
-            .border(BorderStroke(0.5.dp, PikuColors.border), shape)
-            .padding(3.dp),
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        SearchTabItem(
-            text = stringResource(R.string.search_tab_works),
-            active = selected == SearchTab.WORKS,
-            onClick = { onSelect(SearchTab.WORKS) },
-            dark = dark,
-            modifier = Modifier.weight(1f),
-        )
-        SearchTabItem(
-            text = stringResource(R.string.search_tab_users),
-            active = selected == SearchTab.USERS,
-            onClick = { onSelect(SearchTab.USERS) },
-            dark = dark,
-            modifier = Modifier.weight(1f),
-        )
-        SearchTabItem(
-            text = stringResource(R.string.search_tab_tags),
-            active = selected == SearchTab.TAGS,
-            onClick = { onSelect(SearchTab.TAGS) },
-            dark = dark,
-            modifier = Modifier.weight(1f),
-        )
-    }
-}
-
-@Composable
-private fun SearchTabItem(
-    text: String,
-    active: Boolean,
-    onClick: () -> Unit,
-    dark: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(50))
-            .background(if (active) PikuColors.accent else Color.Transparent)
-            .clickable(onClick = onClick)
-            .padding(vertical = 7.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = text,
-            color = when {
-                active -> if (dark) LoginBackgroundDark else Color.White
-                else -> PikuColors.textSecondary
-            },
-            fontSize = 14.sp,
-            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
-        )
-    }
+    val tabs = SearchTab.entries
+    PikuSegmented(
+        labels = listOf(
+            stringResource(R.string.search_tab_works),
+            stringResource(R.string.search_tab_users),
+            stringResource(R.string.search_tab_tags),
+        ),
+        selectedIndex = tabs.indexOf(selected),
+        onSelect = { onSelect(tabs[it]) },
+        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 6.dp),
+    )
 }
 
 @Composable

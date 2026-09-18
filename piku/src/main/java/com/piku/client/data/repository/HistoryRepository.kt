@@ -3,6 +3,7 @@ package com.piku.client.data.repository
 import com.piku.client.data.local.HistoryDao
 import com.piku.client.data.local.HistoryEntity
 import com.piku.client.data.local.toWork
+import com.piku.client.domain.model.HistoryItem
 import com.piku.client.domain.model.HistoryTimeRange
 import com.piku.client.domain.model.Work
 import kotlinx.coroutines.flow.Flow
@@ -15,10 +16,14 @@ class HistoryRepository @Inject constructor(
     private val historyDao: HistoryDao,
 ) {
 
-    fun observeHistory(range: HistoryTimeRange = HistoryTimeRange.ALL): Flow<List<Work>> =
-        historyDao.observeSince(range.cutoffMillis()).map { list -> list.map { it.toWork() } }
+    fun observeHistory(range: HistoryTimeRange = HistoryTimeRange.ALL): Flow<List<HistoryItem>> =
+        historyDao.observeSince(range.cutoffMillis()).map { list ->
+            list.map { HistoryItem(it.toWork(), it.visitedAt) }
+        }
 
-    suspend fun record(work: Work) {
+    suspend fun record(work: Work) = record(work, System.currentTimeMillis())
+
+    suspend fun record(work: Work, visitedAt: Long) {
         historyDao.upsert(
             HistoryEntity(
                 workId = work.id.toString(),
@@ -29,9 +34,13 @@ class HistoryRepository @Inject constructor(
                 thumbnailUrl = work.thumbnailUrl,
                 imageCount = work.imageCount,
                 r18 = work.r18,
-                visitedAt = System.currentTimeMillis(),
+                visitedAt = visitedAt,
             ),
         )
+    }
+
+    suspend fun remove(workId: Long) {
+        historyDao.deleteByWorkId(workId.toString())
     }
 
     suspend fun clear() {

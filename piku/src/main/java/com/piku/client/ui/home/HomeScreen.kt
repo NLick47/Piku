@@ -6,12 +6,8 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -897,7 +893,6 @@ fun HomeScreen(
             if (initialPublishId != null) {
                 val profile = state.userProfile
                 // 与浏览记录等抽屉页一致：全屏 Dialog 浮层，独立窗口天然挡住首页点击
-                val publishEnter = fadeIn(animationSpec = tween(250))
                 Dialog(
                     onDismissRequest = {
                         publishDraftId = null
@@ -909,36 +904,33 @@ fun HomeScreen(
                         dismissOnClickOutside = false,
                     ),
                 ) {
-val enterState = remember { MutableTransitionState(false).apply { targetState = true } }
-                    AnimatedVisibility(visibleState = enterState, enter = publishEnter) {
-                        PublishScreen(
-                            initialDraftId = initialPublishId,
-                            onBack = {
-                                publishDraftId = null
-                                scope.launch { drawerState.open() }
-                            },
-                            onPublished = { workId ->
-                                publishDraftId = null
-                                val uid = profile?.uid?.toLongOrNull()
-                                if (uid != null) {
-                                    onWorkClick(
-                                        Work(
-                                            id = workId,
-                                            authorId = uid,
-                                            authorName = profile.name.orEmpty(),
-                                            authorAvatarUrl = null,
-                                            categoryCd = 0,
-                                            categoryName = "",
-                                            title = "",
-                                            thumbnailUrl = "",
-                                            imageCount = 0,
-                                            r18 = false,
-                                        ),
-                                    )
-                                }
-                            },
-                        )
-                    }
+                    PublishScreen(
+                        initialDraftId = initialPublishId,
+                        onBack = {
+                            publishDraftId = null
+                            scope.launch { drawerState.open() }
+                        },
+                        onPublished = { workId ->
+                            publishDraftId = null
+                            val uid = profile?.uid?.toLongOrNull()
+                            if (uid != null) {
+                                onWorkClick(
+                                    Work(
+                                        id = workId,
+                                        authorId = uid,
+                                        authorName = profile.name.orEmpty(),
+                                        authorAvatarUrl = null,
+                                        categoryCd = 0,
+                                        categoryName = "",
+                                        title = "",
+                                        thumbnailUrl = "",
+                                        imageCount = 0,
+                                        r18 = false,
+                                    ),
+                                )
+                            }
+                        },
+                    )
                 }
             }
             SnackbarHost(
@@ -973,42 +965,29 @@ private fun HomeOverlays(
         decorFitsSystemWindows = false,
         dismissOnClickOutside = false,
     )
-    val pageEnter = fadeIn(animationSpec = tween(250))
 
     if (showHistoryPage) {
         Dialog(onDismissRequest = onHistoryBack, properties = fullScreenProps) {
-val enterState = remember { MutableTransitionState(false).apply { targetState = true } }
-            AnimatedVisibility(visibleState = enterState, enter = pageEnter) {
-                HistoryScreen(onBack = onHistoryBack, onWorkClick = { onWorkClick(it) })
-            }
+            HistoryScreen(onBack = onHistoryBack, onWorkClick = { onWorkClick(it) })
         }
     }
     if (showCollectionPage) {
         Dialog(onDismissRequest = onCollectionBack, properties = fullScreenProps) {
-val enterState = remember { MutableTransitionState(false).apply { targetState = true } }
-            AnimatedVisibility(visibleState = enterState, enter = pageEnter) {
-                CollectionScreen(onBack = onCollectionBack, onWorkClick = { onWorkClick(it) })
-            }
+            CollectionScreen(onBack = onCollectionBack, onWorkClick = { onWorkClick(it) })
         }
     }
     if (showTagsPage) {
         Dialog(onDismissRequest = onTagsBack, properties = fullScreenProps) {
-val enterState = remember { MutableTransitionState(false).apply { targetState = true } }
-            AnimatedVisibility(visibleState = enterState, enter = pageEnter) {
-                TagScreen(onBack = onTagsBack, onWorkClick = { onWorkClick(it) })
-            }
+            TagScreen(onBack = onTagsBack, onWorkClick = { onWorkClick(it) })
         }
     }
     if (showFollowUsersPage) {
         Dialog(onDismissRequest = onFollowUsersBack, properties = fullScreenProps) {
-val enterState = remember { MutableTransitionState(false).apply { targetState = true } }
-            AnimatedVisibility(visibleState = enterState, enter = pageEnter) {
-                FollowUsersScreen(
-                    onBack = onFollowUsersBack,
-                    onLoginClick = onLoginClick,
-                    onUserClick = { user -> onProfileOpen(user.userId, user.name) },
-                )
-            }
+            FollowUsersScreen(
+                onBack = onFollowUsersBack,
+                onLoginClick = onLoginClick,
+                onUserClick = { user -> onProfileOpen(user.userId, user.name) },
+            )
         }
     }
 }

@@ -124,6 +124,10 @@ val GlassCardBorderDark = Color(0x1FFFFFFF)
 val GlassCardBgLight = Color(0x99FFFFFF)
 val GlassCardBgDark = Color(0x8C262421)
 
+// 分段控件轨道：比卡片玻璃更薄一层，好让内部的选中胶囊压出层次
+val SegmentedTrackLight = Color(0xF2FFFFFF)
+val SegmentedTrackDark = Color(0x40FFFFFF)
+
 val GlassIconBgDark = Color(0xCC262421)
 val PillBorderLight = Color(0xFFE8E4DE)
 val PillBorderDark = Color(0xFF46405A)

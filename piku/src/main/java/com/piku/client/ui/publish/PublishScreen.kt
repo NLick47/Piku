@@ -5,14 +5,11 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.MutableTransitionState
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.fadeIn
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -390,31 +387,24 @@ fun PublishScreen(
                 dismissOnClickOutside = false,
             ),
         ) {
-            // 全屏浮层淡入，与浏览记录 / 收藏等抽屉页保持同一动效
-            val draftEnter = remember { MutableTransitionState(false).apply { targetState = true } }
-            AnimatedVisibility(
-                visibleState = draftEnter,
-                enter = fadeIn(animationSpec = tween(250)),
-            ) {
-                DraftBoxScreen(
-                    sessionId = sessionId,
-                    onBack = { showDraftBox = false },
-                    onDraftSelected = { id ->
-                        showDraftBox = false
-                        // 独立会话切换：当前已自动保存，直接载入目标，不再弹窗问覆盖
-                        viewModel.switchTo(id) { boxScope.launch { draftBoxViewModel.refresh() } }
-                    },
-                    onDraftDeleted = { id ->
-                        // 先终止会话（取消防抖、清 session id），再删行+删目录，杜绝复活竞态
-                        if (id == sessionId) viewModel.resetState()
-                        draftBoxViewModel.delete(id)
-                    },
-                    onNewDraft = {
-                        showDraftBox = false
-                        viewModel.startNew { boxScope.launch { draftBoxViewModel.refresh() } }
-                    },
-                )
-            }
+            DraftBoxScreen(
+                sessionId = sessionId,
+                onBack = { showDraftBox = false },
+                onDraftSelected = { id ->
+                    showDraftBox = false
+                    // 独立会话切换：当前已自动保存，直接载入目标，不再弹窗问覆盖
+                    viewModel.switchTo(id) { boxScope.launch { draftBoxViewModel.refresh() } }
+                },
+                onDraftDeleted = { id ->
+                    // 先终止会话（取消防抖、清 session id），再删行+删目录，杜绝复活竞态
+                    if (id == sessionId) viewModel.resetState()
+                    draftBoxViewModel.delete(id)
+                },
+                onNewDraft = {
+                    showDraftBox = false
+                    viewModel.startNew { boxScope.launch { draftBoxViewModel.refresh() } }
+                },
+            )
         }
     }
     if (showCategorySheet) {
