@@ -42,6 +42,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
@@ -59,6 +61,8 @@ import com.piku.client.ui.common.PikuBackButton
 import com.piku.client.ui.common.WorkCard
 import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.GlassCardBgDark
+import com.piku.client.ui.theme.GlassHeaderTintDark
+import com.piku.client.ui.theme.GlassHeaderTintLight
 import com.piku.client.ui.theme.HomeBgBottomDark
 import com.piku.client.ui.theme.HomeBgBottomLight
 import com.piku.client.ui.theme.HomeBgTopDark
@@ -66,6 +70,8 @@ import com.piku.client.ui.theme.HomeBgTopLight
 import com.piku.client.ui.theme.LoginTextPrimaryDark
 import com.piku.client.ui.theme.LoginTextSecondaryDark
 import com.piku.client.ui.theme.PikuColors
+import com.piku.client.ui.theme.PillBorderDark
+import com.piku.client.ui.theme.PillBorderLight
 
 @Composable
 fun HistoryScreen(
@@ -202,6 +208,16 @@ private fun HistoryTopBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            // 与详情页 / 收藏页 / 发布页头部一致：半透明玻璃底 + 0.5dp 底分隔线
+            .background(if (dark) GlassHeaderTintDark else GlassHeaderTintLight)
+            .drawBehind {
+                drawLine(
+                    color = if (dark) PillBorderDark.copy(alpha = 0.6f) else PillBorderLight,
+                    start = Offset(0f, size.height - 0.5.dp.toPx()),
+                    end = Offset(size.width, size.height - 0.5.dp.toPx()),
+                    strokeWidth = 0.5.dp.toPx(),
+                )
+            }
             .statusBarsPadding()
             .padding(start = 4.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,

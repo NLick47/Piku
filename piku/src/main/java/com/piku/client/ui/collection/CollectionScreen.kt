@@ -5,6 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import com.piku.client.ui.theme.GlassHeaderTintDark
+import com.piku.client.ui.theme.GlassHeaderTintLight
 import com.piku.client.ui.theme.LocalDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -318,7 +320,7 @@ private fun FolderListContent(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(if (dark) Color(0xF2262421) else Color(0xF7FFFFFF))
+                .background(if (dark) GlassHeaderTintDark else GlassHeaderTintLight)
                 .statusBarsPadding()
                 .padding(start = 4.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -621,7 +623,7 @@ private fun FolderDetailContent(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(if (dark) Color(0xF2262421) else Color(0xF7FFFFFF))
+                .background(if (dark) GlassHeaderTintDark else GlassHeaderTintLight)
                 .statusBarsPadding()
                 .padding(start = 4.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,

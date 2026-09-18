@@ -30,17 +30,19 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.CloudSync
+import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.GTranslate
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.PostAdd
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Tag
 import androidx.compose.material.icons.outlined.Translate
@@ -103,6 +105,7 @@ fun UserDrawer(
     onProfileClick: () -> Unit,
     /** 登录后点头像/名字区域进入自己的个人主页 */
     onProfileOpen: () -> Unit,
+    onPublishClick: () -> Unit = {},
     onLoginClick: () -> Unit,
     onLogout: () -> Unit,
     onAvatarClick: () -> Unit,
@@ -144,6 +147,7 @@ fun UserDrawer(
                 onFollowUsersClick = onFollowUsersClick,
                 onProfileClick = onProfileClick,
                 onProfileOpen = onProfileOpen,
+                onPublishClick = onPublishClick,
                 onLoginClick = onLoginClick,
                 onLogout = onLogout,
                 onAvatarClick = onAvatarClick,
@@ -184,6 +188,7 @@ private fun DrawerPanel(
     onFollowUsersClick: () -> Unit,
     onProfileClick: () -> Unit,
     onProfileOpen: () -> Unit,
+    onPublishClick: () -> Unit = {},
     onLoginClick: () -> Unit,
     onLogout: () -> Unit,
     onAvatarClick: () -> Unit,
@@ -244,6 +249,16 @@ private fun DrawerPanel(
                 .fillMaxWidth()
                 .verticalScroll(scrollState),
         ) {
+            if (loggedIn) {
+                Spacer(Modifier.height(2.dp))
+                DrawerMenuRow(
+                    icon = Icons.Outlined.PostAdd,
+                    label = stringResource(R.string.menu_publish),
+                    onClick = onPublishClick,
+                    dark = dark,
+                    accent = iconAccent,
+                )
+            }
             if (userProfile?.profileUrl != null) {
                 Spacer(Modifier.height(2.dp))
                 DrawerMenuRow(

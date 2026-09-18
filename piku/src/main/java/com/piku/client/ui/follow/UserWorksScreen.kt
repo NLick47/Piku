@@ -95,6 +95,8 @@ import com.piku.client.ui.common.LoaderDots
 import com.piku.client.ui.common.PikuBackButton
 import com.piku.client.ui.common.WorkCard
 import com.piku.client.ui.common.AvatarViewerDialog
+import com.piku.client.ui.theme.GlassHeaderTintDark
+import com.piku.client.ui.theme.GlassHeaderTintLight
 import com.piku.client.ui.theme.HomeBgBottomDark
 import com.piku.client.ui.theme.HomeBgBottomLight
 import com.piku.client.ui.theme.HomeBgTopDark
@@ -324,7 +326,7 @@ private fun UserWorksTopBar(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(if (dark) Color(0xF2262421) else Color(0xF7FFFFFF))
+            .background(if (dark) GlassHeaderTintDark else GlassHeaderTintLight)
             .statusBarsPadding(),
     ) {
         Row(

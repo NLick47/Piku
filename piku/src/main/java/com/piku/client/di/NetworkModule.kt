@@ -11,6 +11,7 @@ import com.piku.client.data.remote.RefererInterceptor
 import com.piku.client.data.remote.RetryInterceptor
 import com.piku.client.data.remote.SniStrippingSocketFactory
 import com.piku.client.data.remote.UpdateApi
+import com.piku.client.data.remote.UploadApi
 import com.piku.client.data.remote.translation.LlmChatApi
 import dagger.Module
 import dagger.Provides
@@ -178,6 +179,42 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideUpdateApi(@Named("github") retrofit: Retrofit): UpdateApi = retrofit.create(UpdateApi::class.java)
+
+    /**
+     * 上传专用 client：复用主 client 的全部配置（cookie、Referer、UA、DoH 观测），
+     * 仅把读写超时拉长到 120s（几十 MB 图片逐张串行，慢网下 30s 会误杀）。
+     */
+    @Provides
+    @Singleton
+    @Named("upload")
+    fun provideUploadOkHttpClient(client: OkHttpClient): OkHttpClient =
+        client.newBuilder()
+            .addInterceptor { chain ->
+                val request = chain.request().newBuilder()
+                    .header("X-Requested-With", "XMLHttpRequest")
+                    .build()
+                chain.proceed(request)
+            }
+            .readTimeout(120, TimeUnit.SECONDS)
+            .writeTimeout(120, TimeUnit.SECONDS)
+            .build()
+
+    @Provides
+    @Singleton
+    @Named("upload")
+    fun provideUploadRetrofit(
+        @Named("upload") client: OkHttpClient,
+        json: Json,
+    ): Retrofit = Retrofit.Builder()
+        .baseUrl(ApiConfig.BASE_URL)
+        .client(client)
+        .addConverterFactory(LenientJsonConverterFactory(json))
+        .build()
+
+    @Provides
+    @Singleton
+    fun provideUploadApi(@Named("upload") retrofit: Retrofit): UploadApi =
+        retrofit.create(UploadApi::class.java)
 
     /**
      * 翻译专用 client：**刻意不带** RefererInterceptor / cookieJar。

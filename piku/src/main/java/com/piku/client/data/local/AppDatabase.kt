@@ -14,8 +14,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         SearchKeywordEntity::class,
         WorkPasswordEntity::class,
         TranslationEntity::class,
+        DraftEntity::class,
+        DraftImageEntity::class,
     ],
-    version = 10,
+    version = 12,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -25,6 +27,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun searchKeywordDao(): SearchKeywordDao
     abstract fun workPasswordDao(): WorkPasswordDao
     abstract fun translationDao(): TranslationDao
+    abstract fun draftDao(): DraftDao
 
     companion object {
         val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -149,6 +152,55 @@ abstract class AppDatabase : RoomDatabase() {
                 // search_keywords 有 MAX_KEYWORDS=20 的硬上限，建索引纯亏。
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_history_visitedAt ON history(visitedAt)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_favorites_addedAt ON favorites(addedAt)")
+            }
+        }
+
+        val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // 发布草稿单槽位：payload 存 PublishDraft JSON，图片在 filesDir 由代码管理
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS draft_works (" +
+                        "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "payload TEXT NOT NULL, " +
+                        "updatedAt INTEGER NOT NULL)",
+                )
+            }
+        }
+
+        val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS drafts (" +
+                        "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "kind INTEGER NOT NULL, " +
+                        "categoryCd INTEGER NOT NULL, " +
+                        "tags TEXT NOT NULL, " +
+                        "description TEXT NOT NULL, " +
+                        "publish INTEGER NOT NULL, " +
+                        "nsfwWire INTEGER, " +
+                        "visibility INTEGER NOT NULL, " +
+                        "password TEXT NOT NULL, " +
+                        "showRecent INTEGER NOT NULL, " +
+                        "showFirstOnly INTEGER NOT NULL, " +
+                        "title TEXT NOT NULL, " +
+                        "body TEXT NOT NULL, " +
+                        "novelDirection INTEGER NOT NULL, " +
+                        "createdAt INTEGER NOT NULL, " +
+                        "updatedAt INTEGER NOT NULL)",
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS draft_images (" +
+                        "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "draftId INTEGER NOT NULL, " +
+                        "path TEXT NOT NULL, " +
+                        "sortOrder INTEGER NOT NULL, " +
+                        "FOREIGN KEY(draftId) REFERENCES drafts(id) ON DELETE CASCADE)",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_draft_images_draftId " +
+                        "ON draft_images(draftId)",
+                )
+                db.execSQL("DROP TABLE IF EXISTS draft_works")
             }
         }
     }

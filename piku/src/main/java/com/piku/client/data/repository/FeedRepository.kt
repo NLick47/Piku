@@ -136,6 +136,13 @@ class FeedRepository @Inject constructor(
             TagCardParser.parse(api.getTagSuggestions(tag, page).string())
         }
 
+    /** 标签自动补全建议（GetTagSuggestionF，输入时实时调用） */
+    suspend fun getTagAutoComplete(input: String): Result<List<String>> =
+        apiCall {
+            val response = api.getTagAutoComplete(input = input)
+            if (response.result == 10) response.tags else emptyList()
+        }
+
     suspend fun getKeywordFeed(keyword: String, page: Int): Result<List<Work>> =
         apiCall {
             val adultEnabled = settingsRepository.showAdultContent.first()

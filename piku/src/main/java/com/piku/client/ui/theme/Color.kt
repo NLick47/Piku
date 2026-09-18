@@ -109,8 +109,11 @@ val HomeBgBottomLight = Color(0xFFF0EFED)
 val HomeBgTopDark = Color(0xFF1C1A18)
 val HomeBgBottomDark = Color(0xFF232323)
 
-val GlassHeaderTintLight = Color(0xF2F5F3F0)
-val GlassHeaderTintDark = Color(0xE61C1A18)
+// 头部玻璃着色：全站头部统一色。
+// 取值沿用"我的收藏"页原本的头色（纯白 / 深棕），比原先的暖灰更实、与内容分界更清楚。
+// 值与 MenuPopupBg* 相同但语义不同：这两个专供页面头部，勿合并。
+val GlassHeaderTintLight = Color(0xF7FFFFFF)
+val GlassHeaderTintDark = Color(0xF2262421)
 val GlassCardTintLight = Color(0xA6FFFFFF)
 val GlassCardTintDark = Color(0x99FFFFFF)
 val GlassCardBorderLight = Color(0x59FFFFFF)

@@ -7,11 +7,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
-import androidx.compose.animation.slideInHorizontally
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -91,6 +91,7 @@ import com.piku.client.data.local.CatalogSource
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.domain.model.Work
 import com.piku.client.ui.profile.ProfileEditSheet
+import com.piku.client.ui.publish.PublishScreen
 import com.piku.client.ui.common.AvatarViewerDialog
 import com.piku.client.ui.collection.CollectionScreen
 import com.piku.client.ui.follow.FollowUsersScreen
@@ -168,10 +169,12 @@ fun HomeScreen(
     var showFollowUsersPage by rememberSaveable { mutableStateOf(false) }
     var showLogoutConfirm by rememberSaveable { mutableStateOf(false) }
     var showProfileEdit by rememberSaveable { mutableStateOf(false) }
+    var publishDraftId by rememberSaveable { mutableStateOf<Long?>(null) }
     var showAvatarViewer by rememberSaveable { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val anyOverlayActive = showHistoryPage ||
-        showCollectionPage || showTagsPage || showFollowUsersPage || showWebDavSettings
+        showCollectionPage || showTagsPage || showFollowUsersPage || showWebDavSettings ||
+        publishDraftId != null
     val isScrolling = remember { mutableStateOf(false) }
     val gridState = rememberLazyStaggeredGridState()
     val scope = rememberCoroutineScope()
@@ -277,6 +280,10 @@ fun HomeScreen(
         },
         onFollowUsersClick = {
             showFollowUsersPage = true
+        },
+        onPublishClick = {
+            scope.launch { drawerState.close() }
+            publishDraftId = -1L
         },
         onProfileClick = { showProfileEdit = true },
         onProfileOpen = {
@@ -885,6 +892,55 @@ fun HomeScreen(
                 state = state,
                 dark = dark,
             )
+
+            val initialPublishId = publishDraftId
+            if (initialPublishId != null) {
+                val profile = state.userProfile
+                // 与浏览记录等抽屉页一致：全屏 Dialog 浮层，独立窗口天然挡住首页点击
+                val publishEnter = fadeIn(animationSpec = tween(250))
+                Dialog(
+                    onDismissRequest = {
+                        publishDraftId = null
+                        scope.launch { drawerState.open() }
+                    },
+                    properties = DialogProperties(
+                        usePlatformDefaultWidth = false,
+                        decorFitsSystemWindows = false,
+                        dismissOnClickOutside = false,
+                    ),
+                ) {
+val enterState = remember { MutableTransitionState(false).apply { targetState = true } }
+                    AnimatedVisibility(visibleState = enterState, enter = publishEnter) {
+                        PublishScreen(
+                            initialDraftId = initialPublishId,
+                            onBack = {
+                                publishDraftId = null
+                                scope.launch { drawerState.open() }
+                            },
+                            onPublished = { workId ->
+                                publishDraftId = null
+                                val uid = profile?.uid?.toLongOrNull()
+                                if (uid != null) {
+                                    onWorkClick(
+                                        Work(
+                                            id = workId,
+                                            authorId = uid,
+                                            authorName = profile.name.orEmpty(),
+                                            authorAvatarUrl = null,
+                                            categoryCd = 0,
+                                            categoryName = "",
+                                            title = "",
+                                            thumbnailUrl = "",
+                                            imageCount = 0,
+                                            r18 = false,
+                                        ),
+                                    )
+                                }
+                            },
+                        )
+                    }
+                }
+            }
             SnackbarHost(
                 hostState = snackbarHostState,
                 modifier = Modifier
@@ -917,35 +973,36 @@ private fun HomeOverlays(
         decorFitsSystemWindows = false,
         dismissOnClickOutside = false,
     )
-    val pageEnter = slideInHorizontally(
-        initialOffsetX = { it },
-        animationSpec = tween(250),
-    ) + fadeIn(animationSpec = tween(250))
+    val pageEnter = fadeIn(animationSpec = tween(250))
 
     if (showHistoryPage) {
         Dialog(onDismissRequest = onHistoryBack, properties = fullScreenProps) {
-            AnimatedVisibility(visible = true, enter = pageEnter) {
+val enterState = remember { MutableTransitionState(false).apply { targetState = true } }
+            AnimatedVisibility(visibleState = enterState, enter = pageEnter) {
                 HistoryScreen(onBack = onHistoryBack, onWorkClick = { onWorkClick(it) })
             }
         }
     }
     if (showCollectionPage) {
         Dialog(onDismissRequest = onCollectionBack, properties = fullScreenProps) {
-            AnimatedVisibility(visible = true, enter = pageEnter) {
+val enterState = remember { MutableTransitionState(false).apply { targetState = true } }
+            AnimatedVisibility(visibleState = enterState, enter = pageEnter) {
                 CollectionScreen(onBack = onCollectionBack, onWorkClick = { onWorkClick(it) })
             }
         }
     }
     if (showTagsPage) {
         Dialog(onDismissRequest = onTagsBack, properties = fullScreenProps) {
-            AnimatedVisibility(visible = true, enter = pageEnter) {
+val enterState = remember { MutableTransitionState(false).apply { targetState = true } }
+            AnimatedVisibility(visibleState = enterState, enter = pageEnter) {
                 TagScreen(onBack = onTagsBack, onWorkClick = { onWorkClick(it) })
             }
         }
     }
     if (showFollowUsersPage) {
         Dialog(onDismissRequest = onFollowUsersBack, properties = fullScreenProps) {
-            AnimatedVisibility(visible = true, enter = pageEnter) {
+val enterState = remember { MutableTransitionState(false).apply { targetState = true } }
+            AnimatedVisibility(visibleState = enterState, enter = pageEnter) {
                 FollowUsersScreen(
                     onBack = onFollowUsersBack,
                     onLoginClick = onLoginClick,

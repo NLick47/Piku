@@ -38,7 +38,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -53,6 +52,8 @@ import com.piku.client.ui.common.LoaderDots
 import com.piku.client.ui.common.PikuBackButton
 import com.piku.client.ui.common.WorkCard
 import com.piku.client.ui.home.CustomTagSection
+import com.piku.client.ui.theme.GlassHeaderTintDark
+import com.piku.client.ui.theme.GlassHeaderTintLight
 import com.piku.client.ui.theme.HomeBgBottomDark
 import com.piku.client.ui.theme.HomeBgBottomLight
 import com.piku.client.ui.theme.HomeBgTopDark
@@ -171,7 +172,7 @@ private fun TagDetailContent(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(if (dark) Color(0xF2262421) else Color(0xF7FFFFFF))
+                .background(if (dark) GlassHeaderTintDark else GlassHeaderTintLight)
                 .statusBarsPadding()
                 .padding(start = 4.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -316,7 +317,7 @@ private fun TopBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(if (dark) Color(0xF2262421) else Color(0xF7FFFFFF))
+            .background(if (dark) GlassHeaderTintDark else GlassHeaderTintLight)
             .statusBarsPadding()
             .padding(start = 4.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
