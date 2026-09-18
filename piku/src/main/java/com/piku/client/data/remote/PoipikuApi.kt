@@ -157,4 +157,21 @@ interface PoipikuApi {
         @Query("type") type: String = "tag",
         @Query("input") input: String,
     ): TagSuggestionResponse
+
+    /**
+     * 图集编辑页（服务端预填作品当前值，是编辑表单的回填数据源）
+     * 注意：该 URL 不校验作品类型，TD 传小说 ID 也会返回图集编辑页壳——
+     * 调用前必须先经详情页判定类型。
+     */
+    @GET("UpdateFilePcV2.jsp")
+    suspend fun getIllustEditPage(
+        @Query("ID") userId: Long,
+        @Query("TD") workId: Long,
+    ): ResponseBody
+
+    @GET("UpdateTextPcV2.jsp")
+    suspend fun getNovelEditPage(
+        @Query("ID") userId: Long,
+        @Query("TD") workId: Long,
+    ): ResponseBody
 }

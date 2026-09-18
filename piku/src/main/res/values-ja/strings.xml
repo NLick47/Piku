@@ -455,6 +455,12 @@
     <string name="publish_error_password_empty">閲覧パスワードが有効です。入力してください</string>
     <string name="publish_title">投稿</string>
     <string name="publish_publish">投稿する</string>
+    <string name="publish_edit_title">投稿を編集</string>
+    <string name="publish_save">保存</string>
+    <string name="publish_edit_image_note">編集では画像を変更できません。保存後も既存の画像はそのまま保持されます</string>
+    <string name="publish_edit_exit_title">未保存の変更を破棄しますか？</string>
+    <string name="publish_edit_exit_discard">破棄</string>
+    <string name="publish_edit_exit_stay">編集を続ける</string>
     <string name="publish_kind_image">イラスト</string>
     <string name="publish_kind_novel">小説</string>
     <string name="publish_add_images">画像を追加</string>
@@ -469,7 +475,7 @@
     <string name="publish_image_actions">画像の操作</string>
     <string name="publish_image_cover_badge">表紙</string>
     <string name="publish_novel_title">タイトル</string>
-    <string name="publish_novel_title_hint">作品タイトル</string>
+    <string name="publish_novel_title_hint">投稿タイトル</string>
     <string name="publish_novel_body">本文</string>
     <string name="publish_novel_body_hint">本文を入力…</string>
     <string name="publish_novel_line_count">%1$d 行</string>
@@ -495,7 +501,7 @@
     <string name="publish_tags_tap_hint">タップで追加／削除</string>
     <string name="publish_tag_remove">タグを削除</string>
     <string name="publish_description">説明</string>
-    <string name="publish_description_hint">作品の説明…（任意）</string>
+    <string name="publish_description_hint">投稿の説明…（任意）</string>
     <string name="publish_options">投稿設定</string>
     <string name="publish_options_summary_public">公開</string>
     <string name="publish_options_summary_private">自分のみ</string>
@@ -509,7 +515,9 @@
     <string name="publish_options_first_only">1 枚目のみ公開</string>
     <string name="publish_options_first_only_hint">1 枚目のみ公開 · 2 枚以上かつ公開範囲が限定の場合</string>
     <string name="publish_options_public_row">公開作品として投稿</string>
-    <string name="publish_options_public_off_hint">オフにすると自分のみ閲覧可</string>
+    <string name="publish_options_public_off_hint">自分のみ · プロフィール・タイムライン・最新動向には表示されません</string>
+    <string name="publish_options_public_on_hint">全体に公開 · 公開範囲と閲覧パスワードを設定できます</string>
+    <string name="publish_options_private_scope_hint">非公開投稿では設定できません · 公開に戻すと元の選択に戻ります</string>
     <string name="publish_options_rating">年齢制限</string>
     <string name="publish_options_rating_all">全年齢</string>
     <string name="publish_options_rating_cushion">クッション</string>
@@ -532,7 +540,7 @@
     <string name="publish_exit_stay">編集を続ける</string>
     <string name="publish_progress_title">投稿中</string>
     <string name="publish_progress_page">アップロード中 %1$d/%2$d</string>
-    <string name="publish_progress_creating">作品を作成中…</string>
+    <string name="publish_progress_creating">投稿を作成中…</string>
     <string name="publish_failed_page">%1$d 枚目のアップロードに失敗しました</string>
     <string name="publish_failed_retry">再試行</string>
     <string name="publish_failed_abort">投稿を中止</string>
@@ -568,4 +576,12 @@
     <string name="draft_box_duplicate">複製</string>
     <string name="draft_box_empty_search">一致する下書きがありません</string>
     <string name="draft_novel_stat">%1$d 文字</string>
+    <string name="my_posts_title">投稿管理</string>
+    <string name="my_posts_empty">投稿はまだありません</string>
+    <string name="my_posts_manage">管理</string>
+    <string name="my_posts_edit">編集</string>
+    <string name="my_posts_delete_confirm_title">投稿を削除</string>
+    <string name="my_posts_delete_confirm_body">削除すると元に戻せません。「%1$s」を主页から削除します。よろしいですか？</string>
+    <string name="my_posts_deleted">削除しました</string>
+    <string name="my_posts_delete_failed">削除に失敗しました。再試行してください</string>
 </resources>

@@ -18,22 +18,31 @@ import java.io.File
  * 与网页端 UploadFilePcV2.js 对齐的约定：
  * - 布尔一律传 "true"/"false" 字符串（jQuery 序列化习惯）；
  * - NSFW_VAL / SHOW_LIMIT_VAL / PASSWORD_VAL 只在对应"指定/限定"开关打开时才携带；
+ * - 私密作品（OPTION_PUBLISH=false）不携带 SHOW_LIMIT_VAL / PASSWORD_VAL，OPTION_SHOW_FIRST 按 false；
  * - REC 与 OPTION_RECENT **取反**（进最新动向 → REC=0）。
  */
 object UploadFormBuilder {
 
+    /** 编辑已发布作品时追加的字段：IID=作品 ID；时限三值从编辑页原样透传（防把定时作品改成即时公开） */
+    data class EditFields(val iid: Long, val notTimeLimited: Boolean, val timeLimitedStart: String, val timeLimitedEnd: String)
+
     /**
      * Step1 建条目 / 小说发布共用的公共字段（ED 按 [draft.kind] 区分，
-     * 小说额外带 TIT/BDY/NOVEL_DIRECTION_VAL）。
+     * 小说额外带 TIT/BDY/NOVEL_DIRECTION_VAL）。[edit] 非空 = 编辑已发布作品，
+     * 追加 IID/DELTW 并改投 Update 端点。
      */
-    fun entryForm(draft: PublishDraft, uid: Long, rid: Long = -1): FormBody {
+    fun entryForm(draft: PublishDraft, uid: Long, rid: Long = -1, edit: EditFields? = null): FormBody {
         val ed = when (draft.kind) {
             UploadKind.ILLUST -> "0"
             UploadKind.NOVEL -> "3"
         }
         val notNsfw = draft.nsfw == NsfwLevel.ALL
-        val noConditional = draft.visibility == ShowVisibility.ANYONE
-        val noPassword = draft.password.isBlank()
+        // 私密作品没有「可见范围/浏览密码/仅公开第一张」语义：强制按无条件公开构建，
+        // 避免提交「私密 + 限定可见」这类未在网页端验证过的组合。
+        // UI 状态保留不重置，重新打开公开开关后原选择继续生效。
+        val noConditional = !draft.publish || draft.visibility == ShowVisibility.ANYONE
+        val showFirstOnly = draft.publish && draft.showFirstOnly
+        val noPassword = !draft.publish || draft.password.isBlank()
 
         val builder = FormBody.Builder()
         builder.add("ED", ed)
@@ -44,7 +53,12 @@ object UploadFormBuilder {
         builder.add("RID", rid.toString())
         builder.add("NOTE", "")
         builder.add("OPTION_PUBLISH", bool(draft.publish))
-        builder.add("OPTION_NOT_TIME_LIMITED", "true")
+        // 网页端编辑会携带 TIME_LIMITED_*（与编辑页回填值一致）；create 不带（与官方 App 一致）
+        builder.add("OPTION_NOT_TIME_LIMITED", bool(edit?.notTimeLimited ?: true))
+        if (edit != null) {
+            builder.add("TIME_LIMITED_START", edit.timeLimitedStart)
+            builder.add("TIME_LIMITED_END", edit.timeLimitedEnd)
+        }
         builder.add("OPTION_NOT_PUBLISH_NSFW", bool(notNsfw))
         if (!notNsfw) {
             builder.add("NSFW_VAL", draft.nsfw.wire.toString())
@@ -57,7 +71,8 @@ object UploadFormBuilder {
         if (!noPassword) {
             builder.add("PASSWORD_VAL", draft.password)
         }
-        builder.add("OPTION_SHOW_FIRST", bool(draft.showFirstOnly))
+        builder.add("OPTION_SHOW_FIRST", bool(showFirstOnly))
+        // REC/OPTION_RECENT 对私密作品无意义，保持原值提交（与官方 App 序列化习惯一致）
         builder.add("OPTION_RECENT", bool(draft.showRecent))
         builder.add("OPTION_TWEET", "false")
         builder.add("OPTION_TWEET_IMAGE", "true")
@@ -69,6 +84,10 @@ object UploadFormBuilder {
             builder.add("TIT", draft.title)
             builder.add("BDY", draft.body)
             builder.add("NOVEL_DIRECTION_VAL", draft.novelDirection.toString())
+        }
+        if (edit != null) {
+            builder.add("IID", edit.iid.toString())
+            builder.add("DELTW", "0")
         }
         return builder.build()
     }

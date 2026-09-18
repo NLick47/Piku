@@ -74,7 +74,20 @@ class UserWorksViewModel @Inject constructor(
     private var page = 0
     private var generation = 0
 
+    companion object {
+        const val KEY_POSTS_CHANGED = "my_posts_changed"
+    }
+
     init {
+        // 从投稿管理页返回：删除过作品就整页刷新，保证列表与服务端一致
+        viewModelScope.launch {
+            savedStateHandle.getStateFlow(KEY_POSTS_CHANGED, false).collect { changed ->
+                if (changed) {
+                    savedStateHandle[KEY_POSTS_CHANGED] = false
+                    retry()
+                }
+            }
+        }
         viewModelScope.launch {
             observeFavoriteIdsUseCase().collect { ids ->
                 _uiState.update { it.copy(favoriteIds = ids) }

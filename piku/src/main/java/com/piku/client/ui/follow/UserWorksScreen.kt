@@ -124,6 +124,7 @@ private const val CollapseTakeoverEnd = 0.68f
 fun UserWorksScreen(
     onBack: () -> Unit,
     onWorkClick: (Work) -> Unit,
+    onManageClick: (Long, String) -> Unit = { _, _ -> },
     dark: Boolean = LocalDarkTheme.current,
 ) {
     val viewModel: UserWorksViewModel = hiltViewModel()
@@ -179,6 +180,11 @@ fun UserWorksScreen(
                 },
                 onOpenBrowser = {
                     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(userPageUrl)))
+                },
+                onManageClick = if (state.isSelf) {
+                    { onManageClick(state.userId, state.userName) }
+                } else {
+                    null
                 },
                 dark = dark,
             )
@@ -314,6 +320,7 @@ private fun UserWorksTopBar(
     onBack: () -> Unit,
     onCopyLink: () -> Unit,
     onOpenBrowser: () -> Unit,
+    onManageClick: (() -> Unit)? = null,
     dark: Boolean,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -379,6 +386,19 @@ private fun UserWorksTopBar(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+            }
+            // 自己的主页才显示「管理」入口（进入投稿管理页）
+            if (onManageClick != null) {
+                Text(
+                    text = stringResource(R.string.my_posts_manage),
+                    color = PikuColors.accent,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .clickable(onClick = onManageClick)
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                )
             }
             var anchorHeightPx by remember { mutableIntStateOf(0) }
             Box(

@@ -120,6 +120,8 @@ import com.piku.client.ui.common.PikuBackButton
 import com.piku.client.ui.common.PikuBottomSheet
 import com.piku.client.ui.common.PikuSheetHandle
 import com.piku.client.ui.common.PikuSheetTitle
+import com.piku.client.ui.common.SkeletonBlock
+import com.piku.client.ui.common.rememberSkeletonPulse
 import com.piku.client.ui.theme.ErrorRedDark
 import com.piku.client.ui.theme.GlassCardBgDark
 import com.piku.client.ui.theme.GlassCardBgLight
@@ -137,6 +139,8 @@ import com.piku.client.ui.theme.LoginTextSecondaryDark
 import com.piku.client.ui.theme.PikuColors
 import com.piku.client.ui.theme.PillBorderDark
 import com.piku.client.ui.theme.PillBorderLight
+import com.piku.client.ui.theme.PrivateAmberDark
+import com.piku.client.ui.theme.PrivateAmberLight
 import com.piku.client.ui.theme.ViewerBackgroundDark
 import com.piku.client.ui.theme.themedSwitchColors
 import kotlinx.coroutines.launch
@@ -155,6 +159,8 @@ fun PublishScreen(
     onBack: () -> Unit,
     onPublished: (Long) -> Unit,
     initialDraftId: Long? = null,
+    /** >0 = 编辑该已发布作品（编辑模式：无草稿箱、无选图、无类型切换、提交走 Update 端点） */
+    editWorkId: Long = -1L,
 ) {
     val viewModel: PublishViewModel = hiltViewModel()
     val draftBoxViewModel: DraftBoxViewModel = hiltViewModel()
@@ -162,6 +168,7 @@ fun PublishScreen(
     val sessionId by viewModel.sessionId.collectAsStateWithLifecycle()
     val boxDrafts by draftBoxViewModel.drafts.collectAsStateWithLifecycle()
     val dark = LocalDarkTheme.current
+    val isEditMode = editWorkId > 0
     val snackbar = remember { SnackbarHostState() }
     val boxScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -191,9 +198,14 @@ fun PublishScreen(
     LaunchedEffect(Unit) {
         viewModel.published.collect { workId -> onPublished(workId) }
     }
-    // 进入会话：新创作(null/-1)或编辑某份草稿；只执行一次，后续切稿走 switchTo
-    LaunchedEffect(initialDraftId) {
-        viewModel.openSession(initialDraftId)
+    // 进入会话：编辑已发布作品 > 编辑本地草稿 > 新创作；只执行一次
+    LaunchedEffect(editWorkId, initialDraftId) {
+        if (editWorkId > 0) viewModel.openEditSession(editWorkId)
+        else viewModel.openSession(initialDraftId)
+    }
+    // 编辑页加载失败：提示已发 Snackbar，直接回列表页
+    LaunchedEffect(state.editFailed) {
+        if (state.editFailed) onBack()
     }
     // 每次打开草稿箱刷新独立列表
     LaunchedEffect(showDraftBox) {
@@ -229,21 +241,28 @@ fun PublishScreen(
     ) {
         Column(Modifier.fillMaxSize()) {
             PublishTopBar(
+                title = if (isEditMode) stringResource(R.string.publish_edit_title)
+                else stringResource(R.string.publish_title),
                 onBack = {
-                    if (state.isBusy) return@PublishTopBar
+                    if (state.isBusy || state.editLoading) return@PublishTopBar
                     if (state.dirty && state.hasContent) {
                         showExitDialog = true
                     } else {
                         flushPendingTag()
-                        viewModel.saveAndExit(onBack)
+                        if (isEditMode) onBack() else viewModel.saveAndExit(onBack)
                     }
                 },
                 draftCount = boxDrafts.size,
-                onOpenDrafts = {
-                    flushPendingTag()
-                    showDraftBox = true
+                // 编辑模式没有草稿语义：草稿箱入口隐藏
+                onOpenDrafts = if (isEditMode) null else {
+                    {
+                        flushPendingTag()
+                        showDraftBox = true
+                    }
                 },
-                canPublish = !state.isBusy,
+                canPublish = !state.isBusy && !state.editLoading,
+                publishLabel = if (isEditMode) stringResource(R.string.publish_save)
+                else stringResource(R.string.publish_publish),
                 onPublish = {
                     flushPendingTag()
                     viewModel.publish()
@@ -260,66 +279,78 @@ fun PublishScreen(
                     .padding(top = 4.dp, bottom = 24.dp)
                     .imePadding(),
             ) {
-                KindSegmented(kind = state.kind, enabled = !state.isBusy, onSelect = viewModel::setKind)
-                Spacer(Modifier.height(14.dp))
-                if (state.kind == UploadKind.ILLUST) {
-                    ImageSection(
-                        images = state.images,
-                        totalBytes = state.totalBytes,
-                        onPick = {
-                            pickImages.launch(
-                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                if (state.editLoading) {
+                    // 编辑页加载骨架：与编辑模式版式同构，替代原先的单点 LoaderDots
+                    PublishEditSkeleton(dark = dark)
+                } else {
+                    if (!isEditMode) {
+                        KindSegmented(kind = state.kind, enabled = !state.isBusy, onSelect = viewModel::setKind)
+                        Spacer(Modifier.height(14.dp))
+                    }
+                    if (state.kind == UploadKind.ILLUST) {
+                        if (isEditMode) {
+                            // 编辑模式第一版不改图片：服务端保持原有图片
+                            EditImageReadonlyNote(dark = dark)
+                        } else {
+                            ImageSection(
+                                images = state.images,
+                                totalBytes = state.totalBytes,
+                                onPick = {
+                                    pickImages.launch(
+                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                                    )
+                                },
+                                onTileClick = { showImageActions = it },
+                                onRemove = viewModel::removeImage,
+                                dark = dark,
                             )
-                        },
-                        onTileClick = { showImageActions = it },
-                        onRemove = viewModel::removeImage,
+                        }
+                    } else {
+                        NovelSection(
+                            title = state.title,
+                            body = state.body,
+                            vertical = state.novelDirection == 1,
+                            onTitle = viewModel::setTitle,
+                            onDirection = viewModel::setNovelDirection,
+                            onOpenComposer = { showNovelComposer = true },
+                            dark = dark,
+                        )
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    CategorySection(
+                        categoryCd = state.categoryCd,
+                        onSelect = viewModel::setCategory,
+                        onMore = { showCategorySheet = true },
                         dark = dark,
                     )
-                } else {
-                    NovelSection(
-                        title = state.title,
-                        body = state.body,
-                        vertical = state.novelDirection == 1,
-                        onTitle = viewModel::setTitle,
-                        onDirection = viewModel::setNovelDirection,
-                        onOpenComposer = { showNovelComposer = true },
+                    Spacer(Modifier.height(12.dp))
+                    TagsSection(
+                        tags = state.tagsText,
+                        pendingTag = pendingTag,
+                        onPendingTagChange = { pendingTag = it },
+                        myTags = viewModel.myTags.collectAsStateWithLifecycle().value,
+                        tagSuggestions = viewModel.tagSuggestions.collectAsStateWithLifecycle().value,
+                        onTagInputChange = viewModel::onTagInputChange,
+                        onAppend = viewModel::appendTag,
+                        onRemove = viewModel::removeTagWord,
+                        onFlushPending = { flushPendingTag() },
+                        dark = dark,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    DescriptionSection(
+                        text = state.description,
+                        onChange = viewModel::setDescription,
+                        dark = dark,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    OptionsSummaryCard(
+                        state = state,
+                        onPublic = viewModel::setPublish,
+                        onNsfw = viewModel::setNsfw,
+                        onClickMore = { showOptionsSheet = true },
                         dark = dark,
                     )
                 }
-                Spacer(Modifier.height(12.dp))
-                CategorySection(
-                    categoryCd = state.categoryCd,
-                    onSelect = viewModel::setCategory,
-                    onMore = { showCategorySheet = true },
-                    dark = dark,
-                )
-                Spacer(Modifier.height(12.dp))
-                TagsSection(
-                    tags = state.tagsText,
-                    pendingTag = pendingTag,
-                    onPendingTagChange = { pendingTag = it },
-                    myTags = viewModel.myTags.collectAsStateWithLifecycle().value,
-                    tagSuggestions = viewModel.tagSuggestions.collectAsStateWithLifecycle().value,
-                    onTagInputChange = viewModel::onTagInputChange,
-                    onAppend = viewModel::appendTag,
-                    onRemove = viewModel::removeTagWord,
-                    onFlushPending = { flushPendingTag() },
-                    dark = dark,
-                )
-                Spacer(Modifier.height(12.dp))
-                DescriptionSection(
-                    text = state.description,
-                    onChange = viewModel::setDescription,
-                    dark = dark,
-                )
-                Spacer(Modifier.height(12.dp))
-                OptionsSummaryCard(
-                    state = state,
-                    onPublic = viewModel::setPublish,
-                    onNsfw = viewModel::setNsfw,
-                    onClickMore = { showOptionsSheet = true },
-                    dark = dark,
-                )
             }
         }
 
@@ -428,18 +459,29 @@ fun PublishScreen(
         )
     }
     if (showExitDialog) {
-        ExitDraftDialog(
-            onSave = {
-                showExitDialog = false
-                flushPendingTag()
-                viewModel.saveAndExit(onBack)
-            },
-            onDiscard = {
-                showExitDialog = false
-                viewModel.discardAndExit(onBack)
-            },
-            onStay = { showExitDialog = false },
-        )
+        if (isEditMode) {
+            // 编辑模式：没有草稿语义，只有"放弃修改 / 继续编辑"
+            EditExitDialog(
+                onDiscard = {
+                    showExitDialog = false
+                    onBack()
+                },
+                onStay = { showExitDialog = false },
+            )
+        } else {
+            ExitDraftDialog(
+                onSave = {
+                    showExitDialog = false
+                    flushPendingTag()
+                    viewModel.saveAndExit(onBack)
+                },
+                onDiscard = {
+                    showExitDialog = false
+                    viewModel.discardAndExit(onBack)
+                },
+                onStay = { showExitDialog = false },
+            )
+        }
     }
 }
 
@@ -559,10 +601,13 @@ private fun Modifier.dashedBorder(color: Color, corner: Dp): Modifier =
 
 @Composable
 private fun PublishTopBar(
+    title: String,
     onBack: () -> Unit,
     draftCount: Int,
-    onOpenDrafts: () -> Unit,
+    /** null = 隐藏草稿箱入口（编辑模式） */
+    onOpenDrafts: (() -> Unit)?,
     canPublish: Boolean,
+    publishLabel: String,
     onPublish: () -> Unit,
     dark: Boolean,
 ) {
@@ -590,7 +635,7 @@ private fun PublishTopBar(
             contentDescription = stringResource(R.string.back),
         )
         Text(
-            text = stringResource(R.string.publish_title),
+            text = title,
             color = PikuColors.textPrimary,
             fontSize = 17.sp,
             fontWeight = FontWeight.SemiBold,
@@ -600,14 +645,15 @@ private fun PublishTopBar(
                 .weight(1f)
                 .padding(start = 2.dp),
         )
-        // 草稿箱
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(999.dp))
-                .clickable(onClick = onOpenDrafts)
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            contentAlignment = Alignment.Center,
-        ) {
+        // 草稿箱（编辑模式不渲染）
+        if (onOpenDrafts != null) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .clickable(onClick = onOpenDrafts)
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                contentAlignment = Alignment.Center,
+            ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = stringResource(R.string.menu_draft_box),
@@ -642,11 +688,12 @@ private fun PublishTopBar(
                     }
                 }
             }
+            }
         }
         Spacer(Modifier.width(8.dp))
         // 发布按钮（无背景）
         Text(
-            text = stringResource(R.string.publish_publish),
+            text = publishLabel,
             color = if (canPublish) accent else accent.copy(alpha = 0.4f),
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
@@ -1757,7 +1804,6 @@ private fun OptionsSummaryCard(
     dark: Boolean,
 ) {
     val faint = PikuColors.textFaint
-    val accent = PikuColors.accent
 
     SectionCard(dark = dark) {
         SectionHeader(
@@ -1793,6 +1839,15 @@ private fun OptionsSummaryCard(
                 colors = themedSwitchColors(dark),
             )
         }
+        // 开关状态实时说明：公开时提示可用的细化选项，私密时说明后果
+        Text(
+            text = stringResource(
+                if (state.publish) R.string.publish_options_public_on_hint
+                else R.string.publish_options_public_off_hint,
+            ),
+            color = PikuColors.textFaint,
+            fontSize = 11.sp,
+        )
 
         Spacer(Modifier.height(8.dp))
 
@@ -1809,62 +1864,6 @@ private fun OptionsSummaryCard(
             red = ErrorRedDark,
             onPick = onNsfw,
         )
-
-        // 其他选项提示
-        if (state.visibility != ShowVisibility.ANYONE || state.passwordEnabled || state.showRecent || state.showFirstOnly) {
-            Spacer(Modifier.height(8.dp))
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                if (state.visibility != ShowVisibility.ANYONE) {
-                    SummaryChip(
-                        text = stringResource(
-                            when (state.visibility) {
-                                ShowVisibility.POIPIKU_LOGIN -> R.string.publish_options_visibility_login
-                                ShowVisibility.FOLLOWER -> R.string.publish_options_visibility_follower
-                                ShowVisibility.ANYONE -> R.string.publish_options_visibility_anyone
-                            },
-                        ),
-                        bg = accent.copy(alpha = 0.14f),
-                        fg = accent,
-                    )
-                }
-                if (state.passwordEnabled) {
-                    SummaryChip(
-                        text = stringResource(R.string.publish_options_password_on),
-                        bg = accent.copy(alpha = 0.14f),
-                        fg = accent,
-                    )
-                }
-                if (state.showRecent) {
-                    SummaryChip(
-                        text = stringResource(R.string.publish_options_recent),
-                        bg = accent.copy(alpha = 0.14f),
-                        fg = accent,
-                    )
-                }
-                if (state.showFirstOnly) {
-                    SummaryChip(
-                        text = stringResource(R.string.publish_options_first_only),
-                        bg = accent.copy(alpha = 0.14f),
-                        fg = accent,
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SummaryChip(text: String, bg: Color, fg: Color) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(999.dp))
-            .background(bg)
-            .padding(horizontal = 11.dp, vertical = 5.dp),
-    ) {
-        Text(text, color = fg, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1)
     }
 }
 
@@ -1958,20 +1957,32 @@ private fun PublishOptionsSheet(
             label = stringResource(R.string.publish_options_visibility_anyone),
             selected = state.visibility == ShowVisibility.ANYONE,
             accent = accent,
+            enabled = state.publish,
             onClick = { onVisibility(ShowVisibility.ANYONE) },
         )
         VisibilityOption(
             label = stringResource(R.string.publish_options_visibility_login),
             selected = state.visibility == ShowVisibility.POIPIKU_LOGIN,
             accent = accent,
+            enabled = state.publish,
             onClick = { onVisibility(ShowVisibility.POIPIKU_LOGIN) },
         )
         VisibilityOption(
             label = stringResource(R.string.publish_options_visibility_follower),
             selected = state.visibility == ShowVisibility.FOLLOWER,
             accent = accent,
+            enabled = state.publish,
             onClick = { onVisibility(ShowVisibility.FOLLOWER) },
         )
+        if (!state.publish) {
+            // 私密时可见范围不适用：置灰保留原选择，重新公开后恢复
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = stringResource(R.string.publish_options_private_scope_hint),
+                color = if (dark) PrivateAmberDark else PrivateAmberLight,
+                fontSize = 11.sp,
+            )
+        }
 
         Spacer(Modifier.height(12.dp))
 
@@ -2013,9 +2024,11 @@ private fun PublishOptionsSheet(
             label = stringResource(R.string.publish_options_recent),
             checked = state.showRecent,
             onChange = onRecent,
+            // 私密作品不会出现在任何动向，禁用但保留状态
+            enabled = state.publish,
             dark = dark,
         )
-        if (state.images.size >= 2 && state.visibility != ShowVisibility.ANYONE) {
+        if (state.publish && state.images.size >= 2 && state.visibility != ShowVisibility.ANYONE) {
             SwitchRow(
                 label = stringResource(R.string.publish_options_first_only),
                 checked = state.showFirstOnly,
@@ -2050,6 +2063,7 @@ private fun SwitchRow(
     hint: String = "",
     checked: Boolean,
     onChange: (Boolean) -> Unit,
+    enabled: Boolean = true,
     dark: Boolean,
 ) {
     Row(
@@ -2059,12 +2073,20 @@ private fun SwitchRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(label, color = PikuColors.textPrimary, fontSize = 14.sp)
+            Text(
+                label,
+                color = if (enabled) PikuColors.textPrimary else PikuColors.textFaint,
+                fontSize = 14.sp,
+            )
             if (hint.isNotBlank()) {
                 Text(hint, color = PikuColors.textFaint, fontSize = 11.sp)
             }
         }
-        Switch(checked = checked, onCheckedChange = onChange, colors = themedSwitchColors(dark))
+        Switch(
+            checked = checked,
+            onCheckedChange = if (enabled) onChange else null,
+            colors = themedSwitchColors(dark),
+        )
     }
 }
 
@@ -2136,12 +2158,24 @@ private fun RatingChip(
 }
 
 @Composable
-private fun VisibilityOption(label: String, selected: Boolean, accent: Color, onClick: () -> Unit) {
+private fun VisibilityOption(
+    label: String,
+    selected: Boolean,
+    accent: Color,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    // 禁用（私密）时整体置灰，选中态仅保留淡色标记供"重新公开后恢复"参考
+    val ringColor = when {
+        !enabled -> PikuColors.border
+        selected -> accent
+        else -> PikuColors.textFaint
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(vertical = 10.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -2150,7 +2184,7 @@ private fun VisibilityOption(label: String, selected: Boolean, accent: Color, on
                 .size(18.dp)
                 .clip(CircleShape)
                 .border(
-                    BorderStroke(1.5.dp, if (selected) accent else PikuColors.textFaint),
+                    BorderStroke(1.5.dp, ringColor),
                     CircleShape,
                 )
                 .padding(3.dp),
@@ -2160,16 +2194,20 @@ private fun VisibilityOption(label: String, selected: Boolean, accent: Color, on
                     modifier = Modifier
                         .fillMaxSize()
                         .clip(CircleShape)
-                        .background(accent),
+                        .background(if (enabled) accent else PikuColors.border),
                 )
             }
         }
         Spacer(Modifier.width(10.dp))
         Text(
             text = label,
-            color = if (selected) accent else PikuColors.textPrimary,
+            color = when {
+                !enabled -> PikuColors.textFaint
+                selected -> accent
+                else -> PikuColors.textPrimary
+            },
             fontSize = 14.sp,
-            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+            fontWeight = if (selected && enabled) FontWeight.Medium else FontWeight.Normal,
         )
     }
 }
@@ -2204,6 +2242,114 @@ private fun ExitDraftDialog(
     )
 }
 
+/** 编辑模式的退出确认：没有草稿语义，只有"放弃修改 / 继续编辑" */
+@Composable
+private fun EditExitDialog(
+    onDiscard: () -> Unit,
+    onStay: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onStay,
+        title = { Text(stringResource(R.string.publish_edit_exit_title)) },
+        confirmButton = {
+            TextButton(onClick = onStay) {
+                Text(stringResource(R.string.publish_edit_exit_stay), color = PikuColors.accent)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDiscard) {
+                Text(stringResource(R.string.publish_edit_exit_discard), color = PikuColors.error)
+            }
+        },
+    )
+}
+
+/** 编辑模式图片区占位 */
+@Composable
+private fun EditImageReadonlyNote(dark: Boolean) {
+    SectionCard(dark = dark) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = stringResource(R.string.publish_kind_image),
+                color = PikuColors.textPrimary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = stringResource(R.string.publish_edit_image_note),
+            color = PikuColors.textFaint,
+            fontSize = 12.sp,
+        )
+    }
+}
+
+/** 编辑页加载骨架：与编辑模式版式同构（首卡 + 分类 + 标签 + 说明 + 选项摘要），呼吸脉冲 */
+@Composable
+private fun PublishEditSkeleton(dark: Boolean) {
+    val pulse = rememberSkeletonPulse()
+    Column {
+        // 首卡：插画=图片只读说明，小说=标题/正文摘要；类型解析前两者版式相近，共用一个壳
+        SectionCard(dark = dark) {
+            SkeletonBlock(pulse.value, Modifier.fillMaxWidth().height(13.dp), shape = RoundedCornerShape(6.dp))
+            Spacer(Modifier.height(10.dp))
+            SkeletonBlock(pulse.value, Modifier.fillMaxWidth(0.72f).height(10.dp), shape = RoundedCornerShape(5.dp))
+            Spacer(Modifier.height(12.dp))
+            SkeletonBlock(pulse.value, Modifier.fillMaxWidth().height(64.dp), shape = RoundedCornerShape(10.dp))
+        }
+        Spacer(Modifier.height(12.dp))
+        // 分类
+        SectionCard(dark = dark) {
+            SkeletonBlock(pulse.value, Modifier.size(64.dp, 12.dp), shape = RoundedCornerShape(6.dp))
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SkeletonBlock(pulse.value, Modifier.size(72.dp, 30.dp), shape = RoundedCornerShape(15.dp))
+                SkeletonBlock(pulse.value, Modifier.size(88.dp, 30.dp), shape = RoundedCornerShape(15.dp))
+                SkeletonBlock(pulse.value, Modifier.size(64.dp, 30.dp), shape = RoundedCornerShape(15.dp))
+                SkeletonBlock(pulse.value, Modifier.size(80.dp, 30.dp), shape = RoundedCornerShape(15.dp))
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        // 标签
+        SectionCard(dark = dark) {
+            SkeletonBlock(pulse.value, Modifier.size(48.dp, 12.dp), shape = RoundedCornerShape(6.dp))
+            Spacer(Modifier.height(12.dp))
+            SkeletonBlock(pulse.value, Modifier.fillMaxWidth().height(38.dp), shape = RoundedCornerShape(10.dp))
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SkeletonBlock(pulse.value, Modifier.size(68.dp, 28.dp), shape = RoundedCornerShape(14.dp))
+                SkeletonBlock(pulse.value, Modifier.size(96.dp, 28.dp), shape = RoundedCornerShape(14.dp))
+                SkeletonBlock(pulse.value, Modifier.size(56.dp, 28.dp), shape = RoundedCornerShape(14.dp))
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        // 说明
+        SectionCard(dark = dark) {
+            SkeletonBlock(pulse.value, Modifier.size(48.dp, 12.dp), shape = RoundedCornerShape(6.dp))
+            Spacer(Modifier.height(12.dp))
+            SkeletonBlock(pulse.value, Modifier.fillMaxWidth().height(88.dp), shape = RoundedCornerShape(10.dp))
+        }
+        Spacer(Modifier.height(12.dp))
+        // 发布选项摘要：开关行 + 年龄分级
+        SectionCard(dark = dark) {
+            SkeletonBlock(pulse.value, Modifier.size(72.dp, 12.dp), shape = RoundedCornerShape(6.dp))
+            Spacer(Modifier.height(14.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SkeletonBlock(pulse.value, Modifier.weight(1f).height(12.dp), shape = RoundedCornerShape(6.dp))
+                Spacer(Modifier.width(12.dp))
+                SkeletonBlock(pulse.value, Modifier.size(40.dp, 22.dp), shape = RoundedCornerShape(11.dp))
+            }
+            Spacer(Modifier.height(14.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                repeat(4) {
+                    SkeletonBlock(pulse.value, Modifier.weight(1f).height(30.dp), shape = RoundedCornerShape(15.dp))
+                }
+            }
+        }
+    }
+}
 
 // ---------- 发布中 / 失败 / 成功覆盖层 ----------
 

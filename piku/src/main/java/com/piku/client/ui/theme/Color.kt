@@ -54,6 +54,9 @@ val ErrorRedLight = Color(0xFFC24B4B)
 
 val StatusSyncing = Color(0xFFFFA726)
 
+val PrivateAmberLight = Color(0xFFA96A10)
+val PrivateAmberDark = Color(0xFFE5A94D)
+
 val ShadowAmbient = Color(0x33000000)
 val ShadowSpot = Color(0x40000000)
 

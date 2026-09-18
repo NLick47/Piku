@@ -31,6 +31,8 @@ import com.piku.client.ui.history.HistoryScreen
 import com.piku.client.ui.home.HomeScreen
 import com.piku.client.ui.login.EmailLoginScreen
 import com.piku.client.ui.login.RegisterScreen
+import com.piku.client.ui.myposts.MyPostsScreen
+import com.piku.client.ui.publish.PublishScreen
 import com.piku.client.ui.search.PoipikuLink
 import com.piku.client.ui.search.SearchScreen
 import com.piku.client.ui.tags.TagScreen
@@ -47,6 +49,8 @@ object Routes {
     const val TAGS = "tags"
     const val FOLLOW_USERS = "follow_users"
     const val USER_WORKS = "user_works/{userId}?userName={userName}"
+    const val MY_POSTS = "my_posts/{userId}?userName={userName}"
+    const val EDIT_POST = "edit_post/{workId}"
     const val SEARCH = "search/{keyword}"
     const val MAX_DETAIL_DEPTH = 3
 
@@ -59,6 +63,15 @@ object Routes {
 
     fun userWorks(userId: Long, userName: String = "") =
         "user_works/$userId?userName=${Uri.encode(userName)}"
+
+    fun myPosts(userId: Long, userName: String = "") =
+        "my_posts/$userId?userName=${Uri.encode(userName)}"
+
+    /** 编辑已发布作品（发布页编辑模式；类型由页面自己判定，不进路由参数） */
+    fun editPost(workId: Long) = "edit_post/$workId"
+
+    /** 管理页删除成功后写回用户主页的标记（SavedStateHandle 返回结果模式） */
+    const val KEY_POSTS_CHANGED = "my_posts_changed"
 
     /**
      * [thumbnailUrl] 为来源页（feed/历史/收藏/相关作品）的缩略图，供详情页在作品
@@ -289,6 +302,49 @@ fun AppNavHost() {
                 onBack = safePopBack,
                 onWorkClick = { work: Work ->
                     navController.navigate(Routes.detail(work.authorId, work.id, work.thumbnailUrl))
+                },
+                onManageClick = { uid, name ->
+                    navController.navigate(Routes.myPosts(uid, name))
+                },
+            )
+        }
+        composable(
+            route = Routes.MY_POSTS,
+            arguments = listOf(
+                navArgument("userId") { type = NavType.LongType },
+                navArgument("userName") { type = NavType.StringType; defaultValue = "" },
+            ),
+        ) {
+            MyPostsScreen(
+                onBack = safePopBack,
+                onWorkClick = { work: Work ->
+                    navController.navigate(Routes.detail(work.authorId, work.id, work.thumbnailUrl))
+                },
+                onEditClick = { work: Work ->
+                    navController.navigate(Routes.editPost(work.id))
+                },
+                onDeleted = {
+                    navController.previousBackStackEntry
+                        ?.savedStateHandle
+                        ?.set(Routes.KEY_POSTS_CHANGED, true)
+                },
+            )
+        }
+        composable(
+            route = Routes.EDIT_POST,
+            arguments = listOf(
+                navArgument("workId") { type = NavType.LongType },
+            ),
+        ) {
+            PublishScreen(
+                onBack = safePopBack,
+                editWorkId = it.arguments?.getLong("workId") ?: -1L,
+                onPublished = {
+                    // 编辑保存成功：写回投稿管理页标记触发刷新，然后返回
+                    navController.previousBackStackEntry
+                        ?.savedStateHandle
+                        ?.set(Routes.KEY_POSTS_CHANGED, true)
+                    safePopBack()
                 },
             )
         }

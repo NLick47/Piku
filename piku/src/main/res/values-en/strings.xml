@@ -455,6 +455,12 @@
     <string name="publish_error_password_empty">Viewing password is on. Please enter one</string>
     <string name="publish_title">Post</string>
     <string name="publish_publish">Publish</string>
+    <string name="publish_edit_title">Edit post</string>
+    <string name="publish_save">Save</string>
+    <string name="publish_edit_image_note">Images can\'t be changed in edit mode. The original images are kept after saving</string>
+    <string name="publish_edit_exit_title">Discard unsaved changes?</string>
+    <string name="publish_edit_exit_discard">Discard</string>
+    <string name="publish_edit_exit_stay">Keep editing</string>
     <string name="publish_kind_image">Illustration</string>
     <string name="publish_kind_novel">Novel</string>
     <string name="publish_add_images">Add images</string>
@@ -509,7 +515,9 @@
     <string name="publish_options_first_only">Only first image public</string>
     <string name="publish_options_first_only_hint">Only the first image is public · needs 2+ images and restricted visibility</string>
     <string name="publish_options_public_row">Post as public</string>
-    <string name="publish_options_public_off_hint">If off, only you can see it</string>
+    <string name="publish_options_public_off_hint">Only you · hidden from your profile, timelines and What\'s New</string>
+    <string name="publish_options_public_on_hint">Visible to everyone · visibility scope and password available</string>
+    <string name="publish_options_private_scope_hint">Not available for private works · restored when the work is public again</string>
     <string name="publish_options_rating">Age rating</string>
     <string name="publish_options_rating_all">All ages</string>
     <string name="publish_options_rating_cushion">Cushion</string>
@@ -568,4 +576,12 @@
     <string name="draft_box_duplicate">Duplicate</string>
     <string name="draft_box_empty_search">No matching drafts</string>
     <string name="draft_novel_stat">%1$d chars</string>
+    <string name="my_posts_title">Manage posts</string>
+    <string name="my_posts_empty">No posts yet</string>
+    <string name="my_posts_manage">Manage</string>
+    <string name="my_posts_edit">Edit</string>
+    <string name="my_posts_delete_confirm_title">Delete post</string>
+    <string name="my_posts_delete_confirm_body">This cannot be undone. \"%1$s\" will be removed from your profile. Delete it?</string>
+    <string name="my_posts_deleted">Deleted</string>
+    <string name="my_posts_delete_failed">Delete failed, please retry</string>
 </resources>

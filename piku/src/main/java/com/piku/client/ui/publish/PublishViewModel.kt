@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.piku.client.R
 import com.piku.client.data.local.CustomTagRepository
 import com.piku.client.data.local.DraftRepository
+import com.piku.client.data.repository.EditOptions
 import com.piku.client.data.repository.FeedRepository
 import com.piku.client.data.repository.PublishFailure
 import com.piku.client.data.repository.PublishRepository
@@ -80,6 +81,16 @@ data class PublishUiState(
     val phase: PublishPhase = PublishPhase.Idle,
     /** 一次性提示（错误/草稿已存），UI 展示后调 [consumeNotice] */
     val noticeRes: Int? = null,
+    // ---- 编辑已发布作品（editWorkId != null 时激活，草稿自动保存全部短路）----
+    val editWorkId: Long? = null,
+    /** 编辑页（详情页+预填页）加载中：表单区显示 loading，提交按钮禁用 */
+    val editLoading: Boolean = false,
+    /** 编辑页加载失败：UI 收到后直接返回列表页 */
+    val editFailed: Boolean = false,
+    /** 时限原值透传（App 不支持编辑定时，但提交必须带回，防把定时作品改成即时公开） */
+    val notTimeLimited: Boolean = true,
+    val timeLimitedStart: String = "",
+    val timeLimitedEnd: String = "",
 ) {
     val isBusy: Boolean get() = phase != PublishPhase.Idle
     val hasContent: Boolean
@@ -174,6 +185,46 @@ class PublishViewModel @Inject constructor(
         persistSnapshot()
         openSession(id)
         onReady()
+    }
+
+    /**
+     * 编辑已发布作品：拉作品详情页判类型（编辑页 URL 不校验类型，不能猜），
+     * 再拉编辑页解析服务端预填的当前值。失败置 editFailed，由 UI 返回列表页。
+     */
+    fun openEditSession(workId: Long) = viewModelScope.launch {
+        autoSaveJob?.cancel()
+        resetState()
+        _uiState.update { it.copy(editWorkId = workId, editLoading = true) }
+        publishRepository.loadEditPage(workId)
+            .onSuccess { data ->
+                _uiState.update {
+                    it.copy(
+                        editLoading = false,
+                        kind = data.kind,
+                        categoryCd = data.categoryCd,
+                        tagsText = data.tags,
+                        description = data.description,
+                        title = data.title,
+                        body = data.body,
+                        novelDirection = data.novelDirection,
+                        publish = data.publish,
+                        nsfw = data.nsfw,
+                        visibility = data.visibility,
+                        // 密码值服务端不回显：开启时必须重新输入（validate 会拦空密码）
+                        passwordEnabled = data.passwordEnabled,
+                        password = "",
+                        showRecent = data.showRecent,
+                        showFirstOnly = data.showFirstOnly,
+                        notTimeLimited = data.notTimeLimited,
+                        timeLimitedStart = data.timeLimitedStart,
+                        timeLimitedEnd = data.timeLimitedEnd,
+                    )
+                }
+            }
+            .onFailure { e ->
+                _uiState.update { it.copy(editWorkId = null, editLoading = false, editFailed = true) }
+                handlePublishFailure(e)
+            }
     }
 
     /** 新创作：当前已自动存过，直接重置为空白会话（不删已存的稿） */
@@ -339,6 +390,8 @@ class PublishViewModel @Inject constructor(
      * 无实质内容时不留行：已有行则删除（用户清空全部内容的情况）。
      */
     private suspend fun persistSnapshot() {
+        // 编辑已发布作品不写草稿箱（草稿语义只属于新创作）
+        if (_uiState.value.editWorkId != null) return
         val draft = buildDraft(_uiState.value).copy(password = "")
         if (!draft.hasContent) {
             currentDraftId?.let { id ->
@@ -391,12 +444,42 @@ class PublishViewModel @Inject constructor(
         if (_uiState.value.isBusy) return
         viewModelScope.launch {
             val state = _uiState.value
-            val draft = buildDraft(state)
-            when (state.kind) {
-                UploadKind.NOVEL -> publishNovel(draft)
-                UploadKind.ILLUST -> publishIllust(draft)
+            val editWorkId = state.editWorkId
+            if (editWorkId != null) {
+                updateWork(editWorkId)
+            } else {
+                val draft = buildDraft(state)
+                when (state.kind) {
+                    UploadKind.NOVEL -> publishNovel(draft)
+                    UploadKind.ILLUST -> publishIllust(draft)
+                }
             }
         }
+    }
+
+    /** 编辑提交：单步更新元数据（图集不动已有图片），成功动效与发布共用 */
+    private suspend fun updateWork(workId: Long) {
+        val state = _uiState.value
+        val draft = buildDraft(state)
+        val options = EditOptions(
+            notTimeLimited = state.notTimeLimited,
+            timeLimitedStart = state.timeLimitedStart,
+            timeLimitedEnd = state.timeLimitedEnd,
+        )
+        _uiState.update { it.copy(phase = PublishPhase.Creating) }
+        val result = when (state.kind) {
+            UploadKind.NOVEL -> publishRepository.updateNovel(draft, workId, options)
+            UploadKind.ILLUST -> publishRepository.updateEntry(draft, workId, options)
+        }
+        result.fold(
+            onSuccess = {
+                _uiState.update { it.copy(phase = PublishPhase.Success) }
+                delay(600)
+                clearAfterPublished()
+                _published.tryEmit(workId)
+            },
+            onFailure = { fail -> handlePublishFailure(fail) },
+        )
     }
 
     /** 失败页后重试：从该页续传（repo 内部单张自动重试 3 次） */
@@ -512,8 +595,10 @@ class PublishViewModel @Inject constructor(
 
     private fun validate(): Int? {
         val s = _uiState.value
+        val isEdit = s.editWorkId != null
         if (s.categoryCd == null) return R.string.publish_error_require_category
-        if (s.kind == UploadKind.ILLUST && s.images.isEmpty()) {
+        // 编辑图集不改图片（服务端保持原有图片），无需"必选图"校验
+        if (s.kind == UploadKind.ILLUST && !isEdit && s.images.isEmpty()) {
             return R.string.publish_error_require_image
         }
         if (s.kind == UploadKind.NOVEL && s.title.isBlank()) {

@@ -1,9 +1,14 @@
 package com.piku.client.data.repository
 
+import com.piku.client.data.remote.EditPageData
+import com.piku.client.data.remote.EditPageParser
+import com.piku.client.data.remote.PoipikuApi
 import com.piku.client.data.remote.SessionMonitor
 import com.piku.client.data.remote.UploadApi
+import com.piku.client.data.remote.WorkDetailParser
 import com.piku.client.domain.model.AppError
 import com.piku.client.domain.model.PublishDraft
+import com.piku.client.domain.model.UploadKind
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
 import okhttp3.ResponseBody
@@ -15,6 +20,9 @@ import javax.inject.Singleton
 
 /** Step1 建条目成功后的句柄，图片上传期间各步骤都要回传 */
 data class UploadTarget(val contentId: Long, val openId: Long)
+
+/** 编辑提交的时限透传值（来自编辑页回填，原样带回防破坏定时公开设置） */
+data class EditOptions(val notTimeLimited: Boolean, val timeLimitedStart: String, val timeLimitedEnd: String)
 
 /** 发布链路中可让 UI 区分的失败类型 */
 sealed class PublishFailure(message: String) : Exception(message) {
@@ -33,6 +41,7 @@ sealed class PublishFailure(message: String) : Exception(message) {
 @Singleton
 class PublishRepository @Inject constructor(
     private val api: UploadApi,
+    private val poipikuApi: PoipikuApi,
     private val json: Json,
     private val authRepository: AuthRepository,
     private val sessionMonitor: SessionMonitor,
@@ -111,6 +120,73 @@ class PublishRepository @Inject constructor(
         }.fold(
             onSuccess = { raw ->
                 if (raw.trim() == "true") Result.success(Unit)
+                else Result.failure(PublishFailure.Rejected)
+            },
+            onFailure = { Result.failure(it) },
+        )
+    }
+
+    /**
+     * 加载编辑页并解析出作品当前值（编辑表单回填数据源）
+     * 类型判定必须先走作品详情页（IllustItem class 的 Text 标记）——
+     * 两个编辑页 URL 都不校验类型，kind 错了会向错误类型的端点提交并损坏数据。
+     */
+    suspend fun loadEditPage(workId: Long): Result<EditPageData> {
+        val uid = requireUid() ?: return Result.failure(PublishFailure.NotLoggedIn)
+        val detailRaw = request { Response.success(poipikuApi.getWorkDetail(uid, workId)) }
+            .getOrElse { return Result.failure(it) }
+        val isTextWork = try {
+            WorkDetailParser.parse(detailRaw).imageUrls.isEmpty()
+        } catch (e: Exception) {
+            // 详情页解析失败（非作品页 / 结构变更）：宁可拒绝编辑也不能猜类型
+            return Result.failure(PublishFailure.Rejected)
+        }
+        val kind = if (isTextWork) UploadKind.NOVEL else UploadKind.ILLUST
+        val editRaw = request {
+            Response.success(
+                if (isTextWork) poipikuApi.getNovelEditPage(uid, workId)
+                else poipikuApi.getIllustEditPage(uid, workId),
+            )
+        }.getOrElse { return Result.failure(it) }
+        val data = EditPageParser.parse(editRaw, kind)
+            ?: return Result.failure(PublishFailure.Rejected)
+        return Result.success(data)
+    }
+
+    /** 编辑图集作品（仅元数据，不动已有图片），成功以返回原 content_id 为准 */
+    suspend fun updateEntry(draft: PublishDraft, workId: Long, options: EditOptions): Result<Unit> {
+        val uid = requireUid() ?: return Result.failure(PublishFailure.NotLoggedIn)
+        val edit = UploadFormBuilder.EditFields(
+            iid = workId,
+            notTimeLimited = options.notTimeLimited,
+            timeLimitedStart = options.timeLimitedStart,
+            timeLimitedEnd = options.timeLimitedEnd,
+        )
+        return request {
+            api.updateImageWork(UploadFormBuilder.entryForm(draft, uid, edit = edit))
+        }.fold(
+            onSuccess = { body ->
+                if (decodeObject(body)?.content_id == workId) Result.success(Unit)
+                else Result.failure(PublishFailure.Rejected)
+            },
+            onFailure = { Result.failure(it) },
+        )
+    }
+
+    /** 编辑小说（标题/正文/元数据），成功以返回原 content_id 为准 */
+    suspend fun updateNovel(draft: PublishDraft, workId: Long, options: EditOptions): Result<Unit> {
+        val uid = requireUid() ?: return Result.failure(PublishFailure.NotLoggedIn)
+        val edit = UploadFormBuilder.EditFields(
+            iid = workId,
+            notTimeLimited = options.notTimeLimited,
+            timeLimitedStart = options.timeLimitedStart,
+            timeLimitedEnd = options.timeLimitedEnd,
+        )
+        return request {
+            api.updateNovelWork(UploadFormBuilder.entryForm(draft, uid, edit = edit))
+        }.fold(
+            onSuccess = { body ->
+                if (decodeObject(body)?.content_id == workId) Result.success(Unit)
                 else Result.failure(PublishFailure.Rejected)
             },
             onFailure = { Result.failure(it) },

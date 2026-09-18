@@ -51,4 +51,12 @@ interface UploadApi {
     /** 删除作品（中途放弃的半成品），成功 body 为纯文本 true */
     @POST("f/DeleteContentF.jsp")
     suspend fun deleteContent(@Body body: RequestBody): Response<ResponseBody>
+
+    /** 编辑图集作品（= 发布端点的 Update 版：同表单 + IID + DELTW），成功返回原 content_id */
+    @POST("f/UpdateFileRefTwitterV2F.jsp")
+    suspend fun updateImageWork(@Body body: RequestBody): Response<ResponseBody>
+
+    /** 编辑小说（= 小说发布端点的 Update 版：同表单 + IID + DELTW），成功返回原 content_id */
+    @POST("f/UpdateTextRefTwitterV2F.jsp")
+    suspend fun updateNovelWork(@Body body: RequestBody): Response<ResponseBody>
 }
