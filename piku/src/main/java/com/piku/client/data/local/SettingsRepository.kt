@@ -213,6 +213,9 @@ class SettingsRepository @Inject constructor(
             .putInt(KEY_BACKGROUND_IMG_WIDTH, imgWidth ?: 0)
             .putInt(KEY_BACKGROUND_IMG_HEIGHT, imgHeight ?: 0)
             .apply()
+        // 内存态同步：否则换图后 uiState 仍持旧图尺寸，画框式比例与拖拽溢出会算错
+        _backgroundImgWidth.value = imgWidth?.takeIf { it > 0 }
+        _backgroundImgHeight.value = imgHeight?.takeIf { it > 0 }
         // 换图时把偏移和缩放重置为默认
         _backgroundOffsetX.value = 0f
         _backgroundOffsetY.value = 0f

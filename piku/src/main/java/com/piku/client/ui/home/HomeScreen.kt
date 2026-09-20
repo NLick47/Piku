@@ -126,6 +126,17 @@ fun HomeScreen(
     var bgEditTarget by rememberSaveable { mutableIntStateOf(BG_EDIT_TARGET_HERO) }
     var bgPanelCollapsed by rememberSaveable { mutableStateOf(false) }
     val screenDensity = LocalDensity.current.density
+    val effectiveBgTarget = if (state.customBackgroundPath == null) {
+        BG_EDIT_TARGET_HERO
+    } else {
+        bgEditTarget
+    }
+    LaunchedEffect(state.customBackgroundPath) {
+        // 头部图被清除后同步落回头部层，避免残留的背景层目标在下次选图时继续生效
+        if (state.customBackgroundPath == null && bgEditTarget != BG_EDIT_TARGET_HERO) {
+            bgEditTarget = BG_EDIT_TARGET_HERO
+        }
+    }
     val pickBackgroundLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia(),
     ) { uri: Uri? ->
@@ -253,6 +264,7 @@ fun HomeScreen(
         onThemeClick = { showThemeSheet = true },
         onBackgroundClick = {
             scope.launch { drawerState.close() }
+            viewModel.consumeBackgroundError()
             originalOffsetX = state.backgroundOffsetX
             originalOffsetY = state.backgroundOffsetY
             originalDim = state.backgroundDim
@@ -450,10 +462,10 @@ fun HomeScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .pointerInput(bgEditTarget, state.backdropPath) {
+                        .pointerInput(effectiveBgTarget, state.backdropPath) {
                             detectTransformGestures { _, pan, zoom, _ ->
                                 if (state.customBackgroundPath != null) {
-                                    val editHero = bgEditTarget == BG_EDIT_TARGET_HERO ||
+                                    val editHero = effectiveBgTarget == BG_EDIT_TARGET_HERO ||
                                         state.backdropPath == null
                                     if (editHero) {
                                         val ns = (state.heroScale * zoom).coerceIn(
@@ -513,10 +525,10 @@ fun HomeScreen(
                                 }
                             }
                         }
-                        .pointerInput(bgEditTarget, state.backdropPath) {
+                        .pointerInput(effectiveBgTarget, state.backdropPath) {
                             detectTapGestures(onDoubleTap = {
                                 if (state.customBackgroundPath != null) {
-                                    if (bgEditTarget == BG_EDIT_TARGET_BACKDROP &&
+                                    if (effectiveBgTarget == BG_EDIT_TARGET_BACKDROP &&
                                         state.backdropPath != null
                                     ) {
                                         viewModel.setBackgroundOffset(0f, 0f, persist = true)
@@ -546,7 +558,7 @@ fun HomeScreen(
                     imgHeight = state.backgroundImgHeight,
                     scale = state.heroScale,
                     minimal = bgPreviewMode == BG_PREVIEW_REAL,
-                    editTarget = bgEditTarget,
+                    editTarget = effectiveBgTarget,
                     backdropOffsetX = state.backgroundOffsetX,
                     backdropOffsetY = state.backgroundOffsetY,
                     backdropSeparated = state.backdropPath != null,
@@ -618,13 +630,13 @@ fun HomeScreen(
                             BackgroundEditPanel(
                                 state = state,
                                 bgPreviewMode = bgPreviewMode,
-                                bgEditTarget = bgEditTarget,
+                                bgEditTarget = effectiveBgTarget,
                                 dark = dark,
                                 onTogglePreview = toggleBgPreview,
                                 onSelectTarget = { bgEditTarget = it },
                                 onCollapse = { bgPanelCollapsed = true },
                                 onPickImage = {
-                                    if (bgEditTarget == BG_EDIT_TARGET_BACKDROP) {
+                                    if (effectiveBgTarget == BG_EDIT_TARGET_BACKDROP) {
                                         pickBackdropLauncher.launch(
                                             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                                         )

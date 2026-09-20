@@ -671,6 +671,8 @@ class HomeViewModel @Inject constructor(
 
     fun setCustomBackground(uri: android.net.Uri) {
         viewModelScope.launch {
+            // 先清掉上一次的失败提示，避免旧错误残留让人误判"这次也没生效"
+            _uiState.update { it.copy(backgroundErrorRes = null) }
             val ok = setCustomBackgroundUseCase(uri)
             if (!ok) {
                 _uiState.update { it.copy(backgroundErrorRes = R.string.background_read_failed) }
@@ -717,6 +719,7 @@ class HomeViewModel @Inject constructor(
     /** 保存相册图片为独立背景层；失败时置错误提示（弹层内展示） */
     fun setCustomBackdrop(uri: android.net.Uri) {
         viewModelScope.launch {
+            _uiState.update { it.copy(backgroundErrorRes = null) }
             val ok = setCustomBackgroundUseCase.saveBackdrop(uri)
             if (!ok) {
                 _uiState.update { it.copy(backgroundErrorRes = R.string.background_read_failed) }

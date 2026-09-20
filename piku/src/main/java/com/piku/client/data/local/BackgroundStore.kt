@@ -176,6 +176,13 @@ class BackgroundStore @Inject constructor(
         }
     }
 
+    suspend fun clearBackdropFile() = withContext(Dispatchers.IO) {
+        runCatching {
+            backgroundDir.listFiles { f -> f.name.startsWith("${BACKDROP_PREFIX}_") }
+                ?.forEach { it.delete() }
+        }
+    }
+
     private fun decodeScaled(uri: Uri): Bitmap? {
         val decoded = decodeSmall(uri, MAX_SIDE) ?: return null
         // inSampleSize 只能按 2 的幂缩，最后一步精确缩到 MAX_SIDE 内

@@ -33,6 +33,7 @@ class SetCustomBackgroundUseCase @Inject constructor(
     /** 清除独立背景层图片，回到跟随头部模式（无缝过渡） */
     suspend fun clearBackdrop() {
         settingsRepository.clearBackdropPath()
+        backgroundStore.clearBackdropFile()
     }
 
     /** 恢复默认背景：清除持久化文件与设置（包括偏移、尺寸与独立背景层）。 */
