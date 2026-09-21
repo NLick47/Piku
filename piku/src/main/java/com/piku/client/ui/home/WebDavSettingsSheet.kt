@@ -168,8 +168,11 @@ fun WebDavSettingsScreen(
     // 测试成功的展示窗口内禁用测试按钮，避免手滑重复测试触发限流
     val testEnabled = actionsEnabled && testConnectionState != TestConnectionState.SUCCESS
 
-    // 测试结果 Snackbar 提示
+    var lastTestState by remember { mutableStateOf(TestConnectionState.IDLE) }
     LaunchedEffect(testConnectionState) {
+        val previous = lastTestState
+        lastTestState = testConnectionState
+        if (previous != TestConnectionState.TESTING) return@LaunchedEffect
         when (testConnectionState) {
             TestConnectionState.SUCCESS -> {
                 snackbarHostState.showSnackbar(

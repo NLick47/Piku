@@ -4,12 +4,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.piku.client.R
 import com.piku.client.data.repository.AuthRepository
+import com.piku.client.data.repository.BlockListRepository
+import com.piku.client.data.repository.BlockResult
 import com.piku.client.data.repository.DetailRepository
-import com.piku.client.data.repository.FollowResult
 import com.piku.client.domain.model.AppError
 import com.piku.client.domain.model.AuthStatus
 import com.piku.client.domain.model.FollowUser
-import com.piku.client.domain.usecase.LoadFollowUsersUseCase
+import com.piku.client.domain.usecase.LoadBlockUsersUseCase
 import com.piku.client.ui.common.FeedbackChannel
 import com.piku.client.ui.common.toFeedErrorRes
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -21,32 +22,34 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-data class FollowUsersUiState(
+data class BlockUsersUiState(
     val users: List<FollowUser> = emptyList(),
-    val total: Int = 0,
     val loading: Boolean = false,
     val loadingMore: Boolean = false,
     val errorRes: Int? = null,
     val loadMoreErrorRes: Int? = null,
     val endReached: Boolean = false,
-    val followNeedLogin: Boolean = false,
-    /** 正在取消关注的用户 ID 集合，防止连点 */
-    val unfollowingIds: Set<Long> = emptySet(),
-    /** 已取消关注的用户 ID 集合（保留在列表，仅按钮置灰） */
-    val unfollowedIds: Set<Long> = emptySet(),
+    val needLogin: Boolean = false,
+    /** 正在解除屏蔽的用户 ID 集合，防止连点 */
+    val unblockingIds: Set<Long> = emptySet(),
 )
 
 @HiltViewModel
-class FollowUsersViewModel @Inject constructor(
-    private val loadFollowUsersUseCase: LoadFollowUsersUseCase,
+class BlockUsersViewModel @Inject constructor(
+    private val loadBlockUsersUseCase: LoadBlockUsersUseCase,
     private val detailRepository: DetailRepository,
+    private val blockListRepository: BlockListRepository,
     private val authRepository: AuthRepository,
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(FollowUsersUiState())
-    val uiState: StateFlow<FollowUsersUiState> = _uiState.asStateFlow()
+    private val _uiState = MutableStateFlow(BlockUsersUiState())
+    val uiState: StateFlow<BlockUsersUiState> = _uiState.asStateFlow()
 
-    /** 一次性反馈（本页 VM 挂在 Home 作用域，关闭页面不销毁，见 [FeedbackChannel]） */
+    /**
+     * 操作反馈走一次性事件通道而非 UiState：本页 VM 挂在 Home 的 ViewModelStore 上
+     * （全屏 Dialog 继承宿主作用域），关闭页面不会销毁——存在 State 里的反馈会在
+     * 重进页面时被重放一遍
+     */
     val feedback = FeedbackChannel()
 
     private var page = 0
@@ -54,10 +57,20 @@ class FollowUsersViewModel @Inject constructor(
     private var loadJob: Job? = null
 
     init {
+        // 本地名单是列表展示的唯一来源：屏蔽动作实时写入本地，不必等服务端
+        // （BlockListF 有缓存延迟）。服务端拉取只负责补充昵称/头像与推进分页。
+        viewModelScope.launch {
+            blockListRepository.entries.collect { list ->
+                _uiState.update { s -> s.copy(users = list.toFollowUsers()) }
+            }
+        }
         viewModelScope.launch {
             authRepository.authStatus.collect { status ->
                 val loggedIn = status == AuthStatus.LOGGED_IN
-                if (loggedIn && _uiState.value.users.isEmpty() && !_uiState.value.loading) {
+                // 需要登录（登出时的占位态）或还没有数据时拉取；已有本地数据则直接展示
+                if (loggedIn && !_uiState.value.loading &&
+                    (_uiState.value.needLogin || _uiState.value.users.isEmpty())
+                ) {
                     reload()
                 }
             }
@@ -76,15 +89,15 @@ class FollowUsersViewModel @Inject constructor(
         page = 0
         _uiState.update {
             it.copy(
-                users = emptyList(),
+                // 保留本地名单：刷新（或刷新失败）时列表不该变空——本地是展示的唯一来源
+                users = blockListRepository.entries.value.toFollowUsers(),
                 loading = false,
                 loadingMore = false,
                 errorRes = null,
                 loadMoreErrorRes = null,
                 endReached = false,
-                followNeedLogin = false,
-                unfollowingIds = emptySet(),
-                unfollowedIds = emptySet(),
+                needLogin = false,
+                unblockingIds = emptySet(),
             )
         }
         loadFirstPage()
@@ -105,35 +118,33 @@ class FollowUsersViewModel @Inject constructor(
         loadPage(append = true)
     }
 
-    fun unfollow(userId: Long) {
+    /**
+     * 解除屏蔽。列表由本地名单驱动（[BlockListRepository.remove] 触发收集器刷新），
+     * 这里只负责按钮态与结果反馈。
+     */
+    fun unblock(userId: Long) {
         val state = _uiState.value
-        if (userId in state.unfollowingIds) return
-        _uiState.update { it.copy(unfollowingIds = it.unfollowingIds + userId) }
+        if (userId in state.unblockingIds) return
+        _uiState.update { it.copy(unblockingIds = it.unblockingIds + userId) }
         viewModelScope.launch {
-            val result = detailRepository.updateFollow(userId)
+            val result = detailRepository.updateBlock(userId, blocked = false)
             _uiState.update { s ->
-                val stillLoading = s.unfollowingIds - userId
-                when (result) {
-                    is FollowResult.Unfollowed -> s.copy(
-                        unfollowingIds = stillLoading,
-                        unfollowedIds = s.unfollowedIds + userId,
-                    )
-                    is FollowResult.Followed -> s.copy(
-                        unfollowingIds = stillLoading,
-                        unfollowedIds = s.unfollowedIds - userId,
-                    )
-                    else -> s.copy(unfollowingIds = stillLoading)
-                }
+                s.copy(unblockingIds = s.unblockingIds - userId)
             }
             feedback.show(
-                when (result) {
-                    is FollowResult.Unfollowed -> R.string.detail_unfollow_sent
-                    is FollowResult.Followed -> R.string.detail_follow_sent
-                    else -> R.string.detail_follow_failed
+                if (result is BlockResult.Unblocked) {
+                    R.string.block_users_unblocked
+                } else {
+                    // 未登录（会话已失效）与请求失败都归为失败反馈，避免静默无响应
+                    R.string.block_users_unblock_failed
                 },
             )
         }
     }
+
+    /** 本地名单 → 列表项：屏蔽列表的展示由本地名单唯一驱动 */
+    private fun List<BlockListRepository.Entry>.toFollowUsers(): List<FollowUser> =
+        map { FollowUser(it.userId, it.name, it.avatarUrl) }
 
     private fun loadFirstPage() {
         if (_uiState.value.loading) return
@@ -152,31 +163,32 @@ class FollowUsersViewModel @Inject constructor(
                     errorRes = null,
                     loadMoreErrorRes = null,
                     endReached = true,
-                    followNeedLogin = true,
-                    users = if (append) it.users else emptyList(),
+                    // 未登录时按账号维度不可用：即使本地有残留名单也走登录引导，
+                    // 免得用户在无会话状态点到"解除"（必然失败）
+                    needLogin = true,
                 )
             }
             return
         }
         _uiState.update {
             if (append) it.copy(loadingMore = true, loadMoreErrorRes = null)
-            else it.copy(loading = true, errorRes = null, loadMoreErrorRes = null, followNeedLogin = false)
+            else it.copy(loading = true, errorRes = null, loadMoreErrorRes = null, needLogin = false)
         }
         loadJob = viewModelScope.launch {
-            loadFollowUsersUseCase(targetPage)
-                .onSuccess { resultPage ->
+            loadBlockUsersUseCase(targetPage)
+                .onSuccess { users ->
                     if (generation != gen) return@launch
                     page = targetPage
-                    val users = if (append) _uiState.value.users + resultPage.users else resultPage.users
-                    val total = if (append) _uiState.value.total else resultPage.total
+                    // 并集合并（不覆盖本地）：服务端有缓存延迟，且分页每次只带一页。
+                    // 列表展示由本地名单收集器驱动，这里不再直接写 users（避免重复 key）
+                    blockListRepository.mergeFromServer(users)
                     _uiState.update {
                         it.copy(
-                            users = users,
-                            total = total,
                             loading = false,
                             loadingMore = false,
                             loadMoreErrorRes = null,
-                            endReached = resultPage.users.isEmpty() || users.size >= total,
+                            // BlockListF 不返回 TOTAL，返回空列表即到末页
+                            endReached = users.isEmpty(),
                         )
                     }
                 }

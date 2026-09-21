@@ -49,6 +49,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import com.piku.client.ui.common.FeedbackHost
 import com.piku.client.ui.common.PikuBottomSheet
 import com.piku.client.ui.common.PikuSheetTitle
 import androidx.compose.runtime.Composable
@@ -111,20 +112,7 @@ fun CollectionScreen(
     val isTablet = LocalConfiguration.current.screenWidthDp >= 600
     val snackbarHostState = remember { SnackbarHostState() }
 
-    val movedMessage = state.movedToFolder?.let { stringResource(R.string.collection_moved_to, it) }
-    LaunchedEffect(movedMessage) {
-        if (movedMessage != null) {
-            snackbarHostState.showSnackbar(movedMessage)
-            viewModel.clearFeedback()
-        }
-    }
-    val actionFeedbackMessage = state.actionFeedbackRes?.let { stringResource(it) }
-    LaunchedEffect(actionFeedbackMessage) {
-        if (actionFeedbackMessage != null) {
-            snackbarHostState.showSnackbar(actionFeedbackMessage)
-            viewModel.clearFeedback()
-        }
-    }
+    FeedbackHost(channel = viewModel.feedback, snackbarHostState = snackbarHostState)
 
     var creatingFolder by rememberSaveable { mutableStateOf(false) }
     var renamingFolder by remember { mutableStateOf<FavoriteFolder?>(null) }

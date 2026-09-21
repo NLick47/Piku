@@ -192,7 +192,6 @@ internal fun DetailContent(
                 if (chipVisible(TranslateField.AUTHOR_PROFILE)) {
                     TranslateChip(
                         showTranslation = profileTranslated,
-                        dark = dark,
                         onClick = { onToggleField(TranslateField.AUTHOR_PROFILE) },
                         modifier = Modifier.padding(start = 6.dp, top = 1.dp),
                     )
@@ -246,7 +245,6 @@ internal fun DetailContent(
                 if (chipVisible(TranslateField.TITLE)) {
                     TranslateChip(
                         showTranslation = titleTranslated,
-                        dark = dark,
                         onClick = { onToggleField(TranslateField.TITLE) },
                         modifier = Modifier.padding(start = 6.dp, top = 2.dp),
                     )
@@ -317,7 +315,6 @@ internal fun DetailContent(
                     if (collapsible) Spacer(Modifier.width(8.dp))
                     TranslateChip(
                         showTranslation = descriptionTranslated,
-                        dark = dark,
                         onClick = { onToggleField(TranslateField.DESCRIPTION) },
                         modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
                     )
@@ -342,7 +339,6 @@ internal fun DetailContent(
                     {
                         TranslateChip(
                             showTranslation = tagsTranslated,
-                            dark = dark,
                             onClick = { onToggleField(TranslateField.TAGS) },
                         )
                     }

@@ -16,6 +16,7 @@ import com.piku.client.data.remote.translation.Role
 import com.piku.client.data.remote.translation.RoleDefaultIds
 import com.piku.client.data.remote.translation.TranslationRepository
 import com.piku.client.data.repository.AuthRepository
+import com.piku.client.data.repository.BlockListRepository
 import com.piku.client.data.repository.ThumbnailResolver
 import com.piku.client.data.repository.WebDavSyncRepository
 import com.piku.client.data.repository.SyncResult
@@ -61,6 +62,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -209,6 +211,7 @@ class HomeViewModel @Inject constructor(
     private val thumbnailResolver: ThumbnailResolver,
     private val webDavSyncRepository: WebDavSyncRepository,
     private val imageSaver: ImageSaver,
+    private val blockListRepository: BlockListRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -425,6 +428,15 @@ class HomeViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
+            // 屏蔽名单变化（如详情页/用户主页屏蔽后返回）：loader 快照不会重新请求，
+            // 必须用最新名单重放一次当前快照，被屏蔽作者的作品才会立即消失。
+            // drop(1)：跳过订阅时的初始值，避免与首屏加载竞争。
+            blockListRepository.blockedIds.drop(1).collect {
+                android.util.Log.d("PikuDiag", "blocklist changed, re-filter feed")
+                currentLoader()?.let { loader -> applySnapshot(loader.state.value) }
+            }
+        }
+        viewModelScope.launch {
             // 只替换缩略图字段：事件里的 work 可能是详情页传入的瘦对象（title 等为空），
             // 整体替换会把卡片标题/作者等字段清空（历史 bug：密码作品解锁后回退，标题消失）
             thumbnailResolver.thumbUpdated.collect { updated ->
@@ -589,15 +601,21 @@ class HomeViewModel @Inject constructor(
         else -> loadFeedUseCase(page, key.category.cd)
     }
 
-    /** 把当前 loader 的快照合并进对外 UI 状态（错误在此处映射成文案资源） */
+    /**
+     * 把当前 loader 的快照合并进对外 UI 状态（错误在此处映射成文案资源）。
+     *
+     * 已屏蔽作者在此处过滤而非 fetch 处：loader 快照是内存缓存，从详情页屏蔽后返回时
+     * 不会重新请求，只有渲染这一层能保证被屏蔽作品立即消失（同时覆盖所有分页与来源）。
+     */
     private fun applySnapshot(snap: FeedSnapshot) {
         val key = currentKey ?: return
+        val blocked = blockListRepository.blockedIds.value
         _uiState.update {
             it.copy(
                 feedTab = key.tab,
                 category = key.category,
                 currentTag = key.tag,
-                works = snap.works,
+                works = if (blocked.isEmpty()) snap.works else snap.works.filterNot { w -> w.authorId in blocked },
                 loading = snap.loading,
                 loadingMore = snap.loadingMore,
                 endReached = snap.endReached,

@@ -7,6 +7,7 @@ import com.piku.client.domain.model.FavoriteFolder
 import com.piku.client.domain.model.Work
 import com.piku.client.R
 import dagger.hilt.android.lifecycle.HiltViewModel
+import com.piku.client.ui.common.FeedbackChannel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,8 +25,6 @@ data class CollectionUiState(
     val selectedFolderName: String = "",
     val works: List<Work> = emptyList(),
     val loaded: Boolean = false,
-    val movedToFolder: String? = null,
-    val actionFeedbackRes: Int? = null,
 )
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -36,6 +35,9 @@ class CollectionViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(CollectionUiState())
     val uiState: StateFlow<CollectionUiState> = _uiState.asStateFlow()
+
+    /** 一次性反馈（移出/移动到收藏夹） */
+    val feedback = FeedbackChannel()
 
     init {
         viewModelScope.launch {
@@ -108,18 +110,14 @@ class CollectionViewModel @Inject constructor(
     fun removeWorkFromFolder(folderId: Long, workId: Long) {
         viewModelScope.launch {
             favoriteRepository.removeFromFolder(workId.toString(), folderId)
-            _uiState.update { it.copy(actionFeedbackRes = R.string.collection_removed) }
+            feedback.show(R.string.collection_removed)
         }
     }
 
     fun moveWork(work: Work, fromFolderId: Long, toFolderId: Long, toFolderName: String) {
         viewModelScope.launch {
             favoriteRepository.moveWork(work, fromFolderId, toFolderId)
-            _uiState.update { it.copy(movedToFolder = toFolderName) }
+            feedback.show(R.string.collection_moved_to, toFolderName)
         }
-    }
-
-    fun clearFeedback() {
-        _uiState.update { it.copy(movedToFolder = null, actionFeedbackRes = null) }
     }
 }

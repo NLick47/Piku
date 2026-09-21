@@ -9,10 +9,14 @@ import com.piku.client.data.repository.PublishRepository
 import com.piku.client.domain.model.AppError
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.usecase.LoadUserWorksUseCase
+import com.piku.client.ui.common.FeedbackChannel
 import com.piku.client.ui.common.toFeedErrorRes
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -29,8 +33,6 @@ data class MyPostsUiState(
     val endReached: Boolean = false,
     /** 正在删除的作品 id（防连点，对应行给删除中反馈） */
     val deletingId: Long? = null,
-    /** 删除结果反馈（Snackbar 文案资源） */
-    val feedbackRes: Int? = null,
 )
 
 @HiltViewModel
@@ -47,6 +49,17 @@ class MyPostsViewModel @Inject constructor(
         MyPostsUiState(userId = userId, userName = userNameArg),
     )
     val uiState: StateFlow<MyPostsUiState> = _uiState.asStateFlow()
+
+    /** 一次性反馈（删除结果） */
+    val feedback = FeedbackChannel()
+
+    /**
+     * 作品被删除的一次性信号，与 [feedback] 分开是因为它驱动的是「返回个人主页时要刷新列表」
+     * 这个副作用：UI 侧在非挂起的收集里立刻写返回标记，不再依赖 snackbar 的展示时序
+     * （原先写在 showSnackbar 之后，用户删完立刻回退会被取消，个人主页便不刷新）。
+     */
+    private val _workDeleted = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val workDeleted: SharedFlow<Unit> = _workDeleted.asSharedFlow()
 
     private var page = 0
 
@@ -96,9 +109,6 @@ class MyPostsViewModel @Inject constructor(
         loadPage(append = true)
     }
 
-    fun clearFeedback() {
-        _uiState.update { it.copy(feedbackRes = null) }
-    }
 
     /**
      * 删除已发布作品：服务端删除不可撤销，确认框由 UI 层负责。
@@ -114,20 +124,19 @@ class MyPostsViewModel @Inject constructor(
                         it.copy(
                             deletingId = null,
                             works = it.works.filterNot { w -> w.id == work.id },
-                            feedbackRes = R.string.my_posts_deleted,
                         )
                     }
+                    _workDeleted.tryEmit(Unit)
+                    feedback.show(R.string.my_posts_deleted)
                 }
                 .onFailure { e ->
-                    _uiState.update {
-                        it.copy(
-                            deletingId = null,
-                            feedbackRes = when (e) {
-                                is PublishFailure.NotLoggedIn -> R.string.detail_follow_login_hint
-                                else -> R.string.my_posts_delete_failed
-                            },
-                        )
-                    }
+                    _uiState.update { it.copy(deletingId = null) }
+                    feedback.show(
+                        when (e) {
+                            is PublishFailure.NotLoggedIn -> R.string.detail_follow_login_hint
+                            else -> R.string.my_posts_delete_failed
+                        },
+                    )
                 }
         }
     }

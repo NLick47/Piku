@@ -30,6 +30,12 @@ data class WorkDetail(
     /** 当前登录用户是否已关注该作者（详情页 HTML 中 UserInfoCmdFollow 的 Selected 类） */
     val followed: Boolean = false,
     /**
+     * 当前登录用户是否已屏蔽该作者（页头 UserInfoCmdBlock 的 Selected 类）。
+     * 被屏蔽的作者作品页会 302 跳其主页，因此正常能解析出详情时该项恒为 false，
+     * 仅在用户主页等场景下可能为 true。
+     */
+    val blocked: Boolean = false,
+    /**
      * AI 译文（原文字段保持不变）。null 表示未翻译；
      * 展示由 UI 的原文/译文开关控制，复制与历史记录始终用原文。
      */

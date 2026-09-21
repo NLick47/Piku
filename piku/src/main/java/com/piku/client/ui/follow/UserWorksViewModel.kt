@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.piku.client.R
 import com.piku.client.data.local.ImageSaver
 import com.piku.client.data.repository.AuthRepository
+import com.piku.client.data.repository.BlockListRepository
+import com.piku.client.data.repository.BlockResult
 import com.piku.client.data.repository.DetailRepository
 import com.piku.client.data.repository.FollowResult
 import com.piku.client.domain.model.AppError
@@ -15,6 +17,7 @@ import com.piku.client.domain.model.Work
 import com.piku.client.domain.usecase.LoadUserWorksUseCase
 import com.piku.client.domain.usecase.ObserveFavoriteIdsUseCase
 import com.piku.client.domain.usecase.ToggleFavoriteUseCase
+import com.piku.client.ui.common.FeedbackChannel
 import com.piku.client.ui.common.toFeedErrorRes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,8 +46,10 @@ data class UserWorksUiState(
     val followed: Boolean = true,
     /** 关注操作进行中（防连点） */
     val followSending: Boolean = false,
-    /** 关注操作结果反馈（Snackbar 文案资源） */
-    val followFeedbackRes: Int? = null,
+    /** 是否已屏蔽该用户（用户主页 UserInfoCmdBlock 的 Selected 类） */
+    val blocked: Boolean = false,
+    /** 屏蔽操作进行中 */
+    val blockSending: Boolean = false,
 )
 
 @HiltViewModel
@@ -54,6 +59,7 @@ class UserWorksViewModel @Inject constructor(
     private val observeFavoriteIdsUseCase: ObserveFavoriteIdsUseCase,
     private val toggleFavoriteUseCase: ToggleFavoriteUseCase,
     private val detailRepository: DetailRepository,
+    private val blockListRepository: BlockListRepository,
     private val authRepository: AuthRepository,
     private val imageSaver: ImageSaver,
 ) : ViewModel() {
@@ -70,6 +76,9 @@ class UserWorksViewModel @Inject constructor(
         ),
     )
     val uiState: StateFlow<UserWorksUiState> = _uiState.asStateFlow()
+
+    /** 一次性反馈（关注/屏蔽操作结果） */
+    val feedback = FeedbackChannel()
 
     private var page = 0
     private var generation = 0
@@ -103,6 +112,27 @@ class UserWorksViewModel @Inject constructor(
                 _uiState.update { it.copy(isSelf = profile?.uid?.toLongOrNull() == userId) }
             }
         }
+        viewModelScope.launch {
+            // 屏蔽名单在别处变化时同步本页（典型：详情页屏蔽该作者后返回本页，或去屏蔽列表
+            // 解除后返回）。本页只在第一页拉取时读一次 pageInfo.blocked，之后是内存态，
+            // 不跟这个流就会停留在旧状态：作品列表还在、菜单还显示"屏蔽该用户"。
+            blockListRepository.blockedIds.collect { ids ->
+                val blocked = userId in ids
+                if (blocked == _uiState.value.blocked) return@collect
+                _uiState.update { s ->
+                    s.copy(
+                        blocked = blocked,
+                        // 屏蔽后服务端只回无作品的壳页：本地一并清空，避免看起来"没生效"
+                        works = if (blocked) emptyList() else s.works,
+                        endReached = if (blocked) true else s.endReached,
+                        // 服务端屏蔽会连带解除关注
+                        followed = if (blocked) false else s.followed,
+                    )
+                }
+                // 解除屏蔽后作品需要重新拉取（此前列表已清空）
+                if (!blocked) retry()
+            }
+        }
         loadFirstPage()
     }
 
@@ -116,7 +146,7 @@ class UserWorksViewModel @Inject constructor(
         if (state.isSelf) return
         if (state.followSending) return
         if (!state.loggedIn) {
-            _uiState.update { it.copy(followFeedbackRes = R.string.detail_follow_login_hint) }
+            feedback.show(R.string.detail_follow_login_hint)
             return
         }
         viewModelScope.launch {
@@ -125,12 +155,6 @@ class UserWorksViewModel @Inject constructor(
             _uiState.update { s ->
                 s.copy(
                     followSending = false,
-                    followFeedbackRes = when (result) {
-                        FollowResult.Followed -> R.string.detail_follow_sent
-                        FollowResult.Unfollowed -> R.string.detail_unfollow_sent
-                        FollowResult.NotLoggedIn -> R.string.detail_follow_login_hint
-                        is FollowResult.Failure -> R.string.detail_follow_failed
-                    },
                     followed = when (result) {
                         FollowResult.Followed -> true
                         FollowResult.Unfollowed -> false
@@ -138,11 +162,58 @@ class UserWorksViewModel @Inject constructor(
                     },
                 )
             }
+            feedback.show(
+                when (result) {
+                    FollowResult.Followed -> R.string.detail_follow_sent
+                    FollowResult.Unfollowed -> R.string.detail_unfollow_sent
+                    FollowResult.NotLoggedIn -> R.string.detail_follow_login_hint
+                    is FollowResult.Failure -> R.string.detail_follow_failed
+                },
+            )
         }
     }
 
-    fun clearFollowFeedback() {
-        _uiState.update { it.copy(followFeedbackRes = null) }
+    fun toggleBlock() {
+        val state = _uiState.value
+        if (state.isSelf) return
+        if (state.blockSending) return
+        if (!state.loggedIn) {
+            feedback.show(R.string.detail_block_login_hint)
+            return
+        }
+        val target = !state.blocked
+        viewModelScope.launch {
+            _uiState.update { it.copy(blockSending = true) }
+            val result = detailRepository.updateBlock(
+                userId,
+                target,
+                name = state.userName.ifBlank { state.pageInfo?.userName.orEmpty() },
+                avatarUrl = state.pageInfo?.avatarUrl,
+            )
+            _uiState.update { s ->
+                s.copy(
+                    blockSending = false,
+                    blocked = when (result) {
+                        BlockResult.Blocked -> true
+                        BlockResult.Unblocked -> false
+                        else -> s.blocked
+                    },
+                    followed = if (result is BlockResult.Blocked) false else s.followed,
+                    works = if (result is BlockResult.Blocked) emptyList() else s.works,
+                    endReached = if (result is BlockResult.Blocked) true else s.endReached,
+                )
+            }
+            feedback.show(
+                when (result) {
+                    BlockResult.Blocked -> R.string.detail_block_sent
+                    BlockResult.Unblocked -> R.string.detail_unblock_sent
+                    BlockResult.NotLoggedIn -> R.string.detail_block_login_hint
+                    is BlockResult.Failure -> R.string.detail_block_failed
+                },
+            )
+            // 解除屏蔽后作品需要重新拉取
+            if (result is BlockResult.Unblocked) retry()
+        }
     }
 
     suspend fun saveAvatar(url: String?): Boolean {
@@ -210,6 +281,7 @@ class UserWorksViewModel @Inject constructor(
                             // 页头信息只在第一页刷新，避免分页响应覆盖（分页 pageInfo 为 null）；
                             pageInfo = result.pageInfo ?: it.pageInfo,
                             followed = result.pageInfo?.followed ?: it.followed,
+                            blocked = result.pageInfo?.blocked ?: it.blocked,
                             works = if (append) it.works + list else list,
                             endReached = list.isEmpty(),
                         )

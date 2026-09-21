@@ -178,29 +178,24 @@ internal fun DetailTopBar(
  * 单字段"原/译"切换 chip（方案 C）。
  * 用独立小按钮而不是长按手势：文本区域的长按已经归属"选中复制"，
  * 抢占会破坏复制描述这类刚需操作。
+ * 纯文字无底色无边框：选中 = 正文深色，未选中 = 极浅灰，只靠深浅对比表意；
+ * clip 保留是为了让按压涟漪仍是圆角而非方块。
  */
 @Composable
 internal fun TranslateChip(
     showTranslation: Boolean,
-    dark: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val accent = PikuColors.controlAccent
-    val off = PikuColors.textSecondary
     Text(
         text = stringResource(
             if (showTranslation) R.string.detail_chip_original else R.string.detail_chip_translate,
         ),
-        color = if (showTranslation) accent else off,
+        color = if (showTranslation) PikuColors.textPrimary else PikuColors.textFaint,
         fontSize = 10.sp,
         fontWeight = FontWeight.Medium,
         modifier = modifier
             .clip(RoundedCornerShape(999.dp))
-            .background(
-                if (showTranslation) accent.copy(alpha = if (dark) 0.20f else 0.12f)
-                else Color.Transparent,
-            )
             .clickable(onClick = onClick)
             .padding(horizontal = 7.dp, vertical = 2.dp),
     )

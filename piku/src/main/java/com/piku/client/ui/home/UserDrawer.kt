@@ -31,6 +31,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.Logout
+import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.CloudUpload
@@ -102,6 +103,7 @@ fun UserDrawer(
     onCollectionClick: () -> Unit,
     onTagsClick: () -> Unit,
     onFollowUsersClick: () -> Unit,
+    onBlockUsersClick: () -> Unit = {},
     onProfileClick: () -> Unit,
     /** 登录后点头像/名字区域进入自己的个人主页 */
     onProfileOpen: () -> Unit,
@@ -145,6 +147,7 @@ fun UserDrawer(
                 onCollectionClick = onCollectionClick,
                 onTagsClick = onTagsClick,
                 onFollowUsersClick = onFollowUsersClick,
+                onBlockUsersClick = onBlockUsersClick,
                 onProfileClick = onProfileClick,
                 onProfileOpen = onProfileOpen,
                 onPublishClick = onPublishClick,
@@ -186,6 +189,7 @@ private fun DrawerPanel(
     onCollectionClick: () -> Unit,
     onTagsClick: () -> Unit,
     onFollowUsersClick: () -> Unit,
+    onBlockUsersClick: () -> Unit = {},
     onProfileClick: () -> Unit,
     onProfileOpen: () -> Unit,
     onPublishClick: () -> Unit = {},
@@ -305,6 +309,13 @@ private fun DrawerPanel(
                     icon = Icons.Outlined.Group,
                     label = stringResource(R.string.menu_follow_users),
                     onClick = onFollowUsersClick,
+                    dark = dark,
+                    accent = iconAccent,
+                )
+                DrawerMenuRow(
+                    icon = Icons.Outlined.Block,
+                    label = stringResource(R.string.menu_block_users),
+                    onClick = onBlockUsersClick,
                     dark = dark,
                     accent = iconAccent,
                 )

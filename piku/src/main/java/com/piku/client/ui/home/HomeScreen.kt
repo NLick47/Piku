@@ -90,6 +90,7 @@ import com.piku.client.ui.profile.ProfileEditSheet
 import com.piku.client.ui.publish.PublishScreen
 import com.piku.client.ui.common.AvatarViewerDialog
 import com.piku.client.ui.collection.CollectionScreen
+import com.piku.client.ui.follow.BlockUsersScreen
 import com.piku.client.ui.follow.FollowUsersScreen
 import com.piku.client.ui.history.HistoryScreen
 import com.piku.client.ui.tags.TagScreen
@@ -174,13 +175,14 @@ fun HomeScreen(
     var showCollectionPage by rememberSaveable { mutableStateOf(false) }
     var showTagsPage by rememberSaveable { mutableStateOf(false) }
     var showFollowUsersPage by rememberSaveable { mutableStateOf(false) }
+    var showBlockUsersPage by rememberSaveable { mutableStateOf(false) }
     var showLogoutConfirm by rememberSaveable { mutableStateOf(false) }
     var showProfileEdit by rememberSaveable { mutableStateOf(false) }
     var publishDraftId by rememberSaveable { mutableStateOf<Long?>(null) }
     var showAvatarViewer by rememberSaveable { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val anyOverlayActive = showHistoryPage ||
-        showCollectionPage || showTagsPage || showFollowUsersPage || showWebDavSettings ||
+        showCollectionPage || showTagsPage || showFollowUsersPage || showBlockUsersPage || showWebDavSettings ||
         publishDraftId != null
     val isScrolling = remember { mutableStateOf(false) }
     val gridState = rememberLazyStaggeredGridState()
@@ -288,6 +290,9 @@ fun HomeScreen(
         },
         onFollowUsersClick = {
             showFollowUsersPage = true
+        },
+        onBlockUsersClick = {
+            showBlockUsersPage = true
         },
         onPublishClick = {
             scope.launch { drawerState.close() }
@@ -894,6 +899,8 @@ fun HomeScreen(
                 onTagsBack = { showTagsPage = false; scope.launch { drawerState.open() } },
                 showFollowUsersPage = showFollowUsersPage,
                 onFollowUsersBack = { showFollowUsersPage = false; scope.launch { drawerState.open() } },
+                showBlockUsersPage = showBlockUsersPage,
+                onBlockUsersBack = { showBlockUsersPage = false; scope.launch { drawerState.open() } },
                 onWorkClick = onWorkClick,
                 onLoginClick = onLoginClick,
                 onProfileOpen = onProfileOpen,
@@ -966,6 +973,8 @@ private fun HomeOverlays(
     onTagsBack: () -> Unit,
     showFollowUsersPage: Boolean,
     onFollowUsersBack: () -> Unit,
+    showBlockUsersPage: Boolean,
+    onBlockUsersBack: () -> Unit,
     onWorkClick: (Work) -> Unit,
     onLoginClick: () -> Unit,
     onProfileOpen: (Long, String) -> Unit,
@@ -997,6 +1006,15 @@ private fun HomeOverlays(
         Dialog(onDismissRequest = onFollowUsersBack, properties = fullScreenProps) {
             FollowUsersScreen(
                 onBack = onFollowUsersBack,
+                onLoginClick = onLoginClick,
+                onUserClick = { user -> onProfileOpen(user.userId, user.name) },
+            )
+        }
+    }
+    if (showBlockUsersPage) {
+        Dialog(onDismissRequest = onBlockUsersBack, properties = fullScreenProps) {
+            BlockUsersScreen(
+                onBack = onBlockUsersBack,
                 onLoginClick = onLoginClick,
                 onUserClick = { user -> onProfileOpen(user.userId, user.name) },
             )

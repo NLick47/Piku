@@ -31,6 +31,13 @@ sealed interface FollowResult {
     data class Failure(val message: String = "") : FollowResult
 }
 
+sealed interface BlockResult {
+    data object Blocked : BlockResult
+    data object Unblocked : BlockResult
+    data object NotLoggedIn : BlockResult
+    data class Failure(val message: String = "") : BlockResult
+}
+
 @Singleton
 class DetailRepository @Inject constructor(
     private val api: PoipikuApi,
@@ -39,6 +46,7 @@ class DetailRepository @Inject constructor(
     private val thumbnailResolver: ThumbnailResolver,
     private val sessionMonitor: SessionMonitor,
     private val workPasswordRepository: WorkPasswordRepository,
+    private val blockListRepository: BlockListRepository,
 ) {
 
     /**
@@ -261,6 +269,41 @@ class DetailRepository @Inject constructor(
         throw e
     } catch (e: Exception) {
         FollowResult.Failure(e.message.orEmpty())
+    }
+
+    /**
+     * 屏蔽/解除屏蔽用户（POST /f/UpdateBlockF.jsp，UID=当前用户、IID=目标用户、CHK=1/0）。
+     * 未登录直接返回 [BlockResult.NotLoggedIn]，不发请求。
+     * 服务端在屏蔽成功时会同时解除对该用户的关注，调用方需据此同步关注态。
+     * 成功后同步本地屏蔽名单（[BlockListRepository]），供各列表页即时过滤与
+     * 屏蔽列表页展示——官方 BlockListF 有缓存延迟，不能只依赖服务端列表。
+     * [name]/[avatar] 用于本地名单展示，可空。
+     */
+    suspend fun updateBlock(
+        targetUserId: Long,
+        blocked: Boolean,
+        name: String = "",
+        avatarUrl: String? = null,
+    ): BlockResult = try {
+        val uid = authRepository.currentUserId()
+        if (uid == null) return BlockResult.NotLoggedIn
+        val resp = api.updateBlockUser(uid, targetUserId, if (blocked) 1 else 0)
+        Log.d(TAG, "updateBlock target=$targetUserId uid=$uid chk=$blocked result=${resp.result}")
+        when (resp.result) {
+            1 -> {
+                blockListRepository.add(targetUserId, name, avatarUrl)
+                BlockResult.Blocked
+            }
+            2 -> {
+                blockListRepository.remove(targetUserId)
+                BlockResult.Unblocked
+            }
+            else -> BlockResult.Failure()
+        }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        BlockResult.Failure(e.message.orEmpty())
     }
 
     private companion object {

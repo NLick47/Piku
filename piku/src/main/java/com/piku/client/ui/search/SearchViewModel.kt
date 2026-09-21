@@ -28,6 +28,7 @@ import com.piku.client.domain.usecase.ToggleFavoriteUseCase
 import com.piku.client.domain.usecase.TranslateSearchKeywordUseCase
 import com.piku.client.ui.common.toFeedErrorRes
 import dagger.hilt.android.lifecycle.HiltViewModel
+import com.piku.client.ui.common.FeedbackChannel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -86,7 +87,6 @@ data class SearchUiState(
     val followPendingIds: Set<Long> = emptySet(),
     /** 本地乐观覆盖：userId -> 目标关注态，服务端确认后以服务端结果为准 */
     val followOverrides: Map<Long, Boolean> = emptyMap(),
-    val actionFeedbackRes: Int? = null,
 )
 
 @HiltViewModel
@@ -129,6 +129,9 @@ class SearchViewModel @Inject constructor(
         SearchUiState(keyword = keyword, tab = initialTab),
     )
     val uiState: StateFlow<SearchUiState> = _uiState.asStateFlow()
+
+    /** 一次性反馈（关注操作结果） */
+    val feedback = FeedbackChannel()
 
     private var worksPage = 0
     private var usersPage = 0
@@ -348,30 +351,30 @@ class SearchViewModel @Inject constructor(
                     is FollowResult.Followed -> s.copy(
                         followPendingIds = stillPending,
                         followOverrides = s.followOverrides + (userId to true),
-                        actionFeedbackRes = R.string.detail_follow_sent,
                     )
                     is FollowResult.Unfollowed -> s.copy(
                         followPendingIds = stillPending,
                         followOverrides = s.followOverrides + (userId to false),
-                        actionFeedbackRes = R.string.detail_unfollow_sent,
                     )
                     is FollowResult.NotLoggedIn -> s.copy(
                         followPendingIds = stillPending,
                         followOverrides = s.followOverrides - userId,
-                        actionFeedbackRes = R.string.detail_follow_login_hint,
                     )
                     is FollowResult.Failure -> s.copy(
                         followPendingIds = stillPending,
                         followOverrides = s.followOverrides - userId,
-                        actionFeedbackRes = R.string.detail_follow_failed,
                     )
                 }
             }
+            feedback.show(
+                when (result) {
+                    is FollowResult.Followed -> R.string.detail_follow_sent
+                    is FollowResult.Unfollowed -> R.string.detail_unfollow_sent
+                    is FollowResult.NotLoggedIn -> R.string.detail_follow_login_hint
+                    is FollowResult.Failure -> R.string.detail_follow_failed
+                },
+            )
         }
-    }
-
-    fun clearFeedback() {
-        _uiState.update { it.copy(actionFeedbackRes = null) }
     }
 
     private fun loadWorks(append: Boolean) {

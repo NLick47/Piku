@@ -41,6 +41,9 @@ object UserPageParser {
     /** 关注状态：`UserInfoCmdFollow` 按钮 class 含 Selected = 当前登录用户已关注（匿名恒无） */
     private val FOLLOW_BTN = Regex("""class="([^"]*UserInfoCmdFollow[^"]*)"""")
 
+    /** 屏蔽状态：`UserInfoCmdBlock` 按钮 class 含 Selected = 当前登录用户已屏蔽（整页唯一） */
+    private val BLOCK_BTN = Regex("""class="([^"]*UserInfoCmdBlock[^"]*)"""")
+
     fun parse(html: String): UserPageInfo {
         val headerUrl = HEADER_IMAGE.find(html)?.groupValues?.get(1)?.takeIf { it.isNotBlank() }
 
@@ -55,6 +58,12 @@ object UserPageParser {
 
         // 关注状态：与关注列表（FollowListF）一致的 Selected 标记
         val followed = FOLLOW_BTN.find(html)
+            ?.groupValues?.get(1)
+            ?.split(" ")
+            ?.any { it == "Selected" } == true
+
+        // 屏蔽状态：同一套 Selected 标记（实测被屏蔽时 class 为 "typcn typcn-cancel BtnBase UserInfoCmdBlock Selected"）
+        val blocked = BLOCK_BTN.find(html)
             ?.groupValues?.get(1)
             ?.split(" ")
             ?.any { it == "Selected" } == true
@@ -83,6 +92,7 @@ object UserPageParser {
             bgColorHex = bgColorHex,
             bgImageUrl = bgImageUrl,
             followed = followed,
+            blocked = blocked,
             twitterUrl = twitterUrl,
         )
     }

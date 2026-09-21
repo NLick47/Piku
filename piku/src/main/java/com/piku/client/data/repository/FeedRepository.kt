@@ -80,6 +80,19 @@ class FeedRepository @Inject constructor(
             FollowUserPage(users = users, total = total ?: users.size)
         }
 
+    /**
+     * 屏蔽列表（BlockListF，MD=1）。与关注列表不同，服务端不返回 TOTAL，
+     * 分页只能以"返回空列表"为终点；列表项结构与 FollowListF 相同，复用同一解析器。
+     */
+    suspend fun getBlockUsers(page: Int): Result<List<FollowUser>> =
+        apiCall {
+            val html = api.getBlockList(FOLLOW_LIST_MAX, BLOCK_LIST_MD, page).string()
+            if (authRepository.isLoggedIn() && FollowUserParser.isLoginPage(html)) {
+                sessionMonitor.notifySessionCleared()
+            }
+            FollowUserParser.parse(html)
+        }
+
     suspend fun getUserWorks(userId: Long, page: Int): Result<UserWorksPage> =
         apiCall {
             val adultEnabled = settingsRepository.showAdultContent.first()
@@ -152,3 +165,6 @@ class FeedRepository @Inject constructor(
 }
 
 private const val FOLLOW_LIST_MAX = 30
+
+/** BlockListF 的 MD 固定为 1（0 为关注列表） */
+private const val BLOCK_LIST_MD = 1

@@ -54,6 +54,12 @@ object WorkDetailParser {
             ?.groupValues?.get(1)
             ?.split(" ")
             ?.any { it == "Selected" } == true
+        // 屏蔽按钮在页头 UserInfo 区，位置先于 IllustItem 区块，只能在整页 HTML 里找
+        // 已屏蔽时服务端在 class 追加 Selected
+        val blocked = REGEX_BLOCK_BTN.find(html)
+            ?.groupValues?.get(1)
+            ?.split(" ")
+            ?.any { it == "Selected" } == true
         return WorkDetail(
             title = title,
             description = description,
@@ -72,6 +78,7 @@ object WorkDetailParser {
             warning = mainImage.contains("/img/warning"),
             passwordProtected = passwordProtected,
             followed = followed,
+            blocked = blocked,
         )
     }
 
@@ -141,6 +148,12 @@ object WorkDetailParser {
     private fun ensureWorkPage(html: String) {
         if (REGEX_ILLUST_BLOCK.containsMatchIn(html)) return
         if (REGEX_CANONICAL.containsMatchIn(html)) return
+        // 屏蔽作者后访问其作品页：服务端 302 重定向到该作者的用户主页（OkHttp 自动跟随），
+        // 落到这里而非真正的 404 主页上 UserInfoCmdBlock 带 Selected，
+        // 用它区分"被你屏蔽"与"作品真的没了"
+        if (REGEX_BLOCK_BTN.find(html)?.groupValues?.get(1)?.split(" ")?.any { it == "Selected" } == true) {
+            throw AppError.BlockedAuthor
+        }
         throw AppError.NotFound
     }
 
@@ -174,6 +187,8 @@ object WorkDetailParser {
     private val REGEX_PASSWORD_PASS = Regex("""IllustItemExpandPass"\s+name="PAS"""")
     private val REGEX_ANY_TAG = Regex("<[^>]*>")
     private val REGEX_FOLLOW_BTN = Regex("""class="([^"]*UserInfoCmdFollow[^"]*)"""")
+    /** 页头屏蔽按钮（`id="UserInfoCmdBlock"`），整页唯一 */
+    private val REGEX_BLOCK_BTN = Regex("""class="([^"]*UserInfoCmdBlock[^"]*)"""")
     private val REGEX_NOVEL = Regex("""<div class="NovelSection">(.*?)</div>""", RegexOption.DOT_MATCHES_ALL)
     private val REGEX_ILLUST_TEXT_CLASS = Regex("""<div class="IllustItem[^"]*\bText\b""")
     private val REGEX_ILLUST_BLOCK = Regex("""<div class="IllustItem """)

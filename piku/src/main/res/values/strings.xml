@@ -123,6 +123,14 @@
     <string name="follow_user_unfollow">取消关注</string>
     <string name="follow_user_refollow">重新关注</string>
     <string name="follow_user_follow">关注</string>
+    <string name="menu_block_users">屏蔽列表</string>
+    <string name="block_users_title">屏蔽列表</string>
+    <string name="block_users_empty">还没有屏蔽任何用户</string>
+    <string name="block_users_login">登录后即可查看屏蔽列表</string>
+    <string name="block_users_count">已屏蔽 %1$d 人</string>
+    <string name="block_users_unblock">解除</string>
+    <string name="block_users_unblocked">已解除屏蔽</string>
+    <string name="block_users_unblock_failed">解除屏蔽失败</string>
     <string name="user_works_title">%1$s 的主页</string>
     <string name="user_works_empty">该用户暂无投稿</string>
     <string name="user_works_empty_self">你还没有发布投稿</string>
@@ -206,6 +214,7 @@
     <string name="detail_no_image">暂无图片</string>
     <string name="detail_error_not_found">投稿不存在或已被删除</string>
     <string name="detail_error_not_found_hint">用户可能已删除该投稿、设为非公开，或链接有误</string>
+    <string name="detail_blocked_notice_hint">可在「屏蔽列表」中解除屏蔽后重新查看</string>
     <string name="detail_image_index">%1$d / %2$d</string>
     <string name="home_retry">重试</string>
     <string name="home_empty">暂无投稿</string>
@@ -333,6 +342,16 @@
     <string name="detail_follow_sent">已关注该用户</string>
     <string name="detail_unfollow_sent">已取消关注</string>
     <string name="detail_follow_failed">关注操作失败</string>
+    <string name="detail_block">屏蔽该用户</string>
+    <string name="detail_unblock">解除屏蔽</string>
+    <string name="detail_block_login_hint">登录后即可屏蔽</string>
+    <string name="detail_block_sent">已屏蔽该用户</string>
+    <string name="detail_unblock_sent">已解除屏蔽</string>
+    <string name="detail_block_failed">屏蔽操作失败</string>
+    <string name="detail_block_confirm_title">屏蔽该用户？</string>
+    <string name="detail_block_confirm_message">屏蔽后其作品不再出现在你的浏览中，并会同时解除关注。可随时在屏蔽列表中解除。</string>
+    <string name="detail_block_confirm_ok">屏蔽</string>
+    <string name="detail_blocked_notice">你已屏蔽该作者，无法查看其作品</string>
     <string name="detail_user_home">查看用户主页</string>
     <string name="tab_wip">功能开发中</string>
 

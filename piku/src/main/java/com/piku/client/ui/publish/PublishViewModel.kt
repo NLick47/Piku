@@ -17,6 +17,7 @@ import com.piku.client.domain.model.PoipikuCategory
 import com.piku.client.domain.model.PublishDraft
 import com.piku.client.domain.model.ShowVisibility
 import com.piku.client.domain.model.UploadKind
+import com.piku.client.ui.common.FeedbackChannel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -79,8 +80,6 @@ data class PublishUiState(
     /** 相对"进入页面/恢复草稿"是否有改动——决定离开是否弹保存确认 */
     val dirty: Boolean = false,
     val phase: PublishPhase = PublishPhase.Idle,
-    /** 一次性提示（错误/草稿已存），UI 展示后调 [consumeNotice] */
-    val noticeRes: Int? = null,
     // ---- 编辑已发布作品（editWorkId != null 时激活，草稿自动保存全部短路）----
     val editWorkId: Long? = null,
     /** 编辑页（详情页+预填页）加载中：表单区显示 loading，提交按钮禁用 */
@@ -107,6 +106,10 @@ class PublishViewModel @Inject constructor(
     private val customTagRepository: CustomTagRepository,
     private val feedRepository: FeedRepository,
 ) : ViewModel() {
+
+    /** 一次性提示（错误/草稿已存等）。事件通道而非 State：本页是全屏 Dialog，
+     * VM 挂在 Home 作用域、关闭不销毁，存 State 会在重进页面时重放旧提示。 */
+    val feedback = FeedbackChannel()
 
     private val _uiState = MutableStateFlow(PublishUiState())
     val uiState: StateFlow<PublishUiState> = _uiState.asStateFlow()
@@ -431,8 +434,6 @@ class PublishViewModel @Inject constructor(
         _uiState.value = PublishUiState()
     }
 
-    fun consumeNotice() = _uiState.update { it.copy(noticeRes = null) }
-
     // ---- 发布 ----
 
     fun publish() {
@@ -635,7 +636,7 @@ class PublishViewModel @Inject constructor(
     )
 
     private fun setNotice(res: Int) {
-        _uiState.update { it.copy(noticeRes = res) }
+        feedback.show(res)
     }
 
     private data class Resume(

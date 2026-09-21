@@ -123,6 +123,14 @@
     <string name="follow_user_unfollow">Unfollow</string>
     <string name="follow_user_refollow">Follow again</string>
     <string name="follow_user_follow">Follow</string>
+    <string name="menu_block_users">Blocked users</string>
+    <string name="block_users_title">Blocked users</string>
+    <string name="block_users_empty">You haven\'t blocked anyone</string>
+    <string name="block_users_login">Log in to see your block list</string>
+    <string name="block_users_count">%1$d blocked</string>
+    <string name="block_users_unblock">Unblock</string>
+    <string name="block_users_unblocked">User unblocked</string>
+    <string name="block_users_unblock_failed">Failed to unblock</string>
     <string name="user_works_title">%1$s\'s Profile</string>
     <string name="user_works_empty">No posts by this user yet</string>
     <string name="user_works_empty_self">You haven\'t published any posts yet</string>
@@ -194,6 +202,7 @@
     <string name="detail_no_image">No image</string>
     <string name="detail_error_not_found">This post doesn\'t exist or has been deleted</string>
     <string name="detail_error_not_found_hint">The user may have deleted it or set it to private, or the link may be wrong</string>
+    <string name="detail_blocked_notice_hint">Unblock this user from the block list to view their posts</string>
     <string name="detail_image_index">%1$d / %2$d</string>
     <string name="home_retry">Retry</string>
     <string name="home_empty">No posts yet</string>
@@ -321,6 +330,16 @@
     <string name="detail_follow_sent">Now following</string>
     <string name="detail_unfollow_sent">Unfollowed</string>
     <string name="detail_follow_failed">Failed to update follow status</string>
+    <string name="detail_block">Block this user</string>
+    <string name="detail_unblock">Unblock</string>
+    <string name="detail_block_login_hint">Sign in to block this user</string>
+    <string name="detail_block_sent">User blocked</string>
+    <string name="detail_unblock_sent">User unblocked</string>
+    <string name="detail_block_failed">Failed to update block status</string>
+    <string name="detail_block_confirm_title">Block this user?</string>
+    <string name="detail_block_confirm_message">Their posts will no longer appear in your browsing, and you will be unfollowed. You can unblock anytime from the block list.</string>
+    <string name="detail_block_confirm_ok">Block</string>
+    <string name="detail_blocked_notice">You blocked this user, so their post is unavailable</string>
     <string name="detail_user_home">View user\'s page</string>
     <string name="tab_wip">Under development</string>
 

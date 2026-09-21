@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
@@ -36,16 +37,20 @@ import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridS
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.OpenInBrowser
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
@@ -91,6 +96,7 @@ import coil3.compose.AsyncImage
 import com.piku.client.R
 import com.piku.client.domain.model.UserPageInfo
 import com.piku.client.domain.model.Work
+import com.piku.client.ui.common.FeedbackHost
 import com.piku.client.ui.common.LoaderDots
 import com.piku.client.ui.common.PikuBackButton
 import com.piku.client.ui.common.WorkCard
@@ -137,15 +143,11 @@ fun UserWorksScreen(
     val linkCopiedMessage = stringResource(R.string.detail_link_copied)
     val userPageUrl = "https://poipiku.com/${state.userId}.html"
 
-    val followFeedback = state.followFeedbackRes?.let { stringResource(it) }
-    LaunchedEffect(followFeedback) {
-        if (followFeedback != null) {
-            snackbarHostState.showSnackbar(followFeedback)
-            viewModel.clearFollowFeedback()
-        }
-    }
+    FeedbackHost(channel = viewModel.feedback, snackbarHostState = snackbarHostState)
 
     var showAvatarViewer by rememberSaveable { mutableStateOf(false) }
+    // 屏蔽前的二次确认（屏蔽会连带解除关注）；解除屏蔽可恢复，不弹确认
+    var blockConfirmVisible by rememberSaveable { mutableStateOf(false) }
 
     // 折叠进度：0=完全展开，1=头部卡片完全滚出（顶栏接管）
     val gridState = rememberLazyStaggeredGridState()
@@ -186,6 +188,14 @@ fun UserWorksScreen(
                 } else {
                     null
                 },
+                // 未登录也保留入口（点击提示登录），与详情页「更多」菜单一致
+                onToggleBlock = if (state.isSelf) null else {
+                    {
+                        // 屏蔽有连带解除关注的副作用，先确认；解除屏蔽可直接执行
+                        if (state.blocked) viewModel.toggleBlock() else blockConfirmVisible = true
+                    }
+                },
+                blocked = state.blocked,
                 dark = dark,
             )
             when {
@@ -218,14 +228,24 @@ fun UserWorksScreen(
                                 .fillMaxWidth(),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Text(
-                                text = stringResource(
-                                    if (state.isSelf) R.string.user_works_empty_self
-                                    else R.string.user_works_empty,
-                                ),
-                                color = PikuColors.textFaint,
-                                fontSize = 14.sp,
-                            )
+                            // 被屏蔽的作者作品页：服务端只回无作品的壳页，
+                            // 明确告知原因而不是"暂无投稿"
+                            if (state.blocked) {
+                                Text(
+                                    text = stringResource(R.string.detail_blocked_notice),
+                                    color = PikuColors.textFaint,
+                                    fontSize = 14.sp,
+                                )
+                            } else {
+                                Text(
+                                    text = stringResource(
+                                        if (state.isSelf) R.string.user_works_empty_self
+                                        else R.string.user_works_empty,
+                                    ),
+                                    color = PikuColors.textFaint,
+                                    fontSize = 14.sp,
+                                )
+                            }
                         }
                     }
                 }
@@ -253,6 +273,46 @@ fun UserWorksScreen(
                 avatarUrl = avatarUrl,
                 onDismiss = { showAvatarViewer = false },
                 onSave = { url -> viewModel.saveAvatar(url) },
+            )
+        }
+        if (blockConfirmVisible) {
+            AlertDialog(
+                onDismissRequest = { blockConfirmVisible = false },
+                containerColor = PikuColors.surface,
+                title = {
+                    Text(
+                        text = stringResource(R.string.detail_block_confirm_title),
+                        color = PikuColors.textPrimary,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                },
+                text = {
+                    Text(
+                        text = stringResource(R.string.detail_block_confirm_message),
+                        color = PikuColors.textSecondary,
+                        fontSize = 13.sp,
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        blockConfirmVisible = false
+                        viewModel.toggleBlock()
+                    }) {
+                        Text(
+                            text = stringResource(R.string.detail_block_confirm_ok),
+                            color = PikuColors.error,
+                        )
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { blockConfirmVisible = false }) {
+                        Text(
+                            text = stringResource(R.string.detail_favorite_cancel),
+                            color = PikuColors.textSecondary,
+                        )
+                    }
+                },
             )
         }
         SnackbarHost(
@@ -321,6 +381,9 @@ private fun UserWorksTopBar(
     onCopyLink: () -> Unit,
     onOpenBrowser: () -> Unit,
     onManageClick: (() -> Unit)? = null,
+    /** 屏蔽/解除屏蔽入口；null 表示不显示（未登录或自己的主页） */
+    onToggleBlock: (() -> Unit)? = null,
+    blocked: Boolean = false,
     dark: Boolean,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -425,6 +488,13 @@ private fun UserWorksTopBar(
                             menuExpanded = false
                             onOpenBrowser()
                         },
+                        onToggleBlock = onToggleBlock?.let { toggle ->
+                            {
+                                menuExpanded = false
+                                toggle()
+                            }
+                        },
+                        blocked = blocked,
                     )
                 }
             }
@@ -448,6 +518,9 @@ private fun UserWorksMoreMenu(
     onDismiss: () -> Unit,
     onCopyLink: () -> Unit,
     onOpenBrowser: () -> Unit,
+    /** 屏蔽/解除屏蔽入口；null 表示不显示（未登录或自己的主页） */
+    onToggleBlock: (() -> Unit)? = null,
+    blocked: Boolean = false,
 ) {
     val density = LocalDensity.current
     val shape = RoundedCornerShape(18.dp)
@@ -459,6 +532,7 @@ private fun UserWorksMoreMenu(
     ) {
         Column(
             modifier = Modifier
+                .widthIn(max = 200.dp)
                 .shadow(14.dp, shape, ambientColor = Color(0x40000000), spotColor = Color(0x55000000))
                 .clip(shape)
                 .background(if (dark) Color(0xF2262421) else Color(0xF7FFFFFF))
@@ -494,6 +568,29 @@ private fun UserWorksMoreMenu(
                 dark = dark,
                 onClick = onOpenBrowser,
             )
+            if (onToggleBlock != null) {
+                // 破坏性操作与上方的复制/打开项用细线隔开，避免误触
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                    thickness = 0.5.dp,
+                    color = if (dark) Color(0x59FFFFFF) else Color(0x59C8C2B8),
+                )
+                UserWorksMoreMenuRow(
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Outlined.Block,
+                            contentDescription = null,
+                            tint = PikuColors.error,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    },
+                    label = stringResource(
+                        if (blocked) R.string.detail_unblock else R.string.detail_block,
+                    ),
+                    dark = dark,
+                    onClick = onToggleBlock,
+                )
+            }
         }
     }
 }

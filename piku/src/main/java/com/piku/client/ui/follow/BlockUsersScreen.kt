@@ -23,9 +23,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.People
+import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -38,6 +37,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import com.piku.client.ui.common.FeedbackHost
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -47,8 +48,6 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.piku.client.R
 import com.piku.client.domain.model.FollowUser
-import com.piku.client.ui.common.FeedbackHost
-import com.piku.client.ui.common.FollowPillButton
 import com.piku.client.ui.common.GlassCard
 import com.piku.client.ui.common.LoaderDots
 import com.piku.client.ui.common.LoginPrompt
@@ -64,15 +63,14 @@ import com.piku.client.ui.theme.LocalDarkTheme
 import com.piku.client.ui.theme.PikuColors
 import kotlinx.coroutines.flow.distinctUntilChanged
 
-/** 我的关注列表页：展示关注的创作者，可跳转其作品页或在行内取消关注 */
 @Composable
-fun FollowUsersScreen(
+fun BlockUsersScreen(
     onBack: () -> Unit,
     onLoginClick: () -> Unit,
     onUserClick: (FollowUser) -> Unit,
     dark: Boolean = LocalDarkTheme.current,
 ) {
-    val viewModel: FollowUsersViewModel = hiltViewModel()
+    val viewModel: BlockUsersViewModel = hiltViewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -89,19 +87,18 @@ fun FollowUsersScreen(
             ),
     ) {
         Column(Modifier.fillMaxSize()) {
-            FollowTopBar(
-                title = stringResource(R.string.follow_users_title),
-                count = if (state.total > 0) {
-                    stringResource(R.string.follow_users_count, state.total)
+            BlockTopBar(
+                count = if (state.users.isNotEmpty()) {
+                    stringResource(R.string.block_users_count, state.users.size)
                 } else null,
                 onBack = onBack,
                 dark = dark,
             )
             when {
-                state.followNeedLogin -> {
+                state.needLogin -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         LoginPrompt(
-                            message = stringResource(R.string.follow_users_login),
+                            message = stringResource(R.string.block_users_login),
                             onLogin = onLoginClick,
                             dark = dark,
                         )
@@ -114,20 +111,20 @@ fun FollowUsersScreen(
                 }
                 state.errorRes != null && state.users.isEmpty() -> {
                     val errorRes = state.errorRes
-                    FollowErrorState(errorRes = errorRes ?: R.string.home_error_parse, onRetry = viewModel::retry, dark = dark)
+                    BlockErrorState(errorRes = errorRes ?: R.string.home_error_parse, onRetry = viewModel::retry, dark = dark)
                 }
                 state.users.isEmpty() -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(
-                                imageVector = Icons.Outlined.People,
+                                imageVector = Icons.Outlined.Block,
                                 contentDescription = null,
                                 tint = PikuColors.textFaint,
                                 modifier = Modifier.size(32.dp),
                             )
                             Spacer(Modifier.height(12.dp))
                             Text(
-                                text = stringResource(R.string.follow_users_empty),
+                                text = stringResource(R.string.block_users_empty),
                                 color = PikuColors.textSecondary,
                                 fontSize = 14.sp,
                                 lineHeight = 22.sp,
@@ -136,11 +133,11 @@ fun FollowUsersScreen(
                     }
                 }
                 else -> {
-                    FollowUserList(
+                    BlockUserList(
                         state = state,
                         dark = dark,
                         onUserClick = onUserClick,
-                        onUnfollow = viewModel::unfollow,
+                        onUnblock = viewModel::unblock,
                         onLoadMore = viewModel::loadMore,
                         onRetryLoadMore = viewModel::retryLoadMore,
                     )
@@ -158,8 +155,7 @@ fun FollowUsersScreen(
 }
 
 @Composable
-private fun FollowTopBar(
-    title: String,
+private fun BlockTopBar(
     count: String?,
     onBack: () -> Unit,
     dark: Boolean,
@@ -180,7 +176,7 @@ private fun FollowTopBar(
         )
         Column(Modifier.weight(1f)) {
             Text(
-                text = title,
+                text = stringResource(R.string.block_users_title),
                 color = PikuColors.textPrimary,
                 fontSize = 17.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -199,11 +195,11 @@ private fun FollowTopBar(
 }
 
 @Composable
-private fun FollowUserList(
-    state: FollowUsersUiState,
+private fun BlockUserList(
+    state: BlockUsersUiState,
     dark: Boolean,
     onUserClick: (FollowUser) -> Unit,
-    onUnfollow: (Long) -> Unit,
+    onUnblock: (Long) -> Unit,
     onLoadMore: () -> Unit,
     onRetryLoadMore: () -> Unit,
 ) {
@@ -230,20 +226,19 @@ private fun FollowUserList(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         items(state.users, key = { it.userId }) { user ->
-            FollowUserRow(
+            BlockUserRow(
                 user = user,
-                unfollowing = user.userId in state.unfollowingIds,
-                unfollowed = user.userId in state.unfollowedIds,
+                unblocking = user.userId in state.unblockingIds,
                 dark = dark,
                 onClick = { onUserClick(user) },
-                onUnfollow = { onUnfollow(user.userId) },
+                onUnblock = { onUnblock(user.userId) },
                 modifier = Modifier.animateItem(),
             )
         }
         when {
             state.loadMoreErrorRes != null -> {
                 item {
-                    FollowLoadMoreError(errorRes = state.loadMoreErrorRes, onRetry = onRetryLoadMore, dark = dark)
+                    BlockLoadMoreError(errorRes = state.loadMoreErrorRes, onRetry = onRetryLoadMore, dark = dark)
                 }
             }
             state.loadingMore -> {
@@ -253,29 +248,17 @@ private fun FollowUserList(
                     }
                 }
             }
-            state.endReached && state.users.size >= 30 -> {
-                item {
-                    Box(Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = stringResource(R.string.home_no_more),
-                            color = PikuColors.textFaint,
-                            fontSize = 12.sp,
-                        )
-                    }
-                }
-            }
         }
     }
 }
 
 @Composable
-private fun FollowUserRow(
+private fun BlockUserRow(
     user: FollowUser,
-    unfollowing: Boolean,
-    unfollowed: Boolean,
+    unblocking: Boolean,
     dark: Boolean,
     onClick: () -> Unit,
-    onUnfollow: () -> Unit,
+    onUnblock: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(20.dp)
@@ -295,36 +278,68 @@ private fun FollowUserRow(
             UserAvatar(avatarUrl = user.avatarUrl, onClick = onClick, dark = dark, size = 48.dp)
             Spacer(Modifier.width(13.dp))
             Column(Modifier.weight(1f)) {
+                // 本地名单可能只有 ID（如从缺昵称的上下文屏蔽）：主文案兜底显示 ID
                 Text(
-                    text = user.name,
+                    text = user.name.ifBlank { "ID: ${user.userId}" },
                     color = PikuColors.textPrimary,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Text(
-                    text = "ID: ${user.userId}",
-                    color = PikuColors.textFaint,
-                    fontSize = 11.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                if (user.name.isNotBlank()) {
+                    Text(
+                        text = "ID: ${user.userId}",
+                        color = PikuColors.textFaint,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
             Spacer(Modifier.width(10.dp))
-            FollowPillButton(
-                followed = !unfollowed,
-                refollow = true,
-                sending = unfollowing,
+            BlockPillButton(
+                unblocking = unblocking,
                 dark = dark,
-                onClick = onUnfollow,
+                onClick = onUnblock,
+            )
+        }
+    }
+}
+
+/** 解除屏蔽按钮：与关注列表的 FollowPillButton 同款胶囊样式 */
+@Composable
+private fun BlockPillButton(
+    unblocking: Boolean,
+    dark: Boolean,
+    onClick: () -> Unit,
+) {
+    val shape = RoundedCornerShape(50)
+    val bg = if (dark) Color(0x30FFFFFF) else Color(0x14262421)
+    Box(
+        modifier = Modifier
+            .clip(shape)
+            .background(bg)
+            .border(BorderStroke(0.5.dp, PikuColors.border), shape)
+            .clickable(enabled = !unblocking, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 7.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (unblocking) {
+            LoaderDots(dark = dark)
+        } else {
+            Text(
+                text = stringResource(R.string.block_users_unblock),
+                color = PikuColors.textPrimary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
             )
         }
     }
 }
 
 @Composable
-private fun FollowErrorState(
+private fun BlockErrorState(
     errorRes: Int,
     onRetry: () -> Unit,
     dark: Boolean,
@@ -364,7 +379,7 @@ private fun FollowErrorState(
 }
 
 @Composable
-private fun FollowLoadMoreError(
+private fun BlockLoadMoreError(
     errorRes: Int,
     onRetry: () -> Unit,
     dark: Boolean,

@@ -12,6 +12,8 @@ package com.piku.client.domain.model
  *   （Poipass 会员「背景画像/背景色」β 功能，非会员不出现；渲染格式宽容解析，未命中则为 null）
  * - [followed]：`UserInfoCmdFollow` 按钮 class 是否含 `Selected`（= 当前登录用户已关注该
  *   作者；匿名访问恒为 false，与关注列表 FollowListF 状态一致，2026-08-18 实测）
+ * - [blocked]：`UserInfoCmdBlock` 按钮 class 是否含 `Selected`（= 当前登录用户已屏蔽该
+ *   用户；被屏蔽时服务端还会在其主页渲染「ブロック中」并提供解除入口）
  */
 data class UserPageInfo(
     val userName: String? = null,
@@ -21,6 +23,7 @@ data class UserPageInfo(
     val bgColorHex: String? = null,
     val bgImageUrl: String? = null,
     val followed: Boolean = false,
+    val blocked: Boolean = false,
     val twitterUrl: String? = null,
 ) {
     val hasBackground: Boolean

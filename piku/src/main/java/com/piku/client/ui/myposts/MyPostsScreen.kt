@@ -48,6 +48,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.piku.client.R
 import com.piku.client.domain.model.Work
+import com.piku.client.ui.common.FeedbackHost
 import com.piku.client.ui.common.PikuBackButton
 import com.piku.client.ui.common.SkeletonBlock
 import com.piku.client.ui.common.localizedCategoryName
@@ -80,18 +81,14 @@ fun MyPostsScreen(
     val viewModel: MyPostsViewModel = hiltViewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
-    val feedbackRes = state.feedbackRes
-    val feedback = feedbackRes?.let { stringResource(it) }
-    LaunchedEffect(feedbackRes) {
-        if (feedbackRes != null && feedback != null) {
-            // 删除成功时立即通知用户主页刷新列表：必须在 showSnackbar 之前写入返回标记，
-            // 否则用户删完立刻回退会让本 LaunchedEffect 在 showSnackbar 处被取消，
-            // onDeleted 永不执行，个人主页便不会刷新（内容不是最新）。
-            if (feedbackRes == R.string.my_posts_deleted) onDeleted()
-            snackbarHostState.showSnackbar(feedback)
-            viewModel.clearFeedback()
-        }
+
+    // 删除成功 → 立即写返回标记通知个人主页刷新。独立于 snackbar：收集体不挂起，
+    // 用户删完立刻回退也不会漏掉这次通知（旧写法把通知放在 showSnackbar 之后，会被取消）。
+    LaunchedEffect(Unit) {
+        viewModel.workDeleted.collect { onDeleted() }
     }
+    FeedbackHost(channel = viewModel.feedback, snackbarHostState = snackbarHostState)
+
     var deleteTarget by remember { mutableStateOf<Work?>(null) }
 
     Box(Modifier.fillMaxSize()) {

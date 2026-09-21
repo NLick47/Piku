@@ -123,6 +123,14 @@
     <string name="follow_user_unfollow">フォロー解除</string>
     <string name="follow_user_refollow">再フォロー</string>
     <string name="follow_user_follow">フォロー</string>
+    <string name="menu_block_users">ブロックリスト</string>
+    <string name="block_users_title">ブロックリスト</string>
+    <string name="block_users_empty">ブロック中のユーザーはいません</string>
+    <string name="block_users_login">ログインするとブロックリストを確認できます</string>
+    <string name="block_users_count">ブロック %1$d 人</string>
+    <string name="block_users_unblock">解除</string>
+    <string name="block_users_unblocked">ブロックを解除しました</string>
+    <string name="block_users_unblock_failed">ブロック解除に失敗しました</string>
     <string name="user_works_title">%1$s のホーム</string>
     <string name="user_works_empty">このユーザーの投稿はまだありません</string>
     <string name="user_works_empty_self">まだ投稿を公開していません</string>
@@ -194,6 +202,7 @@
     <string name="detail_no_image">画像がありません</string>
     <string name="detail_error_not_found">投稿が存在しないか、削除されています</string>
     <string name="detail_error_not_found_hint">ユーザーが削除した、非公開に設定した、またはリンクが間違っている可能性があります</string>
+    <string name="detail_blocked_notice_hint">ブロックリストからブロックを解除すると閲覧できます</string>
     <string name="detail_image_index">%1$d / %2$d</string>
     <string name="home_retry">再試行</string>
     <string name="home_empty">投稿がありません</string>
@@ -321,6 +330,16 @@
     <string name="detail_follow_sent">フォローしました</string>
     <string name="detail_unfollow_sent">フォローを解除しました</string>
     <string name="detail_follow_failed">フォローに失敗しました</string>
+    <string name="detail_block">このユーザーをブロック</string>
+    <string name="detail_unblock">ブロック解除</string>
+    <string name="detail_block_login_hint">ログインしてブロック</string>
+    <string name="detail_block_sent">ブロックしました</string>
+    <string name="detail_unblock_sent">ブロックを解除しました</string>
+    <string name="detail_block_failed">ブロックに失敗しました</string>
+    <string name="detail_block_confirm_title">このユーザーをブロックしますか？</string>
+    <string name="detail_block_confirm_message">ブロックすると投稿が表示されなくなり、フォローも解除されます。ブロックリストからいつでも解除できます。</string>
+    <string name="detail_block_confirm_ok">ブロック</string>
+    <string name="detail_blocked_notice">このユーザーをブロックしているため、投稿を表示できません</string>
     <string name="detail_user_home">ユーザーのページを見る</string>
     <string name="tab_wip">準備中</string>
 

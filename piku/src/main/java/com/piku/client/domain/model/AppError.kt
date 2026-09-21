@@ -12,4 +12,10 @@ sealed class AppError : Exception() {
      * UI 据此不再给「重试」按钮。
      */
     data object NotFound : AppError()
+
+    /**
+     * 作品作者被当前用户屏蔽：服务端把作品页 302 重定向到作者主页。
+     * 同样是终态（重试无意义），但 UI 提示应指向屏蔽列表而不是"作品已删除"。
+     */
+    data object BlockedAuthor : AppError()
 }

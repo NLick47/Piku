@@ -28,6 +28,10 @@ data class SendEmojiResponse(val result_num: Int = 0, val result: String = "", v
 @Serializable
 data class UpdateFollowUserResponse(val result: Int = 0, val btn_label: String = "", val err_msg: String = "")
 
+/** result：1=屏蔽成功，2=解除屏蔽成功，其余为失败 */
+@Serializable
+data class UpdateBlockUserResponse(val result: Int = 0)
+
 @Serializable
 data class TagSuggestionResponse(
     val result: Int = 0,
@@ -151,6 +155,32 @@ interface PoipikuApi {
         @Field("UID") uid: Long,
         @Field("IID") targetUserId: Long,
     ): UpdateFollowUserResponse
+
+    /**
+     * 屏蔽/解除屏蔽用户（网页端作品页与用户主页的 UserInfoCmdBlock 同款请求）。
+     * UID 为当前登录用户，IID 为目标用户，CHK 1=屏蔽 0=解除；
+     * 服务端会在屏蔽成功时同时解除对该用户的关注。
+     */
+    @FormUrlEncoded
+    @POST("f/UpdateBlockF.jsp")
+    suspend fun updateBlockUser(
+        @Field("UID") uid: Long,
+        @Field("IID") targetUserId: Long,
+        @Field("CHK") checked: Int,
+    ): UpdateBlockUserResponse
+
+    /**
+     * 屏蔽列表（设置页「ブロックリスト」同款请求，MD 固定 1）。
+     * 返回结构与 FollowListF 一致（`<a class="UserInfo Thumb" href="/{uid}/">` 列表），
+     * 但不带 TOTAL 分页信息：列表为空即表示已到末页。
+     */
+    @FormUrlEncoded
+    @POST("f/BlockListF.jsp")
+    suspend fun getBlockList(
+        @Field("MAX") max: Int,
+        @Field("MD") md: Int,
+        @Field("PG") page: Int,
+    ): ResponseBody
 
     @GET("f/GetTagSuggestionF.jsp")
     suspend fun getTagAutoComplete(

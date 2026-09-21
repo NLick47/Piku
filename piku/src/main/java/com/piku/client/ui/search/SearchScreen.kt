@@ -89,6 +89,7 @@ import com.piku.client.R
 import com.piku.client.domain.model.FollowUser
 import com.piku.client.domain.model.TagCard
 import com.piku.client.domain.model.Work
+import com.piku.client.ui.common.FeedbackHost
 import com.piku.client.ui.common.FollowPillButton
 import com.piku.client.ui.common.GlassCard
 import com.piku.client.ui.common.LoaderDots
@@ -165,13 +166,7 @@ fun SearchScreen(
         }
     }
 
-    val feedbackMessage = state.actionFeedbackRes?.let { stringResource(it) }
-    LaunchedEffect(feedbackMessage) {
-        if (feedbackMessage != null) {
-            snackbarHostState.showSnackbar(feedbackMessage)
-            viewModel.clearFeedback()
-        }
-    }
+    FeedbackHost(channel = viewModel.feedback, snackbarHostState = snackbarHostState)
 
     fun doSubmit(raw: String) {
         val keyword = raw.trim()

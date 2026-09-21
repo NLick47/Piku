@@ -9,6 +9,7 @@ import com.piku.client.data.local.ImageSaver
 import com.piku.client.data.local.ImageShareHelper
 import com.piku.client.data.local.WorkPasswordRepository
 import com.piku.client.data.repository.AuthRepository
+import com.piku.client.data.repository.BlockResult
 import com.piku.client.data.repository.DetailRepository
 import com.piku.client.data.repository.FavoriteRepository
 import com.piku.client.data.repository.FollowResult
@@ -31,6 +32,7 @@ import com.piku.client.domain.model.FavoriteFolder
 import com.piku.client.domain.model.TranslatedFields
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkDetail
+import com.piku.client.ui.common.FeedbackChannel
 import com.piku.client.domain.model.mergeTranslatedFields
 import com.piku.client.domain.usecase.LoadWorkDetailUseCase
 import com.piku.client.domain.usecase.LoadWorkFullImagesUseCase
@@ -51,8 +53,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
@@ -69,12 +74,6 @@ import javax.inject.Inject
 enum class TranslateField { TITLE, DESCRIPTION, AUTHOR_PROFILE, TAGS, NOVEL }
 
 /** 图片翻译失败的轻提示（snackbar）：按错误类型给文案，[retryable] 决定是否给「重试」按钮 */
-data class ImageTranslateFeedback(
-    val errorRes: Int,
-    val page: Int,
-    val retryable: Boolean,
-)
-
 data class DetailUiState(
     val detail: WorkDetail? = null,
     val fullImageUrls: List<String> = emptyList(),
@@ -96,20 +95,17 @@ data class DetailUiState(
     val passwordPrefilled: Boolean = false,
     val passwordLoading: Boolean = false,
     val loggedIn: Boolean = false,
+    /** 当前详情页的作者即登录用户自己：屏蔽入口整项不显示 */
+    val isSelf: Boolean = false,
     val reactionSending: Boolean = false,
-    val reactionFeedbackRes: Int? = null,
     /** 仅内存：本会话发过反应，重进页面重置 */
     val hasReacted: Boolean = false,
     val followSending: Boolean = false,
-    val followFeedbackRes: Int? = null,
-    val favoriteFeedbackRes: Int? = null,
+    /** 屏蔽操作进行中（防连点） */
+    val blockSending: Boolean = false,
     val savingImage: Boolean = false,
-    val saveFeedbackRes: Int? = null,
-    /** 批量保存完成的一次性结果事件（全量完成后置位，UI 弹 snackbar）；过程静默无进度 */
-    val saveAllFeedback: SaveAllFeedback? = null,
     /** 个人自定义标签（用于详情页把作品标签收藏进个人标签） */
     val customTags: List<String> = emptyList(),
-    val tagFeedbackRes: Int? = null,
     /** 底部菜单一次性新手引导（仅首次进入详情页显示） */
     val guideVisible: Boolean = false,
     /**
@@ -133,8 +129,6 @@ data class DetailUiState(
     val canTranslate: Boolean = false,
     /** 译文拉取中 */
     val translating: Boolean = false,
-    /** 手动翻译失败的轻提示（snackbar，可重试）；自动路径保持静默 */
-    val translateFeedbackRes: Int? = null,
     /** 是否展示"换模型重翻"的模型选择弹窗 */
     val showModelPicker: Boolean = false,
     /** 当前这轮拉取包含长篇正文（阅读器入口触发）；用于精确驱动阅读器的加载态 */
@@ -164,7 +158,6 @@ data class DetailUiState(
     /** 当前正在翻译的页码（null = 空闲） */
     val imageTranslatingPage: Int? = null,
     /** 图片翻译失败反馈（snackbar）；开始新翻译或成功时清空 */
-    val imageTranslateFeedback: ImageTranslateFeedback? = null,
     /** 当前页是否显示译图 */
     val showTranslatedImage: Boolean = false,
     /** 是否有可用的 image 模型 */
@@ -174,7 +167,6 @@ data class DetailUiState(
     /** 正在分享的目标包名（null = 系统面板）：loading 只转圈在被点的那一行 */
     val sharingTargetPackage: String? = null,
     /** 分享失败的轻提示（snackbar，可重试）；成功时直接拉起分享面板不需要提示 */
-    val shareFeedbackRes: Int? = null,
 ) {
     /** 该字段当前是否显示译文：全局态异或单字段覆盖 */
     fun showTranslation(field: TranslateField): Boolean =
@@ -208,11 +200,6 @@ data class ViewerImage(
 )
 
 /** 批量保存全部的一次性结果：失败数 = total - ok */
-data class SaveAllFeedback(
-    val ok: Int,
-    val total: Int,
-)
-
 @HiltViewModel
 class DetailViewModel @Inject constructor(
     private val loadWorkDetailUseCase: LoadWorkDetailUseCase,
@@ -278,6 +265,17 @@ class DetailViewModel @Inject constructor(
         ),
     )
     val uiState: StateFlow<DetailUiState> = _uiState.asStateFlow()
+
+    /** 一次性反馈（反应/关注/屏蔽/收藏/保存/标签/翻译/图片翻译/分享/批量保存） */
+    val feedback = FeedbackChannel()
+
+    /**
+     * 分享准备失败的一次性信号：失败时图片操作面板仍开着（loading 刚结束），
+     * snackbar 会被 BottomSheet 盖住，UI 收到后先收起面板。
+     * 与 [feedback] 分开是因为它驱动的是 UI 动作而非提示文案。
+     */
+    private val _shareSheetDismiss = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val shareSheetDismiss: SharedFlow<Unit> = _shareSheetDismiss.asSharedFlow()
 
     /** 目录模型列表（用于"换模型重翻"弹窗），不含分类硬限制，全部可用模型都可选 */
     private val _catalogModels = MutableStateFlow(modelCatalogRepository.models.value)
@@ -372,6 +370,11 @@ class DetailViewModel @Inject constructor(
             // 自动重登成功后重新加载详情（登录墙作品的真实图依赖有效会话）
             authRepository.sessionRefreshed.collect {
                 if (_uiState.value.detail != null) load()
+            }
+        }
+        viewModelScope.launch {
+            authRepository.userProfile.collect { profile ->
+                _uiState.update { it.copy(isSelf = profile?.uid?.toLongOrNull() == authorId) }
             }
         }
         viewModelScope.launch {
@@ -519,18 +522,18 @@ class DetailViewModel @Inject constructor(
                             )
                         }
 
-                        is NovelStreamEvent.Completed -> _uiState.update { state ->
-                            val current = state.detail ?: return@update state
-                            state.copy(
-                                detail = current.copy(
-                                    translated = withProgressiveNovel(current.translated, event.translatedSoFar),
-                                ),
-                                novelStreamProgress = null,
-                                novelRemainder = null,
-                                translateFeedbackRes =
-                                if (event.failedCount > 0) R.string.detail_novel_partial_failed
-                                else state.translateFeedbackRes,
-                            )
+                        is NovelStreamEvent.Completed -> {
+                            if (event.failedCount > 0) feedback.show(R.string.detail_novel_partial_failed)
+                            _uiState.update { state ->
+                                val current = state.detail ?: return@update state
+                                state.copy(
+                                    detail = current.copy(
+                                        translated = withProgressiveNovel(current.translated, event.translatedSoFar),
+                                    ),
+                                    novelStreamProgress = null,
+                                    novelRemainder = null,
+                                )
+                            }
                         }
                     }
                 }
@@ -623,10 +626,10 @@ class DetailViewModel @Inject constructor(
             val fields = outcome?.takeUnless { it.failed }?.fields
             _uiState.update { state ->
                 // 期间可能已重新加载/解锁成 detail，按当前 detail 回填
+                if (failed) notifyTranslateFailed()
                 val current = state.detail ?: return@update state.copy(
                     translating = false,
                     fetchingNovelText = false,
-                    translateFeedbackRes = if (failed) R.string.detail_translate_failed else null,
                 )
                 val merged = mergeTranslatedFields(current.translated, fields)
                 // 自动路径在“本次首次拿到译文”时翻面到译文视图；已有译文后的
@@ -640,7 +643,6 @@ class DetailViewModel @Inject constructor(
                     fetchingNovelText = false,
                     detail = if (merged != null) current.copy(translated = merged) else current,
                     showTranslationAll = if (shouldShow) true else state.showTranslationAll,
-                    translateFeedbackRes = if (failed) R.string.detail_translate_failed else null,
                 )
             }
             // 补跑在途期间记下的最近一次请求（先清空再跑，防循环）
@@ -714,10 +716,6 @@ class DetailViewModel @Inject constructor(
         else onTopBarTranslateClick()
     }
 
-    fun clearTranslateFeedback() {
-        _uiState.update { it.copy(translateFeedbackRes = null) }
-    }
-
     // =====================================================================
     // 图片翻译
     // =====================================================================
@@ -746,7 +744,7 @@ class DetailViewModel @Inject constructor(
         val detail = _uiState.value.detail ?: return
         val imageUrl = detail.imageUrls.getOrNull(page) ?: return
 
-        _uiState.update { it.copy(imageTranslatingPage = page, imageTranslateFeedback = null) }
+        _uiState.update { it.copy(imageTranslatingPage = page) }
         imageTranslateJob?.cancel()
         imageTranslateJob = viewModelScope.launch {
             when (val result = translateImageWithRetry(imageUrl)) {
@@ -765,15 +763,15 @@ class DetailViewModel @Inject constructor(
                         "ImageTranslate",
                         "page=$page failed: ${result.error::class.simpleName}: ${result.error.message}",
                     )
-                    _uiState.update {
-                        it.copy(
-                            imageTranslatingPage = null,
-                            imageTranslateFeedback = ImageTranslateFeedback(
-                                errorRes = imageErrorRes(result.error),
-                                page = page,
-                                retryable = result.error.retryable,
-                            ),
-                        )
+                    _uiState.update { it.copy(imageTranslatingPage = null) }
+                    val errorRes = imageErrorRes(result.error)
+                    if (result.error.retryable) {
+                        feedback.showAction(errorRes, R.string.detail_translate_retry) {
+                            onImageTranslateClick(page)
+                        }
+                    } else {
+                        // 拒绝/无模型是终态：不给「重试」按钮
+                        feedback.show(errorRes)
                     }
                 }
             }
@@ -811,14 +809,12 @@ class DetailViewModel @Inject constructor(
         is ImageTranslateError.Upstream, is ImageTranslateError.BadResponse -> R.string.image_translate_upstream
     }
 
-    fun clearImageTranslateFeedback() {
-        _uiState.update { it.copy(imageTranslateFeedback = null) }
-    }
-
-    /** snackbar「重试」：重翻失败的那一页 */
-    fun retryImageTranslate() {
-        val page = _uiState.value.imageTranslateFeedback?.page ?: return
-        onImageTranslateClick(page)
+    /** 手动翻译失败提示（带「重试」动作）；自动路径保持静默 */
+    private fun notifyTranslateFailed() {
+        feedback.showAction(
+            R.string.detail_translate_failed,
+            R.string.detail_translate_retry,
+        ) { retryLastTranslate() }
     }
 
     private suspend fun doTranslateImage(imageUrl: String): ImageTranslateResult {
@@ -1025,20 +1021,10 @@ class DetailViewModel @Inject constructor(
         val detail = _uiState.value.detail ?: return
         viewModelScope.launch {
             val added = favoriteRepository.toggleFavorite(currentWork(detail))
-            _uiState.update {
-                it.copy(
-                    favoriteFeedbackRes = if (added) {
-                        R.string.detail_favorite_added
-                    } else {
-                        R.string.detail_favorite_removed
-                    },
-                )
-            }
+            feedback.show(
+                if (added) R.string.detail_favorite_added else R.string.detail_favorite_removed,
+            )
         }
-    }
-
-    fun clearFavoriteFeedback() {
-        _uiState.update { it.copy(favoriteFeedbackRes = null) }
     }
 
     /**
@@ -1050,16 +1036,12 @@ class DetailViewModel @Inject constructor(
         viewModelScope.launch {
             if (tag in state.customTags) {
                 removeCustomTagUseCase(tag)
-                _uiState.update { it.copy(tagFeedbackRes = R.string.detail_tag_removed) }
+                feedback.show(R.string.detail_tag_removed)
             } else {
                 addCustomTagUseCase(tag)
-                _uiState.update { it.copy(tagFeedbackRes = R.string.detail_tag_added) }
+                feedback.show(R.string.detail_tag_added)
             }
         }
-    }
-
-    fun clearTagFeedback() {
-        _uiState.update { it.copy(tagFeedbackRes = null) }
     }
 
     /**
@@ -1086,21 +1068,11 @@ class DetailViewModel @Inject constructor(
             val result = runCatching {
                 imageSaver.save(url, "Piku_${workId}_${page + 1}")
             }
-            _uiState.update {
-                it.copy(
-                    savingImage = false,
-                    saveFeedbackRes = if (result.isSuccess) {
-                        R.string.detail_save_saved
-                    } else {
-                        R.string.detail_save_failed
-                    },
-                )
-            }
+            _uiState.update { it.copy(savingImage = false) }
+            feedback.show(
+                if (result.isSuccess) R.string.detail_save_saved else R.string.detail_save_failed,
+            )
         }
-    }
-
-    fun clearSaveFeedback() {
-        _uiState.update { it.copy(saveFeedbackRes = null) }
     }
 
     /**
@@ -1110,7 +1082,7 @@ class DetailViewModel @Inject constructor(
      * 不可解析时由 UI 层回落到系统面板（微信/QQ 不一定接通用 ACTION_SEND）。
      *
      * 面板在准备期间保持打开（loading 转圈在被点的那一行），成功后 UI 层拉起
-     * 分享面板并关闭；失败则通过 [DetailUiState.shareFeedbackRes] 给 snackbar。
+     * 分享面板并关闭；失败则通过 [feedback] 提示、并通过 [shareSheetDismiss] 收起面板。
      * 用户中途划掉面板可调 [cancelShare] 中断。
      */
     private var shareJob: Job? = null
@@ -1126,7 +1098,7 @@ class DetailViewModel @Inject constructor(
         shareJob?.cancel()
         shareJob = viewModelScope.launch {
             _uiState.update {
-                it.copy(sharingImage = true, sharingTargetPackage = targetPackage, shareFeedbackRes = null)
+                it.copy(sharingImage = true, sharingTargetPackage = targetPackage)
             }
             try {
                 val uri = imageShareHelper.getImageUri(url, workId, page)
@@ -1142,12 +1114,11 @@ class DetailViewModel @Inject constructor(
             } catch (e: Exception) {
                 Log.d("PikuDiag", "shareImage fail work=$workId page=$page: ${e.message}", e)
                 _uiState.update {
-                    it.copy(
-                        sharingImage = false,
-                        sharingTargetPackage = null,
-                        shareFeedbackRes = R.string.detail_share_failed,
-                    )
+                    it.copy(sharingImage = false, sharingTargetPackage = null)
                 }
+                // 失败时面板仍开着（loading 刚结束），snackbar 会被盖住：先让 UI 收起面板
+                _shareSheetDismiss.tryEmit(Unit)
+                feedback.show(R.string.detail_share_failed)
             }
         }
     }
@@ -1159,10 +1130,6 @@ class DetailViewModel @Inject constructor(
         if (_uiState.value.sharingImage) {
             _uiState.update { it.copy(sharingImage = false, sharingTargetPackage = null) }
         }
-    }
-
-    fun clearShareFeedback() {
-        _uiState.update { it.copy(shareFeedbackRes = null) }
     }
 
 
@@ -1187,15 +1154,16 @@ class DetailViewModel @Inject constructor(
                     runCatching { imageSaver.save(url, "Piku_${workId}_${page + 1}") }
                         .onSuccess { ok++ }
                 }
-                _uiState.update { it.copy(saveAllFeedback = SaveAllFeedback(ok = ok, total = total)) }
+                // 批量保存完成：带数字的结果文案（全失败沿用单张保存的静态失败文案）
+                when {
+                    ok == 0 -> feedback.show(R.string.detail_save_failed)
+                    ok == total -> feedback.show(R.string.detail_save_all_success, total)
+                    else -> feedback.show(R.string.detail_save_all_partial, ok, total - ok)
+                }
             } finally {
                 runningSaveAlls.remove(workId)
             }
         }
-    }
-
-    fun clearSaveAllFeedback() {
-        _uiState.update { it.copy(saveAllFeedback = null) }
     }
 
     fun toggleFavoriteFolder(folderId: Long) {
@@ -1240,22 +1208,20 @@ class DetailViewModel @Inject constructor(
         val uid = authRepository.currentUserId()
         val detail = state.detail ?: return
         if (uid == null) {
-            _uiState.update { it.copy(reactionFeedbackRes = R.string.detail_reaction_login_hint) }
+            feedback.show(R.string.detail_reaction_login_hint)
             return
         }
         viewModelScope.launch {
             _uiState.update { it.copy(reactionSending = true) }
             val result = detailRepository.sendReaction(work.id, emoji, uid)
-            _uiState.update {
-                it.copy(
-                    reactionSending = false,
-                    reactionFeedbackRes = when (result) {
-                        ReactionResult.Success -> R.string.detail_reaction_sent
-                        ReactionResult.LimitReached -> R.string.detail_reaction_limit
-                        is ReactionResult.Failure -> R.string.detail_reaction_send_failed
-                    },
-                )
-            }
+            _uiState.update { it.copy(reactionSending = false) }
+            feedback.show(
+                when (result) {
+                    ReactionResult.Success -> R.string.detail_reaction_sent
+                    ReactionResult.LimitReached -> R.string.detail_reaction_limit
+                    is ReactionResult.Failure -> R.string.detail_reaction_send_failed
+                },
+            )
             if (result is ReactionResult.Success) {
                 _uiState.update { state ->
                     val detail = state.detail ?: return@update state
@@ -1273,10 +1239,6 @@ class DetailViewModel @Inject constructor(
         }
     }
 
-    fun clearReactionFeedback() {
-        _uiState.update { it.copy(reactionFeedbackRes = null) }
-    }
-
     /**
      * 关注/取消关注作者。关注状态以详情页解析出的 [WorkDetail.followed] 为准，
      * 切换成功后原地更新，等待下次加载详情时由服务端渲染校正。
@@ -1285,7 +1247,7 @@ class DetailViewModel @Inject constructor(
         val state = _uiState.value
         if (state.followSending || state.detail == null) return
         if (!state.loggedIn) {
-            _uiState.update { it.copy(followFeedbackRes = R.string.detail_follow_login_hint) }
+            feedback.show(R.string.detail_follow_login_hint)
             return
         }
         viewModelScope.launch {
@@ -1295,12 +1257,6 @@ class DetailViewModel @Inject constructor(
                 val detail = s.detail ?: return@update s
                 s.copy(
                     followSending = false,
-                    followFeedbackRes = when (result) {
-                        FollowResult.Followed -> R.string.detail_follow_sent
-                        FollowResult.Unfollowed -> R.string.detail_unfollow_sent
-                        FollowResult.NotLoggedIn -> R.string.detail_follow_login_hint
-                        is FollowResult.Failure -> R.string.detail_follow_failed
-                    },
                     detail = when (result) {
                         FollowResult.Followed -> detail.copy(followed = true)
                         FollowResult.Unfollowed -> detail.copy(followed = false)
@@ -1308,11 +1264,61 @@ class DetailViewModel @Inject constructor(
                     },
                 )
             }
+            feedback.show(
+                when (result) {
+                    FollowResult.Followed -> R.string.detail_follow_sent
+                    FollowResult.Unfollowed -> R.string.detail_unfollow_sent
+                    FollowResult.NotLoggedIn -> R.string.detail_follow_login_hint
+                    is FollowResult.Failure -> R.string.detail_follow_failed
+                },
+            )
         }
     }
 
-    fun clearFollowFeedback() {
-        _uiState.update { it.copy(followFeedbackRes = null) }
+    /**
+     * 屏蔽/解除屏蔽作者。屏蔽状态以详情页解析出的 [WorkDetail.blocked] 为准。
+     * 屏蔽成功时服务端会一并解除关注（网页端 UpdateBlock 同款行为），
+     * 本地同步把关注态置为未关注，避免作者行按钮显示成"已关注"。
+     */
+    fun toggleBlock() {
+        val state = _uiState.value
+        val detail = state.detail ?: return
+        // 自己查看自己的作品：入口在 UI 已隐藏，这里再兜一层，避免非法请求
+        if (state.isSelf) return
+        if (state.blockSending) return
+        if (!state.loggedIn) {
+            feedback.show(R.string.detail_block_login_hint)
+            return
+        }
+        val target = !detail.blocked
+        viewModelScope.launch {
+            _uiState.update { it.copy(blockSending = true) }
+            val result = detailRepository.updateBlock(
+                authorId,
+                target,
+                name = detail.authorName,
+                avatarUrl = detail.authorAvatarUrl.takeIf { it.isNotBlank() },
+            )
+            _uiState.update { s ->
+                val current = s.detail ?: return@update s
+                s.copy(
+                    blockSending = false,
+                    detail = when (result) {
+                        BlockResult.Blocked -> current.copy(blocked = true, followed = false)
+                        BlockResult.Unblocked -> current.copy(blocked = false)
+                        else -> current
+                    },
+                )
+            }
+            feedback.show(
+                when (result) {
+                    BlockResult.Blocked -> R.string.detail_block_sent
+                    BlockResult.Unblocked -> R.string.detail_unblock_sent
+                    BlockResult.NotLoggedIn -> R.string.detail_block_login_hint
+                    is BlockResult.Failure -> R.string.detail_block_failed
+                },
+            )
+        }
     }
 
     private fun recordHistory(detail: WorkDetail) {
@@ -1357,19 +1363,25 @@ class DetailViewModel @Inject constructor(
                         error,
                     )
                     // 404（作品已删除/链接有误）是终态：文案直说原因，且不给重试按钮。
+                    // 作者被屏蔽时服务端把作品页 302 到其主页，同样是终态，但提示指向屏蔽。
                     // 其余错误（网络、解析、未知）保留重试；未知类型也要有文案，
                     // 否则 errorRes 为 null 会退化成一片空白页。
                     val notFound = error is AppError.NotFound
+                    val blockedAuthor = error is AppError.BlockedAuthor
                     _uiState.update {
                         it.copy(
                             loading = false,
-                            errorRes = if (notFound) {
-                                R.string.detail_error_not_found
-                            } else {
-                                (error as? AppError)?.toFeedErrorRes() ?: R.string.home_error_parse
+                            errorRes = when {
+                                blockedAuthor -> R.string.detail_blocked_notice
+                                notFound -> R.string.detail_error_not_found
+                                else -> (error as? AppError)?.toFeedErrorRes() ?: R.string.home_error_parse
                             },
-                            errorHintRes = if (notFound) R.string.detail_error_not_found_hint else null,
-                            errorRetryable = !notFound,
+                            errorHintRes = when {
+                                blockedAuthor -> R.string.detail_blocked_notice_hint
+                                notFound -> R.string.detail_error_not_found_hint
+                                else -> null
+                            },
+                            errorRetryable = !notFound && !blockedAuthor,
                         )
                     }
                 }

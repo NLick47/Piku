@@ -37,6 +37,8 @@ class AuthRepository @Inject constructor(
     private val cookieStore: CookieStore,
     private val sessionMonitor: SessionMonitor,
     private val credentialStore: CredentialStore,
+    /** 屏蔽名单随账号存在，清除会话时必须一并清掉 */
+    private val blockListRepository: BlockListRepository,
 ) {
 
     private val _authStatus =
@@ -330,6 +332,8 @@ class AuthRepository @Inject constructor(
         uid = null
         _userProfile.value = null
         _authStatus.value = AuthStatus.LOGGED_OUT
+        // 屏蔽名单属于账号：不清掉的话，换账号登录后本地名单会把新账号的内容误过滤
+        blockListRepository.clear()
     }
 
     private fun hasSession(): Boolean {

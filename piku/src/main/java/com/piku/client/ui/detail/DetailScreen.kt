@@ -38,9 +38,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import com.piku.client.ui.common.FeedbackHost
 import com.piku.client.ui.common.PikuBottomSheet
 import com.piku.client.ui.common.PikuSheetTitle
 import androidx.compose.runtime.Composable
@@ -54,7 +56,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -122,6 +123,8 @@ fun DetailScreen(
     var viewerPage by rememberSaveable { mutableIntStateOf(-1) }
     var reactionSheetVisible by rememberSaveable { mutableStateOf(false) }
     var favoriteSheetVisible by rememberSaveable { mutableStateOf(false) }
+    // 屏蔽作者前的二次确认：屏蔽会连带解除关注，误触有代价，故比其他菜单项多一步
+    var blockConfirmVisible by rememberSaveable { mutableStateOf(false) }
     // 长按命中的页码：分享期间面板保持打开（loading 转圈），成功/失败后才关闭；
     // 必须声明在分享 LaunchedEffect 之前，effect 内要把它置 -1 关面板
     var imageActionPage by rememberSaveable { mutableIntStateOf(-1) }
@@ -194,74 +197,11 @@ fun DetailScreen(
         }
     }
 
-    FeedbackSnackbar(
-        message = state.reactionFeedbackRes?.let { stringResource(it) },
-        snackbarHostState = snackbarHostState,
-        onConsumed = viewModel::clearReactionFeedback,
-    )
-    FeedbackSnackbar(
-        message = state.followFeedbackRes?.let { stringResource(it) },
-        snackbarHostState = snackbarHostState,
-        onConsumed = viewModel::clearFollowFeedback,
-    )
-    FeedbackSnackbar(
-        message = state.favoriteFeedbackRes?.let { stringResource(it) },
-        snackbarHostState = snackbarHostState,
-        onConsumed = viewModel::clearFavoriteFeedback,
-    )
-    FeedbackSnackbar(
-        message = state.saveFeedbackRes?.let { stringResource(it) },
-        snackbarHostState = snackbarHostState,
-        onConsumed = viewModel::clearSaveFeedback,
-    )
-    // 分享下载失败：面板已关闭，用 snackbar 给重试入口（成功时直接拉起分享面板不打扰）
-    FeedbackSnackbar(
-        message = state.shareFeedbackRes?.let { stringResource(it) },
-        snackbarHostState = snackbarHostState,
-        onConsumed = viewModel::clearShareFeedback,
-    )
-    // 下载失败时面板还开着（loading 刚消失），snackbar 会被 BottomSheet 盖住：
-    // 先关面板再弹提示，用户重长按即可重试
-    LaunchedEffect(state.shareFeedbackRes) {
-        if (state.shareFeedbackRes != null) imageActionPage = -1
+    FeedbackHost(channel = viewModel.feedback, snackbarHostState = snackbarHostState)
+    // 分享准备失败：面板仍开着（loading 刚结束），先收起面板，否则 snackbar 被 BottomSheet 盖住
+    LaunchedEffect(Unit) {
+        viewModel.shareSheetDismiss.collect { imageActionPage = -1 }
     }
-    // 批量保存完成：带数字的结果文案（全失败沿用单张保存的静态失败文案）
-    val saveAllMessage = state.saveAllFeedback?.let { fb ->
-        val failed = fb.total - fb.ok
-        when {
-            fb.ok == 0 -> stringResource(R.string.detail_save_failed)
-            failed == 0 -> stringResource(R.string.detail_save_all_success, fb.total)
-            else -> stringResource(R.string.detail_save_all_partial, fb.ok, failed)
-        }
-    }
-    FeedbackSnackbar(
-        message = saveAllMessage,
-        snackbarHostState = snackbarHostState,
-        onConsumed = viewModel::clearSaveAllFeedback,
-    )
-    FeedbackSnackbar(
-        message = state.tagFeedbackRes?.let { stringResource(it) },
-        snackbarHostState = snackbarHostState,
-        onConsumed = viewModel::clearTagFeedback,
-    )
-    // 手动翻译失败：snackbar 轻提示 + 一键重试（自动路径不触发，保持静默）
-    FeedbackSnackbar(
-        message = state.translateFeedbackRes?.let { stringResource(it) },
-        snackbarHostState = snackbarHostState,
-        onConsumed = viewModel::clearTranslateFeedback,
-        actionLabel = stringResource(R.string.detail_translate_retry),
-        onAction = viewModel::retryLastTranslate,
-    )
-    // 图片翻译失败：按错误类型给文案；拒绝/无模型是终态，不给「重试」
-    FeedbackSnackbar(
-        message = state.imageTranslateFeedback?.let { stringResource(it.errorRes) },
-        snackbarHostState = snackbarHostState,
-        onConsumed = viewModel::clearImageTranslateFeedback,
-        actionLabel = state.imageTranslateFeedback
-            ?.takeIf { it.retryable }
-            ?.let { stringResource(R.string.detail_translate_retry) },
-        onAction = viewModel::retryImageTranslate,
-    )
 
     // 长按图片 → 弹出操作面板；面板中保存/分享时处理权限
     val savePermissionMessage = stringResource(R.string.detail_save_permission_denied)
@@ -420,8 +360,58 @@ fun DetailScreen(
                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(state.shareUrl)))
             },
             onOpenModelPicker = if (state.canTranslate) viewModel::openModelPicker else null,
+            blocked = state.detail?.blocked == true,
+            onToggleBlock = if (state.isSelf) {
+                null
+            } else {
+                {
+                    // 屏蔽有连带解除关注的副作用，先确认；解除屏蔽可直接执行
+                    if (state.detail?.blocked == true) viewModel.toggleBlock() else blockConfirmVisible = true
+                }
+            },
             modifier = Modifier.align(Alignment.BottomCenter),
         )
+        // 屏蔽作者确认：屏蔽会连带解除关注，误触有代价；解除屏蔽可恢复，不弹确认
+        if (blockConfirmVisible) {
+            AlertDialog(
+                onDismissRequest = { blockConfirmVisible = false },
+                containerColor = PikuColors.surface,
+                title = {
+                    Text(
+                        text = stringResource(R.string.detail_block_confirm_title),
+                        color = PikuColors.textPrimary,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                },
+                text = {
+                    Text(
+                        text = stringResource(R.string.detail_block_confirm_message),
+                        color = PikuColors.textSecondary,
+                        fontSize = 13.sp,
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        blockConfirmVisible = false
+                        viewModel.toggleBlock()
+                    }) {
+                        Text(
+                            text = stringResource(R.string.detail_block_confirm_ok),
+                            color = PikuColors.error,
+                        )
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { blockConfirmVisible = false }) {
+                        Text(
+                            text = stringResource(R.string.detail_favorite_cancel),
+                            color = PikuColors.textSecondary,
+                        )
+                    }
+                },
+            )
+        }
         if (state.guideVisible && state.detail != null) {
             BottomBarGuideHint(
                 dark = dark,
@@ -584,32 +574,6 @@ fun DetailScreen(
                 },
             )
         }
-    }
-}
-
-/**
- * 统一的轻提示出口：把「弹 snackbar → 清掉 ViewModel 里的一次性状态」这段样板收拢到一处，
- * 六种反馈（反应/关注/收藏夹/保存/标签/翻译）共用同一套时序。
- * 传了 [actionLabel] 时（翻译失败重试）额外处理动作点击。
- */
-@Composable
-private fun FeedbackSnackbar(
-    message: String?,
-    snackbarHostState: SnackbarHostState,
-    onConsumed: () -> Unit,
-    actionLabel: String? = null,
-    onAction: (() -> Unit)? = null,
-) {
-    val currentOnConsumed by rememberUpdatedState(onConsumed)
-    val currentOnAction by rememberUpdatedState(onAction)
-    LaunchedEffect(message) {
-        if (message == null) return@LaunchedEffect
-        val result = snackbarHostState.showSnackbar(
-            message = message,
-            actionLabel = actionLabel,
-        )
-        if (result == SnackbarResult.ActionPerformed) currentOnAction?.invoke()
-        currentOnConsumed()
     }
 }
 

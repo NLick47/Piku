@@ -97,6 +97,9 @@ internal fun DetailBottomBar(
     onOpenBrowser: () -> Unit,
     /** 配置了可用翻译模型时传入，更多菜单里会出现"换模型重翻" */
     onOpenModelPicker: (() -> Unit)? = null,
+    /** 已屏蔽该作者（决定更多菜单文案）；未登录时连同 [onToggleBlock] 一起不显示该入口 */
+    blocked: Boolean = false,
+    onToggleBlock: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -207,6 +210,13 @@ internal fun DetailBottomBar(
                             {
                                 menuExpanded = false
                                 picker()
+                            }
+                        },
+                        blocked = blocked,
+                        onToggleBlock = onToggleBlock?.let { toggle ->
+                            {
+                                menuExpanded = false
+                                toggle()
                             }
                         },
                     )

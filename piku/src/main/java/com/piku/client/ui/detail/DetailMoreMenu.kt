@@ -13,12 +13,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Article
+import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.OpenInBrowser
 import androidx.compose.material.icons.outlined.Translate
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -112,6 +115,12 @@ internal fun MoreMenuPopup(
      * 这里给一个看得见的落点；没有可用模型时传 null，整项不显示。
      */
     onOpenModelPicker: (() -> Unit)? = null,
+    /**
+     * 屏蔽/解除屏蔽作者。null 表示不显示该入口（未登录、屏蔽状态未知等）；
+     * [blocked] 决定文案是「屏蔽作者」还是「解除屏蔽」。
+     */
+    onToggleBlock: (() -> Unit)? = null,
+    blocked: Boolean = false,
 ) {
     val density = LocalDensity.current
     var offsetY by remember { mutableIntStateOf(0) }
@@ -124,6 +133,7 @@ internal fun MoreMenuPopup(
     ) {
         Column(
             modifier = Modifier
+                .widthIn(max = 200.dp)
                 .onSizeChanged { size ->
                     offsetY = -size.height - with(density) { 8.dp.roundToPx() }
                 }
@@ -161,6 +171,22 @@ internal fun MoreMenuPopup(
                     label = stringResource(R.string.detail_menu_retry_with_model),
                     dark = dark,
                     onClick = onOpenModelPicker,
+                )
+            }
+            if (onToggleBlock != null) {
+                // 破坏性操作与上方的复制/打开项用细线隔开，避免误触
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                    thickness = 0.5.dp,
+                    color = if (dark) SoftBorderDark else SoftBorderLight,
+                )
+                MoreMenuRow(
+                    iconVector = Icons.Outlined.Block,
+                    label = stringResource(
+                        if (blocked) R.string.detail_unblock else R.string.detail_block,
+                    ),
+                    dark = dark,
+                    onClick = onToggleBlock,
                 )
             }
         }

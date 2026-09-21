@@ -86,7 +86,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextRange
@@ -112,6 +111,7 @@ import com.piku.client.domain.model.PoipikuCategory
 import com.piku.client.domain.model.ShowVisibility
 import com.piku.client.domain.model.UploadKind
 import androidx.compose.foundation.gestures.detectTapGestures
+import com.piku.client.ui.common.FeedbackHost
 import com.piku.client.ui.common.LoaderDots
 import com.piku.client.ui.common.PikuBackButton
 import com.piku.client.ui.common.PikuBottomSheet
@@ -168,7 +168,6 @@ fun PublishScreen(
     val isEditMode = editWorkId > 0
     val snackbar = remember { SnackbarHostState() }
     val boxScope = rememberCoroutineScope()
-    val context = LocalContext.current
 
     var showCategorySheet by remember { mutableStateOf(false) }
     var showOptionsSheet by remember { mutableStateOf(false) }
@@ -208,11 +207,7 @@ fun PublishScreen(
     LaunchedEffect(showDraftBox) {
         if (showDraftBox) draftBoxViewModel.refresh()
     }
-    LaunchedEffect(state.noticeRes) {
-        val res = state.noticeRes ?: return@LaunchedEffect
-        viewModel.consumeNotice()
-        snackbar.showSnackbar(context.getString(res))
-    }
+    FeedbackHost(channel = viewModel.feedback, snackbarHostState = snackbar)
 
     // 拦截返回键：busy 时空处理（消费事件，不让 HomeScreen 的 onDismissRequest 关掉浮层）；
     // 非 busy 时有改动弹确认，无改动直接退
