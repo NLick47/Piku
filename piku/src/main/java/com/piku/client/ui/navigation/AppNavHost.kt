@@ -38,8 +38,11 @@ import com.piku.client.ui.search.PoipikuLink
 import com.piku.client.ui.search.SearchScreen
 import com.piku.client.ui.search.parsePoipikuLink
 import com.piku.client.ui.tags.TagScreen
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.tween
 
 object Routes {
     const val LOGIN = "login"
@@ -91,12 +94,16 @@ private const val BACK_POP_DEBOUNCE_MS = 400L
 
 private const val EXIT_CONFIRM_INTERVAL_MS = 2000L
 
+/** 路由转场时长，同时也是共享元素过渡的动画窗口 */
+private const val SHARED_TRANSITION_MS = 220
+
 private const val KEY_PENDING_TAG = "pending_tag"
 
 private const val KEY_SHOULD_REOPEN_DRAWER = "should_reopen_drawer"
 
 private const val TAG = "PikuDiag"
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun AppNavHost(
     deepLink: String? = null,
@@ -166,14 +173,18 @@ fun AppNavHost(
         }
     }
 
-    NavHost(
-        navController = navController,
-        startDestination = Routes.HOME,
-        enterTransition = { EnterTransition.None },
-        exitTransition = { ExitTransition.None },
-        popEnterTransition = { EnterTransition.None },
-        popExitTransition = { ExitTransition.None },
-    ) {
+    // 共享元素过渡：Home ↔ Detail 之间的作品图放大/缩回。
+    // 注意这里必须给非零时长——全 None 时 AnimatedContent 瞬间完成，sharedBounds 会直接跳变。
+    SharedTransitionLayout {
+        val sharedScope = this
+        NavHost(
+            navController = navController,
+            startDestination = Routes.HOME,
+            enterTransition = { fadeIn(tween(SHARED_TRANSITION_MS)) },
+            exitTransition = { fadeOut(tween(SHARED_TRANSITION_MS)) },
+            popEnterTransition = { fadeIn(tween(SHARED_TRANSITION_MS)) },
+            popExitTransition = { fadeOut(tween(SHARED_TRANSITION_MS)) },
+        ) {
         composable(Routes.LOGIN) {
             // 有上一页（能回退）才显示返回按钮；按钮直接弹栈，
             // 不经过 safePopBack 的防抖闸门（快速往返登录页时防抖会吞掉回退）
@@ -223,54 +234,56 @@ fun AppNavHost(
                 .getStateFlow<Boolean>(KEY_SHOULD_REOPEN_DRAWER, false)
                 .collectAsStateWithLifecycle()
 
-            HomeScreen(
-                pendingTag = pendingTag,
-                onTagConsumed = {
-                    backStackEntry.savedStateHandle[KEY_PENDING_TAG] = null
-                },
-                shouldReopenDrawer = shouldReopenDrawer,
-                onDrawerReopenConsumed = {
-                    backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = false
-                },
-                onWorkClick = { work: Work ->
-                    navController.navigate(Routes.detail(work.authorId, work.id, work.thumbnailUrl))
-                },
-                onLoginClick = {
-                    Log.d(TAG, "navigate LOGIN " +
-                        "current=${navController.currentBackStackEntry?.destination?.route} " +
-                        "prev=${navController.previousBackStackEntry?.destination?.route}")
-                    backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = true
-                    navController.navigate(Routes.LOGIN)
-                },
-                onHistoryClick = {
-                    backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = true
-                    navController.navigate(Routes.HISTORY)
-                },
-                onCollectionClick = {
-                    backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = true
-                    navController.navigate(Routes.COLLECTION)
-                },
-                onTagsClick = {
-                    backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = true
-                    navController.navigate(Routes.TAGS)
-                },
-                onFollowUsersClick = {
-                    backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = true
-                    navController.navigate(Routes.followUsers())
-                },
-                onSearchClick = { navController.navigate(Routes.search()) },
-                onAuthorClick = { work: Work ->
-                    // 卡片作者区：不写 SHOULD_REOPEN_DRAWER，避免回到首页时抽屉被自动弹出
-                    navController.navigate(Routes.userWorks(work.authorId, work.authorName)) {
-                        launchSingleTop = true
-                    }
-                },
-                onProfileOpen = { uid, name ->
-                    // 抽屉里"我的资料"点击：保留重开抽屉的语义，便于连续切换抽屉菜单项
-                    backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = true
-                    navController.navigate(Routes.userWorks(uid, name))
-                },
-            )
+            ProvideNavSharedScope(sharedScope, this) {
+                HomeScreen(
+                    pendingTag = pendingTag,
+                    onTagConsumed = {
+                        backStackEntry.savedStateHandle[KEY_PENDING_TAG] = null
+                    },
+                    shouldReopenDrawer = shouldReopenDrawer,
+                    onDrawerReopenConsumed = {
+                        backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = false
+                    },
+                    onWorkClick = { work: Work ->
+                        navController.navigate(Routes.detail(work.authorId, work.id, work.thumbnailUrl))
+                    },
+                    onLoginClick = {
+                        Log.d(TAG, "navigate LOGIN " +
+                            "current=${navController.currentBackStackEntry?.destination?.route} " +
+                            "prev=${navController.previousBackStackEntry?.destination?.route}")
+                        backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = true
+                        navController.navigate(Routes.LOGIN)
+                    },
+                    onHistoryClick = {
+                        backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = true
+                        navController.navigate(Routes.HISTORY)
+                    },
+                    onCollectionClick = {
+                        backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = true
+                        navController.navigate(Routes.COLLECTION)
+                    },
+                    onTagsClick = {
+                        backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = true
+                        navController.navigate(Routes.TAGS)
+                    },
+                    onFollowUsersClick = {
+                        backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = true
+                        navController.navigate(Routes.followUsers())
+                    },
+                    onSearchClick = { navController.navigate(Routes.search()) },
+                    onAuthorClick = { work: Work ->
+                        // 卡片作者区：不写 SHOULD_REOPEN_DRAWER，避免回到首页时抽屉被自动弹出
+                        navController.navigate(Routes.userWorks(work.authorId, work.authorName)) {
+                            launchSingleTop = true
+                        }
+                    },
+                    onProfileOpen = { uid, name ->
+                        // 抽屉里"我的资料"点击：保留重开抽屉的语义，便于连续切换抽屉菜单项
+                        backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = true
+                        navController.navigate(Routes.userWorks(uid, name))
+                    },
+                )
+            }
         }
         composable(Routes.FOLLOW_USERS) {
             FollowUsersScreen(
@@ -401,35 +414,38 @@ fun AppNavHost(
                 navArgument("thumb") { type = NavType.StringType; defaultValue = "" },
             ),
         ) {
-            DetailScreen(
-                onBack = safePopBack,
-                onHomeClick = safePopToHome,
-                onTagClick = { tag ->
-                    navController.getBackStackEntry(Routes.HOME)
-                        .savedStateHandle[KEY_PENDING_TAG] = tag
-                    navController.popBackStack(Routes.HOME, inclusive = false)
-                },
-                onRelatedWorkClick = { authorId, workId, thumbnailUrl ->
-                    val detailDepth = navController.currentBackStack.value
-                        .count { it.destination.route == Routes.DETAIL }
-                    if (detailDepth >= Routes.MAX_DETAIL_DEPTH) {
-                        navController.navigate(Routes.detail(authorId, workId, thumbnailUrl)) {
-                            popUpTo(Routes.DETAIL) { inclusive = true }
+            ProvideNavSharedScope(sharedScope, this) {
+                DetailScreen(
+                    onBack = safePopBack,
+                    onHomeClick = safePopToHome,
+                    onTagClick = { tag ->
+                        navController.getBackStackEntry(Routes.HOME)
+                            .savedStateHandle[KEY_PENDING_TAG] = tag
+                        navController.popBackStack(Routes.HOME, inclusive = false)
+                    },
+                    onRelatedWorkClick = { authorId, workId, thumbnailUrl ->
+                        val detailDepth = navController.currentBackStack.value
+                            .count { it.destination.route == Routes.DETAIL }
+                        if (detailDepth >= Routes.MAX_DETAIL_DEPTH) {
+                            navController.navigate(Routes.detail(authorId, workId, thumbnailUrl)) {
+                                popUpTo(Routes.DETAIL) { inclusive = true }
+                            }
+                        } else {
+                            navController.navigate(Routes.detail(authorId, workId, thumbnailUrl))
                         }
-                    } else {
-                        navController.navigate(Routes.detail(authorId, workId, thumbnailUrl))
-                    }
-                },
-                onAuthorClick = { authorId, authorName ->
-                    // 详情页 → 作者主页：作品页头部卡片展示作者主页信息，关注状态由页面自行解析
-                    navController.navigate(
-                        Routes.userWorks(
-                            userId = authorId,
-                            userName = authorName,
-                        ),
-                    )
-                },
-            )
+                    },
+                    onAuthorClick = { authorId, authorName ->
+                        // 详情页 → 作者主页：作品页头部卡片展示作者主页信息，关注状态由页面自行解析
+                        navController.navigate(
+                            Routes.userWorks(
+                                userId = authorId,
+                                userName = authorName,
+                            ),
+                        )
+                    },
+                )
+            }
+        }
         }
     }
 }

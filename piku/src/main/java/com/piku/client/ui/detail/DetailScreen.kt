@@ -45,6 +45,7 @@ import androidx.compose.material3.TextButton
 import com.piku.client.ui.common.FeedbackHost
 import com.piku.client.ui.common.PikuBottomSheet
 import com.piku.client.ui.common.PikuSheetTitle
+import com.piku.client.ui.navigation.workSharedKey
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
@@ -302,6 +303,7 @@ fun DetailScreen(
                     DetailContent(
                         detail = state.detail!!,
                         dark = dark,
+                        sharedKey = workSharedKey(viewModel.authorId, viewModel.workId),
                         scrollState = scrollState,
                         onImageClick = { page -> viewerPage = page },
                         onImageLongPress = { page -> imageActionPage = page },

@@ -3,6 +3,7 @@ package com.piku.client.ui.detail
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.animateContentSize
+import com.piku.client.ui.navigation.sharedWorkBounds
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -129,6 +130,8 @@ private val POIPIKU_WORK_REGEX = Regex("""https?://poipiku\.com/(\d+)/(\d+)\.htm
 internal fun DetailContent(
     detail: WorkDetail,
     dark: Boolean,
+    /** 与列表卡片一致的共享元素 key；空串表示不参与过渡 */
+    sharedKey: String = "",
     /** 由页面持有的滚动状态：顶栏据此决定标题是否淡入，避免两处各建一份 */
     scrollState: ScrollState = rememberScrollState(),
     onImageClick: (Int) -> Unit,
@@ -202,6 +205,7 @@ internal fun DetailContent(
         ImagePager(
             detail = detail,
             dark = dark,
+            sharedKey = sharedKey,
             onImageClick = onImageClick,
             onImageLongPress = onImageLongPress,
             onWorkClick = onRelatedWorkClick,
@@ -400,6 +404,8 @@ private fun AuthorRow(detail: WorkDetail, dark: Boolean, onAuthorClick: () -> Un
 private fun ImagePager(
     detail: WorkDetail,
     dark: Boolean,
+    /** 与列表卡片一致的共享元素 key；空串表示不参与过渡 */
+    sharedKey: String = "",
     onImageClick: (Int) -> Unit,
     onImageLongPress: (Int) -> Unit,
     onWorkClick: (Long, Long, String) -> Unit,
@@ -451,6 +457,7 @@ private fun ImagePager(
     val passwordOnly = detail.imageUrls.isEmpty() && detail.passwordProtected && detail.novelText.isBlank()
     Box(
         modifier = Modifier
+            .sharedWorkBounds(sharedKey)
             .fillMaxWidth()
             .animateContentSize()
             .then(

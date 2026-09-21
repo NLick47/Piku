@@ -59,6 +59,8 @@ import com.piku.client.ui.theme.PikuColors
 import com.piku.client.ui.theme.WorkCardBgDark
 import com.piku.client.ui.theme.WorkCardBorderDark
 import com.piku.client.ui.theme.WorkCardInfoBgDark
+import com.piku.client.ui.navigation.sharedWorkBounds
+import com.piku.client.ui.navigation.workSharedKey
 import com.piku.client.ui.theme.WorkCardPlaceholderDark
 import kotlinx.coroutines.delay
 
@@ -147,6 +149,7 @@ fun WorkCard(
                     // 暗色模式下压暗白底缩略图，避免网格里出现刺眼的"亮块"
                     colorFilter = PikuColors.tameWhiteFilter,
                     modifier = Modifier
+                        .sharedWorkBounds(workSharedKey(work.authorId, work.id))
                         .fillMaxWidth()
                         .aspectRatio(1f)
                         .background(if (dark) WorkCardPlaceholderDark else Color(0xFFF1EFEA)),
