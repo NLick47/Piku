@@ -1,16 +1,19 @@
 package com.piku.client
 
 import android.content.Context
+import android.content.Intent
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import android.os.LocaleList
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.lifecycleScope
 import com.piku.client.data.local.ImageShareHelper
 import com.piku.client.data.local.LanguageStore
@@ -33,6 +36,8 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var imageShareHelper: ImageShareHelper
 
+    private val pendingDeepLink = mutableStateOf<String?>(null)
+
     override fun attachBaseContext(newBase: Context) {
         val prefs = newBase.getSharedPreferences(LanguageStore.PREFS_NAME, Context.MODE_PRIVATE)
         val code = prefs.getString(LanguageStore.KEY_LANGUAGE, null)
@@ -45,12 +50,30 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        if (savedInstanceState == null) {
+            pendingDeepLink.value = intent?.dataString
+            if (pendingDeepLink.value != null) {
+                Log.d(TAG, "cold start deep link: ${pendingDeepLink.value}")
+            }
+        }
         setContent {
             val themeMode by settingsRepository.themeMode.collectAsState(initial = ThemeMode.SYSTEM)
             val systemDark = isSystemInDarkTheme()
             PoipikuTheme(darkTheme = themeMode.isDark(systemDark)) {
-                AppNavHost()
+                AppNavHost(
+                    deepLink = pendingDeepLink.value,
+                    onDeepLinkConsumed = { pendingDeepLink.value = null },
+                )
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        intent.dataString?.let {
+            Log.d(TAG, "new intent deep link: $it")
+            pendingDeepLink.value = it
         }
     }
 
@@ -70,5 +93,9 @@ class MainActivity : ComponentActivity() {
             config.setLocale(locale)
         }
         return createConfigurationContext(config)
+    }
+
+    private companion object {
+        const val TAG = "PikuDiag"
     }
 }

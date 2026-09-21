@@ -7,6 +7,7 @@ import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
@@ -35,6 +36,7 @@ import com.piku.client.ui.myposts.MyPostsScreen
 import com.piku.client.ui.publish.PublishScreen
 import com.piku.client.ui.search.PoipikuLink
 import com.piku.client.ui.search.SearchScreen
+import com.piku.client.ui.search.parsePoipikuLink
 import com.piku.client.ui.tags.TagScreen
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -96,10 +98,29 @@ private const val KEY_SHOULD_REOPEN_DRAWER = "should_reopen_drawer"
 private const val TAG = "PikuDiag"
 
 @Composable
-fun AppNavHost() {
+fun AppNavHost(
+    deepLink: String? = null,
+    onDeepLinkConsumed: () -> Unit = {},
+) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
+
+    LaunchedEffect(deepLink) {
+        if (deepLink == null) return@LaunchedEffect
+        when (val link = parsePoipikuLink(deepLink)) {
+            is PoipikuLink.Work ->
+                navController.navigate(Routes.detail(link.authorId, link.workId)) {
+                    launchSingleTop = true
+                }
+            is PoipikuLink.User ->
+                navController.navigate(Routes.userWorks(link.userId)) {
+                    launchSingleTop = true
+                }
+            null -> Unit
+        }
+        onDeepLinkConsumed()
+    }
 
     // 连按返回防抖 + 栈底保护：快速连按（含转场动画未结束时）只弹出最上层，
     // 且绝不弹出 startDestination（HOME）——返回栈清空会白屏。
