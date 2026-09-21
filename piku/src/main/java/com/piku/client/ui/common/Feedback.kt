@@ -16,7 +16,6 @@ data class FeedbackText(
     val args: List<Any> = emptyList(),
 )
 
-/
 data class FeedbackMessage(
     val text: FeedbackText,
     @StringRes val actionLabelRes: Int? = null,

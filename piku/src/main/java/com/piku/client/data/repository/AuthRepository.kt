@@ -332,7 +332,8 @@ class AuthRepository @Inject constructor(
         uid = null
         _userProfile.value = null
         _authStatus.value = AuthStatus.LOGGED_OUT
-        // 屏蔽名单属于账号：不清掉的话，换账号登录后本地名单会把新账号的内容误过滤
+        // 屏蔽名单属于账号：不清掉的话，换账号登录后内存名单会把新账号的内容误过滤。
+        // 在途的预热分页由 BlockListSync 自己按登录态作废
         blockListRepository.clear()
     }
 

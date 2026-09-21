@@ -11,6 +11,7 @@ import coil3.request.allowHardware
 import coil3.request.crossfade
 import coil3.serviceLoaderEnabled
 import com.piku.client.data.remote.translation.ModelCatalogRepository
+import com.piku.client.data.repository.BlockListSync
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -66,6 +67,12 @@ class PoipikuApplication : Application() {
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             catalogRepository.refresh()
         }
+
+        // 屏蔽名单是纯内存的：冷启动后要重新拉一遍，否则首页在本进程内不知道该过滤谁。
+        // 取依赖也放 IO 里，不给启动路径加负担
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            entryPoint.blockListSync().start()
+        }
     }
 
     @EntryPoint
@@ -74,5 +81,7 @@ class PoipikuApplication : Application() {
         fun okHttpClient(): OkHttpClient
 
         fun modelCatalogRepository(): ModelCatalogRepository
+
+        fun blockListSync(): BlockListSync
     }
 }
