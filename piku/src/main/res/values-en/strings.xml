@@ -217,6 +217,7 @@
     <string name="home_error_parse">Failed to parse the page. Please try again later</string>
     <string name="error_content_not_found">Content doesn\'t exist or has been deleted</string>
     <string name="home_image_count">%1$d images</string>
+    <string name="work_private_badge">Private</string>
     <string name="home_refresh_new">%1$d new posts — tap to go top</string>
     <string name="home_refresh_fresh">Already up to date</string>
     <string name="search_placeholder">Tags, users…</string>

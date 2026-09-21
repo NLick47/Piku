@@ -81,6 +81,16 @@ interface PoipikuApi {
         @Query("PG") page: Int,
     ): ResponseBody
 
+    /**
+     * マイボックス（自己的作品列表，即网页端"マイボックス"）。需登录，ID 非本人时服务端 302 回公开主页。
+     * 与 IllustListPcV 的唯一区别：把自己的非公開作品一并列出。
+     */
+    @GET("MyIllustListPcV.jsp")
+    suspend fun getMyIllusts(
+        @Query("ID") userId: Long,
+        @Query("PG") page: Int,
+    ): ResponseBody
+
     @GET("PopularTagListPcV.jsp")
     suspend fun getPopularTags(): ResponseBody
 

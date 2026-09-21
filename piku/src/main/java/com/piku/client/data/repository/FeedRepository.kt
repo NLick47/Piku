@@ -93,13 +93,36 @@ class FeedRepository @Inject constructor(
             FollowUserParser.parse(html)
         }
 
+
     suspend fun getUserWorks(userId: Long, page: Int): Result<UserWorksPage> =
         apiCall {
             val adultEnabled = settingsRepository.showAdultContent.first()
-            val html = api.getUserIllusts(userId, "", page).string()
-            val works = NewArrivalParser.parse(html)
-                .let { if (adultEnabled) it else it.filter { !it.warning } }
-            val pageInfo = if (page == 0) UserPageParser.parse(html) else null
+            val self = authRepository.currentUserId() == userId
+            val html = if (self) {
+                api.getMyIllusts(userId, page).string()
+            } else {
+                api.getUserIllusts(userId, "", page).string()
+            }
+            val pageInfo = when {
+                page != 0 -> null
+                self -> runCatching { api.getUserIllusts(userId, "", 0).string() }
+                    .getOrNull()
+                    ?.let(UserPageParser::parse)
+                else -> UserPageParser.parse(html)
+            }
+            val profile = authRepository.userProfile.value
+            val parsed = if (self) {
+                // マイボックス列表块内不带作者区，用页主资料（页面优先，本地资料兜底）回填
+                NewArrivalParser.parse(
+                    html = html,
+                    authorFallbackId = userId,
+                    authorFallbackName = pageInfo?.userName ?: profile?.name.orEmpty(),
+                    authorFallbackAvatarUrl = pageInfo?.avatarUrl ?: profile?.avatarUrl,
+                )
+            } else {
+                NewArrivalParser.parse(html)
+            }
+            val works = if (adultEnabled) parsed else parsed.filter { !it.warning }
             UserWorksPage(works = works, pageInfo = pageInfo)
         }
 

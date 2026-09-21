@@ -154,22 +154,32 @@ fun WorkCard(
                 )
             }
             // 动图角标：网格不播放动画（几十张同时逐帧解码会拖垮滚动），
-            // 只标出这是动图，点进详情页才播。判定走文件名，不花任何网络请求。
-            if (isAnimatedImage(work.thumbnailUrl)) {
-                Text(
-                    // 格式名，各语言写法一致，不走 i18n
-                    text = "GIF",
-                    color = Color.White,
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.5.sp,
+            // 只标出这是动图，点进详情页才播。
+            if (work.isPrivate || isAnimatedImage(work.thumbnailUrl)) {
+                Row(
                     modifier = Modifier
                         .align(Alignment.TopStart)
-                        .padding(6.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(Color(0x99000000))
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                )
+                        .padding(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    if (work.isPrivate) {
+                        WorkPrivateBadge()
+                    }
+                    if (isAnimatedImage(work.thumbnailUrl)) {
+                        Text(
+                            // 格式名，各语言写法一致，不走 i18n
+                            text = "GIF",
+                            color = Color.White,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.5.sp,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0x99000000))
+                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
+                    }
+                }
             }
             if (work.imageCount > 1) {
                 Box(
@@ -271,6 +281,33 @@ fun WorkCard(
                 }
             }
         }
+    }
+}
+
+
+@Composable
+fun WorkPrivateBadge(modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(Color(0x99000000))
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.Lock,
+            contentDescription = null,
+            tint = Color.White,
+            modifier = Modifier.size(9.dp),
+        )
+        Text(
+            text = stringResource(R.string.work_private_badge),
+            color = Color.White,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.5.sp,
+        )
     }
 }
 

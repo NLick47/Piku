@@ -13,4 +13,5 @@ data class Work(
     val r18: Boolean,
     val warning: Boolean = false,
     val loginRequired: Boolean = false,
+    val isPrivate: Boolean = false,
 )

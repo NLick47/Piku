@@ -217,6 +217,7 @@
     <string name="home_error_parse">ページ解析に失敗しました。もう一度お試しください</string>
     <string name="error_content_not_found">コンテンツが存在しないか、削除されています</string>
     <string name="home_image_count">%1$d 枚</string>
+    <string name="work_private_badge">非公開</string>
    <string name="home_refresh_new">新着 %1$d 件 — タップで先頭へ</string>
    <string name="home_refresh_fresh">最新です</string>
     <string name="search_placeholder">タグ・ユーザーを検索…</string>

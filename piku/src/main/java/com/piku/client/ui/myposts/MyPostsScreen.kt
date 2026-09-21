@@ -51,6 +51,7 @@ import com.piku.client.domain.model.Work
 import com.piku.client.ui.common.FeedbackHost
 import com.piku.client.ui.common.PikuBackButton
 import com.piku.client.ui.common.SkeletonBlock
+import com.piku.client.ui.common.WorkPrivateBadge
 import com.piku.client.ui.common.localizedCategoryName
 import com.piku.client.ui.common.rememberSkeletonPulse
 import com.piku.client.ui.theme.GlassCardBgDark
@@ -288,14 +289,22 @@ private fun MyPostRow(
         Column(Modifier.weight(1f)) {
             // 分类命中本地枚举用本地化名（WorkGrid / 详情页同款），否则回退站点原文
             val categoryName = localizedCategoryName(work.categoryCd, work.categoryName)
-            Text(
-                text = work.title.ifBlank { categoryName },
-                color = PikuColors.textPrimary,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = work.title.ifBlank { categoryName },
+                    color = PikuColors.textPrimary,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                // 非公開投稿在列表里要能一眼认出来：它没有公开主页入口，但仍可编辑/删除
+                if (work.isPrivate) {
+                    Spacer(Modifier.width(6.dp))
+                    WorkPrivateBadge()
+                }
+            }
             Spacer(Modifier.height(2.dp))
             val countText = if (work.imageCount > 0) {
                 stringResource(R.string.draft_type_images, work.imageCount)
