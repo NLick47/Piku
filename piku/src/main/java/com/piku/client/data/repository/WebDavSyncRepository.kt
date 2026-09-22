@@ -1,6 +1,9 @@
 package com.piku.client.data.repository
 
+import android.content.Context
 import android.util.Log
+import androidx.room.withTransaction
+import com.piku.client.data.local.AppDatabase
 import com.piku.client.data.local.FavoriteDao
 import com.piku.client.data.local.FavoriteEntity
 import com.piku.client.data.local.FavoriteFolderDao
@@ -16,7 +19,8 @@ import com.piku.client.data.remote.WorkDetailParser
 import com.piku.client.domain.model.FavoriteSyncData
 import com.piku.client.domain.model.SyncFolder
 import com.piku.client.domain.model.SyncMembership
-import com.piku.client.domain.model.SyncWork
+import com.piku.client.domain.model.SyncTombstone
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -33,6 +37,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Named
 import javax.inject.Singleton
@@ -82,6 +87,8 @@ class WebDavSyncRepository @Inject constructor(
     private val authRepository: AuthRepository,
     @Named("main") private val mainClient: OkHttpClient,
     private val json: Json,
+    @ApplicationContext private val appContext: Context,
+    private val database: AppDatabase,
 ) {
 
     private val _syncState = MutableStateFlow(SyncState.IDLE)
@@ -89,6 +96,12 @@ class WebDavSyncRepository @Inject constructor(
     private val _testConnectionState = MutableStateFlow(TestConnectionState.IDLE)
     val testConnectionState: StateFlow<TestConnectionState> = _testConnectionState.asStateFlow()
     private val syncMutex = Mutex()
+
+    /** 上次成功同步的 payload，用来判定本机删掉了什么。可能到 MB 级，所以落文件不落 prefs */
+    private val snapshotStore = FavoriteSyncSnapshotStore(
+        file = File(appContext.filesDir, SNAPSHOT_FILE_NAME),
+        json = json,
+    )
 
     /**
      * 完整同步：合并元数据 + 备份已浏览作品的内容。
@@ -165,14 +178,24 @@ class WebDavSyncRepository @Inject constructor(
             buildLocalOnlySyncData(localFolders, localFavorites, allMemberships)
         } else {
             val remoteData = downloadRemoteData(url, credentials)
-            Log.d(TAG, "executeSync: remoteData=${if (remoteData == null) "null" else "folders=${remoteData.folders.size} works=${remoteData.works.size}"}")
-            mergeData(localFolders, localFavorites, allMemberships, remoteData)
+            val snapshot = snapshotStore.read()
+            Log.d(TAG, "executeSync: remoteData=${if (remoteData == null) "null" else "folders=${remoteData.folders.size} works=${remoteData.works.size}"} snapshot=${snapshot != null}")
+            FavoriteSyncMerge.merge(
+                localFolders = localFolders,
+                localFavorites = localFavorites,
+                localMemberships = allMemberships,
+                remote = remoteData,
+                snapshot = snapshot,
+                now = System.currentTimeMillis(),
+            )
         }
 
-        Log.d(TAG, "executeSync: uploadMetadata folders=${merged.folders.size} works=${merged.works.size} memberships=${merged.memberships.size}")
+        Log.d(TAG, "executeSync: uploadMetadata folders=${merged.folders.size} works=${merged.works.size} memberships=${merged.memberships.size} tombstones=${merged.tombstones.size}")
         uploadMetadata(url, credentials, merged)
         if (!skipMerge) {
             writeLocalData(merged)
+            // 本地写成功后再更新快照，否则会把还在本地的条目误判成已删除
+            snapshotStore.write(merged)
         }
 
         val backedUp = if (backupContent) {
@@ -272,6 +295,7 @@ class WebDavSyncRepository @Inject constructor(
         }
     }
 
+    /** skipMerge 专用：只打包本地内容，不带墓碑，不能用于常规同步 */
     private fun buildLocalOnlySyncData(
         localFolders: List<FavoriteFolderEntity>,
         localFavorites: List<FavoriteEntity>,
@@ -292,109 +316,6 @@ class WebDavSyncRepository @Inject constructor(
         }.distinctBy { it.folderId to it.workId },
     )
 
-    /**
-     * 合并本地和远程数据。
-     */
-    private fun mergeData(
-        localFolders: List<FavoriteFolderEntity>,
-        localFavorites: List<FavoriteEntity>,
-        localMemberships: List<Pair<Long, FavoriteMembershipEntity>>,
-        remote: FavoriteSyncData?,
-    ): FavoriteSyncData {
-        if (remote == null) {
-            return buildLocalOnlySyncData(localFolders, localFavorites, localMemberships)
-        }
-
-        // 合并文件夹：按 name 匹配
-        val remoteFolderByName = remote.folders.associateBy { it.name }
-        val localFolderByName = localFolders.associateBy { it.name }
-        val allFolderNames = localFolderByName.keys + remoteFolderByName.keys
-
-        val mergedFolders = mutableListOf<SyncFolder>()
-        for (name in allFolderNames) {
-            val local = localFolderByName[name]
-            val remoteFolder = remoteFolderByName[name]
-            mergedFolders.add(
-                SyncFolder(
-                    id = remoteFolder?.id ?: local?.id ?: System.currentTimeMillis(),
-                    name = name,
-                    isDefault = (local?.isDefault == true) || (remoteFolder?.isDefault == true),
-                    createdAt = minOf(
-                        local?.createdAt ?: Long.MAX_VALUE,
-                        remoteFolder?.createdAt ?: Long.MAX_VALUE,
-                    ).let { if (it == Long.MAX_VALUE) System.currentTimeMillis() else it },
-                ),
-            )
-        }
-
-        // 合并作品：按 workId 去重
-        val remoteWorkMap = remote.works.associateBy { it.workId }
-        val localWorkMap = localFavorites.associateBy { it.workId }
-        val allWorkIds = localWorkMap.keys + remoteWorkMap.keys
-
-        val mergedWorks = allWorkIds.mapNotNull { workId ->
-            val local = localWorkMap[workId]
-            val remoteWork = remoteWorkMap[workId]
-            if (local != null) {
-                SyncWork(
-                    workId = workId,
-                    authorId = local.authorId,
-                    title = local.title,
-                    authorName = local.authorName,
-                    thumbnailUrl = local.thumbnailUrl,
-                    authorAvatarUrl = local.authorAvatarUrl,
-                    imageCount = local.imageCount,
-                    r18 = local.r18,
-                    addedAt = maxOf(local.addedAt, remoteWork?.addedAt ?: 0),
-                    contentBackedUp = local.contentBackedUp || (remoteWork?.contentBackedUp ?: false),
-                )
-            } else {
-                remoteWork
-            }
-        }
-
-        // 合并成员关系
-        val remoteMembershipsByFolderName = remote.memberships.groupBy { m ->
-            remote.folders.find { it.id == m.folderId }?.name ?: ""
-        }
-        val localMembershipsByFolderName = localMemberships.groupBy { (folderId, _) ->
-            localFolders.find { it.id == folderId }?.name ?: ""
-        }
-
-        val mergedMemberships = mutableListOf<SyncMembership>()
-        val allMembershipKeys = mutableSetOf<String>()
-
-        for ((folderName, localMs) in localMembershipsByFolderName) {
-            val mergedFolderId = mergedFolders.find { it.name == folderName }?.id ?: continue
-            for ((_, m) in localMs) {
-                val key = "$folderName:${m.workId}"
-                if (allMembershipKeys.add(key)) {
-                    mergedMemberships.add(
-                        SyncMembership(folderId = mergedFolderId, workId = m.workId, addedAt = m.addedAt),
-                    )
-                }
-            }
-        }
-        for ((folderName, remoteMs) in remoteMembershipsByFolderName) {
-            val mergedFolderId = mergedFolders.find { it.name == folderName }?.id ?: continue
-            for (m in remoteMs) {
-                val key = "$folderName:${m.workId}"
-                if (allMembershipKeys.add(key)) {
-                    mergedMemberships.add(
-                        SyncMembership(folderId = mergedFolderId, workId = m.workId, addedAt = m.addedAt),
-                    )
-                }
-            }
-        }
-
-        return FavoriteSyncData(
-            syncedAt = System.currentTimeMillis(),
-            folders = mergedFolders,
-            works = mergedWorks,
-            memberships = mergedMemberships,
-        )
-    }
-
     private suspend fun uploadMetadata(url: String, credentials: String, data: FavoriteSyncData) {
         val text = json.encodeToString(data)
         webDavClient.uploadFile(
@@ -407,61 +328,73 @@ class WebDavSyncRepository @Inject constructor(
     }
 
     private suspend fun writeLocalData(data: FavoriteSyncData) {
-        val existingFolders = favoriteFolderDao.observeFolders().first()
-        val existingByName = existingFolders.associateBy { it.name }
+        database.withTransaction {
+            for (tombstone in data.tombstones) {
+                val folder = favoriteFolderDao.folderByName(tombstone.folderName) ?: continue
+                when (tombstone.kind) {
+                    SyncTombstone.KIND_FOLDER -> {
+                        if (folder.isDefault) continue
+                        favoriteFolderDao.deleteFolder(folder.id)
+                    }
 
-        for (folder in data.folders) {
-            val existing = existingByName[folder.name]
-            if (existing == null) {
-                favoriteFolderDao.insertFolder(
-                    FavoriteFolderEntity(
-                        id = folder.id,
-                        name = folder.name,
-                        createdAt = folder.createdAt,
-                        isDefault = folder.isDefault,
-                    ),
-                )
-            } else if (
-                existing.isDefault != folder.isDefault ||
-                existing.createdAt != folder.createdAt
-            ) {
-                favoriteFolderDao.updateFolder(
-                    existing.copy(
-                        isDefault = folder.isDefault,
-                        createdAt = folder.createdAt,
+                    SyncTombstone.KIND_MEMBERSHIP ->
+                        favoriteFolderDao.deleteMembership(folder.id, tombstone.workId)
+                }
+            }
+
+            for (folder in data.folders) {
+                val existing = favoriteFolderDao.folderByName(folder.name)
+                if (existing == null) {
+                    favoriteFolderDao.insertFolder(
+                        FavoriteFolderEntity(
+                            id = folder.id,
+                            name = folder.name,
+                            createdAt = folder.createdAt,
+                            isDefault = folder.isDefault,
+                        ),
+                    )
+                } else if (
+                    existing.isDefault != folder.isDefault ||
+                    existing.createdAt != folder.createdAt
+                ) {
+                    favoriteFolderDao.updateFolder(
+                        existing.copy(
+                            isDefault = folder.isDefault,
+                            createdAt = folder.createdAt,
+                        ),
+                    )
+                }
+            }
+
+            for (work in data.works) {
+                favoriteDao.upsert(
+                    FavoriteEntity(
+                        workId = work.workId,
+                        authorId = work.authorId,
+                        title = work.title,
+                        authorName = work.authorName,
+                        thumbnailUrl = work.thumbnailUrl,
+                        authorAvatarUrl = work.authorAvatarUrl,
+                        imageCount = work.imageCount,
+                        r18 = work.r18,
+                        addedAt = work.addedAt,
+                        contentBackedUp = work.contentBackedUp,
                     ),
                 )
             }
-        }
 
-        for (work in data.works) {
-            favoriteDao.upsert(
-                FavoriteEntity(
-                    workId = work.workId,
-                    authorId = work.authorId,
-                    title = work.title,
-                    authorName = work.authorName,
-                    thumbnailUrl = work.thumbnailUrl,
-                    authorAvatarUrl = work.authorAvatarUrl,
-                    imageCount = work.imageCount,
-                    r18 = work.r18,
-                    addedAt = work.addedAt,
-                    contentBackedUp = work.contentBackedUp,
-                ),
-            )
-        }
+            for (membership in data.memberships) {
+                favoriteFolderDao.upsertMembership(
+                    FavoriteMembershipEntity(
+                        folderId = membership.folderId,
+                        workId = membership.workId,
+                        addedAt = membership.addedAt,
+                    ),
+                )
+            }
 
-        for (membership in data.memberships) {
-            favoriteFolderDao.upsertMembership(
-                FavoriteMembershipEntity(
-                    folderId = membership.folderId,
-                    workId = membership.workId,
-                    addedAt = membership.addedAt,
-                ),
-            )
+            favoriteFolderDao.deleteOrphanedFavorites()
         }
-
-        favoriteFolderDao.deleteOrphanedFavorites()
     }
 
     /**
@@ -707,6 +640,9 @@ class WebDavSyncRepository @Inject constructor(
 
     companion object {
         private const val TAG = "WebDavSyncRepo"
+
+        /** 同步快照文件名 */
+        private const val SNAPSHOT_FILE_NAME = "favorite_sync_snapshot.json"
 
         /** 抓取 poipiku 详情页之间的固定间隔基数 */
         private const val FETCH_GAP_MIN_MS = 1_200L

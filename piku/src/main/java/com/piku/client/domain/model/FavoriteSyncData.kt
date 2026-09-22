@@ -9,7 +9,34 @@ data class FavoriteSyncData(
     val folders: List<SyncFolder>,
     val works: List<SyncWork>,
     val memberships: List<SyncMembership>,
+    val tombstones: List<SyncTombstone> = emptyList(),
 )
+
+@Serializable
+data class SyncTombstone(
+    val kind: String,
+    val folderName: String,
+    val workId: String = "",
+    val deletedAt: Long,
+) {
+    val key: String
+        get() = if (kind == KIND_MEMBERSHIP) {
+            "$kind\u0000$folderName\u0000$workId"
+        } else {
+            "$kind\u0000$folderName"
+        }
+
+    companion object {
+        const val KIND_FOLDER = "FOLDER"
+        const val KIND_MEMBERSHIP = "MEMBERSHIP"
+
+        fun folder(name: String, deletedAt: Long) =
+            SyncTombstone(KIND_FOLDER, name, deletedAt = deletedAt)
+
+        fun membership(folderName: String, workId: String, deletedAt: Long) =
+            SyncTombstone(KIND_MEMBERSHIP, folderName, workId, deletedAt)
+    }
+}
 
 @Serializable
 data class SyncFolder(
