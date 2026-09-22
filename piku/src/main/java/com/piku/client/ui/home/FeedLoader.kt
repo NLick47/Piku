@@ -1,5 +1,6 @@
 package com.piku.client.ui.home
 
+import com.piku.client.data.repository.ThumbnailResolver
 import com.piku.client.domain.model.AppError
 import com.piku.client.domain.model.PoipikuCategory
 import com.piku.client.domain.model.Work
@@ -91,16 +92,21 @@ internal class FeedLoader(
         _state.update { it.copy(refreshNotice = null) }
     }
 
-    /** 同步替换缩略图字段（密码作品解锁等场景），其余内容保持不变 */
+    /**
+     * 同步替换缩略图字段（密码作品解锁等场景），其余内容保持不变。
+     *
+     * 只接受占位图/空图卡片的替换（见 [ThumbnailResolver.needsThumbnailBackfill]）：真实
+     * 缩略图被追加图覆盖会让卡片换图并重新解码，返回首页先灰白再出图。
+     */
     fun updateThumbnail(workId: Long, thumbnailUrl: String) {
-        if (_state.value.works.none { it.id == workId && it.thumbnailUrl != thumbnailUrl }) return
+        fun isBackfillTarget(work: Work): Boolean =
+            work.id == workId &&
+                work.thumbnailUrl != thumbnailUrl &&
+                ThumbnailResolver.needsThumbnailBackfill(work.thumbnailUrl)
+        if (_state.value.works.none(::isBackfillTarget)) return
         _state.update { s ->
             s.copy(works = s.works.map { w ->
-                if (w.id == workId && w.thumbnailUrl != thumbnailUrl) {
-                    w.copy(thumbnailUrl = thumbnailUrl)
-                } else {
-                    w
-                }
+                if (isBackfillTarget(w)) w.copy(thumbnailUrl = thumbnailUrl) else w
             })
         }
     }

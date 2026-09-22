@@ -133,8 +133,9 @@ class DetailRepository @Inject constructor(
                 } else {
                     emptyList()
                 }
-                // 回填列表缩略图缓存（append 返回的 _640 图，原图带签名不适合缓存）
-                appendUrls.firstOrNull()?.let { thumbnailResolver.rememberThumb(enrichedWork(work, detail), it) }
+                // 仅列表当前是占位图/空图才替换，判定见 ThumbnailResolver.backfillThumbnailUrl
+                ThumbnailResolver.backfillThumbnailUrl(work.thumbnailUrl, detail.imageUrls + appendUrls)
+                    ?.let { url -> thumbnailResolver.rememberThumb(enrichedWork(work, detail), url) }
                 val novelText = WorkDetailParser.extractNovelText(appendResp.html)
                 // -2 在密码作品上是"密码错误"；非密码作品上是未识别的拒绝，
                 // 走服务端原文提示（不混标 passwordError）
@@ -192,8 +193,11 @@ class DetailRepository @Inject constructor(
         } else {
             emptyList()
         }
-        // 回填列表缩略图缓存：点开详情拿到真实图后，列表立即显示
-        appendUrls.firstOrNull()?.let { thumbnailResolver.rememberThumb(enrichedWork(work, detail), it) }
+        // 回填列表缩略图缓存：点开详情拿到真实图后列表立即显示。
+        // 仅占位图/空图才替换——真实缩略图被追加图覆盖会让卡片换图并重新加载，判定见
+        // ThumbnailResolver.backfillThumbnailUrl
+        ThumbnailResolver.backfillThumbnailUrl(work.thumbnailUrl, detail.imageUrls + appendUrls)
+            ?.let { url -> thumbnailResolver.rememberThumb(enrichedWork(work, detail), url) }
         val novelText = appendResp?.html?.let { WorkDetailParser.extractNovelText(it) }.orEmpty()
         // append 的 -2 只在密码作品上表示"密码错误"；非密码作品拿到 -2 视为未识别
         // 拒绝，走服务端原文提示

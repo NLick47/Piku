@@ -1342,13 +1342,20 @@ class DetailViewModel @Inject constructor(
 
     /**
      * 历史/收藏使用的稳定缩略图，优先级：
-     * 1. 已回填的真实 _360 缩略图（解锁后 append 返回的 640 图转换，稳定不过期）
-     * 2. 详情页第一张图（普通作品为 640 缩略图）
-     * 3. 来源页占位图（密码/warning 作品未解锁时 feed 的 publish_pass 等占位图），
-     *    保证历史/收藏记录永远有图
+     * 1. 列表当前看不到内容（占位图/空图）时用已回填的真实 _360 缩略图（解锁后 append 的
+     *    640 图转换，稳定不过期）——这类作品只有回填缓存里有真图
+     * 2. 详情页第一张图（普通作品为 640 缩略图）——与列表卡片、详情页展示的是同一张
+     * 3. 来源页缩略图（兜底），保证历史/收藏记录永远有图
+     *
+     * 列表已有真实缩略图时不看回填缓存：缓存里可能是旧版无条件回填写下的追加图（第 2 张起），
+     * 会让记录里的作品图与列表/详情不一致（见 ThumbnailResolver.backfillThumbnailUrl）。
      */
-    private fun stableThumbnail(detail: WorkDetail): String =
-        thumbnailResolver.thumbFor(work) ?: detail.imageUrls.firstOrNull() ?: work.thumbnailUrl
+    private fun stableThumbnail(detail: WorkDetail): String {
+        if (ThumbnailResolver.needsThumbnailBackfill(work.thumbnailUrl)) {
+            thumbnailResolver.thumbFor(work)?.let { return it }
+        }
+        return detail.imageUrls.firstOrNull() ?: work.thumbnailUrl
+    }
 
     fun sendReaction(emoji: String) {
         val state = _uiState.value

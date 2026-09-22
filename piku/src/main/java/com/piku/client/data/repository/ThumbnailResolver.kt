@@ -34,7 +34,12 @@ class ThumbnailResolver @Inject constructor(
         }
     }
 
-    /** 详情页解析到真实缩略图后回填列表缓存，返回列表时立即生效 */
+    /**
+     * 详情页解析到真实缩略图后回填列表缓存，返回列表时立即生效。
+     *
+     * 调用方只在列表当前缩略图是占位图/空图时调用（判定见 [backfillThumbnailUrl]）：
+     * 列表已能显示真实图的卡片不该被替换，否则卡片换图并重新解码。
+     */
     fun rememberThumb(work: Work, url: String): String {
         val key = workKey(work)
         val thumb = thumbUrl(url)
@@ -44,7 +49,12 @@ class ThumbnailResolver @Inject constructor(
         return thumb
     }
 
-    /** 已回填的真实缩略图（_360，稳定不过期），无则 null。历史/收藏记录优先用它 */
+    /**
+     * 已回填的真实缩略图（_360，稳定不过期），无则 null。
+     *
+     * 只对"列表里看不到内容"的作品有值（登录墙/关注墙/密码/R-18/警告/文字作品）：这些
+     * 作品的历史/收藏记录用它补上真实图；列表本来就有真实缩略图的作品直接用详情页首图。
+     */
     fun thumbFor(work: Work): String? = thumbCache[workKey(work)]
 
     /**
@@ -86,13 +96,42 @@ class ThumbnailResolver @Inject constructor(
         const val RESULT_LOGIN_REQUIRED = -3
         private const val KEY_THUMBS = "work_thumb_urls"
 
-        /** 是否为网站占位图（登录墙/R-18/警告/文字作品 logo），真实图 URL 均为作品文件路径 */
+        /** 是否为网站占位图（登录墙/关注墙/密码/R-18/警告/文字作品 logo），真实图 URL 均为作品文件路径 */
         fun isPlaceholderImage(url: String): Boolean =
-            url.contains("/img/publish_login") ||
+            url.contains("/img/publish_follower") ||
+                url.contains("/img/publish_login") ||
                 url.contains("/img/publish_pass") ||
                 url.contains("/img/warning") ||
                 url.contains("/img/R-18") ||
                 url.contains("/assets/img/poipiku_icon")
+
+        /**
+         * 列表卡片当前的缩略图是否"看不到内容"：空串或占位图（登录墙/关注墙/密码/R-18/警告）。
+         *
+         * 只有这种卡片该被详情页解析到的真实图替换。真实缩略图一律保留：append 返回的是
+         * 第 2 张起的追加图，替换后卡片换成作品的另一张图；URL 一变 Coil 还要重新解码，
+         * 返回列表时先灰白再出图（多图作品必现，单图作品无从触发）。
+         *
+         * 生产端（[backfillThumbnailUrl]）与消费端（列表回填）共用这一条判定：详情页可能是
+         * 深链/正文链接进来的，那时它并不知道列表缩略图是什么，只有列表自己判断才作数。
+         */
+        fun needsThumbnailBackfill(currentThumbnailUrl: String): Boolean =
+            currentThumbnailUrl.isBlank() || isPlaceholderImage(currentThumbnailUrl)
+
+        /**
+         * 详情页解析到真实图后，列表缩略图该回填成哪个 URL；null = 不回填。
+         *
+         * [imageUrls] 按作品内顺序给出候选（详情页主图在前、追加图在后）。只有列表当前是
+         * 占位图/空图才回填（判定见 [needsThumbnailBackfill]）：这类作品在列表里本来就看不到
+         * 内容，点开详情页拿到真实图后才值得替换。
+         *
+         * 取第一张真实图——回填的必须是作品首图，不能随手拿一张追加图（深链/正文链接进来时
+         * 列表缩略图未知，走的正是这条路）。
+         */
+        fun backfillThumbnailUrl(currentThumbnailUrl: String, imageUrls: List<String>): String? {
+            if (!needsThumbnailBackfill(currentThumbnailUrl)) return null
+            return imageUrls.firstOrNull { !isPlaceholderImage(it) }
+        }
 
         /**
          * 合并详情页主图与追加图为完整图片列表：

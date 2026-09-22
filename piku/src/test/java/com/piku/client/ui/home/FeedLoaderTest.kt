@@ -301,23 +301,64 @@ class FeedLoaderTest {
         assertTrue(loader.state.value.endReached)
     }
 
+    /**
+     * 回归用例：只有占位图/空图卡片接受缩略图回填。
+     *
+     * 列表里的真实缩略图必须原样保留——详情页 append 返回的是作品的第 2 张图，替换后卡片
+     * 换图，且 URL 变化让 Coil 重新解码：从详情页返回首页时图片先灰白再填充。
+     */
     @Test
-    fun thumbnailUpdateReplacesMatchingOnly() = runTest {
-        val api = FakeApi().apply { enqueue(listOf(work(1), work(2))) }
+    fun thumbnailUpdateBackfillsPlaceholderOrBlankCardsOnly() = runTest {
+        val placeholder = "https://cdn.poipiku.com/img/publish_pass.png_640.jpg"
+        val backfilled = "https://cdn.poipiku.com/013955571/013349459_030732415_1NkRpwujF.png_360.jpg"
+        val api = FakeApi().apply {
+            enqueue(listOf(work(1), work(2).copy(thumbnailUrl = placeholder), work(3).copy(thumbnailUrl = "")))
+        }
         val loader = newLoader(api)
         loader.refresh(countNotice = false)
         advanceUntilIdle()
 
-        loader.updateThumbnail(2, "https://new/2.jpg")
+        loader.updateThumbnail(1, backfilled)
+        loader.updateThumbnail(2, backfilled)
+        loader.updateThumbnail(3, backfilled)
 
-        var s = loader.state.value
+        val s = loader.state.value
         assertEquals("https://img/1.jpg", s.works[0].thumbnailUrl)
-        assertEquals("https://new/2.jpg", s.works[1].thumbnailUrl)
+        assertEquals(backfilled, s.works[1].thumbnailUrl)
+        assertEquals(backfilled, s.works[2].thumbnailUrl)
+    }
 
-        loader.updateThumbnail(999, "https://x.jpg")
-        s = loader.state.value
+    @Test
+    fun thumbnailUpdateIgnoresSecondBackfillForSameCard() = runTest {
+        val placeholder = "https://cdn.poipiku.com/img/publish_pass.png_640.jpg"
+        val first = "https://cdn.poipiku.com/013955571/013349459_030732415_1NkRpwujF.png_360.jpg"
+        val second = "https://cdn.poipiku.com/013955571/013349459_9Zzzzzzzzz.png_360.jpg"
+        val api = FakeApi().apply { enqueue(listOf(work(1).copy(thumbnailUrl = placeholder))) }
+        val loader = newLoader(api)
+        loader.refresh(countNotice = false)
+        advanceUntilIdle()
+
+        loader.updateThumbnail(1, first)
+        // 卡片已经是真实图：再来一次回填不得再换图（否则又是一次灰白 → 出图）
+        loader.updateThumbnail(1, second)
+
+        assertEquals(first, loader.state.value.works[0].thumbnailUrl)
+    }
+
+    @Test
+    fun thumbnailUpdateIgnoresNonMatchingWorkAndUnchangedUrl() = runTest {
+        val placeholder = "https://cdn.poipiku.com/img/publish_pass.png_640.jpg"
+        val api = FakeApi().apply { enqueue(listOf(work(1), work(2).copy(thumbnailUrl = placeholder))) }
+        val loader = newLoader(api)
+        loader.refresh(countNotice = false)
+        advanceUntilIdle()
+
+        loader.updateThumbnail(999, "https://cdn.poipiku.com/new/999_360.jpg")
+        loader.updateThumbnail(2, placeholder)
+
+        val s = loader.state.value
         assertEquals("https://img/1.jpg", s.works[0].thumbnailUrl)
-        assertEquals("https://new/2.jpg", s.works[1].thumbnailUrl)
+        assertEquals(placeholder, s.works[1].thumbnailUrl)
     }
 
     @Test

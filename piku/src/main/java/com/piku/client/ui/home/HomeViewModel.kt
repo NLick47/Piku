@@ -436,12 +436,18 @@ class HomeViewModel @Inject constructor(
             // 只替换缩略图字段：事件里的 work 可能是详情页传入的瘦对象（title 等为空），
             // 整体替换会把卡片标题/作者等字段清空（历史 bug：密码作品解锁后回退，标题消失）
             thumbnailResolver.thumbUpdated.collect { updated ->
+                // 与 loader 同一判定（见 ThumbnailResolver.needsThumbnailBackfill）：只有占位图/
+                // 空图卡片接受回填。深链/正文链接进来的详情页拿不到列表缩略图，兜底在这里
+                fun isBackfillTarget(work: Work): Boolean =
+                    work.id == updated.id &&
+                        work.thumbnailUrl != updated.thumbnailUrl &&
+                        ThumbnailResolver.needsThumbnailBackfill(work.thumbnailUrl)
                 _uiState.update { s ->
-                    if (s.works.none { it.id == updated.id && it.thumbnailUrl != updated.thumbnailUrl }) {
+                    if (s.works.none(::isBackfillTarget)) {
                         s
                     } else {
                         s.copy(works = s.works.map {
-                            if (it.id == updated.id && it.thumbnailUrl != updated.thumbnailUrl) {
+                            if (isBackfillTarget(it)) {
                                 it.copy(thumbnailUrl = updated.thumbnailUrl)
                             } else {
                                 it
