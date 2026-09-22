@@ -16,8 +16,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         TranslationEntity::class,
         DraftEntity::class,
         DraftImageEntity::class,
+        DecorationItem::class,
     ],
-    version = 12,
+    version = 13,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -28,6 +29,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun workPasswordDao(): WorkPasswordDao
     abstract fun translationDao(): TranslationDao
     abstract fun draftDao(): DraftDao
+    abstract fun decorationDao(): DecorationDao
 
     companion object {
         val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -201,6 +203,29 @@ abstract class AppDatabase : RoomDatabase() {
                         "ON draft_images(draftId)",
                 )
                 db.execSQL("DROP TABLE IF EXISTS draft_works")
+            }
+        }
+
+        val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // 桌面装饰白名单：widget 只渲染这张表。作品快照 + 入库时刻的安全
+                // 信号（r18/warning/adultLocked/passwordProtected/categoryCd/tags），
+                // 纯本地表，删除 App 才消失。
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS decoration_items (" +
+                        "workId INTEGER NOT NULL PRIMARY KEY, " +
+                        "authorId INTEGER NOT NULL, " +
+                        "title TEXT NOT NULL, " +
+                        "authorName TEXT NOT NULL, " +
+                        "fileName TEXT NOT NULL, " +
+                        "addedAt INTEGER NOT NULL, " +
+                        "r18 INTEGER NOT NULL, " +
+                        "warning INTEGER NOT NULL, " +
+                        "adultLocked INTEGER NOT NULL, " +
+                        "passwordProtected INTEGER NOT NULL, " +
+                        "categoryCd INTEGER NOT NULL, " +
+                        "tags TEXT NOT NULL)",
+                )
             }
         }
     }

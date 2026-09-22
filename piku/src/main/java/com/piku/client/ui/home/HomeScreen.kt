@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Wallpaper
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -171,6 +172,7 @@ fun HomeScreen(
     var showCatalogSource by rememberSaveable { mutableStateOf(false) }
     var showAboutSheet by rememberSaveable { mutableStateOf(false) }
     var showWebDavSettings by rememberSaveable { mutableStateOf(false) }
+    var showDecorationOffDialog by rememberSaveable { mutableStateOf(false) }
     var showHistoryPage by rememberSaveable { mutableStateOf(false) }
     var showCollectionPage by rememberSaveable { mutableStateOf(false) }
     var showTagsPage by rememberSaveable { mutableStateOf(false) }
@@ -261,6 +263,12 @@ fun HomeScreen(
         currentVersion = displayVersionName(),
         updateAvailable = state.updateCheckState is UpdateCheckState.Available,
         onToggleAdult = viewModel::toggleAdultContent,
+        decorationEnabled = state.decorationEnabled,
+        onToggleDecoration = {
+            // 关闭要走确认框（可选是否清除已保存的装饰），开启直接生效
+            if (state.decorationEnabled) showDecorationOffDialog = true
+            else viewModel.setDecorationEnabled(true, clearData = false)
+        },
         onSettingsClick = {},
         onAboutClick = { showAboutSheet = true },
         onThemeClick = { showThemeSheet = true },
@@ -842,6 +850,52 @@ fun HomeScreen(
                     },
                     onDismiss = { showAboutSheet = false },
                     dark = dark,
+                )
+            }
+
+            if (showDecorationOffDialog) {
+                // 关闭总开关的确认框：默认「关闭并清除」（隐私诉求更常见），
+                // 也可以只关功能保留数据。App 无法自动移除桌面卡片，文案里要讲清。
+                AlertDialog(
+                    onDismissRequest = { showDecorationOffDialog = false },
+                    containerColor = PikuColors.surface,
+                    title = {
+                        Text(
+                            text = stringResource(R.string.decoration_off_title),
+                            color = PikuColors.textPrimary,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    },
+                    text = {
+                        Text(
+                            text = stringResource(R.string.decoration_off_message),
+                            color = PikuColors.textSecondary,
+                            fontSize = 13.sp,
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            showDecorationOffDialog = false
+                            viewModel.setDecorationEnabled(false, clearData = true)
+                        }) {
+                            Text(
+                                text = stringResource(R.string.decoration_off_clear),
+                                color = PikuColors.error,
+                            )
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = {
+                            showDecorationOffDialog = false
+                            viewModel.setDecorationEnabled(false, clearData = false)
+                        }) {
+                            Text(
+                                text = stringResource(R.string.decoration_off_keep),
+                                color = PikuColors.textSecondary,
+                            )
+                        }
+                    },
                 )
             }
 

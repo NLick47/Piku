@@ -40,6 +40,7 @@ import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.GTranslate
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Wallpaper
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Person
@@ -89,12 +90,14 @@ fun UserDrawer(
     userProfile: UserProfile?,
     loggedIn: Boolean,
     adultEnabled: Boolean,
+    decorationEnabled: Boolean,
     themeMode: ThemeMode,
     customBackgroundPath: String?,
     language: AppLanguage,
     currentVersion: String,
     updateAvailable: Boolean,
     onToggleAdult: () -> Unit,
+    onToggleDecoration: () -> Unit,
     onSettingsClick: () -> Unit,
     onAboutClick: () -> Unit,
     onThemeClick: () -> Unit,
@@ -130,12 +133,14 @@ fun UserDrawer(
                 userProfile = userProfile,
                 loggedIn = loggedIn,
                 adultEnabled = adultEnabled,
+                decorationEnabled = decorationEnabled,
                 themeMode = themeMode,
                 customBackgroundPath = customBackgroundPath,
                 language = language,
                 currentVersion = currentVersion,
                 updateAvailable = updateAvailable,
                 onToggleAdult = onToggleAdult,
+                onToggleDecoration = onToggleDecoration,
                 onSettingsClick = {
                     settingsExpanded = !settingsExpanded
                     onSettingsClick()
@@ -175,12 +180,14 @@ private fun DrawerPanel(
     userProfile: UserProfile?,
     loggedIn: Boolean,
     adultEnabled: Boolean,
+    decorationEnabled: Boolean,
     themeMode: ThemeMode,
     customBackgroundPath: String?,
     language: AppLanguage,
     currentVersion: String,
     updateAvailable: Boolean,
     onToggleAdult: () -> Unit,
+    onToggleDecoration: () -> Unit,
     onSettingsClick: () -> Unit,
     onAboutClick: () -> Unit,
     onThemeClick: () -> Unit,
@@ -333,6 +340,12 @@ private fun DrawerPanel(
             AdultContentRow(
                 adultEnabled = adultEnabled,
                 onToggleAdult = onToggleAdult,
+                dark = dark,
+                accent = iconAccent,
+            )
+            DecorationRow(
+                decorationEnabled = decorationEnabled,
+                onToggleDecoration = onToggleDecoration,
                 dark = dark,
                 accent = iconAccent,
             )
@@ -781,6 +794,53 @@ private fun AdultContentRow(
         Switch(
             checked = adultEnabled,
             onCheckedChange = { onToggleAdult() },
+            colors = themedSwitchColors(dark),
+        )
+    }
+}
+
+@Composable
+private fun DecorationRow(
+    decorationEnabled: Boolean,
+    onToggleDecoration: () -> Unit,
+    dark: Boolean,
+    accent: Color,
+) {
+    val primary = PikuColors.textPrimary
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onToggleDecoration)
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(11.dp))
+                .background(accent.copy(alpha = if (dark) 0.22f else 0.13f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Wallpaper,
+                contentDescription = null,
+                tint = accent,
+                modifier = Modifier.size(19.dp),
+            )
+        }
+        Spacer(Modifier.width(13.dp))
+        Text(
+            text = stringResource(R.string.menu_decoration),
+            color = primary,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.weight(1f),
+        )
+        Switch(
+            checked = decorationEnabled,
+            onCheckedChange = { onToggleDecoration() },
             colors = themedSwitchColors(dark),
         )
     }

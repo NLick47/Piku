@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import androidx.room.Room
 import com.piku.client.data.local.AppDatabase
 import com.piku.client.data.local.CustomTagRepository
+import com.piku.client.data.local.DecorationDao
 import com.piku.client.data.local.FavoriteDao
 import com.piku.client.data.local.FavoriteFolderDao
 import com.piku.client.data.local.HistoryDao
@@ -48,6 +49,7 @@ object DatabaseModule {
                 AppDatabase.MIGRATION_9_10,
                 AppDatabase.MIGRATION_10_11,
                 AppDatabase.MIGRATION_11_12,
+                AppDatabase.MIGRATION_12_13,
             )
             .build()
 
@@ -76,6 +78,10 @@ object DatabaseModule {
     @Provides
     fun provideDraftDao(database: AppDatabase): DraftDao =
         database.draftDao()
+
+    @Provides
+    fun provideDecorationDao(database: AppDatabase): DecorationDao =
+        database.decorationDao()
 
     @Provides
     @Singleton

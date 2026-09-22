@@ -186,6 +186,20 @@ class SettingsRepository @Inject constructor(
         _showAdultContent.value = value
     }
 
+    /**
+     * 桌面装饰总开关。默认开启——widget 本身需要用户手动摆上桌面才存在，
+     * 不算强塞；关闭后 App 内入口全部隐藏、轮播调度取消、卡片显示关闭态。
+     */
+    private val _decorationEnabled = MutableStateFlow(
+        prefs.getBoolean(KEY_DECORATION_ENABLED, DECORATION_ENABLED_DEFAULT),
+    )
+    val decorationEnabled: StateFlow<Boolean> = _decorationEnabled.asStateFlow()
+
+    fun setDecorationEnabled(value: Boolean) {
+        prefs.edit().putBoolean(KEY_DECORATION_ENABLED, value).apply()
+        _decorationEnabled.value = value
+    }
+
     fun setThemeMode(mode: ThemeMode) {
         prefs.edit().putString(KEY_THEME_MODE, mode.name).apply()
         _themeMode.value = mode
@@ -735,6 +749,8 @@ class SettingsRepository @Inject constructor(
 
     companion object {
         const val KEY_SHOW_ADULT_CONTENT = "show_adult_content"
+        const val KEY_DECORATION_ENABLED = "decoration_enabled"
+        const val DECORATION_ENABLED_DEFAULT = true
         const val KEY_THEME_MODE = "theme_mode"
         const val KEY_FOLDER_SORT = "folder_sort"
         const val KEY_HISTORY_RETENTION_DAYS = "history_retention_days"

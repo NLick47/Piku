@@ -62,6 +62,7 @@ import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material.icons.outlined.StarBorder
+import androidx.compose.material.icons.outlined.Wallpaper
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -148,10 +149,12 @@ fun CollectionScreen(
     onWorkClick: (Work) -> Unit,
     onAuthorClick: (Work) -> Unit,
     onBack: () -> Unit,
+    onManageDecorations: () -> Unit = {},
     dark: Boolean = LocalDarkTheme.current,
 ) {
     val viewModel: CollectionViewModel = hiltViewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val decorationEnabled by viewModel.decorationEnabled.collectAsStateWithLifecycle()
     val isTablet = LocalConfiguration.current.screenWidthDp >= 600
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
@@ -184,6 +187,8 @@ fun CollectionScreen(
                 onFolderClick = viewModel::selectFolder,
                 onRenameFolder = { renamingFolder = it },
                 onDeleteFolder = viewModel::requestDeleteFolder,
+                decorationEnabled = decorationEnabled,
+                onManageDecorations = onManageDecorations,
                 onOpenAll = { viewModel.openAll() },
                 onSearchAll = { viewModel.openAll(focusSearch = true) },
             )
@@ -447,6 +452,8 @@ private fun FolderListContent(
     onFolderClick: (FavoriteFolder) -> Unit,
     onRenameFolder: (FavoriteFolder) -> Unit,
     onDeleteFolder: (FavoriteFolder) -> Unit,
+    decorationEnabled: Boolean,
+    onManageDecorations: () -> Unit,
     onOpenAll: () -> Unit,
     onSearchAll: () -> Unit,
 ) {
@@ -490,6 +497,15 @@ private fun FolderListContent(
                     contentDescription = stringResource(R.string.collection_search_all),
                     tint = PikuColors.textPrimary,
                 )
+            }
+            if (decorationEnabled) {
+                IconButton(onClick = onManageDecorations) {
+                    Icon(
+                        imageVector = Icons.Outlined.Wallpaper,
+                        contentDescription = stringResource(R.string.decoration_manage_title),
+                        tint = PikuColors.textPrimary,
+                    )
+                }
             }
             IconButton(onClick = onNewFolder) {
                 Icon(

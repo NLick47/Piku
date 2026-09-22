@@ -194,6 +194,11 @@ dependencies {
     implementation(libs.coil.gif)
     implementation(libs.androidx.palette.ktx)
 
+    // 桌面装饰小组件：Glance 用 Compose 语法写 AppWidget 的 RemoteViews
+    implementation(libs.androidx.glance.appwidget)
+    // 装饰轮播的定时换图（Glance 自身也依赖 WorkManager，这里显式声明直接使用的版本）
+    implementation(libs.androidx.work.runtime)
+
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.androidx.junit)

@@ -575,6 +575,12 @@ fun DetailScreen(
                     imageActionPage = -1
                     requestSaveAllImages()
                 },
+                showDecorationAction = state.decorationEnabled,
+                onAddDecoration = {
+                    val page = imageActionPage
+                    imageActionPage = -1
+                    viewModel.addDecoration(page)
+                },
             )
         }
     }

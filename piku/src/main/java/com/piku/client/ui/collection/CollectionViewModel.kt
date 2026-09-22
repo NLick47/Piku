@@ -120,6 +120,9 @@ class CollectionViewModel @Inject constructor(
     /** 一次性反馈（仅用于操作失败；移出/移动的结果由撤销条承载，不再弹 Snackbar） */
     val feedback = FeedbackChannel()
 
+    /** 桌面装饰总开关：关闭时顶栏的装饰管理入口隐藏 */
+    val decorationEnabled = settingsRepository.decorationEnabled
+
     /** 撤销栈：与浏览记录同款语义，连续操作时可以一直点撤销，按倒序一条条回退 */
     private val undoStack = ArrayDeque<UndoRecord>()
 

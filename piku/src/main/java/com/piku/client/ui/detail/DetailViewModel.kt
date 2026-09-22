@@ -10,12 +10,14 @@ import com.piku.client.data.local.ImageShareHelper
 import com.piku.client.data.local.WorkPasswordRepository
 import com.piku.client.data.repository.AuthRepository
 import com.piku.client.data.repository.BlockResult
+import com.piku.client.data.repository.DecorationRepository
 import com.piku.client.data.repository.DetailRepository
 import com.piku.client.data.repository.FavoriteRepository
 import com.piku.client.data.repository.FollowResult
 import com.piku.client.data.repository.ReactionResult
 import com.piku.client.data.repository.ThumbnailResolver
 import com.piku.client.data.local.SettingsRepository
+import com.piku.client.ui.widget.isWidgetSafe
 import com.piku.client.data.remote.translation.NovelStreamEvent
 import com.piku.client.data.remote.translation.TranslationRepository
 import com.piku.client.data.remote.translation.ModelCatalogRepository
@@ -166,6 +168,10 @@ data class DetailUiState(
     val sharingImage: Boolean = false,
     /** 正在分享的目标包名（null = 系统面板）：loading 只转圈在被点的那一行 */
     val sharingTargetPackage: String? = null,
+    /** 正在把当前作品设为桌面装饰（拉详情 + 下载首图） */
+    val addingDecoration: Boolean = false,
+    /** 桌面装饰总开关（关闭后长按菜单里的装饰入口隐藏） */
+    val decorationEnabled: Boolean = true,
     /** 分享失败的轻提示（snackbar，可重试）；成功时直接拉起分享面板不需要提示 */
 ) {
     /** 该字段当前是否显示译文：全局态异或单字段覆盖 */
@@ -213,6 +219,7 @@ class DetailViewModel @Inject constructor(
     private val workPasswordRepository: WorkPasswordRepository,
     private val imageSaver: ImageSaver,
     private val imageShareHelper: ImageShareHelper,
+    private val decorationRepository: DecorationRepository,
     private val recordHistoryUseCase: RecordHistoryUseCase,
     private val observeCustomTagsUseCase: ObserveCustomTagsUseCase,
     private val addCustomTagUseCase: AddCustomTagUseCase,
@@ -395,6 +402,12 @@ class DetailViewModel @Inject constructor(
         viewModelScope.launch {
             observeCustomTagsUseCase().collect { tags ->
                 _uiState.update { it.copy(customTags = tags) }
+            }
+        }
+        viewModelScope.launch {
+            // 桌面装饰总开关：关闭时长按菜单里的入口整项隐藏
+            settingsRepository.decorationEnabled.collect { enabled ->
+                _uiState.update { it.copy(decorationEnabled = enabled) }
             }
         }
         viewModelScope.launch {
@@ -1080,6 +1093,40 @@ class DetailViewModel @Inject constructor(
             _uiState.update { it.copy(savingImage = false) }
             feedback.show(
                 if (result.isSuccess) R.string.detail_save_saved else R.string.detail_save_failed,
+            )
+        }
+    }
+
+    /**
+     * 把当前作品设为桌面装饰（白名单入库）。
+     *
+     * 详情就在手上（能打开这个菜单说明详情已加载），先过多信号安全审核
+     * [isWidgetSafe]——r18/warning/密码锁/成人锁任一命中直接拒绝；
+     * 通过后由 [DecorationRepository] 把 [page] 这一页（用户长按的那张）
+     * 下载进 App 私有目录并落库。桌面是公开场景，宁可拒绝也不放过未确认内容。
+     */
+    fun addDecoration(page: Int) {
+        val state = _uiState.value
+        if (state.addingDecoration) return
+        if (!state.decorationEnabled) return
+        val detail = state.detail ?: return
+        if (!isWidgetSafe(detail)) {
+            feedback.show(R.string.detail_decoration_rejected)
+            return
+        }
+        // 优先原图（画质最好），退回详情页图片地址，最后才用缩略图兜底
+        val viewer = state.viewerImages.getOrNull(page)
+        val imageUrl = viewer?.fullUrl
+            ?: detail.imageUrls.getOrNull(page)
+            ?: viewer?.thumbnailUrl
+            ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(addingDecoration = true) }
+            val result = decorationRepository.add(detail, workId, authorId, imageUrl)
+            _uiState.update { it.copy(addingDecoration = false) }
+            feedback.show(
+                if (result.isSuccess) R.string.detail_decoration_added
+                else R.string.detail_decoration_failed,
             )
         }
     }

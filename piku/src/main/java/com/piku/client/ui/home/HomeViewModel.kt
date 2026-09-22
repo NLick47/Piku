@@ -19,6 +19,7 @@ import com.piku.client.data.repository.AuthRepository
 import com.piku.client.data.repository.BlockListRepository
 import com.piku.client.data.repository.ThumbnailResolver
 import com.piku.client.data.repository.WebDavSyncRepository
+import com.piku.client.data.repository.DecorationRepository
 import com.piku.client.data.repository.SyncResult
 import com.piku.client.data.repository.TestConnectionState
 import com.piku.client.data.repository.SyncState
@@ -97,6 +98,8 @@ data class HomeUiState(
     val works: List<Work> = emptyList(),
     val favoriteIds: Set<Long> = emptySet(),
     val adultEnabled: Boolean = false,
+    /** 桌面装饰总开关（抽屉里的开关项） */
+    val decorationEnabled: Boolean = true,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val historyRetentionDays: Int = 0,
     val language: AppLanguage = AppLanguage.SYSTEM,
@@ -212,6 +215,7 @@ class HomeViewModel @Inject constructor(
     private val webDavSyncRepository: WebDavSyncRepository,
     private val imageSaver: ImageSaver,
     private val blockListRepository: BlockListRepository,
+    private val decorationRepository: DecorationRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -241,6 +245,11 @@ class HomeViewModel @Inject constructor(
             restoreAdultContentUseCase()
             observeAdultContentUseCase().collect { enabled ->
                 _uiState.update { it.copy(adultEnabled = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.decorationEnabled.collect { enabled ->
+                _uiState.update { it.copy(decorationEnabled = enabled) }
             }
         }
         viewModelScope.launch {
@@ -671,6 +680,17 @@ class HomeViewModel @Inject constructor(
     fun retryUserProfile() {
         if (_uiState.value.loggedIn && _uiState.value.userProfile == null) {
             viewModelScope.launch { authRepository.refreshUserProfile() }
+        }
+    }
+
+    /**
+     * 桌面装饰总开关。关闭时可选是否清除已保存的白名单与图片
+     * （隐私诉求通常要清），无论哪种都刷新桌面卡片并取消轮播调度。
+     */
+    fun setDecorationEnabled(enabled: Boolean, clearData: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setDecorationEnabled(enabled)
+            decorationRepository.onFeatureToggled(clearData)
         }
     }
 

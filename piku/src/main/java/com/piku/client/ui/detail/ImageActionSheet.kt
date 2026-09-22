@@ -20,6 +20,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.IosShare
 import androidx.compose.material.icons.outlined.SaveAlt
+import androidx.compose.material.icons.outlined.Wallpaper
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -69,6 +70,9 @@ fun ImageActionSheet(
     onShareToQQ: () -> Unit,
     onShareMore: () -> Unit,
     onSaveAll: () -> Unit,
+    /** 桌面装饰总开关关闭时整行隐藏，界面回到功能存在前的样子 */
+    showDecorationAction: Boolean = true,
+    onAddDecoration: () -> Unit = {},
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -124,6 +128,23 @@ fun ImageActionSheet(
                         leading = {
                             Icon(
                                 imageVector = Icons.Outlined.SaveAlt,
+                                contentDescription = null,
+                                tint = PikuColors.accent,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        },
+                    )
+                }
+                if (showDecorationAction) {
+                    CardDivider()
+                    ActionRow(
+                        title = stringResource(R.string.detail_decoration_add),
+                        subtitle = stringResource(R.string.detail_decoration_add_sub),
+                        iconBg = PikuColors.accent.copy(alpha = 0.1f),
+                        onClick = { dismissAndThen(onAddDecoration) },
+                        leading = {
+                            Icon(
+                                imageVector = Icons.Outlined.Wallpaper,
                                 contentDescription = null,
                                 tint = PikuColors.accent,
                                 modifier = Modifier.size(20.dp),

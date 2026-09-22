@@ -25,6 +25,7 @@ import com.piku.client.R
 import com.piku.client.domain.model.FollowUser
 import com.piku.client.domain.model.Work
 import com.piku.client.ui.collection.CollectionScreen
+import com.piku.client.ui.decoration.DecorationManageScreen
 import com.piku.client.ui.detail.DetailScreen
 import com.piku.client.ui.follow.FollowUsersScreen
 import com.piku.client.ui.follow.UserWorksScreen
@@ -49,6 +50,7 @@ object Routes {
     const val REGISTER = "register"
     const val HOME = "home"
     const val COLLECTION = "collection"
+    const val DECORATION_MANAGE = "decoration_manage"
     const val DETAIL = "detail/{authorId}/{workId}?thumb={thumb}"
     const val HISTORY = "history"
     const val TAGS = "tags"
@@ -401,7 +403,13 @@ fun AppNavHost(
                         launchSingleTop = true
                     }
                 },
+                onManageDecorations = {
+                    navController.navigate(Routes.DECORATION_MANAGE)
+                },
             )
+        }
+        composable(Routes.DECORATION_MANAGE) {
+            DecorationManageScreen(onBack = safePopBack)
         }
         composable(Routes.HISTORY) {
             HistoryScreen(
