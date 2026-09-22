@@ -396,6 +396,11 @@ fun AppNavHost(
                 onWorkClick = { work: Work ->
                     navController.navigate(Routes.detail(work.authorId, work.id, work.thumbnailUrl))
                 },
+                onAuthorClick = { work: Work ->
+                    navController.navigate(Routes.userWorks(work.authorId, work.authorName)) {
+                        launchSingleTop = true
+                    }
+                },
             )
         }
         composable(Routes.HISTORY) {

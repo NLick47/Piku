@@ -395,6 +395,7 @@ fun FullScreenViewer(
     imageTranslated: Boolean = false,
     translatedImages: Map<Int, android.graphics.Bitmap> = emptyMap(),
     onImageTranslateClick: (Int) -> Unit = {},
+    onPageChanged: (Int) -> Unit = {},
 ) {
     val pagerState = rememberPagerState(
         pageCount = { images.size },
@@ -413,8 +414,11 @@ fun FullScreenViewer(
         }
     }
 
+    // 回调走 rememberUpdatedState：外层重组换了 lambda 也不会用到旧的那份
+    val currentOnPageChanged by rememberUpdatedState(onPageChanged)
     LaunchedEffect(pagerState.currentPage) {
         refreshAutoHide()
+        currentOnPageChanged(pagerState.currentPage + 1)
     }
     LaunchedEffect(pagerState.isScrollInProgress) {
         if (!pagerState.isScrollInProgress) refreshAutoHide()

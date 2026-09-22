@@ -994,7 +994,11 @@ private fun HomeOverlays(
     }
     if (showCollectionPage) {
         Dialog(onDismissRequest = onCollectionBack, properties = fullScreenProps) {
-            CollectionScreen(onBack = onCollectionBack, onWorkClick = { onWorkClick(it) })
+            CollectionScreen(
+                onBack = onCollectionBack,
+                onWorkClick = { onWorkClick(it) },
+                onAuthorClick = { work -> onProfileOpen(work.authorId, work.authorName) },
+            )
         }
     }
     if (showTagsPage) {

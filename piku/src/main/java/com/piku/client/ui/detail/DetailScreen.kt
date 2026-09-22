@@ -437,6 +437,7 @@ fun DetailScreen(
                         imageTranslated = state.showTranslatedImage,
                         translatedImages = state.translatedImages,
                         onImageTranslateClick = { page -> viewModel.onImageTranslateClick(page) },
+                        onPageChanged = { page -> viewModel.saveImageProgress(page) },
                     )
 
                 }

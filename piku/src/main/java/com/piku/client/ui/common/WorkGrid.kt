@@ -22,11 +22,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.progressSemantics
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -67,6 +69,12 @@ import kotlinx.coroutines.delay
 internal fun feedThumbUrl(url: String): String =
     if ("_640.jpg" in url) url.replace("_640.jpg", "_360.jpg") else url
 
+/**
+ * 卡片上的阅读进度条。[fraction] 为 0~1 的完成比例，[label] 形如 "42%" 或 "5/12"。
+ * 由调用方（收藏夹）算出后传入，WorkCard 只负责画。
+ */
+data class CardProgress(val fraction: Float, val label: String)
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun WorkCard(
@@ -78,6 +86,8 @@ fun WorkCard(
     onLongClick: ((Work) -> Unit)? = null,
     /** 作者区（头像 + 昵称）点击：进该作者作品页。null 表示作者区不可点，整卡仍进详情 */
     onAuthorClick: ((Work) -> Unit)? = null,
+    /** 阅读进度；null 表示不显示（首页/搜索等没有"读到哪"语义的场景） */
+    progress: CardProgress? = null,
 ) {
     val shape = RoundedCornerShape(12.dp)
     var heartVisible by remember { mutableStateOf(false) }
@@ -233,6 +243,34 @@ fun WorkCard(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
+            if (progress != null) {
+                Spacer(Modifier.height(6.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .height(3.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(if (dark) Color(0x33FFFFFF) else Color(0x1A000000))
+                            // 没有语义时读屏只会念旁边的 "5/12"，念不出这是个进度
+                            .progressSemantics(progress.fraction),
+                    ) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth(progress.fraction.coerceIn(0.02f, 1f))
+                                .fillMaxHeight()
+                                .background(PikuColors.accent),
+                        )
+                    }
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = progress.label,
+                        color = PikuColors.textFaint,
+                        fontSize = 9.sp,
+                        maxLines = 1,
+                    )
+                }
+            }
             // 热区自带 8dp 上下内距，标题与头像之间留 0dp 即可（实际 = 8dp）；不可点时维持 6dp
             Spacer(Modifier.height(if (onAuthorClick != null) 0.dp else 6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {

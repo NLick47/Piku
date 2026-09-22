@@ -3,6 +3,8 @@ package com.piku.client.data.local
 import android.content.SharedPreferences
 import com.piku.client.data.repository.SyncResult
 import com.piku.client.data.repository.SyncState
+import com.piku.client.domain.model.FolderSort
+import com.piku.client.domain.model.ReadingProgress
 import com.piku.client.domain.model.ThemeMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -53,6 +55,14 @@ class SettingsRepository @Inject constructor(
             ?: ThemeMode.SYSTEM,
     )
     val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
+
+    /** 收藏夹内的排序方式；纯本地偏好，与账号无关 */
+    private val _folderSort = MutableStateFlow(
+        prefs.getString(KEY_FOLDER_SORT, null)
+            ?.let { name -> runCatching { FolderSort.valueOf(name) }.getOrNull() }
+            ?: FolderSort.ADDED,
+    )
+    val folderSort: StateFlow<FolderSort> = _folderSort.asStateFlow()
 
     /** 浏览记录保留天数，0 表示永久保留 */
     private val _historyRetentionDays = MutableStateFlow(
@@ -179,6 +189,11 @@ class SettingsRepository @Inject constructor(
     fun setThemeMode(mode: ThemeMode) {
         prefs.edit().putString(KEY_THEME_MODE, mode.name).apply()
         _themeMode.value = mode
+    }
+
+    fun setFolderSort(sort: FolderSort) {
+        prefs.edit().putString(KEY_FOLDER_SORT, sort.name).apply()
+        _folderSort.value = sort
     }
 
     fun setHistoryRetentionDays(days: Int) {
@@ -381,10 +396,63 @@ class SettingsRepository @Inject constructor(
 
     /** 保存某作品的阅读进度（百分比 0~100） */
     fun setNovelProgress(workId: Long, percent: Int) {
-        prefs.edit().putInt(novelProgressKey(workId), percent.coerceIn(0, 100)).apply()
+        val clamped = percent.coerceIn(0, 100)
+        prefs.edit().putInt(novelProgressKey(workId), clamped).apply()
+        publishProgress(workId) { it.copy(novelPercent = clamped) }
+    }
+
+    /** 图集读到第几页（1 起，0 表示无进度） */
+    fun getImageProgress(workId: Long): Int =
+        prefs.getInt(imageProgressKey(workId), 0).coerceAtLeast(0)
+
+    /**
+     * 保存图集页码（"上次看到第几页"，往回翻也会更新）。
+     * 页码没变时直接返回，避免同一页反复触发写入与状态更新。
+     */
+    fun setImageProgress(workId: Long, page: Int) {
+        if (page <= 0) return
+        if (prefs.getInt(imageProgressKey(workId), 0) == page) return
+        prefs.edit().putInt(imageProgressKey(workId), page).apply()
+        publishProgress(workId) { it.copy(imagePage = page) }
     }
 
     private fun novelProgressKey(workId: Long): String = "$KEY_NOVEL_PROGRESS_PREFIX$workId"
+
+    private fun imageProgressKey(workId: Long): String = "$KEY_IMAGE_PROGRESS_PREFIX$workId"
+
+    /**
+     * 全量阅读进度快照（workId → 进度）。收藏夹要靠它给卡片画进度条，
+     * 逐个作品去读 SharedPreferences 太散，启动时扫一遍、之后按需更新。
+     */
+    private val _readingProgress = MutableStateFlow(loadReadingProgress())
+    val readingProgress: StateFlow<Map<Long, ReadingProgress>> = _readingProgress.asStateFlow()
+
+    private fun loadReadingProgress(): Map<Long, ReadingProgress> {
+        val result = mutableMapOf<Long, ReadingProgress>()
+        prefs.all.forEach { (key, value) ->
+            val isNovel = key.startsWith(KEY_NOVEL_PROGRESS_PREFIX)
+            val isImage = key.startsWith(KEY_IMAGE_PROGRESS_PREFIX)
+            if (!isNovel && !isImage) return@forEach
+            val workId = key
+                .removePrefix(if (isNovel) KEY_NOVEL_PROGRESS_PREFIX else KEY_IMAGE_PROGRESS_PREFIX)
+                .toLongOrNull() ?: return@forEach
+            val amount = (value as? Int)?.takeIf { it > 0 } ?: return@forEach
+            val current = result[workId] ?: ReadingProgress()
+            result[workId] = if (isNovel) {
+                current.copy(novelPercent = amount)
+            } else {
+                current.copy(imagePage = amount)
+            }
+        }
+        return result
+    }
+
+    private fun publishProgress(workId: Long, transform: (ReadingProgress) -> ReadingProgress) {
+        val current = _readingProgress.value[workId] ?: ReadingProgress()
+        val next = transform(current)
+        if (next == current) return
+        _readingProgress.value = _readingProgress.value + (workId to next)
+    }
 
     fun recordUpdateCheck() {
         prefs.edit().putLong(KEY_LAST_UPDATE_CHECK_AT, System.currentTimeMillis()).apply()
@@ -668,12 +736,14 @@ class SettingsRepository @Inject constructor(
     companion object {
         const val KEY_SHOW_ADULT_CONTENT = "show_adult_content"
         const val KEY_THEME_MODE = "theme_mode"
+        const val KEY_FOLDER_SORT = "folder_sort"
         const val KEY_HISTORY_RETENTION_DAYS = "history_retention_days"
         const val KEY_AUTO_CHECK_ENABLED = "auto_check_update_enabled"
         const val KEY_LAST_UPDATE_CHECK_AT = "last_update_check_at"
         const val KEY_NOVEL_FONT_SIZE = "novel_font_size"
         const val KEY_NOVEL_READER_LIGHT = "novel_reader_light"
         const val KEY_NOVEL_PROGRESS_PREFIX = "novel_progress_"
+        const val KEY_IMAGE_PROGRESS_PREFIX = "image_progress_"
         const val KEY_CUSTOM_BACKGROUND_PATH = "custom_background_path"
         const val KEY_BACKGROUND_DIM = "background_dim"
         const val KEY_BACKGROUND_SCRIM_DARK = "background_scrim_dark"

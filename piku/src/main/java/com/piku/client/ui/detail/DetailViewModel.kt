@@ -326,6 +326,11 @@ class DetailViewModel @Inject constructor(
         settingsRepository.setNovelProgress(workId, percent)
     }
 
+    /** 保存图集的阅读进度（页码 1 起）：收藏夹据此在卡片上画进度条 */
+    fun saveImageProgress(page: Int) {
+        settingsRepository.setImageProgress(workId, page)
+    }
+
     /** 调整阅读器字号（持久化） */
     fun setNovelFontSize(size: Float) {
         settingsRepository.setNovelFontSize(size)
@@ -723,11 +728,15 @@ class DetailViewModel @Inject constructor(
     private val _translatedImages = mutableMapOf<Int, android.graphics.Bitmap>()
     private var imageTranslateJob: Job? = null
 
-    /** 切页时更新按钮状态 */
+    /**
+     * 详情页内嵌图集翻页：更新翻译按钮状态，同时记下阅读进度。
+     * 这里收到的 [page] 从 0 起，落盘统一用 1 起的页码。
+     */
     fun onImagePageChanged(page: Int) {
         _uiState.update {
             it.copy(showTranslatedImage = _translatedImages.containsKey(page))
         }
+        saveImageProgress(page + 1)
     }
 
     /** 点击翻译按钮：已翻译则切换原图/译图，否则开始翻译 */
@@ -1176,7 +1185,10 @@ class DetailViewModel @Inject constructor(
     fun createFavoriteFolder(name: String) {
         val detail = _uiState.value.detail ?: return
         viewModelScope.launch {
-            favoriteRepository.createFolder(name, currentWork(detail))
+            // 重名会被数据层拒掉（同步按名字认收藏夹），要说清为什么没建成
+            if (favoriteRepository.createFolder(name, currentWork(detail)) == null) {
+                feedback.show(R.string.collection_folder_name_taken)
+            }
         }
     }
 
