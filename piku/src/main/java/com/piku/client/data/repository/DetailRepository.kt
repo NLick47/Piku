@@ -8,6 +8,7 @@ import com.piku.client.data.remote.SessionMonitor
 import com.piku.client.data.remote.WorkDetailParser
 import com.piku.client.data.remote.apiCall
 import com.piku.client.domain.model.AppError
+import com.piku.client.domain.model.RestrictionReason
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkDetail
 import kotlinx.coroutines.CancellationException
@@ -71,9 +72,48 @@ class DetailRepository @Inject constructor(
                 WorkDetailParser.parse(html)
             }
         }
-        if (detail.warning && !settingsRepository.showAdultContent.first()) {
-            return@apiCall detail.copy(imageUrls = emptyList(), adultLocked = true)
+        // ---- 门判定（唯一决策点：结果写入 detail.gate，UI 只渲染该字段）----
+        // 依据 = 作品属性（IllustItem class / 密码框；服务端静态渲染，反映作品设置
+        // 而非浏览者状态，必须结合登录态）+ 服务端 append 响应（真正的权限判定，
+        // 逆向自 common.js：-2 密码错 / -3 需登录 / -4 拒绝附原因 / -5 键推限定 /
+        // -20 需转推）。历史上判定分散在多处导致过多次回归，这里统一收口。
+        val adultEnabled = settingsRepository.showAdultContent.first()
+        fun gated(reason: RestrictionReason) = detail.copy(imageUrls = emptyList(), gate = reason)
+        // 未识别负值的原文提示（网页端 DispMsg(html) 同款行为）；-2 非密码作品也走这里。
+        // -3 且已登录是会话失效的瞬态（notifySessionInvalidIfNeeded 已触发自动重登），
+        // 不弹原文避免打扰
+        fun serverNotice(code: Int?, html: String?, passwordError: Boolean, unlockBlocked: Boolean): String? {
+            if (code == null || code >= 0 || code == -4 || passwordError || unlockBlocked) return null
+            if (code == ThumbnailResolver.RESULT_LOGIN_REQUIRED && loggedIn) return null
+            return WorkDetailParser.extractUnlockBlockedMessage(html.orEmpty()).takeIf { it.isNotBlank() }
         }
+
+        // 1) warning + R-18 显示关 → R-18 锁定（App 显示策略；服务端 append 其实
+        //    对 R-18 内容放行，这是我们的产品选择：未开显示不展示 R-18 作品内容）
+        if (detail.warning && !adultEnabled) {
+            Log.d(TAG, "detail adult-locked work=${work.authorId}/${work.id}")
+            return@apiCall gated(RestrictionReason.ADULT)
+        }
+        // 2) 匿名 + 任一门属性 → 登录门（关注/密码都要求先登录；实测服务端对匿名
+        //    的 follower/TFollower 作品也返回登录提示）
+        if (!loggedIn &&
+            (detail.loginRequired || detail.followerGate || detail.twitterFollowerGate)
+        ) {
+            Log.d(TAG, "detail login-gate work=${work.authorId}/${work.id}")
+            return@apiCall gated(RestrictionReason.LOGIN)
+        }
+        // 3) poipiku 内「こっそりフォロー」限定（class "Follower"）未关注 → 关注门。
+        //    已关注则不拦，继续走密码/内容（此类作品常另设密码）
+        if (detail.followerGate && !detail.followed) {
+            Log.d(TAG, "detail follower-gate work=${work.authorId}/${work.id}")
+            return@apiCall gated(RestrictionReason.FOLLOW)
+        }
+        // 4) Twitter 关注者限定（class "TFollower"）→ 引导网页（解锁在 Twitter 侧）
+        if (detail.twitterFollowerGate) {
+            Log.d(TAG, "detail twitter-follower-gate work=${work.authorId}/${work.id}")
+            return@apiCall gated(RestrictionReason.FOLLOW_TWITTER)
+        }
+        // 5) 密码门 → 密码框（不设 gate；密码校验由服务端做：-2 错 / -4 未关注 / -3 需登录）
         if (detail.passwordProtected && password.isBlank()) {
             return@apiCall detail.copy(imageUrls = emptyList())
         }
@@ -96,7 +136,9 @@ class DetailRepository @Inject constructor(
                 // 回填列表缩略图缓存（append 返回的 _640 图，原图带签名不适合缓存）
                 appendUrls.firstOrNull()?.let { thumbnailResolver.rememberThumb(enrichedWork(work, detail), it) }
                 val novelText = WorkDetailParser.extractNovelText(appendResp.html)
-                val passwordError = appendResp.result_num == -2
+                // -2 在密码作品上是"密码错误"；非密码作品上是未识别的拒绝，
+                // 走服务端原文提示（不混标 passwordError）
+                val passwordError = detail.passwordProtected && appendResp.result_num == -2
                 val unlockBlocked = appendResp.result_num == -4
                 val fullUrls = fullD?.await().orEmpty()
                 val textOnly = novelText.isNotBlank() && appendUrls.isEmpty()
@@ -104,26 +146,39 @@ class DetailRepository @Inject constructor(
                 else if (loggedIn) fullUrls.ifEmpty { appendUrls } else appendUrls
                 Log.d(TAG, "detail warning urls=${urls.size} novel=${novelText.length} pwError=$passwordError blocked=$unlockBlocked work=${work.authorId}/${work.id} loggedIn=$loggedIn")
                 rememberWorkPassword(work, password, appendResp.result_num)
-                if (unlockBlocked) {
-                    detail.copy(
+                val gate = appendGate(appendResp.result_num, loggedIn)
+                val notice = if (gate != null) null
+                else serverNotice(appendResp.result_num, appendResp.html, passwordError, unlockBlocked)
+                when {
+                    gate != null -> detail.copy(
+                        imageUrls = emptyList(),
+                        gate = gate,
+                        serverNotice = notice,
+                        novelText = novelText,
+                    )
+                    unlockBlocked -> detail.copy(
                         imageUrls = emptyList(),
                         passwordError = false,
                         unlockBlocked = true,
                         unlockBlockedMessage = WorkDetailParser.extractUnlockBlockedMessage(appendResp.html),
                         novelText = novelText,
                     )
-                } else {
-                    detail.copy(imageUrls = urls, passwordError = passwordError, novelText = novelText)
+                    else -> detail.copy(
+                        imageUrls = urls,
+                        passwordError = passwordError,
+                        serverNotice = notice,
+                        novelText = novelText,
+                    )
                 }
             }
             return@apiCall result
         }
-        val adultEnabled = settingsRepository.showAdultContent.first()
         if (detail.r18 && !adultEnabled) {
             // R18 且未开启显示：与 warning 分支一致返回锁定态。
             // 此前静默跳过 append，导致纯文本等无首屏图作品落到"暂无图片"占位。
+            // （登录/关注门已在上面提前返回，不会落到这里被误判成 R-18 锁定）
             Log.d(TAG, "detail adult-locked work=${work.authorId}/${work.id}")
-            return@apiCall detail.copy(imageUrls = emptyList(), adultLocked = true)
+            return@apiCall gated(RestrictionReason.ADULT)
         }
         val appendResp = run {
             thumbnailResolver.throttleAppend(force = password.isNotBlank())
@@ -140,12 +195,17 @@ class DetailRepository @Inject constructor(
         // 回填列表缩略图缓存：点开详情拿到真实图后，列表立即显示
         appendUrls.firstOrNull()?.let { thumbnailResolver.rememberThumb(enrichedWork(work, detail), it) }
         val novelText = appendResp?.html?.let { WorkDetailParser.extractNovelText(it) }.orEmpty()
-        val passwordError = appendResp?.result_num == -2
+        // append 的 -2 只在密码作品上表示"密码错误"；非密码作品拿到 -2 视为未识别
+        // 拒绝，走服务端原文提示
+        val passwordError = detail.passwordProtected && appendResp?.result_num == -2
         val unlockBlocked = appendResp?.result_num == -4
+        val gate = appendGate(appendResp?.result_num, loggedIn)
+        val notice = if (gate != null) null
+        else serverNotice(appendResp?.result_num, appendResp?.html, passwordError, unlockBlocked)
         Log.d(
             TAG,
             "detail normal append work=${work.authorId}/${work.id} result_num=${appendResp?.result_num} " +
-                "r18=${detail.r18} html=${detail.imageUrls} appendUrls=$appendUrls",
+                "gate=$gate r18=${detail.r18} html=${detail.imageUrls} appendUrls=$appendUrls",
         )
         // 详情页 HTML 提供第 1 张（主图），append 返回第 2 张起的追加图；
         // 合并时过滤 sign in/R-18 等占位图，只保留真实图
@@ -160,8 +220,15 @@ class DetailRepository @Inject constructor(
             else -> ThumbnailResolver.mergeWorkImages(detail.imageUrls, appendUrls)
         }
         rememberWorkPassword(work, password, appendResp?.result_num ?: 0)
-        if (unlockBlocked) {
-            detail.copy(
+        when {
+            // 服务端要求登录/键推关注/转推（class 判定漏判时的兜底）：门卡接管图区
+            gate != null -> detail.copy(
+                imageUrls = emptyList(),
+                gate = gate,
+                serverNotice = notice,
+                novelText = novelText,
+            )
+            unlockBlocked -> detail.copy(
                 imageUrls = emptyList(),
                 passwordError = false,
                 unlockBlocked = true,
@@ -170,8 +237,12 @@ class DetailRepository @Inject constructor(
                 }.orEmpty(),
                 novelText = novelText,
             )
-        } else {
-            detail.copy(imageUrls = urls, passwordError = passwordError, novelText = novelText)
+            else -> detail.copy(
+                imageUrls = urls,
+                passwordError = passwordError,
+                serverNotice = notice,
+                novelText = novelText,
+            )
         }
     }
 
@@ -202,6 +273,11 @@ class DetailRepository @Inject constructor(
         runCatching { workPasswordRepository.savePassword(work.id, password) }
     }
 
+    /**
+     * 全尺寸原图列表。未登录/未开 R-18 时服务端返回 error_code=-2、无 HTML——
+     * 缩略图已在详情里可见，这里静默降级为空列表（UI 沿用缩略图），
+     * 不给逐作品的"去登录"提示（用户反馈：太像强制登录引导）。
+     */
     suspend fun getWorkFullImages(work: Work, password: String = ""): Result<List<String>> = apiCall {
         val response = api.showIllustDetail(work.authorId, work.id, -1, password)
         notifySessionInvalidIfNeeded(response.error_code)
@@ -224,6 +300,20 @@ class DetailRepository @Inject constructor(
                 else WorkDetailParser.extractFullImageUrls(r.html).firstOrNull()
             }.getOrNull()
         }
+    }
+
+    /**
+     * append 拒绝码 → 门卡类型（与 poipiku 网页端行为对齐；逆向自 common.js）：
+     * -3 需登录（仅匿名；登录态的 -3 是会话失效，由 [notifySessionInvalidIfNeeded]
+     * 触发自动重登，不给门卡）/ -5 Twitter 关注者限定 / -20 需转推。
+     * 返回 null 表示非门卡类（-2 密码错、-4 受限、成功码）。
+     */
+    private fun appendGate(code: Int?, loggedIn: Boolean): RestrictionReason? = when {
+        code == null -> null
+        code == ThumbnailResolver.RESULT_LOGIN_REQUIRED && !loggedIn -> RestrictionReason.LOGIN
+        code == RESULT_TWITTER_FOLLOWER_LIMIT -> RestrictionReason.FOLLOW_TWITTER
+        code == RESULT_RETWEET_REQUIRED -> RestrictionReason.RETWEET
+        else -> null
     }
 
     /**
@@ -308,5 +398,11 @@ class DetailRepository @Inject constructor(
 
     private companion object {
         const val TAG = "PikuDiag"
+
+        /** append result_num：Twitter 关注者限定（网页端弹 TwitterFollowerLimitInfoDlg） */
+        const val RESULT_TWITTER_FOLLOWER_LIMIT = -5
+
+        /** append result_num：需转推（网页端弹转推确认框，转推后重试即可放行） */
+        const val RESULT_RETWEET_REQUIRED = -20
     }
 }

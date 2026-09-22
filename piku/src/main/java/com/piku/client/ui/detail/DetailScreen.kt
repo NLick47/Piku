@@ -102,6 +102,8 @@ fun DetailScreen(
     onTagClick: (String) -> Unit,
     onRelatedWorkClick: (Long, Long, String) -> Unit,
     onAuthorClick: (Long, String) -> Unit,
+    /** 受限门卡「去登录」：跳登录页（本页留在返回栈，登录成功自动重载） */
+    onNavigateToLogin: () -> Unit = {},
 ) {
     val viewModel: DetailViewModel = hiltViewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -202,6 +204,20 @@ fun DetailScreen(
     // 分享准备失败：面板仍开着（loading 刚结束），先收起面板，否则 snackbar 被 BottomSheet 盖住
     LaunchedEffect(Unit) {
         viewModel.shareSheetDismiss.collect { imageActionPage = -1 }
+    }
+    // 门卡/软提示「去登录」：跳登录页，详情页留在返回栈，登录成功自动重载
+    LaunchedEffect(Unit) {
+        viewModel.loginRequest.collect {
+            onNavigateToLogin()
+        }
+    }
+    // 关注门「在浏览器打开」：解锁动作（关注作者 Twitter）只能在网页端完成
+    LaunchedEffect(Unit) {
+        viewModel.openInBrowser.collect {
+            runCatching {
+                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(state.shareUrl)))
+            }
+        }
     }
 
     // 长按图片 → 弹出操作面板；面板中保存/分享时处理权限
@@ -330,6 +346,9 @@ fun DetailScreen(
                         onToggleField = viewModel::toggleField,
                         autoExpandImageHint = state.imageHintVisible,
                         onImageHintShown = viewModel::consumeImageHint,
+                        onGateAction = viewModel::onUnlockRestriction,
+                        gateLoading = state.enablingAdultContent || state.followSending,
+                        restrictionReason = state.restrictionReason,
                     )
                 }
             }

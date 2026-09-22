@@ -85,6 +85,7 @@ import com.piku.client.R
 import com.piku.client.common.LinkSegment
 import com.piku.client.common.LinkText
 import com.piku.client.domain.model.WorkDetail
+import com.piku.client.domain.model.RestrictionReason
 import com.piku.client.ui.common.ExpandableIconAction
 import com.piku.client.ui.common.localizedCategoryName
 import com.piku.client.ui.common.rememberAnimatedImage
@@ -119,6 +120,8 @@ private const val IMAGE_HEIGHT_MAX_DP = 520
 private const val EMPTY_HEIGHT_DP = 160
 /** 密码解锁框高度：标签 + 输入框 + 按钮 + 错误提示 */
 private const val PASSWORD_HEIGHT_DP = 220
+/** 受限门卡高度：图标 + 标题 + 副文案 + 主按钮 */
+private const val GATE_HEIGHT_DP = 220
 /** 小说预览高度：正文全文流入，限高卡片内可滚动阅读 */
 private const val NOVEL_PREVIEW_HEIGHT_DP = 480
 /** 首次进入时，图片翻译按钮自动展开文字的停留时间：比普通点击反馈久，留出看清的余裕 */
@@ -159,6 +162,16 @@ internal fun DetailContent(
     autoExpandImageHint: Boolean = false,
     /** 提示真的展开出来时回调，供外部消耗「已展示过」的一次性标记 */
     onImageHintShown: () -> Unit = {},
+    /** 受限门卡主按钮：LOGIN→去登录，ADULT→一键开启 R-18 显示，FOLLOW→浏览器打开 */
+    onGateAction: () -> Unit = {},
+    /** 门卡主按钮的动作进行中（R-18 开启 / 关注作者等），按钮转圈防连点 */
+    gateLoading: Boolean = false,
+    /**
+     * 受限门卡类型（ViewModel 结合登录态统一推导，与数据层判定同序）。
+     * UI 只认这个字段渲染门卡，不再各自判 detail 上的门属性——
+     * 避免"登录用户被展示登录门卡"这类判定错位。
+     */
+    restrictionReason: RestrictionReason? = null,
 ) {
     var descriptionExpanded by remember { mutableStateOf(false) }
     val translated = detail.translated
@@ -213,6 +226,9 @@ internal fun DetailContent(
             onPasswordChange = onPasswordChange,
             onPasswordSubmit = onPasswordSubmit,
             passwordLoading = passwordLoading,
+            onGateAction = onGateAction,
+            gateLoading = gateLoading,
+            restrictionReason = restrictionReason,
             onOpenNovelReader = onOpenNovelReader,
             hasImageModel = hasImageModel,
             imageTranslated = imageTranslated,
@@ -413,6 +429,12 @@ private fun ImagePager(
     onPasswordChange: (String) -> Unit,
     onPasswordSubmit: () -> Unit,
     passwordLoading: Boolean,
+    /** 受限门卡主按钮：LOGIN→去登录，ADULT→一键开启 R-18 显示，FOLLOW→浏览器打开 */
+    onGateAction: () -> Unit = {},
+    /** 门卡主按钮的动作进行中（R-18 开启 / 关注作者等）：按钮转圈防连点 */
+    gateLoading: Boolean = false,
+    /** 受限门卡类型（ViewModel 统一推导）；null = 无比受限门卡 */
+    restrictionReason: RestrictionReason? = null,
     onOpenNovelReader: () -> Unit,
     hasImageModel: Boolean = false,
     imageTranslated: Boolean = false,
@@ -446,7 +468,7 @@ private fun ImagePager(
     // 无图时按内容给合适高度：一行提示不需要 320dp，密码框和小说预览才需要空间
     val boxHeightDp = when {
         detail.imageUrls.isNotEmpty() -> imageHeightDp
-        detail.adultLocked -> EMPTY_HEIGHT_DP
+        restrictionReason != null -> GATE_HEIGHT_DP
         detail.novelText.isNotBlank() -> NOVEL_PREVIEW_HEIGHT_DP
         detail.passwordProtected -> PASSWORD_HEIGHT_DP
         else -> EMPTY_HEIGHT_DP
@@ -472,16 +494,15 @@ private fun ImagePager(
     ) {
         if (detail.imageUrls.isEmpty()) {
             when {
-                detail.adultLocked -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = stringResource(R.string.detail_adult_locked),
-                            color = PikuColors.textSecondary,
-                            fontSize = 12.sp,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(horizontal = 24.dp),
-                        )
-                    }
+                // 受限门卡（登录/关注/R-18）：类型由 ViewModel 结合登录态统一推导，
+                // 与数据层判定同序。UI 不再自行判 detail 上的门属性——否则登录用户
+                // 会因为作品属性里的 "Login" 标记被错展示成"需要登录"
+                restrictionReason != null -> {
+                    LockGateCard(
+                        reason = restrictionReason,
+                        loading = gateLoading,
+                        onPrimaryAction = onGateAction,
+                    )
                 }
                 detail.novelText.isNotBlank() -> {
                     NovelPreview(detail = detail, dark = dark, onWorkClick = onWorkClick)

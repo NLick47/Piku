@@ -26,7 +26,38 @@ data class WorkDetail(
     /** 服务器返回的阻塞原因提示（如"请关联 Twitter 账号"），未提供时为空 */
     val unlockBlockedMessage: String = "",
     val novelText: String = "",
-    val adultLocked: Boolean = false,
+    /**
+     * 访问门（App 应渲染的门卡类型）；null = 无需门卡。
+     * 唯一决策点是 `DetailRepository`（结合作品属性、登录态、R-18 设置与服务端
+     * append 响应），ViewModel/UI 只读这一个字段——历史上判定逻辑分散在多处，
+     * 出现过"登录用户被展示登录门"等漂移回归。
+     */
+    val gate: RestrictionReason? = null,
+    /**
+     * 服务端对 append 的拒绝原文（未知错误码兜底）。与 poipiku 网页端行为一致：
+     * 网页端遇到不认识的结果码就是把这句原文弹出来。null = 无。
+     */
+    val serverNotice: String? = null,
+    /**
+     * 登录限定作品（"仅登录用户可看"的作品属性，IllustItem class 含 Login）。
+     * 注意：属性与当前登录态无关——登录后类名依旧带 Login、占位图也不变，
+     * 服务端只在 append 响应里区分（匿名 -3 / 登录放行）。是否拦成登录门卡
+     * 由 Repository 结合 App 登录态决定；登录后重新加载即可看到真实内容。
+     */
+    val loginRequired: Boolean = false,
+    /**
+     * poipiku 内「こっそりフォロー」限定（IllustItem class 含 Follower）。
+     * 实测（2026-09）：未关注时 append 返回 -4 +「こっそりフォロー限定です」，
+     * App 内关注作者（[followed]）后立即放行——解锁动作 App 可自助完成，
+     * 门卡给「关注作者」而不是引导网页。此类作品常另设密码（关注者口令）。
+     */
+    val followerGate: Boolean = false,
+    /**
+     * Twitter 关注者限定（IllustItem class 含 TFollower）。服务端经 Twitter
+     * 验证关注关系（append -5 + TwitterFollowerLimitInfoDlg），解锁在 Twitter
+     * 侧完成，App 内无自助动作，门卡只能引导网页端。
+     */
+    val twitterFollowerGate: Boolean = false,
     /** 当前登录用户是否已关注该作者（详情页 HTML 中 UserInfoCmdFollow 的 Selected 类） */
     val followed: Boolean = false,
     /**

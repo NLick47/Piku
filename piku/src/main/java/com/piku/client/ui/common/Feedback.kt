@@ -12,8 +12,10 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 
 data class FeedbackText(
-    @StringRes val res: Int,
+    @StringRes val res: Int = 0,
     val args: List<Any> = emptyList(),
+    /** 服务端原文等无法用资源 ID 表达的文本；非 null 时优先于 [res] */
+    val raw: String? = null,
 )
 
 data class FeedbackMessage(
@@ -32,6 +34,11 @@ class FeedbackChannel {
         _messages.tryEmit(FeedbackMessage(FeedbackText(res, args.toList())))
     }
 
+    /** 原样展示一段文本（如 poipiku 服务端返回的拒绝原文，与网页端 DispMsg 对齐） */
+    fun showText(text: String) {
+        _messages.tryEmit(FeedbackMessage(FeedbackText(raw = text)))
+    }
+
     fun showAction(@StringRes res: Int, @StringRes actionLabelRes: Int, onAction: () -> Unit) {
         _messages.tryEmit(
             FeedbackMessage(
@@ -47,8 +54,11 @@ class FeedbackChannel {
     }
 }
 
-fun FeedbackText.resolve(context: Context): String =
-    if (args.isEmpty()) context.getString(res) else context.getString(res, *args.toTypedArray())
+fun FeedbackText.resolve(context: Context): String = when {
+    raw != null -> raw
+    args.isEmpty() -> context.getString(res)
+    else -> context.getString(res, *args.toTypedArray())
+}
 
 @Composable
 fun FeedbackHost(

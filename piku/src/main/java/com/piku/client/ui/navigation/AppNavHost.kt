@@ -196,11 +196,9 @@ fun AppNavHost(
                 onBack = {
                     Log.d(TAG, "login back button tapped " +
                         "current=${navController.currentBackStackEntry?.destination?.route}")
-                    // 确定性弹栈：直接回到 HOME（栈底），不依赖当前栈顶状态，
-                    // 也不会误弹掉 startDestination
-                    val popped = navController.popBackStack(Routes.HOME, inclusive = false)
-                    Log.d(TAG, "login back pop result=$popped " +
-                        "current=${navController.currentBackStackEntry?.destination?.route}")
+                    // 单级弹栈：从哪里来回哪里。首页进入时回到首页；
+                    // 详情页门卡「去登录」进入时回详情页（旧版弹到 HOME 会连详情页一起丢掉）
+                    navController.popBackStack()
                 },
                 canGoBack = canGoBack,
                 onSuccess = safePopBack,
@@ -447,6 +445,12 @@ fun AppNavHost(
                                 userName = authorName,
                             ),
                         )
+                    },
+                    // 受限门卡「去登录」：详情页留在返回栈，登录成功 popBack 后自动重载
+                    onNavigateToLogin = {
+                        navController.navigate(Routes.LOGIN) {
+                            launchSingleTop = true
+                        }
                     },
                 )
             }

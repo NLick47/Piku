@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.piku.client.data.local.ImageSaver
 import com.piku.client.data.local.ImageShareHelper
 import com.piku.client.data.local.WorkPasswordRepository
+import com.piku.client.data.repository.AdultContentRepository
 import com.piku.client.data.repository.AuthRepository
 import com.piku.client.data.repository.BlockResult
 import com.piku.client.data.repository.DetailRepository
@@ -29,6 +30,7 @@ import com.piku.client.data.remote.translation.LlmTranslateEngine
 import com.piku.client.domain.model.AppError
 import com.piku.client.domain.model.AuthStatus
 import com.piku.client.domain.model.FavoriteFolder
+import com.piku.client.domain.model.RestrictionReason
 import com.piku.client.domain.model.TranslatedFields
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkDetail
@@ -87,6 +89,15 @@ data class DetailUiState(
      * 此时 UI 不给「重试」按钮，改给「在浏览器打开」让用户自行确认。
      */
     val errorRetryable: Boolean = true,
+    /**
+     * 受限门卡：需登录 / 需开启 R-18 显示 / 需关注作者（poipiku）/ 需 Twitter 关注 / 需转推。
+     * 与 [errorRes] 互斥——门卡是可操作的引导页（渲染在图区，一键处理动作后自动
+     * 恢复），错误页是终态提示。取值只来自 `detail.gate`（Repository 单一决策），
+     * ViewModel 不再自行推导；仅原图被拒（缩略图可见）不算受限：静默沿用缩略图。
+     */
+    val restrictionReason: RestrictionReason? = null,
+    /** R-18 一键开启进行中（防连点；成功后自动重载） */
+    val enablingAdultContent: Boolean = false,
     val isFavorite: Boolean = false,
     val favoriteFolders: List<FavoriteFolder> = emptyList(),
     val workFavoriteFolderIds: Set<Long> = emptySet(),
@@ -209,6 +220,7 @@ class DetailViewModel @Inject constructor(
     private val observeAuthStatusUseCase: ObserveAuthStatusUseCase,
     private val detailRepository: DetailRepository,
     private val authRepository: AuthRepository,
+    private val adultContentRepository: AdultContentRepository,
     private val thumbnailResolver: ThumbnailResolver,
     private val workPasswordRepository: WorkPasswordRepository,
     private val imageSaver: ImageSaver,
@@ -387,7 +399,23 @@ class DetailViewModel @Inject constructor(
                 val loggedIn = status == AuthStatus.LOGGED_IN
                 val prevLoggedIn = _uiState.value.loggedIn
                 _uiState.update { it.copy(loggedIn = loggedIn) }
-                if (loggedIn != prevLoggedIn && _uiState.value.detail != null && loggedIn) {
+                // detail==null 的受限态（append 抛 Restricted）也要求重载：
+                // 门卡页去登录回来，同样要重新拉详情拿真实内容
+                val needsReload = loggedIn != prevLoggedIn && loggedIn &&
+                    (_uiState.value.detail != null || _uiState.value.restrictionReason != null)
+                if (needsReload) {
+                    // 登录成功（含从门卡「去登录」回来）：清受限态并重载拿真实内容
+                    _uiState.update { it.copy(restrictionReason = null) }
+                    load()
+                }
+            }
+        }
+        viewModelScope.launch {
+            // R-18 显示开关（含本页一键开启、抽屉开关、自动重登还原）变化时：
+            // 停留在详情页的 R-18 门卡作品清门卡并整页重载，不用退出重进
+            settingsRepository.showAdultContent.collect { enabled ->
+                if (enabled && _uiState.value.restrictionReason == RestrictionReason.ADULT) {
+                    _uiState.update { it.copy(restrictionReason = null) }
                     load()
                 }
             }
@@ -907,6 +935,19 @@ class DetailViewModel @Inject constructor(
         _uiState.update { it.copy(password = value, passwordPrefilled = false) }
     }
 
+    /**
+     * 服务端拒绝原文的一次性提示（未知错误码兜底，与网页端 DispMsg(html) 对齐）。
+     * 同一句在本次页面停留期间只提示一次，避免刷新/重载时反复弹。
+     */
+    private var lastServerNotice: String? = null
+
+    private fun showServerNoticeOnce(detail: WorkDetail) {
+        val notice = detail.serverNotice ?: return
+        if (notice == lastServerNotice) return
+        lastServerNotice = notice
+        feedback.showText(notice)
+    }
+
     fun submitPassword() {
         val pwd = _uiState.value.password
         if (pwd.isBlank() || _uiState.value.passwordLoading) return
@@ -919,8 +960,15 @@ class DetailViewModel @Inject constructor(
             loadWorkDetailUseCase(work, pwd, existing)
                 .onSuccess { detail ->
                     _uiState.update {
-                        it.copy(detail = detail, passwordLoading = false)
+                        it.copy(
+                            detail = detail,
+                            passwordLoading = false,
+                            // 门卡类型由 Repository 单一决策写入 detail.gate
+                            // （如匿名提交密码成功后服务端仍要求登录）
+                            restrictionReason = detail.gate,
+                        )
                     }
+                    showServerNoticeOnce(detail)
                     recordHistory(detail)
                     // 解锁成功后后台升级全尺寸原图（不阻塞缩略图展示）；
                     // 匿名时 ShowIllustDetailF 恒 -2、账号受限（-4）时跳过无效请求链
@@ -940,6 +988,8 @@ class DetailViewModel @Inject constructor(
                         "unlock fail work=$workId error=${error::class.simpleName}: ${error.message}",
                         error,
                     )
+                    // 失败（网络等）只清 loading，门卡状态保持原样——
+                    // 门卡由 Repository 决策写入 detail.gate，失败路径不再自行推导
                     _uiState.update { it.copy(passwordLoading = false) }
                 }
         }
@@ -981,7 +1031,8 @@ class DetailViewModel @Inject constructor(
                         "PikuDiag",
                         "maybeAutoUnlock work=$workId done failed=$failed urls=${unlocked.imageUrls.size}",
                     )
-                    _uiState.update { it.copy(detail = unlocked, passwordLoading = false) }
+                    _uiState.update { it.copy(detail = unlocked, passwordLoading = false, restrictionReason = unlocked.gate) }
+                    showServerNoticeOnce(unlocked)
                     recordHistory(unlocked)
                     if (failed) {
                         // 保存的密码已失效：清除，让用户手动输入新密码
@@ -991,7 +1042,7 @@ class DetailViewModel @Inject constructor(
                     }
                     if (!failed) translate(showAfter = settingsRepository.aiTranslateEnabled.value)
                 }
-                .onFailure {
+                .onFailure { error ->
                     Log.d("PikuDiag", "maybeAutoUnlock work=$workId network/parse failure, keep password")
                     _uiState.update { it.copy(passwordLoading = false) }
                 }
@@ -1006,13 +1057,18 @@ class DetailViewModel @Inject constructor(
             _uiState.update { it.copy(fullImageUrls = detail.imageUrls) }
             return
         }
+        // 门卡态原图请求必然被拒，跳过（不烧限速槽）：任何门卡在场都不拉原图；
+        // 门卡解除后（关注/登录/开 R-18）会重载，届时自然补拉
+        if (detail.gate != null) return
         // 未解锁的密码作品拿不到原图，跳过无效请求（也不烧 append 限速槽）
         if (detail.passwordProtected && password.isBlank()) return
         viewModelScope.launch {
             _uiState.update { it.copy(fullImagesLoading = true) }
             loadWorkFullImagesUseCase(work, password)
                 .onSuccess { urls ->
-                    _uiState.update { it.copy(fullImageUrls = urls, fullImagesLoading = false) }
+                    _uiState.update {
+                        it.copy(fullImageUrls = urls, fullImagesLoading = false)
+                    }
                 }
                 .onFailure { error ->
                     Log.d(
@@ -1020,8 +1076,88 @@ class DetailViewModel @Inject constructor(
                         "loadFullImages fail work=$workId error=${error::class.simpleName}: ${error.message}",
                         error,
                     )
+                    // 原图被拒（未登录/未开 R-18 的 -2 等）静默降级：缩略图仍可看，
+                    // 不给逐作品的"去登录"提示（用户反馈：太像强制登录引导）
                     _uiState.update { it.copy(fullImagesLoading = false) }
                 }
+        }
+    }
+
+    // =====================================================================
+    // 受限门卡（登录 / R-18 显示）
+    // =====================================================================
+
+    /**
+     * 门卡的一键动作分发（含导航）。UI 只调这一个入口：
+     * - LOGIN：发登录导航信号（UI 收到后跳登录页，本页留在返回栈）；
+     * - FOLLOW：poipiku 内关注门 → App 内一键关注作者，成功后重载放行；
+     * - FOLLOW_TWITTER / RETWEET：解锁动作在 Twitter/网页端完成
+     *   （关注/转推），发信号让 UI 用浏览器打开作品页；
+     * - ADULT：直接调与抽屉开关同款的 SwitchContentsViewModeF（匿名也生效，
+     *   视图模式靠 cookie 存），成功后 showAdultContent 变化触发自动重载。
+     */
+    fun onUnlockRestriction() {
+        when (_uiState.value.restrictionReason) {
+            RestrictionReason.LOGIN -> requestLogin()
+            RestrictionReason.FOLLOW -> followAuthorForUnlock()
+            RestrictionReason.FOLLOW_TWITTER, RestrictionReason.RETWEET -> _openInBrowser.tryEmit(Unit)
+            RestrictionReason.ADULT -> enableAdultContent()
+            null -> Unit
+        }
+    }
+
+    /** 门卡主按钮是「去登录」时的导航请求（UI 层收到后跳转） */
+    private val _loginRequest = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val loginRequest: SharedFlow<Unit> = _loginRequest.asSharedFlow()
+
+    /** 关注门「在浏览器打开」请求（UI 层收到后拉起浏览器看作品页） */
+    private val _openInBrowser = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val openInBrowser: SharedFlow<Unit> = _openInBrowser.asSharedFlow()
+
+    fun requestLogin() {
+        _loginRequest.tryEmit(Unit)
+    }
+
+    /** 关注门「关注作者」：App 内一键关注（poipiku こっそりフォロー），
+     *  成功后重载放行（实测服务端立即生效，无需等待） */
+    private fun followAuthorForUnlock() {
+        if (_uiState.value.followSending) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(followSending = true) }
+            val result = detailRepository.updateFollow(authorId)
+            _uiState.update { it.copy(followSending = false) }
+            when (result) {
+                FollowResult.Followed -> {
+                    feedback.show(R.string.detail_follow_sent)
+                    // 关注门放行：重载后走密码框（此类作品常另有口令）或直接出图
+                    load()
+                }
+                FollowResult.NotLoggedIn -> {
+                    feedback.show(R.string.detail_follow_login_hint)
+                    requestLogin()
+                }
+                else -> feedback.show(R.string.detail_follow_failed)
+            }
+        }
+    }
+
+    /** R-18 一键开启：直接发请求（与抽屉开关同款，匿名也生效——视图模式靠 cookie 存）。
+     *  失败（服务端拒绝/网络）给轻提示；成功由设置流驱动自动重载 */
+    private fun enableAdultContent() {
+        val state = _uiState.value
+        if (state.enablingAdultContent) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(enablingAdultContent = true) }
+            val ok = runCatching { adultContentRepository.setEnabled(true) }
+                .onFailure { Log.d("PikuDiag", "enable adult fail: ${it.message}") }
+                .getOrDefault(false)
+            _uiState.update { it.copy(enablingAdultContent = false) }
+            if (ok) {
+                feedback.show(R.string.home_r18_on)
+                // settingsRepository.showAdultContent 收到变化后自动清受限态并重载
+            } else {
+                feedback.show(R.string.detail_adult_enable_failed)
+            }
         }
     }
 
@@ -1263,6 +1399,9 @@ class DetailViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
+            // 关注门卡在场时（底栏入口也能关注）：关注成功需重载放行——
+            // 无密码作品直接拿真实内容，有密码作品进入密码框
+            val wasGateFollow = _uiState.value.restrictionReason == RestrictionReason.FOLLOW
             _uiState.update { it.copy(followSending = true) }
             val result = detailRepository.updateFollow(authorId)
             _uiState.update { s ->
@@ -1284,6 +1423,7 @@ class DetailViewModel @Inject constructor(
                     is FollowResult.Failure -> R.string.detail_follow_failed
                 },
             )
+            if (result == FollowResult.Followed && wasGateFollow) load()
         }
     }
 
@@ -1343,7 +1483,13 @@ class DetailViewModel @Inject constructor(
         if (_uiState.value.loading) return
         viewModelScope.launch {
             _uiState.update {
-                it.copy(loading = true, errorRes = null, errorHintRes = null, errorRetryable = true)
+                it.copy(
+                    loading = true,
+                    errorRes = null,
+                    errorHintRes = null,
+                    errorRetryable = true,
+                    restrictionReason = null,
+                )
             }
             // 保留已输入的密码：自动重登/刷新详情后已解锁作品不会重新锁回。
             // 预填值不算——用户还没确认过，不能替他发出去
@@ -1361,8 +1507,11 @@ class DetailViewModel @Inject constructor(
                             errorRes = null,
                             errorHintRes = null,
                             errorRetryable = true,
+                            // 门卡类型由 Repository 单一决策写入 detail.gate
+                            restrictionReason = detail.gate,
                         )
                     }
+                    showServerNoticeOnce(detail)
                     recordHistory(detail)
                     loadFullImages(retainedPassword)
                     maybeAutoUnlock(detail)
@@ -1378,6 +1527,8 @@ class DetailViewModel @Inject constructor(
                     // 作者被屏蔽时服务端把作品页 302 到其主页，同样是终态，但提示指向屏蔽。
                     // 其余错误（网络、解析、未知）保留重试；未知类型也要有文案，
                     // 否则 errorRes 为 null 会退化成一片空白页。
+                    // 注意：受限门卡不走失败路径（Repository 正常返回带 gate 的 detail），
+                    // 这里只需处理真正的错误
                     val notFound = error is AppError.NotFound
                     val blockedAuthor = error is AppError.BlockedAuthor
                     _uiState.update {

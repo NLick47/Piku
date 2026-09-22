@@ -48,6 +48,25 @@ object WorkDetailParser {
         val isTextWork = REGEX_ILLUST_TEXT_CLASS.find(html) != null ||
             REGEX_NOVEL.find(mainBlock) != null
         val passwordProtected = REGEX_PASSWORD_PASS.find(mainBlock) != null
+        // 门类型来自 IllustItem class 标记（比主图 URL 可靠：占位图随 R-18 开关和
+        // 登录态变化），实测（2026-09，1821131/13479014）：
+        // - poipiku 关注门：class 含 "Follower"，未关注 append 返回 -4 +
+        //   「こっそりフォロー限定です」；App 内关注作者后立即放行（无需 Twitter 关注）。
+        //   此类作品常另设密码（作者给关注者的口令），关注后仍需密码
+        // - Twitter 关注门：class 含 "TFollower"，append 返回 -5 +
+        //   TwitterFollowerLimitInfoDlg（服务端经 Twitter 验证关注关系），
+        //   解锁在 Twitter 侧完成，App 内无自助动作
+        // - 登录门：class 含 "Login"，是"仅登录用户可看"的作品属性——登录后类名
+        //   依旧带 Login、占位图也不变，服务端只在 append 响应区分（-3 vs 放行），
+        //   所以这里只标记属性，是否拦成门卡由 Repository 结合 App 登录态决定
+        // URL 判定保留兜底（防 poipiku 改 class 结构）
+        val illustItemClass = REGEX_ILLUST_ITEM_CLASS.find(html)?.groupValues?.get(1) ?: ""
+        val classTokens = illustItemClass.split(" ")
+        val followerGate = "Follower" in classTokens ||
+            mainImage.contains("/img/publish_follower")
+        val twitterFollowerGate = "TFollower" in classTokens
+        val loginRequired = "Login" in classTokens ||
+            mainImage.contains("/img/publish_login")
         // 关注按钮状态：作者行 span 的 class 含 Selected 表示当前用户已关注该作者。
         // 匿名/未关注时服务端渲染无 Selected（客户端切换成功也是增删这个类）。
         val followed = REGEX_FOLLOW_BTN.find(mainBlock)
@@ -68,7 +87,11 @@ object WorkDetailParser {
             authorProfile = authorProfile,
             categoryCd = categoryCd,
             categoryName = categoryName,
-            imageUrls = if (isTextWork) emptyList() else listOf(mainImage).filter { it.isNotEmpty() },
+            imageUrls = if (isTextWork || loginRequired || followerGate || twitterFollowerGate) {
+                emptyList()
+            } else {
+                listOf(mainImage).filter { it.isNotEmpty() }
+            },
             tags = tags,
             reactions = rawReactions.distinct(),
             reactionCounts = rawReactions.groupingBy { it }.eachCount(),
@@ -77,6 +100,9 @@ object WorkDetailParser {
             r18 = mainImage.contains("/img/R-18"),
             warning = mainImage.contains("/img/warning"),
             passwordProtected = passwordProtected,
+            loginRequired = loginRequired,
+            followerGate = followerGate,
+            twitterFollowerGate = twitterFollowerGate,
             followed = followed,
             blocked = blocked,
         )
@@ -192,6 +218,8 @@ object WorkDetailParser {
     private val REGEX_NOVEL = Regex("""<div class="NovelSection">(.*?)</div>""", RegexOption.DOT_MATCHES_ALL)
     private val REGEX_ILLUST_TEXT_CLASS = Regex("""<div class="IllustItem[^"]*\bText\b""")
     private val REGEX_ILLUST_BLOCK = Regex("""<div class="IllustItem """)
+    /** 主作品区块的完整 class（如 `R18 Follower Upload`），访问门类型以此为判据 */
+    private val REGEX_ILLUST_ITEM_CLASS = Regex("""<div class="IllustItem\s+([^"]*)\"""")
     private val REGEX_REACTION =
         Regex("""<span class="ResEmoji"><img class="Twemoji"[^>]*alt="([^"]+)"[^>]*/>""")
     private val REGEX_PROFILE =
