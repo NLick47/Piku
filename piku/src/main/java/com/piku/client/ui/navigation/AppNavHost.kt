@@ -56,15 +56,21 @@ object Routes {
     const val USER_WORKS = "user_works/{userId}?userName={userName}"
     const val MY_POSTS = "my_posts/{userId}?userName={userName}"
     const val EDIT_POST = "edit_post/{workId}"
-    const val SEARCH = "search/{keyword}"
+    const val SEARCH = "search/{keyword}?tag={tag}"
     const val MAX_DETAIL_DEPTH = 3
 
     fun home() = "home"
 
     fun followUsers() = FOLLOW_USERS
 
-    /** 统一搜索页：keyword 为空串表示待机态（搜索历史 + 热门标签）；# 前缀直达标签 tab，@ 前缀直达用户 tab */
-    fun search(keyword: String = "") = "search/${Uri.encode(keyword)}"
+    /**
+     * 统一搜索页：keyword 为空串表示待机态（搜索历史 + 热门标签）；
+     * # 前缀直达标签 tab，@ 前缀直达用户 tab。
+     * [tag] 非空 = 精确标签名，落地即该标签的作品列表（详情页点标签进来，跳过标签建议）；
+     * 需与带 # 前缀的 keyword 搭配使用（keyword 决定 tab 与分页可用性）。
+     */
+    fun search(keyword: String = "", tag: String = "") =
+        "search/${Uri.encode(keyword)}" + if (tag.isEmpty()) "" else "?tag=${Uri.encode(tag)}"
 
     fun userWorks(userId: Long, userName: String = "") =
         "user_works/$userId?userName=${Uri.encode(userName)}"
@@ -96,8 +102,6 @@ private const val EXIT_CONFIRM_INTERVAL_MS = 2000L
 
 /** 路由转场时长，同时也是共享元素过渡的动画窗口 */
 private const val SHARED_TRANSITION_MS = 220
-
-private const val KEY_PENDING_TAG = "pending_tag"
 
 private const val KEY_SHOULD_REOPEN_DRAWER = "should_reopen_drawer"
 
@@ -225,19 +229,12 @@ fun AppNavHost(
             )
         }
         composable(Routes.HOME) { backStackEntry ->
-            val pendingTag by backStackEntry.savedStateHandle
-                .getStateFlow<String?>(KEY_PENDING_TAG, null)
-                .collectAsStateWithLifecycle()
             val shouldReopenDrawer by backStackEntry.savedStateHandle
                 .getStateFlow<Boolean>(KEY_SHOULD_REOPEN_DRAWER, false)
                 .collectAsStateWithLifecycle()
 
             ProvideNavSharedScope(sharedScope, this) {
                 HomeScreen(
-                    pendingTag = pendingTag,
-                    onTagConsumed = {
-                        backStackEntry.savedStateHandle[KEY_PENDING_TAG] = null
-                    },
                     shouldReopenDrawer = shouldReopenDrawer,
                     onDrawerReopenConsumed = {
                         backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = false
@@ -296,6 +293,7 @@ fun AppNavHost(
             route = Routes.SEARCH,
             arguments = listOf(
                 navArgument("keyword") { type = NavType.StringType; defaultValue = "" },
+                navArgument("tag") { type = NavType.StringType; defaultValue = "" },
             ),
         ) {
             SearchScreen(
@@ -421,10 +419,10 @@ fun AppNavHost(
                 DetailScreen(
                     onBack = safePopBack,
                     onHomeClick = safePopToHome,
+                    // 点标签：压栈进统一搜索页并直达该标签的作品列表。详情页留在返回栈里
+                    // （回退即回到作品，不用重新找），关键词带 # 前缀让搜索页落在标签 tab
                     onTagClick = { tag ->
-                        navController.getBackStackEntry(Routes.HOME)
-                            .savedStateHandle[KEY_PENDING_TAG] = tag
-                        navController.popBackStack(Routes.HOME, inclusive = false)
+                        navController.navigate(Routes.search("#$tag", tag = tag))
                     },
                     onRelatedWorkClick = { authorId, workId, thumbnailUrl ->
                         val detailDepth = navController.currentBackStack.value

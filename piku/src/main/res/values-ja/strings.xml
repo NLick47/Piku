@@ -211,8 +211,6 @@
     <string name="home_tab_latest">新着</string>
     <string name="home_tab_follow">フォロー</string>
     <string name="home_tab_random">ランダム</string>
-    <string name="home_tag_select">人気タグ</string>
-    <string name="home_tag_hint">タップでタグの投稿を表示</string>
     <string name="home_category_select">カテゴリを選択</string>
     <string name="home_category_current">現在：%1$s</string>
     <string name="home_category_reset">すべてに戻す</string>
@@ -238,7 +236,6 @@
     <string name="home_load_more_failed">読み込みに失敗しました。タップで再試行</string>
     <string name="home_no_more">これ以上ありません</string>
     <string name="home_random_more">別の投稿を見る</string>
-    <string name="home_tag_clear">タグをクリア</string>
     <string name="home_back_to_top">トップへ戻る</string>
     <string name="home_error_network">ネットワークエラーで読み込めませんでした</string>
     <string name="home_error_parse">ページ解析に失敗しました。もう一度お試しください</string>

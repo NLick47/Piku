@@ -80,6 +80,11 @@ data class SearchUiState(
     val tagWorksErrorRes: Int? = null,
     val tagWorksLoadMoreErrorRes: Int? = null,
     val tagWorksEndReached: Boolean = false,
+    /**
+     * 标签建议不可用（接口 SearchTagByKeywordPcV 需登录）。
+     * 作品模式不需要登录，所以该标记只在建议模式（[selectedTagName] 为空）下弹登录引导；
+     * 非空时 UI 隐藏"返回标签建议"入口。
+     */
     val tagNeedLogin: Boolean = false,
     val customTags: List<String> = emptyList(),
     val favoriteIds: Set<Long> = emptySet(),
@@ -113,13 +118,22 @@ class SearchViewModel @Inject constructor(
 
     /**
      * 去除 #/@ 前缀并去首尾空白后的真实搜索词；
+     * # 可叠加（站点作者分类标签写作 "##東方"），一并去掉；
      * 空串表示未搜索（历史 + 热门标签的待机态）。
      */
     private val base: String =
-        keyword.removePrefix("#").removePrefix("@").trim()
+        keyword.trimStart('#').removePrefix("@").trim()
 
-    /** 初始 tab：按前缀直达对应 tab，普通词停在作品 tab */
+    /**
+     * 详情页点标签进来时带的精确标签名（空串 = 从搜索框进来）。
+     * 非空则落地即该标签的作品列表，跳过"标签建议 → 点卡片"这一步——
+     * 用户点的是确定的标签，再让他从建议里挑一次是多余的。
+     */
+    private val presetTag: String = (savedStateHandle["tag"] ?: "").trim()
+
+    /** 初始 tab：带精确标签 / # 前缀直达标签 tab，@ 前缀直达用户 tab，普通词停在作品 tab */
     private val initialTab: SearchTab = when {
+        presetTag.isNotEmpty() -> SearchTab.TAGS
         keyword.startsWith("#") && base.isNotEmpty() -> SearchTab.TAGS
         keyword.startsWith("@") && base.isNotEmpty() -> SearchTab.USERS
         else -> SearchTab.WORKS
@@ -181,15 +195,18 @@ class SearchViewModel @Inject constructor(
                 loadTagsByMode(append = false)
             }
         }
-        if (base.isNotEmpty()) {
+        if (base.isNotEmpty() || presetTag.isNotEmpty()) {
             // 作品 tab 始终预载（关键词搜索，切 tab 免等待）
             loadWorks(append = false)
-            when (initialTab) {
-                SearchTab.TAGS -> loadTagSuggestions(append = false)
+            when {
+                // 详情页点标签进来：直达该标签的作品列表，跳过标签建议
+                // （匿名时"返回标签建议"入口由 loadTagWorks 按登录态隐藏）
+                presetTag.isNotEmpty() -> selectTagCard(presetTag)
+                initialTab == SearchTab.TAGS -> loadTagSuggestions(append = false)
                 // 用户 tab：无条件调用，内部处理未登录态（usersNeedLogin）
-                SearchTab.USERS -> loadUsers(append = false)
+                initialTab == SearchTab.USERS -> loadUsers(append = false)
                 // 已登录用户直接预载作者列表，切到用户 tab 时无需等待
-                SearchTab.WORKS -> if (authRepository.isLoggedIn()) loadUsers(append = false)
+                else -> if (authRepository.isLoggedIn()) loadUsers(append = false)
             }
         }
     }
@@ -305,13 +322,17 @@ class SearchViewModel @Inject constructor(
                 tagWorksErrorRes = null,
                 tagWorksLoadMoreErrorRes = null,
                 tagWorksEndReached = false,
-                tagNeedLogin = false,
             )
         }
+        // tagNeedLogin 由 loadTagWorks 按登录态刷新，这里不碰
         loadTagWorks(append = false)
     }
 
-    /** 返回标签建议模式 */
+    /**
+     * 返回标签建议模式。
+     * 直达标签作品列表进来时建议还没请求过（[presetTag] 路径），此处补载一次，
+     * 否则会停在"未找到相关标签"的空态且不会自己加载。
+     */
     fun backToTagSuggestions() {
         if (_uiState.value.selectedTagName == null) return
         _uiState.update {
@@ -324,6 +345,10 @@ class SearchViewModel @Inject constructor(
                 tagWorksLoadMoreErrorRes = null,
                 tagWorksEndReached = false,
             )
+        }
+        val state = _uiState.value
+        if (state.tagSuggestions.isEmpty() && !state.tagSuggestionsLoading && !state.tagSuggestionsEndReached) {
+            loadTagSuggestions(append = false)
         }
     }
 
@@ -572,27 +597,17 @@ class SearchViewModel @Inject constructor(
     private fun loadTagWorks(append: Boolean) {
         val tag = _uiState.value.selectedTagName ?: return
         val targetPage = if (append) tagWorksPage + 1 else 0
-        if (!authRepository.isLoggedIn()) {
-            _uiState.update {
-                it.copy(
-                    tagWorksLoading = false,
-                    tagWorksLoadingMore = false,
-                    tagWorksErrorRes = null,
-                    tagWorksLoadMoreErrorRes = null,
-                    tagWorksEndReached = true,
-                    tagNeedLogin = true,
-                    tagWorks = if (append) it.tagWorks else emptyList(),
-                )
-            }
-            return
-        }
+        // 精确标签的作品列表（SearchIllustByTagPcV）匿名可用——网页端与标签页都一样，
+        // 所以这里不设登录门；需要登录的是标签建议（SearchTagByKeywordPcV）。
+        // 登录态同时决定 tagNeedLogin（未登录 = 建议不可用，UI 隐藏"返回标签建议"），
+        // 所以每次全量加载都按当前登录态刷新它，登录成功后不会残留匿名时的标记
         _uiState.update {
             if (append) it.copy(tagWorksLoadingMore = true, tagWorksLoadMoreErrorRes = null)
             else it.copy(
                 tagWorksLoading = true,
                 tagWorksErrorRes = null,
                 tagWorksLoadMoreErrorRes = null,
-                tagNeedLogin = false,
+                tagNeedLogin = !authRepository.isLoggedIn(),
             )
         }
         viewModelScope.launch {

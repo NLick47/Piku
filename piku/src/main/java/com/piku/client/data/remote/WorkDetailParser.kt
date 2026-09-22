@@ -30,9 +30,15 @@ object WorkDetailParser {
         val category = REGEX_CATEGORY.find(mainBlock)
         val categoryCd = category?.groupValues?.get(1)?.toIntOrNull() ?: -1
         val categoryName = category?.groupValues?.get(2)?.cleanText() ?: ""
+        // 站点标签文本自带 # 前缀；作者分类标签（AutoLinkMyTag）写作 "##東方"——站点自己的
+        // 链里 KWD 是 "東方"（前导 # 全去掉），所以这里也全部去掉，只留标签名本身，
+        // 否则 "#東方" 会被拿去搜 KWD=%23東方（实测 0 件）。
+        // 归一后分类标签可能与真实标签同名（该作品就同时有 ##東方 和 #東方）：
+        // 名字相同 = 搜索目标相同，去重后只留一枚 chip，避免同屏两个一模一样的标签
         val tags = REGEX_TAGS.findAll(mainBlock)
-            .map { it.groupValues[1].trim().removePrefix("#") }
+            .map { it.groupValues[1].trim().trimStart('#') }
             .filter { it.isNotBlank() }
+            .distinct()
             .toList()
         val rawReactions = REGEX_REACTION.findAll(mainBlock).map { it.groupValues[1] }.toList()
         val authorProfile = REGEX_PROFILE.find(html)?.groupValues?.get(1)

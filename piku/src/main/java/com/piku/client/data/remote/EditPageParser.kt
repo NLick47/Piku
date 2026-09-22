@@ -74,7 +74,7 @@ object EditPageParser {
             description = DESCRIPTION.find(html)?.groupValues?.get(1)?.let(::decode).orEmpty(),
             tags = TAGS.find(html)?.groupValues?.get(1)?.let(::decode).orEmpty()
                 .split(Regex("\\s+"))
-                .map { it.removePrefix("#") }
+                .map { it.trimStart('#') }
                 .filter { it.isNotBlank() }
                 .joinToString(" "),
             publish = boolParam("OPTION_PUBLISH").find(html)?.groupValues?.get(1) != "false",

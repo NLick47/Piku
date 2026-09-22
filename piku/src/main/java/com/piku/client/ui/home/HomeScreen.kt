@@ -83,7 +83,6 @@ import androidx.lifecycle.compose.currentStateAsState
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.piku.client.BuildConfig
 import com.piku.client.R
-import com.piku.client.data.local.CatalogSource
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.domain.model.Work
 import com.piku.client.ui.profile.ProfileEditSheet
@@ -98,7 +97,6 @@ import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.LocalDarkTheme
 import com.piku.client.ui.theme.PikuColors
 import kotlin.math.roundToInt
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private const val GITHUB_REPO_URL = "https://github.com/NLick47/Piku"
@@ -106,8 +104,6 @@ private const val GITHUB_ISSUES_URL = "https://github.com/NLick47/Piku/issues"
 
 @Composable
 fun HomeScreen(
-    pendingTag: String?,
-    onTagConsumed: () -> Unit,
     shouldReopenDrawer: Boolean = false,
     onDrawerReopenConsumed: () -> Unit = {},
     onWorkClick: (Work) -> Unit,
@@ -208,13 +204,6 @@ fun HomeScreen(
                     }
                 }
             }
-        }
-    }
-
-    LaunchedEffect(pendingTag) {
-        if (pendingTag != null) {
-            viewModel.selectTag(pendingTag)
-            onTagConsumed()
         }
     }
 
@@ -398,9 +387,7 @@ fun HomeScreen(
                                     )
                                     FeedTabRow(
                                         feedTab = state.feedTab,
-                                        currentTag = state.currentTag,
                                         onSelectFeedTab = viewModel::selectFeedTab,
-                                        onClearTag = { viewModel.selectTag(null) },
                                         dark = dark,
                                     )
                                 }
@@ -435,7 +422,6 @@ fun HomeScreen(
                             onSearchClick = onSearchClick,
                             onSelectFeedTab = viewModel::selectFeedTab,
                             onCategoryClick = { showCategories = true },
-                            onClearTag = { viewModel.selectTag(null) },
                             onDoubleTapTop = { gridState.scrollToTopSmart(scope) },
                             dark = dark,
                             isScrolling = isScrolling,

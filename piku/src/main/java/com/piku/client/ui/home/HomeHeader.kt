@@ -56,7 +56,6 @@ internal fun GlassHeader(
     onSearchClick: () -> Unit,
     onSelectFeedTab: (FeedTab) -> Unit,
     onCategoryClick: () -> Unit,
-    onClearTag: () -> Unit,
     onDoubleTapTop: () -> Unit,
     dark: Boolean,
     isScrolling: State<Boolean>,
@@ -107,9 +106,7 @@ internal fun GlassHeader(
             }
             FeedTabRow(
                 feedTab = state.feedTab,
-                currentTag = state.currentTag,
                 onSelectFeedTab = onSelectFeedTab,
-                onClearTag = onClearTag,
                 dark = dark,
             )
         }

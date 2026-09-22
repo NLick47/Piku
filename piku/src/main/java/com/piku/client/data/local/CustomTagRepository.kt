@@ -11,7 +11,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * 用户自定义标签存储（用于标签筛选的快捷入口）。
+ * 用户自定义标签存储（搜索页待机态与标签页的快捷入口）。
  * 以 JSON 数组形式保存在 SharedPreferences 中，保证插入顺序（最新添加的排在最前）。
  * 使用 SharedPreferences（而非 DataStore）是为了去掉 DataStore 依赖、缩小 APK；
  * 与 [LanguageStore]/[SettingsRepository] 同一套模式：内存 StateFlow 为准。
@@ -25,7 +25,7 @@ class CustomTagRepository @Inject constructor(
     private val _customTags = MutableStateFlow(load())
     val customTags: StateFlow<List<String>> = _customTags.asStateFlow()
 
-    /** 添加标签（自动去首尾空白、去 # 前缀、去重）。返回是否真正新增了标签。 */
+    /** 添加标签（自动去首尾空白、去 # 前缀（含叠加的 #）、去重）。返回是否真正新增了标签。 */
     fun addCustomTag(tag: String): Boolean {
         val normalized = normalize(tag) ?: return false
         val current = _customTags.value
@@ -56,9 +56,9 @@ class CustomTagRepository @Inject constructor(
     private fun encode(tags: List<String>): String =
         Json.encodeToString(ListSerializer(String.serializer()), tags)
 
-    /** 规范化标签名：去首尾空白、去 # 前缀；为空返回 null。 */
+    /** 规范化标签名：去首尾空白、去全部前导 #（站点分类标签写作 "##東方"）；为空返回 null。 */
     private fun normalize(tag: String): String? {
-        val t = tag.trim().removePrefix("#").trim()
+        val t = tag.trim().trimStart('#').trim()
         return t.takeIf { it.isNotEmpty() }
     }
 

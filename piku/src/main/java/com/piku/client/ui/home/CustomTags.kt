@@ -43,7 +43,6 @@ import androidx.compose.ui.unit.sp
 import com.piku.client.R
 import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.GlassCardBgDark
-import com.piku.client.ui.theme.LoginBackgroundDark
 import com.piku.client.ui.theme.LoginTextSecondaryDark
 import com.piku.client.ui.theme.PikuColors
 import com.piku.client.ui.theme.SwitchUncheckedTrackDark
@@ -51,13 +50,12 @@ import com.piku.client.ui.theme.SwitchUncheckedTrackLight
 
 /**
  * 自定义标签区块：内联添加输入框 + 标签 chips（点击筛选、× 删除）。
- * 在右侧抽屉与标签筛选面板中复用。
+ * 标签页（TagScreen）复用。
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CustomTagSection(
     tags: List<String>,
-    currentTag: String?,
     onSelect: (String) -> Unit,
     onAdd: (String) -> Unit,
     onRemove: (String) -> Unit,
@@ -96,7 +94,7 @@ fun CustomTagSection(
                 modifier = Modifier.weight(1f),
             )
             Spacer(Modifier.width(8.dp))
-            val addEnabled = input.trim().removePrefix("#").trim().isNotEmpty()
+            val addEnabled = input.trim().trimStart('#').trim().isNotEmpty()
             Box(
                 modifier = Modifier
                     .size(36.dp)
@@ -106,7 +104,7 @@ fun CustomTagSection(
                         else if (dark) SwitchUncheckedTrackDark else SwitchUncheckedTrackLight,
                     )
                     .clickable(enabled = addEnabled, onClick = {
-                        val tag = input.trim().removePrefix("#").trim()
+                        val tag = input.trim().trimStart('#').trim()
                         if (tag.isNotEmpty()) {
                             onAdd(tag)
                             input = ""
@@ -137,7 +135,6 @@ fun CustomTagSection(
                 tags.forEach { tag ->
                     CustomTagChip(
                         tag = tag,
-                        active = tag == currentTag,
                         onSelect = { onSelect(tag) },
                         onRemove = { onRemove(tag) },
                         dark = dark,
@@ -151,34 +148,19 @@ fun CustomTagSection(
 @Composable
 private fun CustomTagChip(
     tag: String,
-    active: Boolean,
     onSelect: () -> Unit,
     onRemove: () -> Unit,
     dark: Boolean,
 ) {
     val shape = RoundedCornerShape(14.dp)
-    val chipBg = when {
-        active -> PikuColors.accent.copy(alpha = 0.10f)
-        else -> if (dark) GlassCardBgDark else Color.White
-    }
-    val chipBorder = when {
-        active -> PikuColors.accent.copy(alpha = 0.30f)
-        else -> PikuColors.border
-    }
-    val textColor = when {
-        active -> if (dark) LoginBackgroundDark else AccentDark
-        else -> if (dark) LoginTextSecondaryDark else Color(0xFF5A5A5A)
-    }
+    val chipBg = if (dark) GlassCardBgDark else Color.White
+    val textColor = if (dark) LoginTextSecondaryDark else Color(0xFF5A5A5A)
     val faint = PikuColors.textFaint
-    val delTint = when {
-        active -> if (dark) LoginBackgroundDark else AccentDark
-        else -> faint
-    }
     Row(
         modifier = Modifier
             .clip(shape)
             .background(chipBg)
-            .border(BorderStroke(0.5.dp, chipBorder), shape)
+            .border(BorderStroke(0.5.dp, PikuColors.border), shape)
             .clickable(onClick = onSelect)
             .padding(start = 12.dp, end = 2.dp, top = 4.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -187,7 +169,7 @@ private fun CustomTagChip(
             text = "#$tag",
             color = textColor,
             fontSize = 12.sp,
-            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+            fontWeight = FontWeight.Normal,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.widthIn(max = 132.dp),
@@ -203,7 +185,7 @@ private fun CustomTagChip(
             Icon(
                 imageVector = Icons.Filled.Close,
                 contentDescription = stringResource(R.string.my_tags_delete),
-                tint = delTint,
+                tint = faint,
                 modifier = Modifier.size(12.dp),
             )
         }

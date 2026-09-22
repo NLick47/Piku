@@ -145,8 +145,8 @@ fun SearchScreen(
     var query by rememberSaveable { mutableStateOf(state.keyword) }
     val focusRequester = remember { FocusRequester() }
 
-    // 去除 #/@ 前缀后的真实搜索词；空串表示待机态（历史 + 热门标签）
-    val searchTerm = state.keyword.removePrefix("#").removePrefix("@").trim()
+    // 去除 #/@ 前缀后的真实搜索词（# 可叠加，如站点分类标签 "##東方"）；空串表示待机态
+    val searchTerm = state.keyword.trimStart('#').removePrefix("@").trim()
     val hasQuery = searchTerm.isNotEmpty()
 
     // 实时识别 poipiku 链接：命中后操作按钮切换为"打开链接"，提交时直接跳转不写历史
@@ -859,12 +859,20 @@ private fun TagsTabContent(
     dark: Boolean,
 ) {
     val selectedTag = state.selectedTagName
+    // 匿名时"返回标签建议"没有去处（建议接口需登录），隐藏入口，保住手上的作品列表
+    val canBackToSuggestions = !state.tagNeedLogin
     Column(Modifier.fillMaxSize()) {
         if (selectedTag != null) {
-            TagWorksHeader(tag = selectedTag, onBack = onBackToSuggestions, dark = dark)
+            TagWorksHeader(
+                tag = selectedTag,
+                onBack = onBackToSuggestions,
+                showBack = canBackToSuggestions,
+                dark = dark,
+            )
         }
         when {
-            state.tagNeedLogin -> {
+            // 登录引导只覆盖建议模式：作品模式匿名可看
+            state.tagNeedLogin && selectedTag == null -> {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     LoginPrompt(
                         message = stringResource(R.string.search_tags_login),
@@ -967,12 +975,13 @@ private fun TagsTabContent(
     }
 }
 
-/** 作品模式顶栏：返回标签建议 + 当前精确标签名 */
+/** 作品模式顶栏：返回标签建议（不可用时只留标签名）+ 当前精确标签名 */
 @Composable
 private fun TagWorksHeader(
     tag: String,
     onBack: () -> Unit,
     dark: Boolean,
+    showBack: Boolean = true,
 ) {
     val primary = PikuColors.textPrimary
     Row(
@@ -981,11 +990,13 @@ private fun TagWorksHeader(
             .padding(start = 4.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        PikuBackButton(
-            onClick = onBack,
-            dark = dark,
-            contentDescription = stringResource(R.string.back),
-        )
+        if (showBack) {
+            PikuBackButton(
+                onClick = onBack,
+                dark = dark,
+                contentDescription = stringResource(R.string.back),
+            )
+        }
         Text(
             text = "#$tag",
             color = primary,

@@ -270,7 +270,7 @@ class PublishViewModel @Inject constructor(
     }
 
     fun appendTag(tag: String) {
-        val t = tag.trim().removePrefix("#").trim()
+        val t = tag.trim().trimStart('#').trim()
         if (t.isEmpty()) return
         val state = _uiState.value
         val existing = state.tagsText.split(Regex("\\s+")).filter { it.isNotBlank() }

@@ -211,8 +211,6 @@
     <string name="home_tab_latest">Latest</string>
     <string name="home_tab_follow">Following</string>
     <string name="home_tab_random">Random</string>
-    <string name="home_tag_select">Popular tags</string>
-    <string name="home_tag_hint">Tap a tag to browse its posts</string>
     <string name="home_category_select">Select category</string>
     <string name="home_category_current">Current: %1$s</string>
     <string name="home_category_reset">Back to All</string>
@@ -238,7 +236,6 @@
     <string name="home_load_more_failed">Failed to load. Tap to retry</string>
     <string name="home_no_more">No more posts</string>
     <string name="home_random_more">Show another batch</string>
-    <string name="home_tag_clear">Clear tag</string>
     <string name="home_back_to_top">Back to top</string>
     <string name="home_error_network">Failed to load. Network error</string>
     <string name="home_error_parse">Failed to parse the page. Please try again later</string>

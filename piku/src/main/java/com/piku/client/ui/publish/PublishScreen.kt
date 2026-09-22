@@ -1555,7 +1555,8 @@ private fun TagsSection(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 // 输入中的文本规范化后与某个已选标签相同时，高亮该 chip 提示「已经加过了」
-                val pendingNormalized = pendingTag.replace(Regex("[\\s,，、]"), "")
+                // （# 前缀与空格/逗号一样属于输入噪声，比较前先去掉）
+                val pendingNormalized = pendingTag.replace(Regex("[\\s,，、]"), "").trimStart('#')
                 list.forEach { tag ->
                     Row(
                         modifier = Modifier

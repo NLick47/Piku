@@ -75,7 +75,7 @@ class FeedLoaderTest {
         loggedIn: Boolean = true,
         prefetch: Boolean = false,
     ): FeedLoader = FeedLoader(
-        key = FeedKey(tab, PoipikuCategory.ALL, null),
+        key = FeedKey(tab, PoipikuCategory.ALL),
         scope = CoroutineScope(StandardTestDispatcher(testScheduler)),
         fetchPage = api::fetch,
         isLoggedIn = { loggedIn },

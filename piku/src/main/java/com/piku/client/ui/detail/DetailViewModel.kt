@@ -1173,7 +1173,7 @@ class DetailViewModel @Inject constructor(
     }
 
     /**
-     * 把作品标签加入/移出个人自定义标签（用于首页标签筛选快捷入口）。
+     * 把作品标签加入/移出个人自定义标签（用于搜索页与标签页的快捷入口）。
      * 已存在则移除，否则添加，操作后给出 snackbar 反馈。
      */
     fun toggleCustomTag(tag: String) {

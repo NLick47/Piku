@@ -138,7 +138,6 @@ private fun TagListContent(
                 ) {
                     CustomTagSection(
                         tags = state.tags,
-                        currentTag = null,
                         onSelect = onTagClick,
                         onAdd = onAdd,
                         onRemove = onRemove,

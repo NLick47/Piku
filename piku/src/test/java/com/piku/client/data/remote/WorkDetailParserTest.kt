@@ -17,6 +17,26 @@ class WorkDetailParserTest {
 
     private val html: String by lazy { readResource("workdetail.html") }
 
+    /**
+     * 标签名不留 # 前缀：普通标签站点写成 "#東方"，作者分类标签（AutoLinkMyTag）写成
+     * "##東方"（叠加的 #），站点自己的搜索词都按 "東方" 处理——只去一个 # 会让
+     * 分类标签拎着 "#東方" 去搜（实测 0 件）。
+     * 归一后分类标签与同名真实标签合并（搜索目标相同），同屏不留两枚一样的 chip。
+     * 这里用内联 HTML，不依赖本地快照。
+     */
+    @Test
+    fun stripsAllHashPrefixesFromTagNames() {
+        val page = """
+            <div class="IllustItem  Upload">
+            <h1 id="IllustItemDesc_1" class="IllustItemDesc">标题</h1>
+            <h2 id="IllustItemTag_1" class="IllustItemTag"><a class="AutoLinkMyTag" href="/IllustListPcV.jsp?ID=1&KWD=東方"><div class="TagLabel"><div class="TagName">##東方</div></div></a><a class="AutoLink" href="/SearchIllustByTagPcV.jsp?KWD=東方紅魔郷"><div class="TagLabel"><div class="TagName">#東方紅魔郷</div></div></a><a class="AutoLink" href="/SearchIllustByTagPcV.jsp?KWD=東方"><div class="TagLabel"><div class="TagName">#東方</div></div></a></h2>
+            <img class="IllustItemThumbImg" src="https://cdn.poipiku.com/example.png_640.jpg" />
+            </div>
+        """.trimIndent()
+
+        assertEquals(listOf("東方", "東方紅魔郷"), WorkDetailParser.parse(page).tags)
+    }
+
     @Test
     fun parsesDetail() {
         val detail = WorkDetailParser.parse(html)

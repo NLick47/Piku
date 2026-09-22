@@ -14,7 +14,6 @@ import kotlinx.coroutines.launch
 internal data class FeedKey(
     val tab: FeedTab,
     val category: PoipikuCategory,
-    val tag: String?,
 )
 
 internal data class FeedSnapshot(

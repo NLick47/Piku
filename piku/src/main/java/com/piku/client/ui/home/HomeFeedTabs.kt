@@ -7,9 +7,7 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,13 +16,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -35,20 +28,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.piku.client.R
-import com.piku.client.ui.theme.GlassCardBgDark
 import com.piku.client.ui.theme.LoginTextSecondaryDark
 import com.piku.client.ui.theme.PikuColors
 
 @Composable
 internal fun FeedTabRow(
     feedTab: FeedTab,
-    currentTag: String?,
     onSelectFeedTab: (FeedTab) -> Unit,
-    onClearTag: () -> Unit,
     dark: Boolean,
 ) {
     Column(
@@ -57,20 +46,6 @@ internal fun FeedTabRow(
             .animateContentSize(animationSpec = tween(durationMillis = 250))
             .padding(top = 4.dp, bottom = 6.dp),
     ) {
-        if (currentTag != null) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 16.dp, end = 16.dp, bottom = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                CurrentTagChip(
-                    tag = currentTag,
-                    onClear = onClearTag,
-                    dark = dark,
-                )
-            }
-        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -171,51 +146,5 @@ private fun FeedTabItem(
                 .clip(RoundedCornerShape(1.dp))
                 .background(underlineColor),
         )
-    }
-}
-
-@Composable
-private fun CurrentTagChip(
-    tag: String,
-    prefix: String = "#",
-    onClear: () -> Unit,
-    dark: Boolean,
-) {
-    val shape = RoundedCornerShape(14.dp)
-    Row(
-        modifier = Modifier
-            .clip(shape)
-            .background(if (dark) GlassCardBgDark else Color.White)
-            .border(
-                BorderStroke(0.5.dp, PikuColors.border),
-                shape,
-            )
-            .padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = "$prefix$tag",
-            color = PikuColors.accent,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.widthIn(max = 220.dp),
-        )
-        Box(
-            modifier = Modifier
-                .padding(start = 2.dp)
-                .size(20.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .clickable(onClick = onClear),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Close,
-                contentDescription = stringResource(R.string.home_tag_clear),
-                tint = PikuColors.textFaint,
-                modifier = Modifier.size(14.dp),
-            )
-        }
     }
 }

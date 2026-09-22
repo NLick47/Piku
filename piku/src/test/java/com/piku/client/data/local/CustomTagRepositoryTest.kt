@@ -44,12 +44,14 @@ class CustomTagRepositoryTest {
     }
 
     @Test
-    fun onlyFirstHashPrefixStripped() {
+    fun allHashPrefixesStripped() {
         val repo = CustomTagRepository(InMemorySharedPreferences())
 
-        // 与原实现一致：只去掉一个 # 前缀，"##" 归一化为 "#"
-        assertTrue(repo.addCustomTag("##"))
-        assertEquals(listOf("#"), repo.customTags.value)
+        // 站点作者分类标签写作 "##東方"（叠加的 #），前导 # 全部去掉后才是标签名；
+        // 只剩 # 的输入视为空，不入库
+        assertTrue(repo.addCustomTag("##東方"))
+        assertEquals(listOf("東方"), repo.customTags.value)
+        assertFalse(repo.addCustomTag("##"))
     }
 
     @Test

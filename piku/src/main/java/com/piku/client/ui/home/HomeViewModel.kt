@@ -22,7 +22,6 @@ import com.piku.client.data.repository.WebDavSyncRepository
 import com.piku.client.data.repository.SyncResult
 import com.piku.client.data.repository.TestConnectionState
 import com.piku.client.data.repository.SyncState
-import com.piku.client.domain.model.AppError
 import com.piku.client.domain.model.AppLanguage
 import com.piku.client.domain.model.AuthStatus
 import com.piku.client.domain.model.PoipikuCategory
@@ -34,7 +33,6 @@ import com.piku.client.domain.usecase.LoadFeedUseCase
 import com.piku.client.domain.usecase.LoadFollowFeedUseCase
 import com.piku.client.domain.usecase.LoadPopularFeedUseCase
 import com.piku.client.domain.usecase.LoadRandomFeedUseCase
-import com.piku.client.domain.usecase.LoadTagFeedUseCase
 import com.piku.client.domain.usecase.ObserveAdultContentUseCase
 import com.piku.client.domain.usecase.ObserveAutoCheckEnabledUseCase
 import com.piku.client.domain.usecase.ObserveBackgroundDimUseCase
@@ -92,7 +90,7 @@ private const val MAX_LOADERS = 12
 data class HomeUiState(
     val feedTab: FeedTab = FeedTab.LATEST,
     val category: PoipikuCategory = PoipikuCategory.ALL,
-    /** 内容换血计数：tab/分类/标签切换、缓存恢复、重载、洗牌时 +1，UI 据此回顶 */
+    /** 内容换血计数：tab/分类切换、缓存恢复、重载、洗牌时 +1，UI 据此回顶 */
     val feedEpoch: Int = 0,
     val works: List<Work> = emptyList(),
     val favoriteIds: Set<Long> = emptySet(),
@@ -108,7 +106,6 @@ data class HomeUiState(
     val errorRes: Int? = null,
     val loadMoreErrorRes: Int? = null,
     val endReached: Boolean = false,
-    val currentTag: String? = null,
     val refreshNotice: Int? = null,
     /** 关注页未登录：不发请求，直接展示登录引导 */
     val followNeedLogin: Boolean = false,
@@ -181,7 +178,6 @@ class HomeViewModel @Inject constructor(
     private val loadPopularFeedUseCase: LoadPopularFeedUseCase,
     private val loadFollowFeedUseCase: LoadFollowFeedUseCase,
     private val loadRandomFeedUseCase: LoadRandomFeedUseCase,
-    private val loadTagFeedUseCase: LoadTagFeedUseCase,
     private val observeFavoriteIdsUseCase: ObserveFavoriteIdsUseCase,
     private val toggleFavoriteUseCase: ToggleFavoriteUseCase,
     private val observeAdultContentUseCase: ObserveAdultContentUseCase,
@@ -218,7 +214,7 @@ class HomeViewModel @Inject constructor(
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
     /**
-     * 各 tab/分类/标签的自治加载器（兼内存缓存）：LRU 限容，逐出非当前项并停其后台任务。
+     * 各 tab/分类的自治加载器（兼内存缓存）：LRU 限容，逐出非当前项并停其后台任务。
      * 切换 tab 只换渲染的 loader，不取消在途请求——刷新后台飞完自动落位。
      */
     private val loaders = object : LinkedHashMap<FeedKey, FeedLoader>(16, 0.75f, true) {
@@ -526,32 +522,24 @@ class HomeViewModel @Inject constructor(
                 _uiState.update { it.copy(testConnectionState = state) }
             }
         }
-        select(FeedKey(FeedTab.LATEST, PoipikuCategory.ALL, null))
+        select(FeedKey(FeedTab.LATEST, PoipikuCategory.ALL))
     }
 
     fun selectFeedTab(tab: FeedTab) {
-        val key = resolveKey(targetTab = tab, targetCategory = null, targetTag = null)
+        val key = resolveKey(targetTab = tab, targetCategory = null)
         if (key == currentKey) return
         select(key)
     }
 
     fun selectCategory(category: PoipikuCategory) {
-        val cur = _uiState.value
-        if (category == cur.category && cur.currentTag == null) return
-        select(resolveKey(targetTab = null, targetCategory = category, targetTag = null))
-    }
-
-    fun selectTag(tag: String?) {
-        val key = resolveKey(targetTab = FeedTab.LATEST, targetCategory = PoipikuCategory.ALL, targetTag = tag)
-        if (key == currentKey) return
-        select(key)
+        if (category == _uiState.value.category) return
+        select(resolveKey(targetTab = null, targetCategory = category))
     }
 
     /** 解析目标 FeedKey：未显式指定时沿用当前值；非 LATEST tab 分类强制回 ALL */
     private fun resolveKey(
         targetTab: FeedTab?,
         targetCategory: PoipikuCategory?,
-        targetTag: String?,
     ): FeedKey {
         val cur = _uiState.value
         val tab = targetTab ?: cur.feedTab
@@ -560,7 +548,7 @@ class HomeViewModel @Inject constructor(
             tab == FeedTab.LATEST -> cur.category
             else -> PoipikuCategory.ALL
         }
-        return FeedKey(tab, category, targetTag)
+        return FeedKey(tab, category)
     }
 
     /** 切换当前渲染的 loader：同步合并一次快照（零帧延迟），再持续收集后续更新 */
@@ -593,11 +581,10 @@ class HomeViewModel @Inject constructor(
         return loader
     }
 
-    private suspend fun fetchPageFor(key: FeedKey, page: Int): Result<List<Work>> = when {
-        key.tag != null -> loadTagFeedUseCase(key.tag, page)
-        key.tab == FeedTab.HOT -> loadPopularFeedUseCase(page)
-        key.tab == FeedTab.FOLLOW -> loadFollowFeedUseCase(page)
-        key.tab == FeedTab.RANDOM -> loadRandomFeedUseCase()
+    private suspend fun fetchPageFor(key: FeedKey, page: Int): Result<List<Work>> = when (key.tab) {
+        FeedTab.HOT -> loadPopularFeedUseCase(page)
+        FeedTab.FOLLOW -> loadFollowFeedUseCase(page)
+        FeedTab.RANDOM -> loadRandomFeedUseCase()
         else -> loadFeedUseCase(page, key.category.cd)
     }
 
@@ -614,7 +601,6 @@ class HomeViewModel @Inject constructor(
             it.copy(
                 feedTab = key.tab,
                 category = key.category,
-                currentTag = key.tag,
                 works = if (blocked.isEmpty()) snap.works else snap.works.filterNot { w -> w.authorId in blocked },
                 loading = snap.loading,
                 loadingMore = snap.loadingMore,
@@ -939,7 +925,7 @@ class HomeViewModel @Inject constructor(
         for (loader in loaders.values.toList()) loader.dispose()
         loaders.clear()
         val key = currentKey
-            ?: resolveKey(targetTab = null, targetCategory = null, targetTag = null)
+            ?: resolveKey(targetTab = null, targetCategory = null)
         currentKey = null
         select(key)
     }
