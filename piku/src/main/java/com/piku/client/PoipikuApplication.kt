@@ -10,6 +10,7 @@ import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.allowHardware
 import coil3.request.crossfade
 import coil3.serviceLoaderEnabled
+import coil3.size.Precision
 import com.piku.client.data.remote.translation.ModelCatalogRepository
 import com.piku.client.data.repository.BlockListSync
 import dagger.hilt.EntryPoint
@@ -52,6 +53,7 @@ class PoipikuApplication : Application() {
                 // 改用软件位图绕开该竞争路径（轻微性能开销，换取稳定性）。
                 // 动图解码同样依赖此项：GifDecoder 明确拒绝 hardware 位图配置。
                 .allowHardware(false)
+                .precision(Precision.INEXACT)
                 .crossfade(200)
                 .diskCache {
                     // 200MB：详情页每次打开都会预取首张原图（常见 1~4MB），50MB 装不下几张

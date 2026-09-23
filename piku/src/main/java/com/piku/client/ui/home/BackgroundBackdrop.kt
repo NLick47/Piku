@@ -2,7 +2,6 @@ package com.piku.client.ui.home
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -14,6 +13,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -36,6 +37,9 @@ import kotlin.math.PI
 import kotlin.math.sin
 
 private val ScrollProgressThickness = 1.5.dp
+
+/** 高光推进的最小步长（约 30fps）：慢速漂移不需要每帧重绘整个头部 */
+private const val ShimmerStepNanos = 33_000_000L
 
 private class GlassBubble(
     val xFrac: Float,
@@ -72,45 +76,66 @@ private val GlassSparkles = listOf(
 /**
  * 页面背景（渐变 + 彩色光斑）：
  * 首页 Canvas 与头部毛玻璃衬底共用同一绘制，保证模糊层与页面背景严格对齐。
+ * 绘制对象只跟尺寸与主题有关，交给 drawWithCache 缓存，避免每帧重建 Brush/Shader。
  */
-internal fun DrawScope.drawHomeBackdrop(dark: Boolean) {
-    drawRect(
-        brush = Brush.verticalGradient(
+internal class HomeBackdrop(
+    val base: Brush,
+    val blobs: List<Blob>,
+) {
+    class Blob(val brush: Brush, val center: Offset, val radius: Float)
+}
+
+internal fun DrawScope.drawBackdrop(backdrop: HomeBackdrop, baseOnly: Boolean = false) {
+    drawRect(brush = backdrop.base)
+    if (baseOnly) return
+    backdrop.blobs.forEach { drawCircle(brush = it.brush, radius = it.radius, center = it.center) }
+}
+
+internal fun Density.homeBackdrop(dark: Boolean, size: Size): HomeBackdrop {
+    val blobWarm = if (dark) Color(0x33C98A2D) else Color(0x4DC98A2D)
+    val blobPink = if (dark) Color(0x33D8A8B8) else Color(0x4DD8A8B8)
+    fun blob(color: Color, cx: Float, cy: Float, radius: Float): HomeBackdrop.Blob {
+        val center = Offset(cx, cy)
+        return HomeBackdrop.Blob(
+            brush = Brush.radialGradient(
+                colors = listOf(color, Color.Transparent),
+                center = center,
+                radius = radius,
+            ),
+            center = center,
+            radius = radius,
+        )
+    }
+    return HomeBackdrop(
+        base = Brush.verticalGradient(
             if (dark) listOf(HomeBgTopDark, HomeBgBottomDark)
             else listOf(HomeBgTopLight, HomeBgBottomLight),
         ),
+        blobs = listOf(
+            if (dark) {
+                blob(Color(0x409A7FC9), size.width - 40.dp.toPx(), 96.dp.toPx(), 120.dp.toPx())
+            } else {
+                blob(Color(0x4D9A7FC9), size.width - 36.dp.toPx(), 140.dp.toPx(), 76.dp.toPx())
+            },
+            blob(blobWarm, 0f, 400.dp.toPx(), 100.dp.toPx()),
+            blob(blobPink, size.width, 620.dp.toPx(), 90.dp.toPx()),
+        ),
     )
-    val blobWarm = if (dark) Color(0x33C98A2D) else Color(0x4DC98A2D)
-    val blobPink = if (dark) Color(0x33D8A8B8) else Color(0x4DD8A8B8)
-    fun blob(color: Color, cx: Float, cy: Float, radius: Float) {
-        drawCircle(
-            brush = Brush.radialGradient(
-                colors = listOf(color, Color.Transparent),
-                center = Offset(cx, cy),
-                radius = radius,
-            ),
-            radius = radius,
-            center = Offset(cx, cy),
-        )
-    }
-    if (dark) {
-        blob(Color(0x409A7FC9), size.width - 40.dp.toPx(), 96.dp.toPx(), 120.dp.toPx())
-    } else {
-        blob(Color(0x4D9A7FC9), size.width - 36.dp.toPx(), 140.dp.toPx(), 76.dp.toPx())
-    }
-    blob(blobWarm, 0f, 400.dp.toPx(), 100.dp.toPx())
-    blob(blobPink, size.width, 620.dp.toPx(), 90.dp.toPx())
 }
 
-private fun DrawScope.drawHeaderBackdrop(dark: Boolean) {
-    if (!dark) {
-        drawRect(
-            brush = Brush.verticalGradient(listOf(HomeBgTopLight, HomeBgBottomLight)),
-        )
-        return
-    }
-    drawHomeBackdrop(dark)
-}
+private val GlassBandDark = listOf(
+    Color.Transparent,
+    Color.White.copy(alpha = 0.10f),
+    Color.White.copy(alpha = 0.14f),
+    Color.Transparent,
+)
+
+private val GlassBandLight = listOf(
+    Color.Transparent,
+    Color.White.copy(alpha = 0.12f),
+    Color.White.copy(alpha = 0.20f),
+    Color.Transparent,
+)
 
 @Composable
 internal fun LiquidGlassBackdrop(
@@ -128,71 +153,100 @@ internal fun LiquidGlassBackdrop(
     var acc by remember { mutableFloatStateOf(0f) }
     LaunchedEffect(isResumed, drawerIsOpen) {
         if (!isResumed || drawerIsOpen) return@LaunchedEffect
-        var lastFrameNanos = 0L
+        var lastUpdateNanos = 0L
         while (true) {
             withFrameNanos { frameNanos ->
-                if (lastFrameNanos != 0L) {
-                    val elapsedSeconds = (frameNanos - lastFrameNanos) / 1_000_000_000f
-                    acc = (acc + elapsedSeconds / 12f) % 1f
+                val elapsed = frameNanos - lastUpdateNanos
+                if (lastUpdateNanos == 0L) {
+                    lastUpdateNanos = frameNanos
+                } else if (elapsed >= ShimmerStepNanos) {
+                    acc = (acc + elapsed / 1_000_000_000f / 12f) % 1f
+                    lastUpdateNanos = frameNanos
                 }
-                lastFrameNanos = frameNanos
             }
         }
     }
-    val deepen by animateFloatAsState(
+    val deepen = animateFloatAsState(
         targetValue = if (isScrolling.value) 1f else 0f,
         animationSpec = tween(durationMillis = 350),
         label = "glassDeepen",
     )
     val tintTop = if (dark) HomeBgTopDark else HomeBgTopLight
     val tintBottom = if (dark) Color(0xFF2B2533) else HomeBgTopLight
-    val tintTopAlpha = when {
-        translucent && dark -> 0.16f + 0.05f * deepen
-        translucent -> 0f
-        dark -> 0.50f + 0.10f * deepen
-        else -> 0.95f + 0.03f * deepen
-    }
-    val tintMidAlpha = when {
-        translucent && dark -> 0.10f + 0.04f * deepen
-        translucent -> 0f
-        dark -> 0.32f + 0.14f * deepen
-        else -> 0.80f + 0.08f * deepen
-    }
     Box(modifier) {
         if (!translucent) {
             Box(
                 Modifier
                     .matchParentSize()
-                    .drawBehind { drawHeaderBackdrop(dark) },
+                    .drawWithCache {
+                        val backdrop = homeBackdrop(dark, size)
+                        onDrawBehind { drawBackdrop(backdrop, baseOnly = !dark) }
+                    },
             )
         }
         Box(
             Modifier
                 .matchParentSize()
-                .background(
-                    if (translucent) {
-                        Brush.verticalGradient(
-                            0f to tintTop.copy(alpha = tintTopAlpha),
-                            0.6f to tintTop.copy(alpha = tintMidAlpha),
-                            1f to Color.Transparent,
-                        )
-                    } else {
-                        Brush.verticalGradient(
-                            listOf(
-                                tintTop.copy(alpha = tintTopAlpha),
-                                tintBottom.copy(alpha = tintMidAlpha),
-                            ),
-                        )
-                    },
-                ),
+                .drawBehind {
+                    val d = deepen.value
+                    val topAlpha = when {
+                        translucent && dark -> 0.16f + 0.05f * d
+                        translucent -> 0f
+                        dark -> 0.50f + 0.10f * d
+                        else -> 0.95f + 0.03f * d
+                    }
+                    val midAlpha = when {
+                        translucent && dark -> 0.10f + 0.04f * d
+                        translucent -> 0f
+                        dark -> 0.32f + 0.14f * d
+                        else -> 0.80f + 0.08f * d
+                    }
+                    drawRect(
+                        brush = if (translucent) {
+                            Brush.verticalGradient(
+                                0f to tintTop.copy(alpha = topAlpha),
+                                0.6f to tintTop.copy(alpha = midAlpha),
+                                1f to Color.Transparent,
+                            )
+                        } else {
+                            Brush.verticalGradient(
+                                listOf(
+                                    tintTop.copy(alpha = topAlpha),
+                                    tintBottom.copy(alpha = midAlpha),
+                                ),
+                            )
+                        },
+                    )
+                },
         )
         Box(
             Modifier
                 .matchParentSize()
-                .drawBehind {
-                    val liquid = acc
-                    val sheen = -0.5f + ((acc * 2f) % 1f) * 2f
-                    drawGlassShine(sheen, liquid, dark, decorations = !translucent, progress = progress)
+                .drawWithCache {
+                    val topSheen = Brush.verticalGradient(
+                        listOf(
+                            if (dark) {
+                                Color.White.copy(alpha = 0.15f)
+                            } else {
+                                Color.White.copy(alpha = 0.55f)
+                            },
+                            Color.Transparent,
+                        ),
+                    )
+                    val bandColors = if (dark) GlassBandDark else GlassBandLight
+                    onDrawBehind {
+                        val liquid = acc
+                        val sheen = -0.5f + ((acc * 2f) % 1f) * 2f
+                        drawGlassShine(
+                            sheen = sheen,
+                            liquid = liquid,
+                            dark = dark,
+                            topSheen = topSheen,
+                            bandColors = bandColors,
+                            decorations = !translucent,
+                            progress = progress,
+                        )
+                    }
                 },
         )
     }
@@ -202,37 +256,20 @@ private fun DrawScope.drawGlassShine(
     sheen: Float,
     liquid: Float,
     dark: Boolean,
+    topSheen: Brush,
+    bandColors: List<Color>,
     decorations: Boolean = true,
     progress: () -> Float = { 0f },
 ) {
     drawRect(
-        brush = Brush.verticalGradient(
-            listOf(
-                if (dark) Color.White.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.55f),
-                Color.Transparent,
-            ),
-        ),
+        brush = topSheen,
         size = Size(size.width, 2.dp.toPx()),
     )
     val band = size.width * 0.5f
     val centerX = (sheen - 0.5f) * (size.width + band * 2f)
     drawRect(
         brush = Brush.linearGradient(
-            colors = if (dark) {
-                listOf(
-                    Color.Transparent,
-                    Color.White.copy(alpha = 0.10f),
-                    Color.White.copy(alpha = 0.14f),
-                    Color.Transparent,
-                )
-            } else {
-                listOf(
-                    Color.Transparent,
-                    Color.White.copy(alpha = 0.12f),
-                    Color.White.copy(alpha = 0.20f),
-                    Color.Transparent,
-                )
-            },
+            colors = bandColors,
             start = Offset(centerX - band / 2f, -size.height * 0.5f),
             end = Offset(centerX + band / 2f, size.height * 1.5f),
         ),

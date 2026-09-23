@@ -8,7 +8,6 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -64,7 +63,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
@@ -343,9 +344,15 @@ fun HomeScreen(
                     editMode = isBackgroundEditMode && bgPreviewMode != BG_PREVIEW_REAL,
                 )
             } else {
-                Canvas(Modifier.fillMaxSize()) {
-                    drawHomeBackdrop(dark)
-                }
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                        .drawWithCache {
+                            val backdrop = homeBackdrop(dark, size)
+                            onDrawBehind { drawBackdrop(backdrop) }
+                        },
+                )
             }
 
             val contentAlpha by animateFloatAsState(

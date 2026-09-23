@@ -74,7 +74,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.SingletonImageLoader
-import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import coil3.size.Size as CoilSize
 import com.piku.client.R
@@ -445,17 +444,19 @@ private fun WorkWaterfall(
 
     val density = LocalDensity.current
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
-    val prefetchSidePx = remember(isTablet, screenWidthDp) {
+    val fallbackSidePx = remember(isTablet, screenWidthDp, density) {
         if (isTablet) {
             512
         } else {
-            feedCardWidthPx(screenWidthDp, density.density).roundToInt().coerceIn(256, 512)
+            feedCardWidthPx(screenWidthDp, density.density).roundToInt().coerceAtLeast(1)
         }
     }
 
     LaunchedEffect(works.lastOrNull()?.id, gridState) {
         val loader = SingletonImageLoader.get(prefetchContext)
-        val lastVisible = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+        val visible = gridState.layoutInfo.visibleItemsInfo
+        val lastVisible = visible.lastOrNull()?.index ?: -1
+        val side = visible.firstOrNull()?.size?.width?.takeIf { it > 0 } ?: fallbackSidePx
         works
             .drop(lastVisible + 1)
             .take(PREFETCH_IMAGE_COUNT)
@@ -465,8 +466,7 @@ private fun WorkWaterfall(
                 loader.enqueue(
                     ImageRequest.Builder(prefetchContext)
                         .data(url)
-                        .size(CoilSize(prefetchSidePx, prefetchSidePx))
-                        .memoryCachePolicy(CachePolicy.DISABLED)
+                        .size(CoilSize(side, side))
                         .build(),
                 )
             }
