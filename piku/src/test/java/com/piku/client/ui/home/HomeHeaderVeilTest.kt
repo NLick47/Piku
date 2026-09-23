@@ -3,10 +3,6 @@ package com.piku.client.ui.home
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * 头部让位规则：自定义背景下列表停在顶部时底衬必须完全退场（把头图让出来），
- * 其余组合一律保持旧的铺底行为；着色数值与浮层化之前逐值一致。
- */
 class HomeHeaderVeilTest {
 
     @Test

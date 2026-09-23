@@ -58,6 +58,7 @@ internal fun CustomHomeBackground(
     blurDp: Float = SettingsRepository.BACKGROUND_BLUR_DEFAULT,
     heroFraction: Float = SettingsRepository.BACKGROUND_HERO_DEFAULT,
     editMode: Boolean = false,
+    scrolledOverTopPx: () -> Int = { 0 },
 ) {
     val context = LocalContext.current
     val heroHeight = (LocalConfiguration.current.screenHeightDp.dp * heroFraction)
@@ -81,11 +82,18 @@ internal fun CustomHomeBackground(
             contentScale = ContentScale.Crop,
             modifier = Modifier
                 .fillMaxSize()
-                .blur(blurDp.dp)
                 .graphicsLayer {
+                    // 位移必须在 blur 之前（blur 在里的效果等价于先平移再模糊）：
+                    // 放在 blur 后面，模糊的 clamp 边缘带会随位移进出视野，视觉上抽搐。
+                    // 毛玻璃层作为环境光只随滚动极缓上漂 24px，封顶后完全静止
+                    translationY = -heroParallaxOffsetPx(
+                        scrolledPx = scrolledOverTopPx() * BACKDROP_PARALLAX_MAX_PX.roundToInt() /
+                            HERO_PARALLAX_MAX_PX.roundToInt(),
+                    )
                     scaleX = frostScale
                     scaleY = frostScale
                 }
+                .blur(blurDp.dp)
         )
 
         val heroImgW = imgWidth?.takeIf { it > 0 }
@@ -118,6 +126,13 @@ internal fun CustomHomeBackground(
                     contentDescription = null,
                     contentScale = ContentScale.FillBounds,
                     modifier = Modifier
+                        .graphicsLayer {
+                            // 编辑模式冻结视差：所见即所调的是停顶状态。
+                            // 向上漂：顶部移出屏幕不露底，底部退出的段由毛玻璃层接住
+                            if (!editMode) {
+                                translationY = -heroParallaxOffsetPx(scrolledOverTopPx())
+                            }
+                        }
                         .offset {
                             IntOffset(
                                 (heroOffsetX * slackX).roundToInt(),
@@ -141,6 +156,11 @@ internal fun CustomHomeBackground(
                     .fillMaxWidth()
                     .height(heroHeight)
                     .graphicsLayer {
+                        // 向上漂：顶部移出屏幕不露底，底部退出的段由毛玻璃层接住；
+                        // 位移源封顶 90px，到位后静止
+                        if (!editMode) {
+                            translationY = -heroParallaxOffsetPx(scrolledOverTopPx())
+                        }
                         scaleX = heroScale
                         scaleY = heroScale
                         compositingStrategy = CompositingStrategy.Offscreen
@@ -168,7 +188,11 @@ internal fun CustomHomeBackground(
             Modifier
                 .fillMaxSize()
                 .drawBehind {
-                    val heroFrac = (heroHeight.toPx() / size.height).coerceIn(0f, 0.9f)
+                    // 压暗遮罩与 hero 同步上移：图动遮罩不动，暗部会浮在图上。
+                    // hero 上移 shift 后下沿在 heroHeight - shift，渐变亮带跟着收窄
+                    val shift = heroParallaxOffsetPx(scrolledOverTopPx())
+                    val heroPx = (heroHeight.toPx() - shift).coerceAtLeast(0f)
+                    val heroFrac = (heroPx / size.height).coerceIn(0f, 0.9f)
                     drawRect(
                         brush = Brush.verticalGradient(
                             0f to scrim.copy(alpha = dimBase),

@@ -779,7 +779,7 @@ class SettingsRepository @Inject constructor(
         /** 自定义背景压暗范围与默认值（0~1） */
         const val BACKGROUND_DIM_MIN = 0f
         const val BACKGROUND_DIM_MAX = 0.8f
-        const val BACKGROUND_DIM_DEFAULT = 0.35f
+        const val BACKGROUND_DIM_DEFAULT = 0f
 
         /** 自定义背景缩放范围与默认值（1~1.5）。
          * 下限 1.0：缩放只负责放大取景，铺满由 Crop 保证，避免缩小露边。
@@ -796,7 +796,7 @@ class SettingsRepository @Inject constructor(
         /** 内容区背景模糊强度范围与默认值（dp） */
         const val BACKGROUND_BLUR_MIN = 0f
         const val BACKGROUND_BLUR_MAX = 48f
-        const val BACKGROUND_BLUR_DEFAULT = 32f
+        const val BACKGROUND_BLUR_DEFAULT = 14f
 
         /** 头部清晰区高度比例范围与默认值（占屏幕高度） */
         const val BACKGROUND_HERO_MIN = 0.22f

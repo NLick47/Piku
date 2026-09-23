@@ -186,6 +186,8 @@ fun HomeScreen(
     val gridState = rememberLazyStaggeredGridState()
     // 传给头部在绘制阶段读取：滚动只重绘底边那条线，不触发重组
     val feedProgress: () -> Float = remember(gridState) { { gridState.feedScrollProgress() } }
+    // 视差位移源：首项滚出视口顶部的像素量，封顶后到位即停；绘制阶段读取
+    val parallax: () -> Int = remember(gridState) { { gridState.scrolledOverTopPx() } }
     // 自定义背景下列表停在顶部时，头部底衬整体退场把头图让出来；滚动即恢复
     val atTop by remember {
         derivedStateOf {
@@ -349,6 +351,7 @@ fun HomeScreen(
                     blurDp = state.backgroundBlur,
                     heroFraction = state.backgroundHeroFraction,
                     editMode = isBackgroundEditMode && bgPreviewMode != BG_PREVIEW_REAL,
+                    scrolledOverTopPx = parallax,
                 )
             } else {
                 Box(

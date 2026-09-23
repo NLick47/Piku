@@ -147,6 +147,24 @@ internal fun LazyStaggeredGridState.feedScrollProgress(): Float {
     )
 }
 
+internal fun LazyStaggeredGridState.scrolledOverTopPx(): Int {
+    val first = layoutInfo.visibleItemsInfo.minByOrNull { it.index } ?: return 0
+    return parallaxSourcePx(first.index, first.offset.y)
+}
+
+internal fun parallaxSourcePx(firstVisibleIndex: Int, firstVisibleOffsetY: Int): Int {
+    val cap = HERO_PARALLAX_MAX_PX.roundToInt()
+    if (firstVisibleIndex > 0) return cap
+    return (-firstVisibleOffsetY).coerceIn(0, cap)
+}
+
+internal const val HERO_PARALLAX_MAX_PX = 90f
+
+internal const val BACKDROP_PARALLAX_MAX_PX = 24f
+
+internal fun heroParallaxOffsetPx(scrolledPx: Int): Float =
+    scrolledPx.coerceAtLeast(0).toFloat().coerceAtMost(HERO_PARALLAX_MAX_PX)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun HomeContent(
