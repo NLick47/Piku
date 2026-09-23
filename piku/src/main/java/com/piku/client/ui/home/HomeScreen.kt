@@ -52,6 +52,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -185,6 +186,12 @@ fun HomeScreen(
     val gridState = rememberLazyStaggeredGridState()
     // 传给头部在绘制阶段读取：滚动只重绘底边那条线，不触发重组
     val feedProgress: () -> Float = remember(gridState) { { gridState.feedScrollProgress() } }
+    // 自定义背景下列表停在顶部时，头部底衬整体退场把头图让出来；滚动即恢复
+    val atTop by remember {
+        derivedStateOf {
+            gridState.firstVisibleItemIndex == 0 && gridState.firstVisibleItemScrollOffset == 0
+        }
+    }
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -437,6 +444,7 @@ fun HomeScreen(
                             isScrolling = isScrolling,
                             scrollProgress = feedProgress,
                             drawerIsOpen = drawerState.isOpen,
+                            atTop = atTop,
                         )
                         HomeContent(
                             state = state,

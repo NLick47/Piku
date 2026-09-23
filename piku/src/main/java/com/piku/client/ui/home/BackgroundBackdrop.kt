@@ -41,6 +41,9 @@ private val ScrollProgressThickness = 1.5.dp
 /** 高光推进的最小步长（约 30fps）：慢速漂移不需要每帧重绘整个头部 */
 private const val ShimmerStepNanos = 33_000_000L
 
+/** 滚出顶部 / 回到顶部时玻璃底衬浮出与退场的时长 */
+private const val GlassVeilMillis = 220
+
 private class GlassBubble(
     val xFrac: Float,
     val phase: Float,
@@ -123,6 +126,29 @@ internal fun Density.homeBackdrop(dark: Boolean, size: Size): HomeBackdrop {
     )
 }
 
+/** 头部底衬的两段透明度（顶部 / 中段），绘制时再乘上让位系数 */
+internal data class GlassTint(val top: Float, val mid: Float)
+
+/**
+ * 头部让位系数：自定义背景下列表停在顶部时取 0，底衬连同装饰全部退场，
+ * 头图从头部控件后面完整露出来；一旦滚动就回到 1，恢复原来的玻璃底衬。
+ * 非自定义背景（底衬就是页面本身）恒为 1。
+ */
+internal fun headerVeilTarget(translucent: Boolean, atTop: Boolean): Float =
+    if (translucent && atTop) 0f else 1f
+
+/** 头部底衬透明度，与浮层化之前逐值一致 */
+internal fun headerTintAlphas(
+    translucent: Boolean,
+    dark: Boolean,
+    deepen: Float,
+): GlassTint = when {
+    translucent && dark -> GlassTint(top = 0.16f + 0.05f * deepen, mid = 0.10f + 0.04f * deepen)
+    translucent -> GlassTint(top = 0f, mid = 0f)
+    dark -> GlassTint(top = 0.50f + 0.10f * deepen, mid = 0.32f + 0.14f * deepen)
+    else -> GlassTint(top = 0.95f + 0.03f * deepen, mid = 0.80f + 0.08f * deepen)
+}
+
 private val GlassBandDark = listOf(
     Color.Transparent,
     Color.White.copy(alpha = 0.10f),
@@ -146,6 +172,8 @@ internal fun LiquidGlassBackdrop(
     translucent: Boolean = false,
     /** 滚动进度 0~1：在底边那条线上从左往右染色。在绘制阶段读取，滚动不会触发重组 */
     progress: () -> Float = { 0f },
+    /** 列表停在顶部：自定义背景下头部把画面让给头图，底衬整体退场 */
+    atTop: Boolean = false,
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val lifecycleState by lifecycleOwner.lifecycle.currentStateAsState()
@@ -171,6 +199,11 @@ internal fun LiquidGlassBackdrop(
         animationSpec = tween(durationMillis = 350),
         label = "glassDeepen",
     )
+    val veil by animateFloatAsState(
+        targetValue = headerVeilTarget(translucent, atTop),
+        animationSpec = tween(durationMillis = GlassVeilMillis),
+        label = "glassVeil",
+    )
     val tintTop = if (dark) HomeBgTopDark else HomeBgTopLight
     val tintBottom = if (dark) Color(0xFF2B2533) else HomeBgTopLight
     Box(modifier) {
@@ -188,19 +221,9 @@ internal fun LiquidGlassBackdrop(
             Modifier
                 .matchParentSize()
                 .drawBehind {
-                    val d = deepen.value
-                    val topAlpha = when {
-                        translucent && dark -> 0.16f + 0.05f * d
-                        translucent -> 0f
-                        dark -> 0.50f + 0.10f * d
-                        else -> 0.95f + 0.03f * d
-                    }
-                    val midAlpha = when {
-                        translucent && dark -> 0.10f + 0.04f * d
-                        translucent -> 0f
-                        dark -> 0.32f + 0.14f * d
-                        else -> 0.80f + 0.08f * d
-                    }
+                    val tint = headerTintAlphas(translucent, dark, deepen.value)
+                    val topAlpha = tint.top * veil
+                    val midAlpha = tint.mid * veil
                     drawRect(
                         brush = if (translucent) {
                             Brush.verticalGradient(
@@ -226,14 +249,19 @@ internal fun LiquidGlassBackdrop(
                     val topSheen = Brush.verticalGradient(
                         listOf(
                             if (dark) {
-                                Color.White.copy(alpha = 0.15f)
+                                Color.White.copy(alpha = 0.15f * veil)
                             } else {
-                                Color.White.copy(alpha = 0.55f)
+                                Color.White.copy(alpha = 0.55f * veil)
                             },
                             Color.Transparent,
                         ),
                     )
-                    val bandColors = if (dark) GlassBandDark else GlassBandLight
+                    val bandSource = if (dark) GlassBandDark else GlassBandLight
+                    val bandColors = if (veil == 1f) {
+                        bandSource
+                    } else {
+                        bandSource.map { it.copy(alpha = it.alpha * veil) }
+                    }
                     onDrawBehind {
                         val liquid = acc
                         val sheen = -0.5f + ((acc * 2f) % 1f) * 2f
@@ -245,6 +273,7 @@ internal fun LiquidGlassBackdrop(
                             bandColors = bandColors,
                             decorations = !translucent,
                             progress = progress,
+                            veil = veil,
                         )
                     }
                 },
@@ -260,6 +289,7 @@ private fun DrawScope.drawGlassShine(
     bandColors: List<Color>,
     decorations: Boolean = true,
     progress: () -> Float = { 0f },
+    veil: Float = 1f,
 ) {
     drawRect(
         brush = topSheen,
@@ -321,9 +351,9 @@ private fun DrawScope.drawGlassShine(
     val waveBase = size.height - 3.dp.toPx()
     val waveAmp = (if (dark) 1.6.dp else 2.2.dp).toPx()
     val waveColor = if (dark) {
-        Color.White.copy(alpha = 0.18f)
+        Color.White.copy(alpha = 0.18f * veil)
     } else {
-        Color(0xFF2C2C2C).copy(alpha = 0.12f)
+        Color(0xFF2C2C2C).copy(alpha = 0.12f * veil)
     }
     val steps = 32
     val stepW = size.width / steps
@@ -342,8 +372,9 @@ private fun DrawScope.drawGlassShine(
         prevX = x
         prevY = y
     }
+    val hairline = if (dark) Color.White.copy(alpha = 0.14f) else PillBorderLight
     drawLine(
-        color = if (dark) Color.White.copy(alpha = 0.14f) else PillBorderLight,
+        color = hairline.copy(alpha = hairline.alpha * veil),
         start = Offset(0f, size.height - 0.5.dp.toPx()),
         end = Offset(size.width, size.height - 0.5.dp.toPx()),
         strokeWidth = 0.5.dp.toPx(),

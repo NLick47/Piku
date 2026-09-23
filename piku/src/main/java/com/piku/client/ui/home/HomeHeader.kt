@@ -37,7 +37,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.piku.client.R
@@ -62,6 +61,8 @@ internal fun GlassHeader(
     isScrolling: State<Boolean>,
     scrollProgress: () -> Float,
     drawerIsOpen: Boolean = false,
+    /** 列表停在顶部：自定义背景下头部底衬整体退场，把清晰头图让出来 */
+    atTop: Boolean = false,
 ) {
     Box(
         modifier = Modifier
@@ -70,7 +71,7 @@ internal fun GlassHeader(
                 detectTapGestures(onDoubleTap = { onDoubleTapTop() })
             }
             .statusBarsPadding()
-            .padding(top = 8.dp),
+            .padding(top = GlassHeaderTopPadding),
     ) {
         LiquidGlassBackdrop(
             dark = dark,
@@ -79,6 +80,7 @@ internal fun GlassHeader(
             modifier = Modifier.matchParentSize(),
             translucent = state.customBackgroundPath != null,
             progress = scrollProgress,
+            atTop = atTop,
         )
         Column(Modifier.fillMaxWidth()) {
             Row(
@@ -94,17 +96,6 @@ internal fun GlassHeader(
                     dark = dark,
                 )
                 Spacer(Modifier.weight(1f))
-                // 分类只作用于「最新」源，其余源隐藏；它排在搜索左边，
-                // 显隐都不会推动右边的搜索按钮
-                if (state.feedTab == FeedTab.LATEST) {
-                    CategoryChip(
-                        label = stringResource(state.category.nameRes),
-                        active = state.category != PoipikuCategory.ALL,
-                        onClick = onCategoryClick,
-                        dark = dark,
-                    )
-                    Spacer(Modifier.width(8.dp))
-                }
                 SearchMenuButton(
                     onClick = onSearchClick,
                     dark = dark,
@@ -114,6 +105,14 @@ internal fun GlassHeader(
                 feedTab = state.feedTab,
                 onSelectFeedTab = onSelectFeedTab,
                 dark = dark,
+                // 分类只作用于「最新」源，其余源隐藏；它排在标签行右端，不与顶行控件抢头图
+                categoryLabel = if (state.feedTab == FeedTab.LATEST) {
+                    stringResource(state.category.nameRes)
+                } else {
+                    null
+                },
+                categoryActive = state.category != PoipikuCategory.ALL,
+                onCategoryClick = onCategoryClick,
             )
         }
     }
@@ -207,44 +206,8 @@ private fun SearchMenuButton(
     }
 }
 
-/** 当前分类入口：与搜索按钮同一套"白底 + 发丝线"，选中非「全部」时换成强调色 */
-@Composable
-private fun CategoryChip(
-    label: String,
-    active: Boolean,
-    onClick: () -> Unit,
-    dark: Boolean,
-) {
-    val interaction = remember { MutableInteractionSource() }
-    Row(
-        modifier = Modifier
-            .height(PikuLayout.NavControl)
-            .clip(CircleShape)
-            .background(if (dark) GlassIconBgDark else PikuColors.surface)
-            .border(
-                BorderStroke(0.5.dp, PikuColors.border),
-                CircleShape,
-            )
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
-            .padding(start = 11.dp, end = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = label,
-            color = if (active) PikuColors.accent else PikuColors.textSecondary,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-        )
-        Spacer(Modifier.width(3.dp))
-        Icon(
-            imageVector = Icons.Filled.KeyboardArrowDown,
-            contentDescription = stringResource(R.string.home_category_select),
-            tint = if (active) PikuColors.accent else PikuColors.textSecondary,
-            modifier = Modifier.size(14.dp),
-        )
-    }
-}
+/** 头部控件行与状态栏之间的呼吸间距 */
+internal val GlassHeaderTopPadding = 8.dp
 
 @Composable
 private fun UserMenuButton(

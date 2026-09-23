@@ -16,8 +16,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -27,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -36,11 +41,18 @@ import com.piku.client.R
 import com.piku.client.ui.theme.PikuColors
 import com.piku.client.ui.theme.PikuLayout
 
+/** 标签行总高（上下内边距 + 文字 + 选中横线）：浮层头部按它估高，给网格留出头部的位置 */
+internal val GlassHeaderTabRowHeight = 43.dp
+
 @Composable
 internal fun FeedTabRow(
     feedTab: FeedTab,
     onSelectFeedTab: (FeedTab) -> Unit,
     dark: Boolean,
+    /** 非空时在行尾显示分类入口（只有「最新」源需要分类） */
+    categoryLabel: String? = null,
+    categoryActive: Boolean = false,
+    onCategoryClick: () -> Unit = {},
 ) {
     Row(
         modifier = Modifier
@@ -73,6 +85,77 @@ internal fun FeedTabRow(
             text = stringResource(R.string.home_tab_random),
             active = feedTab == FeedTab.RANDOM,
             onClick = { onSelectFeedTab(FeedTab.RANDOM) },
+        )
+        if (categoryLabel != null) {
+            Spacer(Modifier.weight(1f))
+            CategoryEntry(
+                label = categoryLabel,
+                active = categoryActive,
+                onClick = onCategoryClick,
+            )
+        }
+    }
+}
+
+/**
+ * 分类入口与标签同排：同一套字号与选中横线，未筛选时只有一行淡字，
+ * 不再用白底胶囊压在头图上；选中非「全部」时整段换强调色 + 横线，一眼看出正在筛选。
+ */
+@Composable
+private fun CategoryEntry(
+    label: String,
+    active: Boolean,
+    onClick: () -> Unit,
+) {
+    val accent = PikuColors.accent
+    val textColor by animateColorAsState(
+        targetValue = if (active) accent else PikuColors.textSecondary,
+        animationSpec = tween(durationMillis = 200),
+        label = "categoryTextColor",
+    )
+    var labelWidthPx by remember { mutableIntStateOf(0) }
+    val indicatorWidth by animateIntAsState(
+        targetValue = if (active) labelWidthPx else 0,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMedium,
+        ),
+        label = "categoryIndicatorWidth",
+    )
+    val density = LocalDensity.current
+    Column(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .clickable(onClick = onClick)
+            .padding(vertical = 5.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Row(
+            modifier = Modifier.onSizeChanged { labelWidthPx = it.width },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = label,
+                color = textColor,
+                fontSize = 14.sp,
+                fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
+                maxLines = 1,
+            )
+            Spacer(Modifier.width(2.dp))
+            Icon(
+                imageVector = Icons.Filled.KeyboardArrowDown,
+                contentDescription = stringResource(R.string.home_category_select),
+                tint = textColor,
+                modifier = Modifier.size(15.dp),
+            )
+        }
+        Spacer(Modifier.height(1.dp))
+        Box(
+            modifier = Modifier
+                .height(TabIndicatorHeight)
+                .width(with(density) { indicatorWidth.toDp() })
+                .clip(RoundedCornerShape(TabIndicatorHeight / 2))
+                .background(accent),
         )
     }
 }
