@@ -23,6 +23,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -30,6 +32,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -118,6 +121,7 @@ fun DetailScreen(
     val titleVisible by remember(density) {
         derivedStateOf { scrollState.value > with(density) { TITLE_REVEAL_SCROLL_DP.dp.toPx() } }
     }
+    val scrolled by remember { derivedStateOf { scrollState.value > 0 } }
     // 标题跟随原/译状态，与正文里的标题保持同一份文案
     val detailTitle = state.detail?.let { detail ->
         val showTranslated = state.showTranslation(TranslateField.TITLE)
@@ -286,84 +290,88 @@ fun DetailScreen(
                     center = Offset(cx, cy),
                 )
             }
-            blob(blobPurple, size.width - 40.dp.toPx(), 96.dp.toPx(), 120.dp.toPx())
+            blob(blobPurple, size.width + 10.dp.toPx(), 210.dp.toPx(), 130.dp.toPx())
             blob(blobWarm, 0f, 400.dp.toPx(), 100.dp.toPx())
             blob(blobPink, size.width, 620.dp.toPx(), 90.dp.toPx())
         }
-        Column(modifier = Modifier.fillMaxSize()) {
-            DetailTopBar(
-                onBack = onBack,
-                onHomeClick = onHomeClick,
-                dark = dark,
-                title = detailTitle,
-                titleVisible = titleVisible,
-                translationAvailable = state.hasTranslation,
-                showTranslation = state.showTranslationAll,
-                translating = state.translating,
-                canTranslate = state.canTranslate,
-                onTranslateClick = viewModel::onTopBarTranslateClick,
-                onOpenModelPicker = viewModel::openModelPicker,
-            )
-            when {
-                state.loading && state.detail == null -> {
-                    DetailSkeleton()
-                }
-                state.errorRes != null && state.detail == null -> {
-                    DetailError(
-                        errorRes = state.errorRes!!,
-                        hintRes = state.errorHintRes,
-                        retryable = state.errorRetryable,
-                        onRetry = viewModel::retry,
-                        dark = dark,
-                    )
-                }
-                state.detail != null -> {
-                    DetailContent(
-                        detail = state.detail!!,
-                        dark = dark,
-                        sharedKey = workSharedKey(viewModel.authorId, viewModel.workId),
-                        scrollState = scrollState,
-                        sourceThumbnailUrl = viewModel.sourceThumbnailUrl,
-                        loadingMore = state.detailLoadingMore,
-                        onFirstImageLoaded = viewModel::ensureFullImages,
-                        // 加载失败但屏上已有内容：图区角落给常驻重试
-                        loadFailed = state.errorRes != null && state.errorRetryable,
-                        onRetry = viewModel::retry,
-                        onImageClick = { page ->
-                            viewModel.ensureFullImages()
-                            viewerPage = page
-                        },
-                        onImageLongPress = { page -> imageActionPage = page },
-                        password = state.password,
-                        onPasswordChange = viewModel::updatePassword,
-                        onPasswordSubmit = viewModel::submitPassword,
-                        passwordLoading = state.passwordLoading,
-                        onTagClick = onTagClick,
-                        onRelatedWorkClick = onRelatedWorkClick,
-                        onAuthorClick = {
-                            onAuthorClick(viewModel.authorId, state.detail!!.authorName)
-                        },
-                        customTags = state.customTags.toSet(),
-                        onToggleCustomTag = viewModel::toggleCustomTag,
-                        onOpenNovelReader = { viewModel.setNovelReaderOpen(true) },
-                        hasImageModel = state.hasImageModel,
-                        imageTranslated = state.showTranslatedImage,
-                        imageTranslatingPage = state.imageTranslatingPage,
-                        translatedImages = state.translatedImages,
-                        onImageTranslateClick = { page -> viewModel.onImageTranslateClick(page) },
-                        onPageChanged = { page -> viewModel.onImagePageChanged(page) },
-                        translationAvailable = state.hasTranslation,
-                        showTranslation = { field -> state.showTranslation(field) },
-                        onToggleField = viewModel::toggleField,
-                        autoExpandImageHint = state.imageHintVisible,
-                        onImageHintShown = viewModel::consumeImageHint,
-                        onGateAction = viewModel::onUnlockRestriction,
-                        gateLoading = state.enablingAdultContent || state.followSending,
-                        restrictionReason = state.restrictionReason,
-                    )
-                }
+        // 顶栏是浮层：内容从它下面滑过，所以顶部内边距要按顶栏高度让位
+        val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() +
+            DETAIL_TOP_BAR_HEIGHT + 12.dp
+        when {
+            state.loading && state.detail == null -> {
+                DetailSkeleton(topInset = topInset)
+            }
+            state.errorRes != null && state.detail == null -> {
+                DetailError(
+                    errorRes = state.errorRes!!,
+                    hintRes = state.errorHintRes,
+                    retryable = state.errorRetryable,
+                    onRetry = viewModel::retry,
+                    dark = dark,
+                )
+            }
+            state.detail != null -> {
+                DetailContent(
+                    detail = state.detail!!,
+                    dark = dark,
+                    sharedKey = workSharedKey(viewModel.authorId, viewModel.workId),
+                    scrollState = scrollState,
+                    topInset = topInset,
+                    sourceThumbnailUrl = viewModel.sourceThumbnailUrl,
+                    loadingMore = state.detailLoadingMore,
+                    onFirstImageLoaded = viewModel::ensureFullImages,
+                    // 加载失败但屏上已有内容：图区角落给常驻重试
+                    loadFailed = state.errorRes != null && state.errorRetryable,
+                    onRetry = viewModel::retry,
+                    onImageClick = { page ->
+                        viewModel.ensureFullImages()
+                        viewerPage = page
+                    },
+                    onImageLongPress = { page -> imageActionPage = page },
+                    password = state.password,
+                    onPasswordChange = viewModel::updatePassword,
+                    onPasswordSubmit = viewModel::submitPassword,
+                    passwordLoading = state.passwordLoading,
+                    onTagClick = onTagClick,
+                    onRelatedWorkClick = onRelatedWorkClick,
+                    onAuthorClick = {
+                        onAuthorClick(viewModel.authorId, state.detail!!.authorName)
+                    },
+                    customTags = state.customTags.toSet(),
+                    onToggleCustomTag = viewModel::toggleCustomTag,
+                    onOpenNovelReader = { viewModel.setNovelReaderOpen(true) },
+                    hasImageModel = state.hasImageModel,
+                    imageTranslated = state.showTranslatedImage,
+                    imageTranslatingPage = state.imageTranslatingPage,
+                    translatedImages = state.translatedImages,
+                    onImageTranslateClick = { page -> viewModel.onImageTranslateClick(page) },
+                    onPageChanged = { page -> viewModel.onImagePageChanged(page) },
+                    translationAvailable = state.hasTranslation,
+                    showTranslation = { field -> state.showTranslation(field) },
+                    onToggleField = viewModel::toggleField,
+                    autoExpandImageHint = state.imageHintVisible,
+                    onImageHintShown = viewModel::consumeImageHint,
+                    onGateAction = viewModel::onUnlockRestriction,
+                    gateLoading = state.enablingAdultContent || state.followSending,
+                    restrictionReason = state.restrictionReason,
+                )
             }
         }
+        DetailTopBar(
+            onBack = onBack,
+            onHomeClick = onHomeClick,
+            dark = dark,
+            modifier = Modifier.align(Alignment.TopCenter),
+            scrolled = scrolled,
+            title = detailTitle,
+            titleVisible = titleVisible,
+            translationAvailable = state.hasTranslation,
+            showTranslation = state.showTranslationAll,
+            translating = state.translating,
+            canTranslate = state.canTranslate,
+            onTranslateClick = viewModel::onTopBarTranslateClick,
+            onOpenModelPicker = viewModel::openModelPicker,
+        )
         DetailBottomBar(
             isFavorite = state.isFavorite,
             reactionCount = state.detail?.reactionCount ?: 0,
@@ -611,13 +619,13 @@ fun DetailScreen(
 }
 
 @Composable
-private fun DetailSkeleton() {
+private fun DetailSkeleton(topInset: Dp = 12.dp) {
     val pulse = rememberSkeletonPulse()
     val block = PikuColors.textFaint.copy(alpha = 0.22f + 0.34f * pulse.value)
     Column(
         Modifier
             .fillMaxSize()
-            .padding(start = 20.dp, end = 20.dp),
+            .padding(start = 20.dp, end = 20.dp, top = topInset),
     ) {
         // 作者行：头像 + 昵称 + 右侧分类位
         Row(verticalAlignment = Alignment.CenterVertically) {

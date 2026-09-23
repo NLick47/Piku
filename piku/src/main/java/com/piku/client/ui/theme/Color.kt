@@ -117,6 +117,10 @@ val HomeBgBottomDark = Color(0xFF232323)
 // 值与 MenuPopupBg* 相同但语义不同：这两个专供页面头部，勿合并。
 val GlassHeaderTintLight = Color(0xF7FFFFFF)
 val GlassHeaderTintDark = Color(0xF2262421)
+
+// 详情页顶栏：暖调近白，0.72 alpha 叠在 HomeBgTopLight 上是逐通道等量提亮，
+// 保住页面温度不偏冷（纯白会把暖米色拉灰）
+val DetailHeaderSurfaceLight = Color(0xFFFFFDFA)
 val GlassCardTintLight = Color(0xA6FFFFFF)
 val GlassCardTintDark = Color(0x99FFFFFF)
 val GlassCardBorderLight = Color(0x59FFFFFF)

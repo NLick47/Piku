@@ -11,6 +11,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -26,9 +27,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -37,14 +38,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.piku.client.R
 import com.piku.client.ui.common.PikuBackButton
+import com.piku.client.ui.theme.DetailHeaderSurfaceLight
 import com.piku.client.ui.theme.GlassHeaderTintDark
-import com.piku.client.ui.theme.GlassHeaderTintLight
 import com.piku.client.ui.theme.HomeFrameIcon
 import com.piku.client.ui.theme.LoginTextPrimaryDark
 import com.piku.client.ui.theme.PikuColors
-import com.piku.client.ui.theme.PillBorderDark
-import com.piku.client.ui.theme.PillBorderLight
+import com.piku.client.ui.theme.ShadowAmbient
+import com.piku.client.ui.theme.ShadowSpot
 import com.piku.client.ui.theme.TranslateActiveBlue
+
+/** 顶栏自身高度（不含状态栏）：48dp 控件 + 上下各 8dp，调用方据此给内容留出顶部内边距 */
+internal val DETAIL_TOP_BAR_HEIGHT = 64.dp
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -52,6 +56,9 @@ internal fun DetailTopBar(
     onBack: () -> Unit,
     onHomeClick: () -> Unit,
     dark: Boolean,
+    modifier: Modifier = Modifier,
+    /** 内容已滚到顶栏下面：底色加深，挡住穿过的内容 */
+    scrolled: Boolean = false,
     /** 滚过图区后淡入的作品标题（调用方已按原/译状态取好文案） */
     title: String = "",
     titleVisible: Boolean = false,
@@ -73,20 +80,20 @@ internal fun DetailTopBar(
         animationSpec = tween(150),
         label = "topBarTitleAlpha",
     )
+    val surface = if (dark) GlassHeaderTintDark else DetailHeaderSurfaceLight
+    val surfaceAlpha by animateFloatAsState(
+        targetValue = if (scrolled) 0.96f else 0.72f,
+        animationSpec = tween(180),
+        label = "topBarSurfaceAlpha",
+    )
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .background(if (dark) GlassHeaderTintDark else GlassHeaderTintLight)
-            .drawBehind {
-                drawLine(
-                    color = if (dark) PillBorderDark.copy(alpha = 0.6f) else PillBorderLight,
-                    start = Offset(0f, size.height - 0.5.dp.toPx()),
-                    end = Offset(size.width, size.height - 0.5.dp.toPx()),
-                    strokeWidth = 0.5.dp.toPx(),
-                )
-            }
+            .shadow(6.dp, RectangleShape, ambientColor = ShadowAmbient, spotColor = ShadowSpot)
+            .background(surface.copy(alpha = surfaceAlpha))
             .statusBarsPadding()
-            .padding(start = 4.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+            .height(DETAIL_TOP_BAR_HEIGHT)
+            .padding(start = 4.dp, end = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         PikuBackButton(

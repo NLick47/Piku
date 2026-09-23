@@ -79,6 +79,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
@@ -139,6 +140,8 @@ internal fun DetailContent(
     sharedKey: String = "",
     /** 由页面持有的滚动状态：顶栏据此决定标题是否淡入，避免两处各建一份 */
     scrollState: ScrollState = rememberScrollState(),
+    /** 顶部让位给浮起来的顶栏；写在滚动容器内部，滚上去时会跟着内容一起被顶栏盖住 */
+    topInset: Dp = 12.dp,
     /** 来源页缩略图（列表卡片的 _360）：首图到位前的低清打底，空串表示没有 */
     sourceThumbnailUrl: String = "",
     /** append 还在路上（HTML 阶段的内容已画出）：图区先不显示页码角标 */
@@ -198,7 +201,7 @@ internal fun DetailContent(
         Modifier
             .fillMaxSize()
             .verticalScroll(scrollState)
-            .padding(start = 20.dp, end = 20.dp, bottom = 96.dp),
+            .padding(start = 20.dp, end = 20.dp, top = topInset, bottom = 96.dp),
     ) {
         AuthorRow(detail = detail, dark = dark, onAuthorClick = onAuthorClick)
         if (detail.authorProfile.isNotBlank()) {
