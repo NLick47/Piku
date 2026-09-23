@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -473,8 +474,8 @@ private fun FolderListContent(
                     fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
-                if (loaded && folders.isNotEmpty()) {
-                        Text(
+                if (loaded) {
+                    Text(
                             text = stringResource(
                                 R.string.collection_summary,
                                 folders.size,
@@ -501,75 +502,45 @@ private fun FolderListContent(
                 )
             }
         }
-        when {
-            !loaded -> {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    LoaderDots(dark = dark)
-                }
+        // 收藏夹列表恒不为空：observeFolders() 起手 ensureDefaultFolder()，没有就补一条默认收藏夹
+        if (!loaded) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                LoaderDots(dark = dark)
             }
-            folders.isEmpty() -> {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = Icons.Outlined.StarBorder,
-                            contentDescription = null,
-                            tint = PikuColors.textFaint,
-                            modifier = Modifier.size(44.dp),
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        Text(
-                            text = stringResource(R.string.collection_empty),
-                            color = PikuColors.textSecondary,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium,
-                        )
-                        Spacer(Modifier.height(18.dp))
-                        TextButton(onClick = onNewFolder) {
-                            Text(
-                                text = stringResource(R.string.collection_create),
-                                color = PikuColors.textPrimary,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium,
-                            )
-                        }
-                    }
-                }
-            }
-            else -> {
-                LazyVerticalGrid(
-                    columns = if (isTablet) GridCells.Adaptive(200.dp) else GridCells.Fixed(2),
-                    state = rememberLazyGridState(),
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        start = 16.dp,
-                        end = 16.dp,
-                        top = 8.dp,
-                        bottom = 96.dp,
-                    ),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    // 「全部收藏」不是收藏夹，用整行入口与收藏夹卡片区分开
-                    if (totalWorks > 0) {
-                        item(key = "all-favorites", span = { GridItemSpan(maxLineSpan) }) {
-                            AllFavoritesEntry(
-                                workCount = totalWorks,
-                                dark = dark,
-                                onClick = onOpenAll,
-                                modifier = Modifier.animateItem(),
-                            )
-                        }
-                    }
-                    items(folders, key = { it.id }) { folder ->
-                        FolderCard(
-                            folder = folder,
+        } else {
+            LazyVerticalGrid(
+                columns = if (isTablet) GridCells.Adaptive(200.dp) else GridCells.Fixed(2),
+                state = rememberLazyGridState(),
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    start = 16.dp,
+                    end = 16.dp,
+                    top = 12.dp,
+                    bottom = 28.dp,
+                ),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                // 「全部收藏」不是收藏夹，用整行入口与收藏夹卡片区分开
+                if (totalWorks > 0) {
+                    item(key = "all-favorites", span = { GridItemSpan(maxLineSpan) }) {
+                        AllFavoritesEntry(
+                            workCount = totalWorks,
                             dark = dark,
-                            onClick = { onFolderClick(folder) },
-                            onRename = onRenameFolder,
-                            onDelete = onDeleteFolder,
+                            onClick = onOpenAll,
                             modifier = Modifier.animateItem(),
                         )
                     }
+                }
+                items(folders, key = { it.id }) { folder ->
+                    FolderCard(
+                        folder = folder,
+                        dark = dark,
+                        onClick = { onFolderClick(folder) },
+                        onRename = onRenameFolder,
+                        onDelete = onDeleteFolder,
+                        modifier = Modifier.animateItem(),
+                    )
                 }
             }
         }
@@ -677,51 +648,10 @@ private fun FolderCard(
                     .background(glassSheen(dark)),
             )
             Column(Modifier.padding(12.dp)) {
-                if (folder.previewUrls.isEmpty()) {
-                    // 空收藏夹：占位图
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(2.2f)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(placeholderColor),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.StarBorder,
-                            contentDescription = null,
-                            tint = PikuColors.textFaint,
-                            modifier = Modifier.size(26.dp),
-                        )
-                    }
-                } else {
-                    // 最近收藏的 3 张作品缩略图，不进入也能预览内容
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        repeat(3) { index ->
-                            val url = folder.previewUrls.getOrNull(index)
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .aspectRatio(1f)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(placeholderColor),
-                            ) {
-                                if (url != null) {
-                                    AsyncImage(
-                                        model = url,
-                                        contentDescription = null,
-                                        colorFilter = PikuColors.tameWhiteFilter,
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentScale = ContentScale.Crop,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
+                FolderPreview(
+                    urls = folder.previewUrls,
+                    placeholderColor = placeholderColor,
+                )
                 Spacer(Modifier.height(10.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
@@ -739,21 +669,12 @@ private fun FolderCard(
                     }
                 }
                 Spacer(Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Filled.Star,
-                        contentDescription = null,
-                        tint = PikuColors.textSecondary,
-                        modifier = Modifier.size(13.dp),
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        text = stringResource(R.string.collection_work_count, folder.workCount),
-                        color = PikuColors.textFaint,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                    )
-                }
+                Text(
+                    text = stringResource(R.string.collection_work_count, folder.workCount),
+                    color = PikuColors.textFaint,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                )
             }
         }
         if (menuOpen) {
@@ -771,6 +692,105 @@ private fun FolderCard(
                 onDismiss = { menuOpen = false },
             )
         }
+    }
+}
+
+private const val PreviewRatio = 1.55f
+
+@Composable
+private fun FolderPreview(
+    urls: List<String>,
+    placeholderColor: Color,
+) {
+    val frame = RoundedCornerShape(12.dp)
+    val tile = RoundedCornerShape(10.dp)
+    when (urls.size) {
+        0 -> Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(PreviewRatio)
+                .clip(frame)
+                .background(placeholderColor),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.StarBorder,
+                contentDescription = null,
+                tint = PikuColors.textFaint,
+                modifier = Modifier.size(26.dp),
+            )
+        }
+        1 -> FolderThumb(
+            url = urls[0],
+            placeholderColor = placeholderColor,
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(PreviewRatio)
+                .clip(frame),
+        )
+        2 -> Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(PreviewRatio),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            FolderThumb(
+                url = urls[0],
+                placeholderColor = placeholderColor,
+                modifier = Modifier.weight(2f).fillMaxHeight().clip(tile),
+            )
+            FolderThumb(
+                url = urls[1],
+                placeholderColor = placeholderColor,
+                modifier = Modifier.weight(1f).fillMaxHeight().clip(tile),
+            )
+        }
+        else -> Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(PreviewRatio),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            FolderThumb(
+                url = urls[0],
+                placeholderColor = placeholderColor,
+                modifier = Modifier.weight(2f).fillMaxHeight().clip(tile),
+            )
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                FolderThumb(
+                    url = urls[1],
+                    placeholderColor = placeholderColor,
+                    modifier = Modifier.weight(1f).fillMaxWidth().clip(tile),
+                )
+                FolderThumb(
+                    url = urls[2],
+                    placeholderColor = placeholderColor,
+                    modifier = Modifier.weight(1f).fillMaxWidth().clip(tile),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FolderThumb(
+    url: String,
+    placeholderColor: Color,
+    modifier: Modifier = Modifier,
+) {
+    Box(modifier.background(placeholderColor)) {
+        AsyncImage(
+            model = url,
+            contentDescription = null,
+            colorFilter = PikuColors.tameWhiteFilter,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop,
+        )
     }
 }
 

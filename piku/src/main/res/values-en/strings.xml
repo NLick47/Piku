@@ -159,7 +159,6 @@
     <string name="history_range_3m">3 months</string>
     <string name="collection_title">My favorites</string>
     <string name="collection_summary">%1$d collections · %2$d posts</string>
-    <string name="collection_empty">No collections yet</string>
     <string name="collection_folder_empty">No posts in this collection</string>
     <string name="collection_work_count">%1$d posts</string>
     <string name="collection_create">New collection</string>

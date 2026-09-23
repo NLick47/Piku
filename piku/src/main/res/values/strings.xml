@@ -171,7 +171,6 @@
     <string name="history_group_count">%1$d 条</string>
     <string name="collection_title">我的收藏</string>
     <string name="collection_summary">%1$d 个收藏夹 · %2$d 个投稿</string>
-    <string name="collection_empty">还没有收藏夹</string>
     <string name="collection_folder_empty">这个收藏夹还没有投稿</string>
     <string name="collection_work_count">%1$d 个投稿</string>
     <string name="collection_create">新建收藏夹</string>

@@ -159,7 +159,6 @@
     <string name="history_range_3m">3か月以内</string>
     <string name="collection_title">お気に入り</string>
     <string name="collection_summary">%1$d コレクション · %2$d 件</string>
-    <string name="collection_empty">コレクションはまだありません</string>
     <string name="collection_folder_empty">このコレクションには投稿がありません</string>
     <string name="collection_work_count">%1$d 件</string>
     <string name="collection_create">新しいコレクション</string>
