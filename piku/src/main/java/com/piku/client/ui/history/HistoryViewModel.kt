@@ -114,7 +114,7 @@ class HistoryViewModel @Inject constructor(
     private fun groupByDate(items: List<HistoryItem>): List<HistorySection> {
         val zone = ZoneId.systemDefault()
         return items
-            .groupBy { LocalDate.ofInstant(Instant.ofEpochMilli(it.visitedAt), zone) }
+            .groupBy { Instant.ofEpochMilli(it.visitedAt).atZone(zone).toLocalDate() }
             .entries
             .sortedByDescending { it.key }
             .map { (date, list) -> HistorySection(date, list) }

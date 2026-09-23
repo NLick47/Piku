@@ -2,7 +2,6 @@ package com.piku.client.domain.model
 
 import com.piku.client.R
 import java.time.Instant
-import java.time.LocalDate
 import java.time.ZoneId
 
 /**
@@ -34,7 +33,9 @@ enum class HistoryTimeRange(val days: Int) {
         ALL -> 0L
         TODAY -> {
             val zone = ZoneId.systemDefault()
-            LocalDate.ofInstant(Instant.ofEpochMilli(now), zone)
+            Instant.ofEpochMilli(now)
+                .atZone(zone)
+                .toLocalDate()
                 .atStartOfDay(zone)
                 .toInstant()
                 .toEpochMilli()
