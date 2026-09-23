@@ -179,8 +179,9 @@ internal fun LiquidGlassBackdrop(
     val lifecycleState by lifecycleOwner.lifecycle.currentStateAsState()
     val isResumed = lifecycleState.isAtLeast(Lifecycle.State.RESUMED)
     var acc by remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(isResumed, drawerIsOpen) {
-        if (!isResumed || drawerIsOpen) return@LaunchedEffect
+    val animateShine = !translucent
+    LaunchedEffect(isResumed, drawerIsOpen, animateShine) {
+        if (!isResumed || drawerIsOpen || !animateShine) return@LaunchedEffect
         var lastUpdateNanos = 0L
         while (true) {
             withFrameNanos { frameNanos ->
@@ -274,6 +275,8 @@ internal fun LiquidGlassBackdrop(
                             decorations = !translucent,
                             progress = progress,
                             veil = veil,
+                            // 自定义背景：扫描光带与顶边高光条都不画，画面交回背景图
+                            shine = !translucent,
                         )
                     }
                 },
@@ -290,20 +293,23 @@ private fun DrawScope.drawGlassShine(
     decorations: Boolean = true,
     progress: () -> Float = { 0f },
     veil: Float = 1f,
+    shine: Boolean = true,
 ) {
-    drawRect(
-        brush = topSheen,
-        size = Size(size.width, 2.dp.toPx()),
-    )
-    val band = size.width * 0.5f
-    val centerX = (sheen - 0.5f) * (size.width + band * 2f)
-    drawRect(
-        brush = Brush.linearGradient(
-            colors = bandColors,
-            start = Offset(centerX - band / 2f, -size.height * 0.5f),
-            end = Offset(centerX + band / 2f, size.height * 1.5f),
-        ),
-    )
+    if (shine) {
+        drawRect(
+            brush = topSheen,
+            size = Size(size.width, 2.dp.toPx()),
+        )
+        val band = size.width * 0.5f
+        val centerX = (sheen - 0.5f) * (size.width + band * 2f)
+        drawRect(
+            brush = Brush.linearGradient(
+                colors = bandColors,
+                start = Offset(centerX - band / 2f, -size.height * 0.5f),
+                end = Offset(centerX + band / 2f, size.height * 1.5f),
+            ),
+        )
+    }
     if (decorations) {
         GlassBubbles.forEach { b ->
             val t = (liquid + b.phase) % 1f
