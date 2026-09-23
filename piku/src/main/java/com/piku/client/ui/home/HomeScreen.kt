@@ -182,6 +182,8 @@ fun HomeScreen(
         publishDraftId != null
     val isScrolling = remember { mutableStateOf(false) }
     val gridState = rememberLazyStaggeredGridState()
+    // 传给头部在绘制阶段读取：滚动只重绘底边那条线，不触发重组
+    val feedProgress: () -> Float = remember(gridState) { { gridState.feedScrollProgress() } }
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -375,6 +377,7 @@ fun HomeScreen(
                                     isScrolling = isScrolling,
                                     modifier = Modifier.matchParentSize(),
                                     translucent = state.customBackgroundPath != null,
+                                    progress = feedProgress,
                                 )
                                 Column(Modifier.fillMaxWidth()) {
                                     TabletTopBar(
@@ -425,6 +428,7 @@ fun HomeScreen(
                             onDoubleTapTop = { gridState.scrollToTopSmart(scope) },
                             dark = dark,
                             isScrolling = isScrolling,
+                            scrollProgress = feedProgress,
                             drawerIsOpen = drawerState.isOpen,
                         )
                         HomeContent(

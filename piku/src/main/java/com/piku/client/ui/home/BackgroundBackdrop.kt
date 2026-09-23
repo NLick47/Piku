@@ -14,6 +14,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -24,13 +25,17 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.currentStateAsState
+import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.HomeBgBottomDark
 import com.piku.client.ui.theme.HomeBgBottomLight
 import com.piku.client.ui.theme.HomeBgTopDark
 import com.piku.client.ui.theme.HomeBgTopLight
+import com.piku.client.ui.theme.LoginTextPrimaryDark
 import com.piku.client.ui.theme.PillBorderLight
 import kotlin.math.PI
 import kotlin.math.sin
+
+private val ScrollProgressThickness = 1.5.dp
 
 private class GlassBubble(
     val xFrac: Float,
@@ -114,6 +119,8 @@ internal fun LiquidGlassBackdrop(
     drawerIsOpen: Boolean = false,
     modifier: Modifier = Modifier,
     translucent: Boolean = false,
+    /** 滚动进度 0~1：在底边那条线上从左往右染色。在绘制阶段读取，滚动不会触发重组 */
+    progress: () -> Float = { 0f },
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val lifecycleState by lifecycleOwner.lifecycle.currentStateAsState()
@@ -185,13 +192,19 @@ internal fun LiquidGlassBackdrop(
                 .drawBehind {
                     val liquid = acc
                     val sheen = -0.5f + ((acc * 2f) % 1f) * 2f
-                    drawGlassShine(sheen, liquid, dark, decorations = !translucent)
+                    drawGlassShine(sheen, liquid, dark, decorations = !translucent, progress = progress)
                 },
         )
     }
 }
 
-private fun DrawScope.drawGlassShine(sheen: Float, liquid: Float, dark: Boolean, decorations: Boolean = true) {
+private fun DrawScope.drawGlassShine(
+    sheen: Float,
+    liquid: Float,
+    dark: Boolean,
+    decorations: Boolean = true,
+    progress: () -> Float = { 0f },
+) {
     drawRect(
         brush = Brush.verticalGradient(
             listOf(
@@ -298,4 +311,16 @@ private fun DrawScope.drawGlassShine(sheen: Float, liquid: Float, dark: Boolean,
         end = Offset(size.width, size.height - 0.5.dp.toPx()),
         strokeWidth = 0.5.dp.toPx(),
     )
+
+    // 滚动进度直接压在底边那条线上：左边已读过的部分染成强调色，线同时充当进度轨道
+    val filled = progress().coerceIn(0f, 1f)
+    if (filled > 0f) {
+        val thickness = ScrollProgressThickness.toPx()
+        drawRoundRect(
+            color = if (dark) LoginTextPrimaryDark else AccentDark,
+            topLeft = Offset(0f, size.height - thickness),
+            size = Size(size.width * filled, thickness),
+            cornerRadius = CornerRadius(thickness / 2f, thickness / 2f),
+        )
+    }
 }

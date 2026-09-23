@@ -58,9 +58,10 @@ import coil3.compose.AsyncImage
 import com.piku.client.R
 import com.piku.client.domain.model.Work
 import com.piku.client.ui.theme.PikuColors
+import com.piku.client.ui.theme.PikuLayout
+import com.piku.client.ui.theme.SoftBorderLight
 import com.piku.client.ui.theme.WorkCardBgDark
 import com.piku.client.ui.theme.WorkCardBorderDark
-import com.piku.client.ui.theme.WorkCardInfoBgDark
 import com.piku.client.ui.navigation.sharedWorkBounds
 import com.piku.client.ui.navigation.workSharedKey
 import com.piku.client.ui.theme.WorkCardPlaceholderDark
@@ -89,7 +90,7 @@ fun WorkCard(
     /** 阅读进度；null 表示不显示（首页/搜索等没有"读到哪"语义的场景） */
     progress: CardProgress? = null,
 ) {
-    val shape = RoundedCornerShape(12.dp)
+    val shape = RoundedCornerShape(PikuLayout.CardCorner)
     var heartVisible by remember { mutableStateOf(false) }
     val heartScale = remember { Animatable(0f) }
     val authorInteraction = remember { MutableInteractionSource() }
@@ -108,17 +109,17 @@ fun WorkCard(
     Column(
         modifier = Modifier
             .shadow(
-                elevation = if (dark) 6.dp else 10.dp,
+                elevation = if (dark) 0.dp else 6.dp,
                 shape = shape,
-                ambientColor = Color(0x33000000),
-                spotColor = Color(0x40000000),
+                ambientColor = Color(0x1F000000),
+                spotColor = Color(0x33000000),
             )
             .clip(shape)
-            .background(if (dark) WorkCardBgDark else Color(0xCCFFFFFF))
+            .background(if (dark) WorkCardBgDark else Color(0xE6FFFFFF))
             .border(
                 BorderStroke(
-                    1.dp,
-                    if (dark) WorkCardBorderDark else Color(0x59C8C2B8),
+                    0.5.dp,
+                    if (dark) WorkCardBorderDark else SoftBorderLight,
                 ),
                 shape,
             )
@@ -130,12 +131,7 @@ fun WorkCard(
                 onDoubleClick = { onToggleFavorite(work) },
             ),
     ) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .padding(6.dp)
-                .clip(RoundedCornerShape(10.dp)),
-        ) {
+        Box(Modifier.fillMaxWidth()) {
             if (work.thumbnailUrl.isBlank()) {
                 // 兜底：历史/收藏里无缩略图信息的旧记录，显示中性占位而非空白
                 Box(
@@ -172,7 +168,7 @@ fun WorkCard(
                 Row(
                     modifier = Modifier
                         .align(Alignment.TopStart)
-                        .padding(6.dp),
+                        .padding(8.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     if (work.isPrivate) {
@@ -183,13 +179,13 @@ fun WorkCard(
                             // 格式名，各语言写法一致，不走 i18n
                             text = "GIF",
                             color = Color.White,
-                            fontSize = 9.sp,
+                            fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 0.5.sp,
                             modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
+                                .clip(RoundedCornerShape(8.dp))
                                 .background(Color(0x99000000))
-                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                                .padding(horizontal = 7.dp, vertical = 3.dp),
                         )
                     }
                 }
@@ -198,15 +194,15 @@ fun WorkCard(
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .padding(6.dp)
-                        .clip(RoundedCornerShape(6.dp))
+                        .padding(8.dp)
+                        .clip(RoundedCornerShape(8.dp))
                         .background(Color(0x99000000))
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                        .padding(horizontal = 7.dp, vertical = 3.dp),
                 ) {
                     Text(
                         text = stringResource(R.string.home_image_count, work.imageCount),
                         color = Color.White,
-                        fontSize = 9.sp,
+                        fontSize = 10.sp,
                     )
                 }
             }
@@ -228,18 +224,18 @@ fun WorkCard(
         Column(
             Modifier
                 .fillMaxWidth()
-                .background(if (dark) WorkCardInfoBgDark else Color(0xF2FFFFFF))
                 .padding(
-                    start = 10.dp,
-                    end = 10.dp,
-                    top = 8.dp,
-                    bottom = if (onAuthorClick != null) 0.dp else 8.dp,
+                    start = PikuLayout.CardPadding,
+                    end = PikuLayout.CardPadding,
+                    top = 10.dp,
+                    bottom = if (onAuthorClick != null) 0.dp else 12.dp,
                 ),
         ) {
             Text(
                 text = work.title,
                 color = PikuColors.textPrimary,
-                fontSize = 11.sp,
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -297,7 +293,7 @@ fun WorkCard(
                         model = work.authorAvatarUrl,
                         contentDescription = null,
                         modifier = Modifier
-                            .size(16.dp)
+                            .size(18.dp)
                             .clip(CircleShape),
                         contentScale = ContentScale.Crop,
                     )
@@ -305,7 +301,7 @@ fun WorkCard(
                     Text(
                         text = work.authorName,
                         color = if (authorPressed) PikuColors.accent else PikuColors.textPrimary,
-                        fontSize = 10.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -316,7 +312,7 @@ fun WorkCard(
                     Text(
                         text = localizedCategoryName(work.categoryCd, work.categoryName),
                         color = PikuColors.textFaint,
-                        fontSize = 9.sp,
+                        fontSize = 10.sp,
                         maxLines = 1,
                     )
                 }
@@ -330,9 +326,9 @@ fun WorkCard(
 fun WorkPrivateBadge(modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(6.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(Color(0x99000000))
-            .padding(horizontal = 6.dp, vertical = 2.dp),
+            .padding(horizontal = 7.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(3.dp),
     ) {
@@ -340,12 +336,12 @@ fun WorkPrivateBadge(modifier: Modifier = Modifier) {
             imageVector = Icons.Outlined.Lock,
             contentDescription = null,
             tint = Color.White,
-            modifier = Modifier.size(9.dp),
+            modifier = Modifier.size(10.dp),
         )
         Text(
             text = stringResource(R.string.work_private_badge),
             color = Color.White,
-            fontSize = 9.sp,
+            fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = 0.5.sp,
         )

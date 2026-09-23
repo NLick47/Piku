@@ -16,15 +16,17 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
@@ -32,12 +34,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.piku.client.R
@@ -46,6 +46,7 @@ import com.piku.client.ui.common.UserAvatar
 import com.piku.client.ui.theme.GlassIconBgDark
 import com.piku.client.ui.theme.LoginTextPrimaryDark
 import com.piku.client.ui.theme.PikuColors
+import com.piku.client.ui.theme.PikuLayout
 
 @Composable
 internal fun GlassHeader(
@@ -59,6 +60,7 @@ internal fun GlassHeader(
     onDoubleTapTop: () -> Unit,
     dark: Boolean,
     isScrolling: State<Boolean>,
+    scrollProgress: () -> Float,
     drawerIsOpen: Boolean = false,
 ) {
     Box(
@@ -76,12 +78,13 @@ internal fun GlassHeader(
             drawerIsOpen = drawerIsOpen,
             modifier = Modifier.matchParentSize(),
             translucent = state.customBackgroundPath != null,
+            progress = scrollProgress,
         )
         Column(Modifier.fillMaxWidth()) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 16.dp, end = 8.dp),
+                    .padding(horizontal = PikuLayout.NavRowInset),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 UserMenuButton(
@@ -91,18 +94,21 @@ internal fun GlassHeader(
                     dark = dark,
                 )
                 Spacer(Modifier.weight(1f))
-                SearchMenuButton(
-                    onClick = onSearchClick,
-                    dark = dark,
-                )
+                // 分类只作用于「最新」源，其余源隐藏；它排在搜索左边，
+                // 显隐都不会推动右边的搜索按钮
                 if (state.feedTab == FeedTab.LATEST) {
-                    Spacer(Modifier.width(8.dp))
-                    CategoryMenuButton(
+                    CategoryChip(
+                        label = stringResource(state.category.nameRes),
                         active = state.category != PoipikuCategory.ALL,
                         onClick = onCategoryClick,
                         dark = dark,
                     )
+                    Spacer(Modifier.width(8.dp))
                 }
+                SearchMenuButton(
+                    onClick = onSearchClick,
+                    dark = dark,
+                )
             }
             FeedTabRow(
                 feedTab = state.feedTab,
@@ -128,7 +134,7 @@ internal fun TabletTopBar(
             .pointerInput(onDoubleTapTop) {
                 detectTapGestures(onDoubleTap = { onDoubleTapTop() })
             }
-            .padding(start = 16.dp, end = 16.dp),
+            .padding(horizontal = PikuLayout.NavRowInset),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         UserMenuButton(
@@ -151,11 +157,10 @@ private fun GlassIconButton(
     dark: Boolean,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    val shape = RoundedCornerShape(15.dp)
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.82f else 1f,
+        targetValue = if (pressed) 0.9f else 1f,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessMedium,
@@ -164,21 +169,27 @@ private fun GlassIconButton(
     )
     Box(
         modifier = Modifier
-            .size(30.dp)
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
-            .clip(shape)
-            .background(if (dark) GlassIconBgDark else Color.White)
-            .border(
-                BorderStroke(0.5.dp, PikuColors.border),
-                shape,
-            )
+            .size(PikuLayout.NavHit)
             .clickable(interactionSource = interaction, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center,
-        content = content,
-    )
+    ) {
+        Box(
+            modifier = Modifier
+                .size(PikuLayout.NavControl)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                }
+                .clip(CircleShape)
+                .background(if (dark) GlassIconBgDark else PikuColors.surface)
+                .border(
+                    BorderStroke(0.5.dp, PikuColors.border),
+                    CircleShape,
+                ),
+            contentAlignment = Alignment.Center,
+            content = content,
+        )
+    }
 }
 
 @Composable
@@ -190,28 +201,47 @@ private fun SearchMenuButton(
         Icon(
             imageVector = Icons.Filled.Search,
             contentDescription = stringResource(R.string.search_placeholder),
-            tint = if (dark) LoginTextPrimaryDark else Color(0xFF5A5A5A),
-            modifier = Modifier.size(16.dp),
+            tint = if (dark) LoginTextPrimaryDark else PikuColors.textPrimary,
+            modifier = Modifier.size(17.dp),
         )
     }
 }
 
+/** 当前分类入口：与搜索按钮同一套"白底 + 发丝线"，选中非「全部」时换成强调色 */
 @Composable
-private fun CategoryMenuButton(
+private fun CategoryChip(
+    label: String,
     active: Boolean,
     onClick: () -> Unit,
     dark: Boolean,
 ) {
-    GlassIconButton(onClick = onClick, dark = dark) {
+    val interaction = remember { MutableInteractionSource() }
+    Row(
+        modifier = Modifier
+            .height(PikuLayout.NavControl)
+            .clip(CircleShape)
+            .background(if (dark) GlassIconBgDark else PikuColors.surface)
+            .border(
+                BorderStroke(0.5.dp, PikuColors.border),
+                CircleShape,
+            )
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .padding(start = 11.dp, end = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            color = if (active) PikuColors.accent else PikuColors.textSecondary,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+        )
+        Spacer(Modifier.width(3.dp))
         Icon(
-            imageVector = Icons.Outlined.GridView,
+            imageVector = Icons.Filled.KeyboardArrowDown,
             contentDescription = stringResource(R.string.home_category_select),
-            tint = when {
-                active -> PikuColors.accent
-                dark -> LoginTextPrimaryDark.copy(alpha = 0.55f)
-                else -> Color(0xFF5A5A5A)
-            },
-            modifier = Modifier.size(16.dp),
+            tint = if (active) PikuColors.accent else PikuColors.textSecondary,
+            modifier = Modifier.size(14.dp),
         )
     }
 }
@@ -224,25 +254,14 @@ private fun UserMenuButton(
     dark: Boolean,
 ) {
     Box(
-        modifier = Modifier
-            .size(46.dp)
-            .drawBehind {
-                drawCircle(
-                    brush = androidx.compose.ui.graphics.Brush.radialGradient(
-                        colors = listOf(
-                            Color(0xFF9A7FC9).copy(alpha = if (dark) 0.24f else 0.18f),
-                            Color.Transparent,
-                        ),
-                    ),
-                    radius = size.minDimension / 2f * 1.25f,
-                )
-            },
+        modifier = Modifier.size(PikuLayout.NavHit),
         contentAlignment = Alignment.Center,
     ) {
         UserAvatar(
             avatarUrl = avatarUrl,
             onClick = onMenuClick,
             dark = dark,
+            size = PikuLayout.NavControl,
             enabled = enabled,
             showIndication = false,
         )

@@ -62,10 +62,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -94,9 +91,12 @@ import com.piku.client.ui.theme.LoginBackgroundDark
 import com.piku.client.ui.theme.LoginButtonDark
 import com.piku.client.ui.theme.LoginButtonLight
 import com.piku.client.ui.theme.PikuColors
+import com.piku.client.ui.theme.PikuLayout
+import com.piku.client.ui.theme.SoftBorderLight
 import com.piku.client.ui.theme.WorkCardBgDark
 import com.piku.client.ui.theme.WorkCardBorderDark
 import com.piku.client.ui.theme.WorkCardPlaceholderDark
+import com.piku.client.ui.theme.feedCardWidthPx
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -119,6 +119,33 @@ internal fun LazyStaggeredGridState.scrollToTopSmart(scope: CoroutineScope) {
             animateScrollToItem(0)
         }
     }
+}
+
+/**
+ * 已滚过的比例 = 首个可见 item 的序号 + 它在视口上方滚掉的比例。
+ * 只按"最后一个可见 item 序号 / 总数"算的话，列表停在顶部就已经有一大截进度。
+ */
+internal fun scrollProgressOf(
+    firstIndex: Int,
+    firstOffsetPx: Int,
+    itemHeightPx: Int,
+    totalItems: Int,
+): Float {
+    if (totalItems <= 0) return 0f
+    val scrolledPast = firstIndex +
+        (-firstOffsetPx).coerceAtLeast(0) / itemHeightPx.coerceAtLeast(1).toFloat()
+    return (scrolledPast / totalItems).coerceIn(0f, 1f)
+}
+
+internal fun LazyStaggeredGridState.feedScrollProgress(): Float {
+    val info = layoutInfo
+    val first = info.visibleItemsInfo.firstOrNull() ?: return 0f
+    return scrollProgressOf(
+        firstIndex = first.index,
+        firstOffsetPx = first.offset.y,
+        itemHeightPx = first.size.height,
+        totalItems = info.totalItemsCount,
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -392,18 +419,6 @@ private fun WorkWaterfall(
 ) {
     val isTablet = LocalConfiguration.current.screenWidthDp >= 600
     val prefetchContext = LocalContext.current
-    val scrollProgress = remember {
-        derivedStateOf {
-            val info = gridState.layoutInfo
-            if (info.totalItemsCount <= 1) {
-                0f
-            } else {
-                ((info.visibleItemsInfo.lastOrNull()?.index ?: 0).toFloat() /
-                    (info.totalItemsCount - 1).toFloat())
-                    .coerceIn(0f, 1f)
-            }
-        }
-    }
     val showFab = remember {
         derivedStateOf { gridState.firstVisibleItemIndex > FAB_SHOW_AFTER_ITEMS }
     }
@@ -434,7 +449,7 @@ private fun WorkWaterfall(
         if (isTablet) {
             512
         } else {
-            (((screenWidthDp - 44) / 2f) * density.density).roundToInt().coerceIn(256, 512)
+            feedCardWidthPx(screenWidthDp, density.density).roundToInt().coerceIn(256, 512)
         }
     }
 
@@ -462,9 +477,14 @@ private fun WorkWaterfall(
             columns = if (isTablet) StaggeredGridCells.Adaptive(220.dp) else StaggeredGridCells.Fixed(2),
             state = gridState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 80.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalItemSpacing = 12.dp,
+            contentPadding = PaddingValues(
+                start = PikuLayout.ScreenInset,
+                end = PikuLayout.ScreenInset,
+                top = 10.dp,
+                bottom = 80.dp,
+            ),
+            horizontalArrangement = Arrangement.spacedBy(PikuLayout.GridGap),
+            verticalItemSpacing = PikuLayout.GridGap,
         ) {
             items(works, key = { it.id }) { work ->
                 WorkCard(
@@ -503,7 +523,6 @@ private fun WorkWaterfall(
                 }
             }
         }
-        ScrollProgressBar(progress = scrollProgress, dark = dark)
         BackToTopFab(
             showFab = showFab,
             isScrolling = isScrolling,
@@ -525,30 +544,12 @@ private fun BoxScope.BackToTopFab(
         modifier = Modifier
             .align(Alignment.BottomEnd)
             .navigationBarsPadding()
-            .padding(end = 16.dp, bottom = 12.dp),
+            .padding(end = PikuLayout.ScreenInset, bottom = 12.dp),
         enter = fadeIn() + scaleIn(initialScale = 0.8f),
         exit = fadeOut() + scaleOut(targetScale = 0.8f),
     ) {
         BackToTopButton(onClick = onGoTop, dark = dark)
     }
-}
-
-@Composable
-private fun ScrollProgressBar(progress: State<Float>, dark: Boolean) {
-    val trackColor = if (dark) Color.White.copy(alpha = 0.10f) else Color.White.copy(alpha = 0.50f)
-    val fillColor = if (dark) Color.White.copy(alpha = 0.45f) else Color(0xFF2C2C2C).copy(alpha = 0.30f)
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(2.dp)
-            .drawBehind {
-                drawRect(trackColor)
-                drawRect(
-                    color = fillColor,
-                    size = Size(size.width * progress.value, size.height),
-                )
-            },
-    )
 }
 
 @Composable
@@ -660,9 +661,14 @@ private fun SkeletonGrid(dark: Boolean) {
         columns = if (isTablet) StaggeredGridCells.Adaptive(220.dp) else StaggeredGridCells.Fixed(2),
         state = rememberLazyStaggeredGridState(),
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalItemSpacing = 12.dp,
+        contentPadding = PaddingValues(
+            start = PikuLayout.ScreenInset,
+            end = PikuLayout.ScreenInset,
+            top = 10.dp,
+            bottom = 96.dp,
+        ),
+        horizontalArrangement = Arrangement.spacedBy(PikuLayout.GridGap),
+        verticalItemSpacing = PikuLayout.GridGap,
     ) {
         items(6) {
             SkeletonCard(dark = dark)
@@ -672,41 +678,47 @@ private fun SkeletonGrid(dark: Boolean) {
 
 @Composable
 private fun SkeletonCard(dark: Boolean) {
-    val shape = RoundedCornerShape(12.dp)
+    val shape = RoundedCornerShape(PikuLayout.CardCorner)
     val placeholder = if (dark) WorkCardPlaceholderDark else Color(0xFFE8E4DE)
     Column(
         modifier = Modifier
             .clip(shape)
-            .background(if (dark) WorkCardBgDark else Color(0xCCFFFFFF))
+            .background(if (dark) WorkCardBgDark else Color(0xE6FFFFFF))
             .border(
-                BorderStroke(1.dp, if (dark) WorkCardBorderDark else Color(0x59C8C2B8)),
+                BorderStroke(0.5.dp, if (dark) WorkCardBorderDark else SoftBorderLight),
                 shape,
-            )
-            .padding(6.dp),
+            ),
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
-                .clip(RoundedCornerShape(10.dp))
                 .background(placeholder),
         )
-        Spacer(Modifier.height(8.dp))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(10.dp)
-                .clip(RoundedCornerShape(5.dp))
-                .background(placeholder),
-        )
-        Spacer(Modifier.height(4.dp))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(0.6f)
-                .height(10.dp)
-                .clip(RoundedCornerShape(5.dp))
-                .background(placeholder),
-        )
+        Column(
+            Modifier.padding(
+                start = PikuLayout.CardPadding,
+                end = PikuLayout.CardPadding,
+                top = 10.dp,
+                bottom = 12.dp,
+            ),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(11.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(placeholder),
+            )
+            Spacer(Modifier.height(6.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.6f)
+                    .height(11.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(placeholder),
+            )
+        }
     }
 }
 
