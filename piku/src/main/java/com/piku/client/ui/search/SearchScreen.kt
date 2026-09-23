@@ -355,7 +355,7 @@ private fun SearchTopBar(
                 modifier = Modifier.size(16.dp),
             )
             Spacer(Modifier.width(6.dp))
-            Box(Modifier.weight(1f)) {
+            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                 if (query.isEmpty()) {
                     Text(
                         text = stringResource(R.string.search_placeholder),
