@@ -336,15 +336,6 @@ private fun AllCategoriesButton(
             fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold,
         )
-        if (active) {
-            Spacer(Modifier.width(6.dp))
-            Icon(
-                imageVector = Icons.Filled.Check,
-                contentDescription = null,
-                tint = content,
-                modifier = Modifier.size(16.dp),
-            )
-        }
     }
 }
 
@@ -377,7 +368,7 @@ private fun CategoryPill(
             .background(container)
             .border(BorderStroke(0.5.dp, PikuColors.border), shape)
             .clickable(onClick = onClick)
-            .padding(start = 14.dp, end = if (active) 9.dp else 14.dp, top = 10.dp, bottom = 10.dp),
+            .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -385,23 +376,5 @@ private fun CategoryPill(
             color = content,
             fontSize = 13.sp,
         )
-        androidx.compose.animation.AnimatedVisibility(
-            visible = active,
-            enter = androidx.compose.animation.scaleIn(
-                animationSpec = androidx.compose.animation.core.spring(
-                    dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
-                    stiffness = androidx.compose.animation.core.Spring.StiffnessMedium,
-                ),
-            ),
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Check,
-                contentDescription = null,
-                tint = content,
-                modifier = Modifier
-                    .padding(start = 4.dp)
-                    .size(14.dp),
-            )
-        }
     }
 }
