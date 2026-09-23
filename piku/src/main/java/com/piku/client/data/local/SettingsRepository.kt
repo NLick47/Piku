@@ -157,7 +157,7 @@ class SettingsRepository @Inject constructor(
     private val _heroOffsetY = MutableStateFlow(prefs.getFloat(KEY_HERO_OFFSET_Y, 0f))
     val heroOffsetY: StateFlow<Float> = _heroOffsetY.asStateFlow()
 
-    /** 头部层缩放：0.5~1.5。≥1 满铺裁切取景，<1 整幅缩小为画框式呈现 */
+    /** 头部层缩放：0.5~1.5。≥1 满铺裁切取景；<1 整幅缩小，缩到能装进清晰区就转为画框式呈现 */
     private val _heroScale = MutableStateFlow(
         prefs.getFloat(KEY_HERO_SCALE, HERO_SCALE_DEFAULT)
             .coerceIn(HERO_SCALE_MIN, HERO_SCALE_MAX),
@@ -788,7 +788,7 @@ class SettingsRepository @Inject constructor(
         const val BACKGROUND_SCALE_MAX = 1.5f
         const val BACKGROUND_SCALE_DEFAULT = 1.0f
 
-        /** 头部层缩放范围与默认值：≥1 满铺裁切，<1 整幅缩小为画框式 */
+        /** 头部层缩放范围与默认值：≥1 满铺裁切；<1 整幅缩小，装得进清晰区才是画框式 */
         const val HERO_SCALE_MIN = 0.5f
         const val HERO_SCALE_MAX = BACKGROUND_SCALE_MAX
         const val HERO_SCALE_DEFAULT = 1.0f
@@ -798,7 +798,8 @@ class SettingsRepository @Inject constructor(
         const val BACKGROUND_BLUR_MAX = 48f
         const val BACKGROUND_BLUR_DEFAULT = 14f
 
-        /** 头部清晰区高度比例范围与默认值（占屏幕高度） */
+        /** 头部清晰区高度比例的外围范围与默认值（占屏幕高度）。
+         * 实际可用范围还要被 200~420dp 钳一次，滑杆量程用 heroFractionRange 算，别直接用这两个值 */
         const val BACKGROUND_HERO_MIN = 0.22f
         const val BACKGROUND_HERO_MAX = 0.45f
         const val BACKGROUND_HERO_DEFAULT = 0.34f

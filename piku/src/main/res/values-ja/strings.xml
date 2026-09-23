@@ -87,7 +87,7 @@
     <string name="background_change_backdrop">背景画像を変更</string>
     <string name="background_hero_scale_label">見出しズーム</string>
     <string name="background_backdrop_scale_label">背景ズーム</string>
-    <string name="background_frame_hint">1x 未満では画像全体がフレーム表示されます</string>
+    <string name="background_frame_hint">1x 未満では画像が鮮明領域に縮み、収まるとフレーム表示になります</string>
     <string name="background_blur_label">ぼかしの強さ</string>
     <string name="background_hero_label">見出し鮮明領域の高さ</string>
     <string name="background_zone_sharp">見出し鮮明領域</string>

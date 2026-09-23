@@ -60,6 +60,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -70,13 +71,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -197,14 +196,24 @@ fun HomeScreen(
         }
     }
     var tabBand by remember { mutableStateOf<TabBand?>(null) }
-    var screenSizePx by remember { mutableStateOf(IntSize.Zero) }
+    // 取景几何的视口：用配置里的屏幕尺寸同步算。别走 onSizeChanged——那要等一帧，
+    // 首帧只能按 null 取景（忽略偏移），图片已在缓存时（旋转/重建）会看到取景跳一下
+    val density = LocalDensity.current
+    val configuration = LocalConfiguration.current
+    val screenHeightDp = configuration.screenHeightDp.toFloat()
+    val viewWidthPx = with(density) { configuration.screenWidthDp.dp.toPx() }
+    val viewHeightPx = with(density) { configuration.screenHeightDp.dp.toPx() }
     val zoneHeightDp = heroZoneHeightDp(
-        screenHeightDp = LocalConfiguration.current.screenHeightDp.toFloat(),
+        screenHeightDp = screenHeightDp,
         heroFraction = state.backgroundHeroFraction,
     ).dp
-    val zoneHeightPx = with(LocalDensity.current) { zoneHeightDp.toPx() }
-    val viewWidthPx = screenSizePx.width.toFloat()
-    val viewHeightPx = screenSizePx.height.toFloat()
+    val zoneHeightPx = with(density) { zoneHeightDp.toPx() }
+    // 手势里读到的必须是当前值：pointerInput 的 key 只跟编辑目标/背景层走，
+    // 设置改了不会重启它的协程，捕获到旧 state 就会用旧缩放/旧清晰区算平移量
+    val currentState by rememberUpdatedState(state)
+    val currentViewWidth by rememberUpdatedState(viewWidthPx)
+    val currentViewHeight by rememberUpdatedState(viewHeightPx)
+    val currentZoneHeight by rememberUpdatedState(zoneHeightPx)
     val heroFrame = contentFrame(
         imgWidth = state.backgroundImgWidth,
         imgHeight = state.backgroundImgHeight,
@@ -410,11 +419,7 @@ fun HomeScreen(
             showWebDavSettings = true
         },
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .onSizeChanged { screenSizePx = it },
-        ) {
+        Box(modifier = Modifier.fillMaxSize()) {
             val customBgPath = state.customBackgroundPath
             if (customBgPath != null) {
                 CustomHomeBackground(
@@ -563,47 +568,48 @@ fun HomeScreen(
                         .fillMaxSize()
                         .pointerInput(effectiveBgTarget, state.backdropPath) {
                             detectTransformGestures { _, pan, zoom, _ ->
-                                if (state.customBackgroundPath != null) {
+                                val editedState = currentState
+                                if (editedState.customBackgroundPath != null) {
                                     val editHero = effectiveBgTarget == BG_EDIT_TARGET_HERO ||
-                                        state.backdropPath == null
+                                        editedState.backdropPath == null
                                     if (editHero) {
-                                        val ns = (state.heroScale * zoom).coerceIn(
+                                        val ns = (editedState.heroScale * zoom).coerceIn(
                                             SettingsRepository.HERO_SCALE_MIN,
                                             SettingsRepository.HERO_SCALE_MAX,
                                         )
-                                        if (ns != state.heroScale) viewModel.setHeroScale(ns)
+                                        if (ns != editedState.heroScale) viewModel.setHeroScale(ns)
                                         // 按新缩放的取景算可平移量：缩放会同步放大拖动范围，拖拽与手指 1:1
                                         val frame = contentFrame(
-                                            imgWidth = state.backgroundImgWidth,
-                                            imgHeight = state.backgroundImgHeight,
-                                            viewWidth = size.width.toFloat(),
-                                            viewHeight = zoneHeightPx,
+                                            imgWidth = editedState.backgroundImgWidth,
+                                            imgHeight = editedState.backgroundImgHeight,
+                                            viewWidth = currentViewWidth,
+                                            viewHeight = currentZoneHeight,
                                             scale = ns,
-                                            offsetX = state.heroOffsetX,
-                                            offsetY = state.heroOffsetY,
+                                            offsetX = editedState.heroOffsetX,
+                                            offsetY = editedState.heroOffsetY,
                                         ) ?: return@detectTransformGestures
                                         viewModel.setHeroOffset(
-                                            dragOffset(state.heroOffsetX, pan.x, frame.slackX),
-                                            dragOffset(state.heroOffsetY, pan.y, frame.slackY),
+                                            dragOffset(editedState.heroOffsetX, pan.x, frame.slackX),
+                                            dragOffset(editedState.heroOffsetY, pan.y, frame.slackY),
                                         )
                                     } else {
-                                        val ns = (state.backgroundScale * zoom).coerceIn(
+                                        val ns = (editedState.backgroundScale * zoom).coerceIn(
                                             SettingsRepository.BACKGROUND_SCALE_MIN,
                                             SettingsRepository.BACKGROUND_SCALE_MAX,
                                         )
-                                        if (ns != state.backgroundScale) viewModel.setBackgroundScale(ns)
+                                        if (ns != editedState.backgroundScale) viewModel.setBackgroundScale(ns)
                                         val frame = contentFrame(
-                                            imgWidth = state.backdropImgWidth,
-                                            imgHeight = state.backdropImgHeight,
-                                            viewWidth = size.width.toFloat(),
-                                            viewHeight = size.height.toFloat(),
+                                            imgWidth = editedState.backdropImgWidth,
+                                            imgHeight = editedState.backdropImgHeight,
+                                            viewWidth = currentViewWidth,
+                                            viewHeight = currentViewHeight,
                                             scale = ns,
-                                            offsetX = state.backgroundOffsetX,
-                                            offsetY = state.backgroundOffsetY,
+                                            offsetX = editedState.backgroundOffsetX,
+                                            offsetY = editedState.backgroundOffsetY,
                                         ) ?: return@detectTransformGestures
                                         viewModel.setBackgroundOffset(
-                                            dragOffset(state.backgroundOffsetX, pan.x, frame.slackX),
-                                            dragOffset(state.backgroundOffsetY, pan.y, frame.slackY),
+                                            dragOffset(editedState.backgroundOffsetX, pan.x, frame.slackX),
+                                            dragOffset(editedState.backgroundOffsetY, pan.y, frame.slackY),
                                         )
                                     }
                                 }
@@ -1140,6 +1146,7 @@ private fun BackgroundEditPanel(
     onHeroFractionChange: (Float) -> Unit,
     onSettingsFinished: () -> Unit,
 ) {
+    val screenHeightDp = LocalConfiguration.current.screenHeightDp.toFloat()
 
     Column(
         modifier = Modifier
@@ -1349,16 +1356,20 @@ private fun BackgroundEditPanel(
                     )
                     Spacer(Modifier.weight(1f))
                     Text(
-                        text = "${(state.backgroundHeroFraction * 100).roundToInt()}%",
+                        // 读数给实际清晰区占比：比例被 200~420dp 钳住时（短屏/高屏两端）
+                        // 设置值不等于实际高度，显示钳后的值才不会和画面不一致
+                        text = "${(heroZoneHeightDp(screenHeightDp, state.backgroundHeroFraction) /
+                            screenHeightDp * 100).roundToInt()}%",
                         color = PikuColors.textFaint,
                         fontSize = 12.sp,
                     )
                 }
+                val heroRange = heroFractionRange(screenHeightDp)
                 Slider(
-                    value = state.backgroundHeroFraction,
+                    value = state.backgroundHeroFraction.coerceIn(heroRange.start, heroRange.endInclusive),
                     onValueChange = onHeroFractionChange,
                     onValueChangeFinished = onSettingsFinished,
-                    valueRange = SettingsRepository.BACKGROUND_HERO_MIN..SettingsRepository.BACKGROUND_HERO_MAX,
+                    valueRange = heroRange,
                 )
             }
             Spacer(Modifier.height(8.dp))

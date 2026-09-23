@@ -1,5 +1,6 @@
 package com.piku.client.ui.home
 
+import com.piku.client.data.local.SettingsRepository
 import kotlin.math.abs
 import kotlin.math.max
 
@@ -94,9 +95,28 @@ internal fun dragOffset(current: Float, panPx: Float, slack: Float): Float =
         current.coerceIn(-1f, 1f)
     }
 
-/** 头部清晰区高度：屏高比例，钳在 200~420dp。绘制/手势/蓝图/取样共用，别各写一遍 */
+/** 头部清晰区高度下限/上限（dp）：绘制、手势、蓝图、滑杆范围都按它钳 */
+internal const val HERO_ZONE_MIN_DP = 200f
+internal const val HERO_ZONE_MAX_DP = 420f
+
+/** 头部清晰区高度：屏高比例，钳在 [HERO_ZONE_MIN_DP]~[HERO_ZONE_MAX_DP] */
 internal fun heroZoneHeightDp(screenHeightDp: Float, heroFraction: Float): Float =
-    (screenHeightDp * heroFraction).coerceIn(200f, 420f)
+    (screenHeightDp * heroFraction).coerceIn(HERO_ZONE_MIN_DP, HERO_ZONE_MAX_DP)
+
+/**
+ * 清晰区高度比例滑杆的可用范围：清晰区本身被钳在 200~420dp，
+ * 滑杆范围必须跟着收，否则量程两端推不动（短屏上 0.22~0.25、高屏上 0.42~0.45 都是死区）。
+ */
+internal fun heroFractionRange(screenHeightDp: Float): ClosedFloatingPointRange<Float> {
+    if (screenHeightDp <= 0f) {
+        return SettingsRepository.BACKGROUND_HERO_MIN..SettingsRepository.BACKGROUND_HERO_MAX
+    }
+    val lowest = (HERO_ZONE_MIN_DP / screenHeightDp)
+        .coerceIn(SettingsRepository.BACKGROUND_HERO_MIN, SettingsRepository.BACKGROUND_HERO_MAX)
+    val highest = (HERO_ZONE_MAX_DP / screenHeightDp)
+        .coerceIn(lowest, SettingsRepository.BACKGROUND_HERO_MAX)
+    return lowest..highest
+}
 
 /** 毛玻璃层视差位移：按封顶比例缓动，比头部慢 */
 internal fun frostShiftPx(heroShiftPx: Float): Float =

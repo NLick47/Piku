@@ -87,7 +87,7 @@
     <string name="background_change_backdrop">更换背景图</string>
     <string name="background_hero_scale_label">头部缩放</string>
     <string name="background_backdrop_scale_label">背景缩放</string>
-    <string name="background_frame_hint">缩放低于 1x：整幅图以画框呈现，可看全图</string>
+    <string name="background_frame_hint">缩放低于 1x：整幅图缩进清晰区；放得下就转为画框式呈现</string>
     <string name="background_blur_label">模糊强度</string>
     <string name="background_hero_label">头部清晰区高度</string>
     <string name="background_zone_sharp">头部清晰区</string>

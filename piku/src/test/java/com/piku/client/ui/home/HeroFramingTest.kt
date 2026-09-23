@@ -31,6 +31,35 @@ class HeroFramingTest {
     }
 
     @Test
+    fun sliderRangeMatchesTheZoneClamp() {
+        // 本机 792dp：下限 200/792=0.2525、上限 420/792=0.53 被外围 0.45 收住
+        val own = heroFractionRange(792f)
+        assertEquals(0.2525f, own.start, 0.001f)
+        assertEquals(0.45f, own.endInclusive, 0.001f)
+        // 下限正好落在清晰区的 200dp 地板上：以前量程写死 0.22~0.45，底部 14% 推不动
+        assertEquals(HERO_ZONE_MIN_DP, heroZoneHeightDp(792f, own.start), 0.01f)
+        // 这台机不够高，量程上限用不到 420dp 封顶（0.45*792=356dp），顶部本来就没有死区
+        assertEquals(356.4f, heroZoneHeightDp(792f, own.endInclusive), 0.1f)
+
+        // 短屏 640dp：下限抬到 0.3125（写死量程时底部 40% 是死区）
+        val short = heroFractionRange(640f)
+        assertEquals(0.3125f, short.start, 0.001f)
+        assertEquals(200f, heroZoneHeightDp(640f, short.start), 0.01f)
+
+        // 高屏 1000dp：上限收到 0.42，顶部不再有死区
+        val tall = heroFractionRange(1000f)
+        assertEquals(0.22f, tall.start, 0.001f)
+        assertEquals(0.42f, tall.endInclusive, 0.001f)
+        assertEquals(420f, heroZoneHeightDp(1000f, tall.endInclusive), 0.01f)
+
+        // 极端屏高也不能出现 start > endInclusive
+        listOf(100f, 320f, 5000f).forEach { h ->
+            val range = heroFractionRange(h)
+            assertTrue("h=$h ${range.start}..${range.endInclusive}", range.start <= range.endInclusive)
+        }
+    }
+
+    @Test
     fun cropModeMatchesCoverCropAtScaleOne() {
         // 缩放 1x：内容尺寸 = 铺满头部区的大小，居中——与旧 Crop 画面一致，缩放临界处不跳
         val frame = frame(scale = 1f, offsetX = 0f, offsetY = 0f)!!

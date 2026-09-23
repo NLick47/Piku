@@ -87,7 +87,7 @@
     <string name="background_change_backdrop">Change backdrop image</string>
     <string name="background_hero_scale_label">Header zoom</string>
     <string name="background_backdrop_scale_label">Backdrop zoom</string>
-    <string name="background_frame_hint">Below 1x the full image shows as a framed card</string>
+    <string name="background_frame_hint">Below 1x the image shrinks into the sharp area and turns into a framed card once it fits</string>
     <string name="background_blur_label">Blur strength</string>
     <string name="background_hero_label">Header sharp-area height</string>
     <string name="background_zone_sharp">Sharp header zone</string>
