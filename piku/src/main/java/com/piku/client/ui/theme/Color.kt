@@ -128,6 +128,14 @@ val GlassCardBorderDark = Color(0x1FFFFFFF)
 val GlassCardBgLight = Color(0x99FFFFFF)
 val GlassCardBgDark = Color(0x8C262421)
 
+val ContentCardBgLight = Color(0xF7FFFFFF)
+val ContentCardBgDark = Color(0xF2262421)
+
+val InsetSurfaceDark = Color(0x14FFFFFF)
+val InsetSurfacePressedDark = Color(0x26FFFFFF)
+
+val OnAccentDark = Color(0xFF1C1B19)
+
 // 分段控件轨道：比卡片玻璃更薄一层，好让内部的选中胶囊压出层次
 val SegmentedTrackLight = Color(0xF2FFFFFF)
 val SegmentedTrackDark = Color(0x40FFFFFF)

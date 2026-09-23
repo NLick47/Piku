@@ -26,9 +26,6 @@ import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridS
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -48,10 +45,13 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.piku.client.R
 import com.piku.client.domain.model.Work
+import com.piku.client.ui.common.GlassCard
 import com.piku.client.ui.common.LoaderDots
 import com.piku.client.ui.common.PikuBackButton
 import com.piku.client.ui.common.WorkCard
 import com.piku.client.ui.home.CustomTagSection
+import com.piku.client.ui.theme.ContentCardBgDark
+import com.piku.client.ui.theme.ContentCardBgLight
 import com.piku.client.ui.theme.GlassHeaderTintDark
 import com.piku.client.ui.theme.GlassHeaderTintLight
 import com.piku.client.ui.theme.HomeBgBottomDark
@@ -120,6 +120,11 @@ private fun TagListContent(
     Column(Modifier.fillMaxSize()) {
         TopBar(
             title = stringResource(R.string.menu_my_tags),
+            subtitle = if (state.loaded && state.tags.isNotEmpty()) {
+                stringResource(R.string.my_tags_count, state.tags.size)
+            } else {
+                null
+            },
             onBack = onBack,
             dark = dark,
         )
@@ -134,21 +139,40 @@ private fun TagListContent(
                     Modifier
                         .fillMaxSize()
                         .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 20.dp, vertical = 16.dp),
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
                 ) {
-                    CustomTagSection(
-                        tags = state.tags,
-                        onSelect = onTagClick,
-                        onAdd = onAdd,
-                        onRemove = onRemove,
+                    GlassCard(
                         dark = dark,
-                    )
-                    Spacer(Modifier.height(16.dp))
-                    Text(
-                        text = stringResource(R.string.tags_screen_hint),
-                        color = PikuColors.textFaint,
-                        fontSize = 12.sp,
-                    )
+                        shape = RoundedCornerShape(20.dp),
+                        // 内容容器用收藏页那档更实的白，半透明玻璃在米灰背景上压不住层次
+                        bgColor = if (dark) ContentCardBgDark else ContentCardBgLight,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(Modifier.padding(horizontal = 14.dp, vertical = 13.dp)) {
+                            CustomTagSection(
+                                tags = state.tags,
+                                onSelect = onTagClick,
+                                onAdd = onAdd,
+                                onRemove = onRemove,
+                                dark = dark,
+                            )
+                            if (state.tags.isNotEmpty()) {
+                                Spacer(Modifier.height(12.dp))
+                                Box(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .height(0.5.dp)
+                                        .background(PikuColors.border),
+                                )
+                                Spacer(Modifier.height(9.dp))
+                                Text(
+                                    text = stringResource(R.string.tags_screen_hint),
+                                    color = PikuColors.textFaint,
+                                    fontSize = 11.sp,
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -173,7 +197,7 @@ private fun TagDetailContent(
                 .fillMaxWidth()
                 .background(if (dark) GlassHeaderTintDark else GlassHeaderTintLight)
                 .statusBarsPadding()
-                .padding(start = 4.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+                .padding(start = 4.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             PikuBackButton(
@@ -312,6 +336,7 @@ private fun TopBar(
     title: String,
     onBack: () -> Unit,
     dark: Boolean,
+    subtitle: String? = null,
 ) {
     Row(
         modifier = Modifier
@@ -326,13 +351,23 @@ private fun TopBar(
             dark = dark,
             contentDescription = stringResource(R.string.back),
         )
-        Text(
-            text = title,
-            color = PikuColors.textPrimary,
-            fontSize = 17.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.weight(1f),
-        )
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = title,
+                color = PikuColors.textPrimary,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    color = PikuColors.textFaint,
+                    fontSize = 11.sp,
+                )
+            }
+        }
     }
 }
 

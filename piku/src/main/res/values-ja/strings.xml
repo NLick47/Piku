@@ -138,6 +138,9 @@
     <string name="my_tags_add_hint">タグ名を入力</string>
     <string name="my_tags_add">追加</string>
     <string name="my_tags_empty">カスタムタグはまだありません</string>
+    <string name="my_tags_empty_title">カスタムタグはまだありません</string>
+    <string name="my_tags_empty_subtitle">追加すると検索ページのショートカットに表示されます</string>
+    <string name="my_tags_count">%1$d 個のタグ</string>
     <string name="my_tags_delete">タグを削除</string>
     <string name="my_tags_manage">タグ管理</string>
     <string name="tags_screen_hint">カスタムタグは検索ページに表示されます</string>

@@ -107,6 +107,8 @@ import com.piku.client.ui.theme.HomeBgBottomDark
 import com.piku.client.ui.theme.HomeBgBottomLight
 import com.piku.client.ui.theme.HomeBgTopDark
 import com.piku.client.ui.theme.HomeBgTopLight
+import com.piku.client.ui.theme.MenuPopupBgDark
+import com.piku.client.ui.theme.MenuPopupBgLight
 import com.piku.client.ui.theme.LocalDarkTheme
 import com.piku.client.ui.theme.PikuColors
 import com.piku.client.ui.theme.WorkCardBgDark
@@ -535,7 +537,7 @@ private fun UserWorksMoreMenu(
                 .widthIn(max = 200.dp)
                 .shadow(14.dp, shape, ambientColor = Color(0x40000000), spotColor = Color(0x55000000))
                 .clip(shape)
-                .background(if (dark) Color(0xF2262421) else Color(0xF7FFFFFF))
+                .background(if (dark) MenuPopupBgDark else MenuPopupBgLight)
                 .border(
                     BorderStroke(0.5.dp, if (dark) Color(0x59FFFFFF) else Color(0x59C8C2B8)),
                     shape,

@@ -138,6 +138,9 @@
     <string name="my_tags_add_hint">输入标签名</string>
     <string name="my_tags_add">添加</string>
     <string name="my_tags_empty">暂无自定义标签，添加一个吧</string>
+    <string name="my_tags_empty_title">还没有自定义标签</string>
+    <string name="my_tags_empty_subtitle">添加后会作为快捷入口显示在搜索页</string>
+    <string name="my_tags_count">%1$d 个标签</string>
     <string name="my_tags_delete">删除标签</string>
     <string name="my_tags_manage">管理</string>
     <string name="tags_screen_hint">自定义标签会显示在搜索页</string>

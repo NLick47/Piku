@@ -89,6 +89,8 @@ import com.piku.client.ui.common.PikuSheetTitle
 import com.piku.client.ui.common.WorkCard
 import com.piku.client.ui.theme.GlassHeaderTintDark
 import com.piku.client.ui.theme.GlassHeaderTintLight
+import com.piku.client.ui.theme.MenuPopupBgDark
+import com.piku.client.ui.theme.MenuPopupBgLight
 import com.piku.client.ui.theme.HomeBgBottomDark
 import com.piku.client.ui.theme.HomeBgBottomLight
 import com.piku.client.ui.theme.HomeBgTopDark
@@ -522,7 +524,7 @@ private fun HistoryUndoBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(14.dp))
-                .background(if (dark) Color(0xF2262421) else Color(0xF7FFFFFF))
+                .background(if (dark) MenuPopupBgDark else MenuPopupBgLight)
                 .border(BorderStroke(0.5.dp, PikuColors.border), RoundedCornerShape(14.dp))
                 .padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,

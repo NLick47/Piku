@@ -138,6 +138,9 @@
     <string name="my_tags_add_hint">Enter a tag name</string>
     <string name="my_tags_add">Add</string>
     <string name="my_tags_empty">No custom tags yet</string>
+    <string name="my_tags_empty_title">No custom tags yet</string>
+    <string name="my_tags_empty_subtitle">Tags you add show up as shortcuts on Search</string>
+    <string name="my_tags_count">%1$d tags</string>
     <string name="my_tags_delete">Delete tag</string>
     <string name="my_tags_manage">Manage</string>
     <string name="tags_screen_hint">Custom tags appear on Search</string>

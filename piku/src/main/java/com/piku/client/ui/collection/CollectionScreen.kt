@@ -124,6 +124,8 @@ import com.piku.client.ui.common.PikuBackButton
 import com.piku.client.ui.common.UserAvatar
 import com.piku.client.ui.common.WorkCard
 import com.piku.client.ui.common.resolve
+import com.piku.client.ui.theme.ContentCardBgDark
+import com.piku.client.ui.theme.ContentCardBgLight
 import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.HomeBgBottomDark
 import com.piku.client.ui.theme.HomeBgBottomLight
@@ -593,7 +595,7 @@ private fun AllFavoritesEntry(
             .fillMaxWidth()
             .shadow(10.dp, shape, ambientColor = Color(0x33000000), spotColor = Color(0x40000000))
             .clip(shape)
-            .background(if (dark) Color(0xF2262421) else Color(0xF7FFFFFF))
+            .background(if (dark) ContentCardBgDark else ContentCardBgLight)
             .border(
                 BorderStroke(1.dp, if (dark) Color(0x3DFFFFFF) else Color(0x80FFFFFF)),
                 shape,
@@ -657,7 +659,7 @@ private fun FolderCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .shadow(10.dp, shape, ambientColor = Color(0x33000000), spotColor = Color(0x40000000))
-                .background(if (dark) Color(0xF2262421) else Color(0xF7FFFFFF))
+                .background(if (dark) ContentCardBgDark else ContentCardBgLight)
                 .clip(shape)
                 .border(
                     BorderStroke(1.dp, if (dark) Color(0x3DFFFFFF) else Color(0x80FFFFFF)),
@@ -1221,7 +1223,7 @@ private fun SelectionActionBar(
             dark = dark,
             shape = RoundedCornerShape(20.dp),
             modifier = Modifier.fillMaxWidth(),
-            bgColor = if (dark) Color(0xF2262421) else Color(0xF7FFFFFF),
+            bgColor = if (dark) ContentCardBgDark else ContentCardBgLight,
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
@@ -1352,7 +1354,7 @@ private fun CollectionUndoBar(
                 .fillMaxWidth()
                 .shadow(12.dp, shape, ambientColor = Color(0x33000000), spotColor = Color(0x40000000))
                 .clip(shape)
-                .background(if (dark) Color(0xF2262421) else Color(0xF7FFFFFF))
+                .background(if (dark) ContentCardBgDark else ContentCardBgLight)
                 .border(BorderStroke(0.5.dp, PikuColors.border), shape)
                 .padding(start = 14.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
