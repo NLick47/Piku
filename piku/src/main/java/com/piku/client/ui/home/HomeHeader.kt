@@ -36,6 +36,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -63,6 +65,8 @@ internal fun GlassHeader(
     drawerIsOpen: Boolean = false,
     /** 列表停在顶部：自定义背景下头部底衬整体退场，把清晰头图让出来 */
     atTop: Boolean = false,
+    tabColors: FeedTabColors? = null,
+    onTabBand: (TabBand) -> Unit = {},
 ) {
     Box(
         modifier = Modifier
@@ -101,22 +105,32 @@ internal fun GlassHeader(
                     dark = dark,
                 )
             }
-            FeedTabRow(
-                feedTab = state.feedTab,
-                onSelectFeedTab = onSelectFeedTab,
-                dark = dark,
-                // 分类只作用于「最新」源，其余源隐藏；它排在标签行右端，不与顶行控件抢头图
-                categoryLabel = if (state.feedTab == FeedTab.LATEST) {
-                    stringResource(state.category.nameRes)
-                } else {
-                    null
-                },
-                categoryActive = state.category != PoipikuCategory.ALL,
-                onCategoryClick = onCategoryClick,
-            )
+            Box(Modifier.reportTabBand(onTabBand)) {
+                FeedTabRow(
+                    feedTab = state.feedTab,
+                    onSelectFeedTab = onSelectFeedTab,
+                    dark = dark,
+                    // 分类只作用于「最新」源，其余源隐藏；它排在标签行右端，不与顶行控件抢头图
+                    categoryLabel = if (state.feedTab == FeedTab.LATEST) {
+                        stringResource(state.category.nameRes)
+                    } else {
+                        null
+                    },
+                    categoryActive = state.category != PoipikuCategory.ALL,
+                    onCategoryClick = onCategoryClick,
+                    tabColors = tabColors,
+                )
+            }
         }
     }
 }
+
+/** 标签行实测上报：报的是窗口坐标里的横带，背景层据此把取样落回图片上 */
+internal fun Modifier.reportTabBand(onBand: (TabBand) -> Unit): Modifier =
+    onGloballyPositioned { coordinates ->
+        val bounds = coordinates.boundsInRoot()
+        if (bounds.height > 0f) onBand(TabBand(topPx = bounds.top, bottomPx = bounds.bottom))
+    }
 
 @Composable
 internal fun TabletTopBar(

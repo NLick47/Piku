@@ -22,6 +22,8 @@ data class SavedBackground(
     val imgHeight: Int = 0,
 )
 
+class SampledImage(val pixels: IntArray, val width: Int, val height: Int)
+
 @Singleton
 class BackgroundStore @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -29,6 +31,10 @@ class BackgroundStore @Inject constructor(
 
     private val backgroundDir: File
         get() = File(context.filesDir, "background").apply { mkdirs() }
+
+    private val thumbLock = Any()
+    private var thumbPath: String? = null
+    private var thumbImage: SampledImage? = null
 
     suspend fun saveFromUri(uri: Uri): SavedBackground? = withContext(Dispatchers.IO) {
         try {
@@ -120,6 +126,48 @@ class BackgroundStore @Inject constructor(
         return SavedBackground(target.absolutePath, scrimDark, scrimLight, imgWidth, imgHeight)
     }
 
+    /**
+     * 采样用的小图（最长边 128px 的 ARGB 像素 + 尺寸）。给标签行判深浅底用：
+     * 走按路径缓存的缩略图，改取景/改头部高度时反复取样也不会反复解码原图。
+     */
+    suspend fun sampleOf(path: String): SampledImage? = withContext(Dispatchers.IO) {
+        try {
+            synchronized(thumbLock) {
+                if (thumbPath == path) {
+                    thumbImage?.let { return@withContext it }
+                }
+                thumbImage = null
+                thumbPath = null
+                val bitmap = decodeThumbnail(path, PALETTE_SIDE) ?: return@withContext null
+                val width = bitmap.width
+                val height = bitmap.height
+                val pixels = IntArray(width * height)
+                bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+                bitmap.recycle()
+                SampledImage(pixels, width, height).also {
+                    thumbPath = path
+                    thumbImage = it
+                }
+            }
+        } catch (t: Throwable) {
+            Log.d(TAG, "sampleOf: exception", t)
+            null
+        }
+    }
+
+    /** 解码到最长边 [side] 内的小图（按文件路径） */
+    private fun decodeThumbnail(path: String, side: Int): Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(path, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        var sample = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= side) sample *= 2
+        return BitmapFactory.decodeFile(
+            path,
+            BitmapFactory.Options().apply { inSampleSize = sample },
+        )
+    }
+
 
     private fun extractScrims(uri: Uri): Pair<Int?, Int?> {
         return try {
@@ -172,6 +220,10 @@ class BackgroundStore @Inject constructor(
     /** 删除自定义背景文件 */
     suspend fun clear() = withContext(Dispatchers.IO) {
         runCatching {
+            synchronized(thumbLock) {
+                thumbPath = null
+                thumbImage = null
+            }
             backgroundDir.listFiles()?.forEach { it.delete() }
         }
     }
@@ -224,7 +276,7 @@ class BackgroundStore @Inject constructor(
         /** 重编码后的最长边 */
         private const val MAX_SIDE = 2048
 
-        /** 取色用小图最长边 */
+        /** 取色/取样用小图最长边 */
         private const val PALETTE_SIDE = 128
 
         /** 遮罩色亮度钳制：暗色遮罩足够深且保留可见色相、亮色遮罩足够浅 */

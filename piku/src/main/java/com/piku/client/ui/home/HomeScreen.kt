@@ -57,6 +57,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -69,11 +70,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -124,7 +127,6 @@ fun HomeScreen(
     var bgPreviewMode by rememberSaveable { mutableIntStateOf(BG_PREVIEW_REAL) }
     var bgEditTarget by rememberSaveable { mutableIntStateOf(BG_EDIT_TARGET_HERO) }
     var bgPanelCollapsed by rememberSaveable { mutableStateOf(false) }
-    val screenDensity = LocalDensity.current.density
     val effectiveBgTarget = if (state.customBackgroundPath == null) {
         BG_EDIT_TARGET_HERO
     } else {
@@ -194,6 +196,84 @@ fun HomeScreen(
             gridState.firstVisibleItemIndex == 0 && gridState.firstVisibleItemScrollOffset == 0
         }
     }
+    var tabBand by remember { mutableStateOf<TabBand?>(null) }
+    var screenSizePx by remember { mutableStateOf(IntSize.Zero) }
+    val zoneHeightDp = heroZoneHeightDp(
+        screenHeightDp = LocalConfiguration.current.screenHeightDp.toFloat(),
+        heroFraction = state.backgroundHeroFraction,
+    ).dp
+    val zoneHeightPx = with(LocalDensity.current) { zoneHeightDp.toPx() }
+    val viewWidthPx = screenSizePx.width.toFloat()
+    val viewHeightPx = screenSizePx.height.toFloat()
+    val heroFrame = contentFrame(
+        imgWidth = state.backgroundImgWidth,
+        imgHeight = state.backgroundImgHeight,
+        viewWidth = viewWidthPx,
+        viewHeight = zoneHeightPx,
+        scale = state.heroScale,
+        offsetX = state.heroOffsetX,
+        offsetY = state.heroOffsetY,
+    )
+    val separatedBackdrop = state.backdropPath != null
+    val frostScale = if (separatedBackdrop) state.backgroundScale else state.heroScale.coerceAtLeast(1f)
+    val frostOffsetX = if (separatedBackdrop) state.backgroundOffsetX else state.heroOffsetX
+    val frostOffsetY = if (separatedBackdrop) state.backgroundOffsetY else state.heroOffsetY
+    val frostFrame = contentFrame(
+        imgWidth = if (separatedBackdrop) state.backdropImgWidth else state.backgroundImgWidth,
+        imgHeight = if (separatedBackdrop) state.backdropImgHeight else state.backgroundImgHeight,
+        viewWidth = viewWidthPx,
+        viewHeight = viewHeightPx,
+        scale = frostScale,
+        offsetX = frostOffsetX,
+        offsetY = frostOffsetY,
+    )
+    val veil = veilColor(dark, state.backgroundScrimDark, state.backgroundScrimLight)
+    // 标签行字色：量的是标签行压到的那块图片。换图、改头部清晰区高度、缩放、拖取景都会改
+    // 取样矩形，颜色跟着变；遮罩按停顶状态算——滚动时头部另有玻璃底衬接管，取色不该随滚动跳
+    val tabLuma by produceState<Float?>(
+        initialValue = null,
+        state.customBackgroundPath,
+        state.backdropPath,
+        heroFrame,
+        frostFrame,
+        tabBand,
+        state.backgroundDim,
+        dark,
+        veil,
+        zoneHeightPx,
+        viewHeightPx,
+    ) {
+        val band = tabBand
+        val sample = band?.let {
+            tabBandSample(
+                bandTop = it.topPx,
+                bandBottom = it.bottomPx,
+                heroPath = state.customBackgroundPath,
+                heroFrame = heroFrame,
+                frostPath = state.backdropPath ?: state.customBackgroundPath,
+                frostFrame = frostFrame,
+            )
+        }
+        val imageLuma = sample?.let { viewModel.sampleBackgroundImage(it.path) }
+            ?.let { meanLumaOfRect(it, sample.rect) }
+        // 量不到（没设背景/标签行不在图上/图读不出来）就退回主题色；
+        // 只是取景变了的话保留上一次结果，拖缩放时字色才不会一闪一闪
+        if (band == null || sample == null || imageLuma == null) {
+            value = null
+            return@produceState
+        }
+        val stops = veilStops(
+            heroFrac = (zoneHeightPx / viewHeightPx).coerceIn(0f, 0.9f),
+            dimBase = veilDim(dark, state.backgroundDim),
+            midFactor = veilMidFactor(dark),
+        )
+        val bandMidT = ((band.topPx + band.bottomPx) / 2f / viewHeightPx).coerceIn(0f, 1f)
+        value = veiledLuma(imageLuma, veilAlphaAt(stops, bandMidT), veil)
+    }
+    val tabColors = feedTabColors(
+        hasCustomBackground = state.customBackgroundPath != null,
+        bandLuma = tabLuma,
+    )
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -330,26 +410,27 @@ fun HomeScreen(
             showWebDavSettings = true
         },
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .onSizeChanged { screenSizePx = it },
+        ) {
             val customBgPath = state.customBackgroundPath
             if (customBgPath != null) {
                 CustomHomeBackground(
                     heroPath = customBgPath,
+                    heroFrame = heroFrame,
+                    heroHeight = zoneHeightDp,
+                    heroScale = state.heroScale,
                     backdropPath = state.backdropPath,
+                    frostScale = frostScale,
+                    frostOffsetX = frostOffsetX,
+                    frostOffsetY = frostOffsetY,
                     dim = state.backgroundDim,
-                    backdropScale = state.backgroundScale,
                     dark = dark,
                     scrimDark = state.backgroundScrimDark,
                     scrimLight = state.backgroundScrimLight,
-                    heroOffsetX = state.heroOffsetX,
-                    heroOffsetY = state.heroOffsetY,
-                    heroScale = state.heroScale,
-                    backdropOffsetX = state.backgroundOffsetX,
-                    backdropOffsetY = state.backgroundOffsetY,
-                    imgWidth = state.backgroundImgWidth,
-                    imgHeight = state.backgroundImgHeight,
                     blurDp = state.backgroundBlur,
-                    heroFraction = state.backgroundHeroFraction,
                     editMode = isBackgroundEditMode && bgPreviewMode != BG_PREVIEW_REAL,
                     scrolledOverTopPx = parallax,
                 )
@@ -405,11 +486,14 @@ fun HomeScreen(
                                         onDoubleTapTop = { gridState.scrollToTopSmart(scope) },
                                         dark = dark,
                                     )
-                                    FeedTabRow(
-                                        feedTab = state.feedTab,
-                                        onSelectFeedTab = viewModel::selectFeedTab,
-                                        dark = dark,
-                                    )
+                                    Box(Modifier.reportTabBand { tabBand = it }) {
+                                        FeedTabRow(
+                                            feedTab = state.feedTab,
+                                            onSelectFeedTab = viewModel::selectFeedTab,
+                                            dark = dark,
+                                            tabColors = tabColors,
+                                        )
+                                    }
                                 }
                             }
                             HomeContent(
@@ -448,6 +532,8 @@ fun HomeScreen(
                             scrollProgress = feedProgress,
                             drawerIsOpen = drawerState.isOpen,
                             atTop = atTop,
+                            tabColors = tabColors,
+                            onTabBand = { tabBand = it },
                         )
                         HomeContent(
                             state = state,
@@ -486,54 +572,39 @@ fun HomeScreen(
                                             SettingsRepository.HERO_SCALE_MAX,
                                         )
                                         if (ns != state.heroScale) viewModel.setHeroScale(ns)
-                                        var nx = state.heroOffsetX
-                                        var ny = state.heroOffsetY
-                                        val iw = state.backgroundImgWidth
-                                        val ih = state.backgroundImgHeight
-                                        if (ns >= 1f) {
-                                            val (overflowX, overflowY) = cropOverflowPx(
-                                                imgWidth = iw,
-                                                imgHeight = ih,
-                                                viewWidth = size.width,
-                                                viewHeight = size.height,
-                                                scale = ns,
-                                            )
-                                            if (overflowX > 1f) nx = state.heroOffsetX + pan.x / overflowX
-                                            if (overflowY > 1f) ny = state.heroOffsetY + pan.y / overflowY
-                                        } else if (iw != null && ih != null && iw > 0 && ih > 0) {
-                                            val screenHdp = size.height / screenDensity
-                                            val zoneHpx = (screenHdp * state.backgroundHeroFraction)
-                                                .coerceIn(200f, 420f) * screenDensity
-                                            val zoneWpx = size.width.toFloat()
-                                            val fill = maxOf(zoneWpx / iw, zoneHpx / ih)
-                                            val cardW = iw * fill * ns
-                                            val cardH = ih * fill * ns
-                                            val slackX = ((zoneWpx - cardW) / 2f).coerceAtLeast(0f)
-                                            val slackY = ((zoneHpx - cardH) / 2f).coerceAtLeast(0f)
-                                            if (slackX > 1f) nx = state.heroOffsetX + pan.x / slackX
-                                            if (slackY > 1f) ny = state.heroOffsetY + pan.y / slackY
-                                        }
-                                        viewModel.setHeroOffset(nx, ny)
+                                        // 按新缩放的取景算可平移量：缩放会同步放大拖动范围，拖拽与手指 1:1
+                                        val frame = contentFrame(
+                                            imgWidth = state.backgroundImgWidth,
+                                            imgHeight = state.backgroundImgHeight,
+                                            viewWidth = size.width.toFloat(),
+                                            viewHeight = zoneHeightPx,
+                                            scale = ns,
+                                            offsetX = state.heroOffsetX,
+                                            offsetY = state.heroOffsetY,
+                                        ) ?: return@detectTransformGestures
+                                        viewModel.setHeroOffset(
+                                            dragOffset(state.heroOffsetX, pan.x, frame.slackX),
+                                            dragOffset(state.heroOffsetY, pan.y, frame.slackY),
+                                        )
                                     } else {
                                         val ns = (state.backgroundScale * zoom).coerceIn(
                                             SettingsRepository.BACKGROUND_SCALE_MIN,
                                             SettingsRepository.BACKGROUND_SCALE_MAX,
                                         )
                                         if (ns != state.backgroundScale) viewModel.setBackgroundScale(ns)
-                                        val (overflowX, overflowY) = cropOverflowPx(
+                                        val frame = contentFrame(
                                             imgWidth = state.backdropImgWidth,
                                             imgHeight = state.backdropImgHeight,
-                                            viewWidth = size.width,
-                                            viewHeight = size.height,
-                                            scale = state.backgroundScale,
+                                            viewWidth = size.width.toFloat(),
+                                            viewHeight = size.height.toFloat(),
+                                            scale = ns,
+                                            offsetX = state.backgroundOffsetX,
+                                            offsetY = state.backgroundOffsetY,
+                                        ) ?: return@detectTransformGestures
+                                        viewModel.setBackgroundOffset(
+                                            dragOffset(state.backgroundOffsetX, pan.x, frame.slackX),
+                                            dragOffset(state.backgroundOffsetY, pan.y, frame.slackY),
                                         )
-                                        val nx = if (overflowX > 1f) {
-                                            state.backgroundOffsetX + pan.x / overflowX
-                                        } else state.backgroundOffsetX
-                                        val ny = if (overflowY > 1f) {
-                                            state.backgroundOffsetY + pan.y / overflowY
-                                        } else state.backgroundOffsetY
-                                        viewModel.setBackgroundOffset(nx, ny)
                                     }
                                 }
                             }
@@ -563,18 +634,27 @@ fun HomeScreen(
 
                 BackgroundBlueprintOverlay(
                     dark = dark,
-                    heroHeightDp = (LocalConfiguration.current.screenHeightDp.dp * state.backgroundHeroFraction)
-                        .coerceIn(200.dp, 420.dp),
-                    offsetX = state.heroOffsetX,
-                    offsetY = state.heroOffsetY,
-                    imgWidth = state.backgroundImgWidth,
-                    imgHeight = state.backgroundImgHeight,
-                    scale = state.heroScale,
+                    zoneHeightPx = zoneHeightPx,
+                    heroFrame = heroFrame,
+                    framedT = ((1f - state.heroScale) / (1f - SettingsRepository.HERO_SCALE_MIN))
+                        .coerceIn(0f, 1f),
+                    readoutX = if (effectiveBgTarget == BG_EDIT_TARGET_BACKDROP &&
+                        state.backdropPath != null
+                    ) {
+                        state.backgroundOffsetX
+                    } else {
+                        state.heroOffsetX
+                    },
+                    readoutY = if (effectiveBgTarget == BG_EDIT_TARGET_BACKDROP &&
+                        state.backdropPath != null
+                    ) {
+                        state.backgroundOffsetY
+                    } else {
+                        state.heroOffsetY
+                    },
                     minimal = bgPreviewMode == BG_PREVIEW_REAL,
-                    editTarget = effectiveBgTarget,
-                    backdropOffsetX = state.backgroundOffsetX,
-                    backdropOffsetY = state.backgroundOffsetY,
-                    backdropSeparated = state.backdropPath != null,
+                    editingBackdrop = effectiveBgTarget == BG_EDIT_TARGET_BACKDROP &&
+                        state.backdropPath != null,
                 )
 
                 Box(

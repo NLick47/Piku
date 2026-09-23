@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -31,6 +32,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -53,7 +57,10 @@ internal fun FeedTabRow(
     categoryLabel: String? = null,
     categoryActive: Boolean = false,
     onCategoryClick: () -> Unit = {},
+    /** 自定义背景下按图取色的标签用色，null 表示跟随主题 */
+    tabColors: FeedTabColors? = null,
 ) {
+    val colors = tabColors ?: FeedTabColors.default()
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -70,21 +77,25 @@ internal fun FeedTabRow(
             text = stringResource(R.string.home_tab_hot),
             active = feedTab == FeedTab.HOT,
             onClick = { onSelectFeedTab(FeedTab.HOT) },
+            colors = colors,
         )
         FeedTabItem(
             text = stringResource(R.string.home_tab_latest),
             active = feedTab == FeedTab.LATEST,
             onClick = { onSelectFeedTab(FeedTab.LATEST) },
+            colors = colors,
         )
         FeedTabItem(
             text = stringResource(R.string.home_tab_follow),
             active = feedTab == FeedTab.FOLLOW,
             onClick = { onSelectFeedTab(FeedTab.FOLLOW) },
+            colors = colors,
         )
         FeedTabItem(
             text = stringResource(R.string.home_tab_random),
             active = feedTab == FeedTab.RANDOM,
             onClick = { onSelectFeedTab(FeedTab.RANDOM) },
+            colors = colors,
         )
         if (categoryLabel != null) {
             Spacer(Modifier.weight(1f))
@@ -92,6 +103,7 @@ internal fun FeedTabRow(
                 label = categoryLabel,
                 active = categoryActive,
                 onClick = onCategoryClick,
+                colors = colors,
             )
         }
     }
@@ -106,10 +118,10 @@ private fun CategoryEntry(
     label: String,
     active: Boolean,
     onClick: () -> Unit,
+    colors: FeedTabColors,
 ) {
-    val accent = PikuColors.accent
     val textColor by animateColorAsState(
-        targetValue = if (active) accent else PikuColors.textSecondary,
+        targetValue = if (active) colors.active else colors.inactive,
         animationSpec = tween(durationMillis = 200),
         label = "categoryTextColor",
     )
@@ -140,6 +152,7 @@ private fun CategoryEntry(
                 fontSize = 14.sp,
                 fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
                 maxLines = 1,
+                style = LocalTextStyle.current.copy(shadow = tabTextShadow(colors.shadow)),
             )
             Spacer(Modifier.width(2.dp))
             Icon(
@@ -155,7 +168,7 @@ private fun CategoryEntry(
                 .height(TabIndicatorHeight)
                 .width(with(density) { indicatorWidth.toDp() })
                 .clip(RoundedCornerShape(TabIndicatorHeight / 2))
-                .background(accent),
+                .background(colors.active),
         )
     }
 }
@@ -166,9 +179,10 @@ private fun FeedTabItem(
     text: String,
     active: Boolean,
     onClick: () -> Unit,
+    colors: FeedTabColors,
 ) {
     val textColor by animateColorAsState(
-        targetValue = if (active) PikuColors.accent else PikuColors.textSecondary,
+        targetValue = if (active) colors.active else colors.inactive,
         animationSpec = tween(durationMillis = 200),
         label = "tabTextColor",
     )
@@ -201,6 +215,7 @@ private fun FeedTabItem(
             fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
             maxLines = 1,
             onTextLayout = { labelWidthPx = it.size.width },
+            style = LocalTextStyle.current.copy(shadow = tabTextShadow(colors.shadow)),
         )
         Spacer(Modifier.height(1.dp))
         Box(
@@ -208,10 +223,51 @@ private fun FeedTabItem(
                 .height(TabIndicatorHeight)
                 .width(with(density) { indicatorWidth.toDp() })
                 .clip(RoundedCornerShape(TabIndicatorHeight / 2))
-                .background(PikuColors.accent),
+                .background(colors.active),
         )
     }
 }
 
 /** 与正文笔画同重量级：再粗就比 14sp 的字还重，比旧版（2dp × 18dp）更轻 */
 private val TabIndicatorHeight = 1.5.dp
+
+internal const val TAB_LUMA_THRESHOLD = 0.5f
+
+internal data class FeedTabColors(
+    val inactive: Color,
+    val active: Color,
+    /** 文字软阴影：底图明暗不均（亮肤色、白蕾丝）时靠它保底，null 表示不加 */
+    val shadow: Color? = null,
+) {
+    companion object {
+        /** 未设自定义背景时的默认取色：跟随主题 */
+        @Composable
+        fun default(): FeedTabColors = FeedTabColors(
+            inactive = PikuColors.textSecondary,
+            active = PikuColors.accent,
+        )
+    }
+}
+
+/**
+ * [bandLuma] 为 null 表示没量到（标签行不在图上/图读不出来），退回 [FeedTabColors.default] 跟随主题。
+ */
+internal fun feedTabColors(
+    hasCustomBackground: Boolean,
+    bandLuma: Float?,
+): FeedTabColors? {
+    if (!hasCustomBackground) return null
+    val luma = bandLuma ?: return null
+    val onLight = luma > TAB_LUMA_THRESHOLD
+    return FeedTabColors(
+        // 未选中：与底同侧但压低对比，选中：拉满对比；压在照片上时对比度的上限就是黑白，别客气
+        inactive = if (onLight) Color(0xD92C2C2C) else Color(0xE6EDEAE4),
+        active = if (onLight) Color(0xFF000000) else Color(0xFFFFFFFF),
+        // 与文字反号的软阴影：底图局部突然变亮/变暗时仍有轮廓
+        shadow = if (onLight) Color(0x80FFFFFF) else Color(0x80000000),
+    )
+}
+
+/** 把 [FeedTabColors.shadow] 折成 Compose 文字阴影（null 返回 null） */
+internal fun tabTextShadow(shadow: Color?): Shadow? =
+    shadow?.let { Shadow(color = it, offset = Offset(0f, 2f), blurRadius = 8f) }

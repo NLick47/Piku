@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,43 +22,44 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.piku.client.R
-import com.piku.client.data.local.SettingsRepository
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
  * 背景编辑蓝图覆盖层（高对比分区可视化）：
  * - 清晰区：四角取景括号框出头部取样范围（相机取景框样式）；
- * - 头部画框式（缩放 <1）：虚线圆角矩形框出卡片实际占位，直观看到留白范围；
- *
+ * - 头部画框式（缩放 <1）：虚线圆角矩形框出整幅图的实际占位，直观看到留白范围；
+ * - 左右/上下刻线：该方向当前可平移才画，和手势用同一份几何（[ContentFrame]）。
  */
 @Composable
 internal fun BackgroundBlueprintOverlay(
     dark: Boolean,
-    heroHeightDp: Dp,
-    offsetX: Float,
-    offsetY: Float,
-    imgWidth: Int?,
-    imgHeight: Int?,
-    scale: Float,
+    /** 头部清晰区高度（像素）：边界线与分区标签都锚在它上面 */
+    zoneHeightPx: Float,
+    /** 头部图绘制矩形；null 表示没有图片尺寸信息（只画头部区） */
+    heroFrame: ContentFrame?,
+    /** 头部图进入画框式的程度 0~1：圆角与投影随之过渡 */
+    framedT: Float,
+    /** 当前编辑对象的取景偏移读数（-1~1） */
+    readoutX: Float,
+    readoutY: Float,
     minimal: Boolean = false,
-    editTarget: Int = BG_EDIT_TARGET_HERO,
-    backdropOffsetX: Float = 0f,
-    backdropOffsetY: Float = 0f,
-    backdropSeparated: Boolean = false,
+    editingBackdrop: Boolean = false,
 ) {
+    val density = LocalDensity.current
+    val zoneHeightDp = with(density) { zoneHeightPx.toDp() }
     val lineColor = if (dark) {
         Color.White.copy(alpha = if (minimal) 0.55f else 0.7f)
     } else {
         Color.Black.copy(alpha = if (minimal) 0.45f else 0.55f)
     }
     val textColor = if (dark) Color.White.copy(alpha = 0.75f) else Color.Black.copy(alpha = 0.6f)
-    val editingBackdrop = editTarget == BG_EDIT_TARGET_BACKDROP && backdropSeparated
     val heroLineColor = if (editingBackdrop) {
         lineColor.copy(alpha = lineColor.alpha * 0.4f)
     } else {
@@ -73,8 +75,8 @@ internal fun BackgroundBlueprintOverlay(
     val dashEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
 
     Box(Modifier.fillMaxSize()) {
-        androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
-            val heroPx = heroHeightDp.toPx().coerceIn(0f, size.height)
+        Canvas(Modifier.fillMaxSize()) {
+            val heroPx = zoneHeightPx.coerceIn(0f, size.height)
 
             if (!minimal) {
                 drawRect(
@@ -109,25 +111,14 @@ internal fun BackgroundBlueprintOverlay(
                 drawLine(heroLineColor, pos, Offset(pos.x, pos.y + bracketLen * dy), bracketStroke)
             }
 
-            if (!minimal && imgWidth != null && imgHeight != null && imgWidth > 0 && imgHeight > 0) {
-                val framedT = ((1f - scale) / (1f - SettingsRepository.HERO_SCALE_MIN)).coerceIn(0f, 1f)
-                if (framedT > 0f) {
-                    val coverFactor = maxOf(size.width / imgWidth, heroPx / imgHeight)
-                    val cardW = imgWidth * coverFactor * scale
-                    val cardH = imgHeight * coverFactor * scale
-                    val slackX = ((size.width - cardW) / 2f).coerceAtLeast(0f)
-                    val slackY = ((heroPx - cardH) / 2f).coerceAtLeast(0f)
-                    drawRoundRect(
-                        color = heroLineColor,
-                        topLeft = Offset(
-                            size.width / 2f - cardW / 2f + offsetX * slackX,
-                            heroPx / 2f - cardH / 2f + offsetY * slackY,
-                        ),
-                        size = Size(cardW, cardH),
-                        cornerRadius = CornerRadius(24.dp.toPx() * framedT),
-                        style = Stroke(width = 1.5.dp.toPx(), pathEffect = dashEffect),
-                    )
-                }
+            if (!minimal && heroFrame != null && framedT > 0f) {
+                drawRoundRect(
+                    color = heroLineColor,
+                    topLeft = Offset(heroFrame.left, heroFrame.top),
+                    size = Size(heroFrame.width, heroFrame.height),
+                    cornerRadius = CornerRadius(24.dp.toPx() * framedT),
+                    style = Stroke(width = 1.5.dp.toPx(), pathEffect = dashEffect),
+                )
             }
 
             if (!minimal && editingBackdrop) {
@@ -175,12 +166,9 @@ internal fun BackgroundBlueprintOverlay(
                 )
             }
 
-            if (!minimal) {
-                val (overflowX, overflowY) = cropOverflowPx(
-                    imgWidth, imgHeight, size.width.toInt(), size.height.toInt(), scale,
-                )
+            if (!minimal && heroFrame != null) {
                 val markLen = 48.dp.toPx()
-                if (overflowX > 1f) {
+                if (abs(heroFrame.slackX) > 1f) {
                     listOf(
                         Offset(6f, size.height / 2f),
                         Offset(size.width - 6f, size.height / 2f),
@@ -193,7 +181,7 @@ internal fun BackgroundBlueprintOverlay(
                         )
                     }
                 }
-                if (overflowY > 1f) {
+                if (abs(heroFrame.slackY) > 1f) {
                     listOf(
                         Offset(size.width / 2f, 6f),
                         Offset(size.width / 2f, size.height - 6f),
@@ -217,7 +205,7 @@ internal fun BackgroundBlueprintOverlay(
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(start = 16.dp, top = (heroHeightDp - 44.dp).coerceAtLeast(8.dp))
+                    .padding(start = 16.dp, top = (zoneHeightDp - 44.dp).coerceAtLeast(8.dp))
                     .background(Color(0xE600BCD4), RoundedCornerShape(50))
                     .padding(horizontal = 10.dp, vertical = 4.dp),
             )
@@ -228,14 +216,12 @@ internal fun BackgroundBlueprintOverlay(
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(start = 16.dp, top = heroHeightDp + 12.dp)
+                    .padding(start = 16.dp, top = zoneHeightDp + 12.dp)
                     .background(Color(0xE67C4DFF), RoundedCornerShape(50))
                     .padding(horizontal = 10.dp, vertical = 4.dp),
             )
         }
 
-        val readoutX = if (editingBackdrop) backdropOffsetX else offsetX
-        val readoutY = if (editingBackdrop) backdropOffsetY else offsetY
         Text(
             text = stringResource(
                 R.string.background_offset_readout,
@@ -246,7 +232,7 @@ internal fun BackgroundBlueprintOverlay(
             fontSize = if (minimal) 10.sp else 11.sp,
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .padding(top = if (minimal) heroHeightDp + 10.dp else heroHeightDp + 56.dp)
+                .padding(top = if (minimal) zoneHeightDp + 10.dp else zoneHeightDp + 56.dp)
                 .background(
                     color = if (dark) {
                         Color.Black.copy(alpha = if (minimal) 0.25f else 0.35f)

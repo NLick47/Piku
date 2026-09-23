@@ -1,6 +1,8 @@
 package com.piku.client.ui.home
 
+import androidx.compose.ui.graphics.Color
 import com.piku.client.data.local.SettingsRepository
+import com.piku.client.ui.theme.HomeBgTopDark
 import kotlin.math.exp
 import kotlin.math.ln
 
@@ -30,6 +32,9 @@ internal const val DARK_DIM_MAX = 0.85f
 /** 暗色下 hero 中段遮罩透明度相对压暗值的系数（亮色沿用 0.15，保持艺术图清透） */
 internal const val DARK_DIM_MID_FACTOR = 0.50f
 
+/** 亮色下遮罩中段透明度相对压暗值的系数 */
+internal const val LIGHT_DIM_MID_FACTOR = 0.15f
+
 /** 暗色 tint 融合主题深色 HomeBgTopDark 的比例（0=纯图片色，1=纯主题色） */
 internal const val DARK_TINT_BLEND = 0.5f
 
@@ -46,30 +51,18 @@ internal fun androidx.compose.ui.graphics.Color.blendInto(
     alpha = alpha,
 )
 
-/**
- * 按图片在视口中的填满缩放 + 当前编辑缩放，计算水平/垂直方向超出视口的像素量。
- * 无有效图片尺寸时返回一个保守的"足够大"值，保证手势除法不 0。
- */
-internal fun cropOverflowPx(
-    imgWidth: Int?,
-    imgHeight: Int?,
-    viewWidth: Int,
-    viewHeight: Int,
-    scale: Float,
-): Pair<Float, Float> {
-    if (imgWidth == null || imgHeight == null || imgWidth <= 0 || imgHeight <= 0 ||
-        viewHeight <= 0
-    ) {
-        return (viewWidth * 0.25f) to (viewHeight * 0.25f)
-    }
-    val fillScale = maxOf(
-        viewWidth.toFloat() / imgWidth,
-        viewHeight.toFloat() / imgHeight,
-    ) * scale
-    val overflowX = ((imgWidth * fillScale - viewWidth) / 2f).coerceAtLeast(0f)
-    val overflowY = ((imgHeight * fillScale - viewHeight) / 2f).coerceAtLeast(0f)
-    return overflowX to overflowY
+/** 压暗遮罩色：绘制与标签行取样共用这一处算式 */
+internal fun veilColor(dark: Boolean, scrimDark: Int?, scrimLight: Int?): Color = if (dark) {
+    (scrimDark?.let { Color(it) } ?: Color.Black).blendInto(HomeBgTopDark, DARK_TINT_BLEND)
+} else {
+    scrimLight?.let { Color(it) } ?: Color.White
 }
+
+internal fun veilDim(dark: Boolean, dim: Float): Float =
+    if (dark) (dim + DARK_DIM_EXTRA).coerceAtMost(DARK_DIM_MAX) else dim
+
+internal fun veilMidFactor(dark: Boolean): Float =
+    if (dark) DARK_DIM_MID_FACTOR else LIGHT_DIM_MID_FACTOR
 
 /** hero 缩放采用对数滑杆，避免 0.x 段被压成无效空间 */
 internal fun sliderToHeroScale(t: Float): Float =

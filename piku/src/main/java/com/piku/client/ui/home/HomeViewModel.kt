@@ -3,9 +3,11 @@ package com.piku.client.ui.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.piku.client.R
+import com.piku.client.data.local.BackgroundStore
 import com.piku.client.data.local.CatalogSource
 import com.piku.client.data.local.CatalogSourceCodec
 import com.piku.client.data.local.ImageSaver
+import com.piku.client.data.local.SampledImage
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.data.local.newCatalogSourceId
 import com.piku.client.data.remote.GitHubRelease
@@ -197,6 +199,7 @@ class HomeViewModel @Inject constructor(
     private val observeBackgroundDimUseCase: ObserveBackgroundDimUseCase,
     private val setBackgroundDimUseCase: SetBackgroundDimUseCase,
     private val settingsRepository: SettingsRepository,
+    private val backgroundStore: BackgroundStore,
     private val modelCatalogRepository: ModelCatalogRepository,
     private val translationRepository: TranslationRepository,
     private val selectTranslateModelUseCase: SelectTranslateModelUseCase,
@@ -745,6 +748,12 @@ class HomeViewModel @Inject constructor(
     fun consumeBackgroundError() {
         _uiState.update { it.copy(backgroundErrorRes = null) }
     }
+
+    /**
+     * 读背景图的小图（128px 缩略图，按路径缓存）：标签行判深浅底用。
+     * 取样区域由 UI 层按当前取景反算（见 [tabBandSample]），这里只负责取像素。
+     */
+    suspend fun sampleBackgroundImage(path: String): SampledImage? = backgroundStore.sampleOf(path)
 
     fun setHistoryRetentionDays(days: Int) {
         viewModelScope.launch { setHistoryRetentionUseCase(days) }
