@@ -26,6 +26,7 @@ import com.piku.client.domain.model.FollowUser
 import com.piku.client.domain.model.Work
 import com.piku.client.ui.collection.CollectionScreen
 import com.piku.client.ui.detail.DetailScreen
+import com.piku.client.ui.detail.rememberWorkDetailPrefetch
 import com.piku.client.ui.follow.FollowUsersScreen
 import com.piku.client.ui.follow.UserWorksScreen
 import com.piku.client.ui.history.HistoryScreen
@@ -116,6 +117,14 @@ fun AppNavHost(
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
+
+    // 点击卡片即预热详情页首图：详情页首图是同一张图的 _640，与卡片渲染的 _360
+    // 缓存互不相通，预热与详情页 HTML/append 请求并行
+    val prefetchDetailImage = rememberWorkDetailPrefetch()
+    val openDetail: (Work) -> Unit = { work ->
+        prefetchDetailImage(work.thumbnailUrl)
+        navController.navigate(Routes.detail(work.authorId, work.id, work.thumbnailUrl))
+    }
 
     LaunchedEffect(deepLink) {
         if (deepLink == null) return@LaunchedEffect
@@ -240,7 +249,7 @@ fun AppNavHost(
                         backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = false
                     },
                     onWorkClick = { work: Work ->
-                        navController.navigate(Routes.detail(work.authorId, work.id, work.thumbnailUrl))
+                        openDetail(work)
                     },
                     onLoginClick = {
                         Log.d(TAG, "navigate LOGIN " +
@@ -306,7 +315,7 @@ fun AppNavHost(
                     }
                 },
                 onWorkClick = { work: Work ->
-                    navController.navigate(Routes.detail(work.authorId, work.id, work.thumbnailUrl))
+                    openDetail(work)
                 },
                 onUserClick = { user: FollowUser ->
                     navController.navigate(Routes.userWorks(user.userId, user.name))
@@ -331,7 +340,7 @@ fun AppNavHost(
             UserWorksScreen(
                 onBack = safePopBack,
                 onWorkClick = { work: Work ->
-                    navController.navigate(Routes.detail(work.authorId, work.id, work.thumbnailUrl))
+                    openDetail(work)
                 },
                 onManageClick = { uid, name ->
                     navController.navigate(Routes.myPosts(uid, name))
@@ -348,7 +357,7 @@ fun AppNavHost(
             MyPostsScreen(
                 onBack = safePopBack,
                 onWorkClick = { work: Work ->
-                    navController.navigate(Routes.detail(work.authorId, work.id, work.thumbnailUrl))
+                    openDetail(work)
                 },
                 onEditClick = { work: Work ->
                     navController.navigate(Routes.editPost(work.id))
@@ -382,7 +391,7 @@ fun AppNavHost(
             TagScreen(
                 onBack = safePopBack,
                 onWorkClick = { work: Work ->
-                    navController.navigate(Routes.detail(work.authorId, work.id, work.thumbnailUrl))
+                    openDetail(work)
                 },
             )
         }
@@ -390,7 +399,7 @@ fun AppNavHost(
             CollectionScreen(
                 onBack = safePopBack,
                 onWorkClick = { work: Work ->
-                    navController.navigate(Routes.detail(work.authorId, work.id, work.thumbnailUrl))
+                    openDetail(work)
                 },
                 onAuthorClick = { work: Work ->
                     navController.navigate(Routes.userWorks(work.authorId, work.authorName)) {
@@ -403,7 +412,7 @@ fun AppNavHost(
             HistoryScreen(
                 onBack = safePopBack,
                 onWorkClick = { work: Work ->
-                    navController.navigate(Routes.detail(work.authorId, work.id, work.thumbnailUrl))
+                    openDetail(work)
                 },
             )
         }
@@ -425,6 +434,8 @@ fun AppNavHost(
                         navController.navigate(Routes.search("#$tag", tag = tag))
                     },
                     onRelatedWorkClick = { authorId, workId, thumbnailUrl ->
+                        // 相关作品同样预热首图
+                        prefetchDetailImage(thumbnailUrl)
                         val detailDepth = navController.currentBackStack.value
                             .count { it.destination.route == Routes.DETAIL }
                         if (detailDepth >= Routes.MAX_DETAIL_DEPTH) {

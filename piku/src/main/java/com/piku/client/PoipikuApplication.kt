@@ -54,9 +54,12 @@ class PoipikuApplication : Application() {
                 .allowHardware(false)
                 .crossfade(200)
                 .diskCache {
+                    // 200MB：详情页每次打开都会预取首张原图（常见 1~4MB），50MB 装不下几张
+                    // 原图就会把列表用的 _360/_640 挤出去，返回列表反而要重新下载。
+                    // 目录是 cacheDir，系统存储紧张时可自行回收
                     DiskCache.Builder()
                         .directory(context.cacheDir.resolve("image_cache"))
-                        .maxSizeBytes(50L * 1024 * 1024)
+                        .maxSizeBytes(200L * 1024 * 1024)
                         .build()
                 }
                 .build()

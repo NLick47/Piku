@@ -36,6 +36,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.text.selection.SelectionState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Article
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -84,6 +85,7 @@ import coil3.compose.AsyncImage
 import com.piku.client.R
 import com.piku.client.common.LinkSegment
 import com.piku.client.common.LinkText
+import com.piku.client.data.repository.ThumbnailResolver
 import com.piku.client.domain.model.WorkDetail
 import com.piku.client.domain.model.RestrictionReason
 import com.piku.client.ui.common.ExpandableIconAction
@@ -137,6 +139,15 @@ internal fun DetailContent(
     sharedKey: String = "",
     /** 由页面持有的滚动状态：顶栏据此决定标题是否淡入，避免两处各建一份 */
     scrollState: ScrollState = rememberScrollState(),
+    /** 来源页缩略图（列表卡片的 _360）：首图到位前的低清打底，空串表示没有 */
+    sourceThumbnailUrl: String = "",
+    /** append 还在路上（HTML 阶段的内容已画出）：图区先不显示页码角标 */
+    loadingMore: Boolean = false,
+    /** 首图渲染完成：据此开始解析原图 URL（见 DetailViewModel.ensureFullImages） */
+    onFirstImageLoaded: () -> Unit = {},
+    /** 上一次加载失败但屏上已有内容：图区角落给常驻重试入口 */
+    loadFailed: Boolean = false,
+    onRetry: () -> Unit = {},
     onImageClick: (Int) -> Unit,
     onImageLongPress: (Int) -> Unit,
     password: String,
@@ -219,6 +230,11 @@ internal fun DetailContent(
             detail = detail,
             dark = dark,
             sharedKey = sharedKey,
+            sourceThumbnailUrl = sourceThumbnailUrl,
+            loadingMore = loadingMore,
+            onFirstImageLoaded = onFirstImageLoaded,
+            loadFailed = loadFailed,
+            onRetry = onRetry,
             onImageClick = onImageClick,
             onImageLongPress = onImageLongPress,
             onWorkClick = onRelatedWorkClick,
@@ -422,6 +438,15 @@ private fun ImagePager(
     dark: Boolean,
     /** 与列表卡片一致的共享元素 key；空串表示不参与过渡 */
     sharedKey: String = "",
+    /** 来源页缩略图（列表卡片的 _360）：首图到位前的低清打底 */
+    sourceThumbnailUrl: String = "",
+    /** append 还在路上：页码角标先不显示（此刻的页数只有主图这一张） */
+    loadingMore: Boolean = false,
+    /** 首图渲染完成回调（只报第一页） */
+    onFirstImageLoaded: () -> Unit = {},
+    /** 上一次加载失败但屏上已有内容：图区角落给常驻重试入口 */
+    loadFailed: Boolean = false,
+    onRetry: () -> Unit = {},
     onImageClick: (Int) -> Unit,
     onImageLongPress: (Int) -> Unit,
     onWorkClick: (Long, Long, String) -> Unit,
@@ -450,6 +475,13 @@ private fun ImagePager(
     val pagerState = rememberPagerState(pageCount = { detail.imageUrls.size })
     LaunchedEffect(pagerState.currentPage) {
         onPageChanged?.invoke(pagerState.currentPage)
+    }
+    // 首图的低清打底：来源缩略图与首图是同一张图时才垫（判定见
+    // ThumbnailResolver.detailUnderlayUrl——占位图、首图另有其图都不垫）。
+    // 垫的是卡片刚渲染过的那张 _360，缓存必中：共享元素过渡落地时图区就是有图的，
+    // 不会先空一块或只剩底色，_640 到位后盖上去。
+    val underlayUrl = remember(sourceThumbnailUrl, detail.imageUrls) {
+        ThumbnailResolver.detailUnderlayUrl(sourceThumbnailUrl, detail.imageUrls.firstOrNull())
     }
 
     // 图区高度跟随真实宽高比：竖图不再被压成窄带，横图也不再上下留大片空白。
@@ -557,30 +589,54 @@ private fun ImagePager(
                         contentScale = ContentScale.Fit,
                     )
                 } else {
-                    AsyncImage(
-                        model = rememberAnimatedImage(detail.imageUrls[page]),
-                        contentDescription = detail.title,
-                        colorFilter = PikuColors.tameWhiteFilter,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .combinedClickable(
-                                onClick = { onImageClick(page) },
-                                onLongClick = { onImageLongPress(page) },
-                            ),
-                        contentScale = ContentScale.Fit,
-                        onSuccess = { state ->
-                            // 取 painter 的固有尺寸换算宽高比，不依赖 result 的具体图片类型
-                            val size = state.painter.intrinsicSize
-                            if (size.width > 0f && size.height > 0f) {
-                                aspectCache[page] = size.width / size.height
-                            }
-                        },
-                    )
+                    Box(Modifier.fillMaxSize()) {
+                        // 只有首页有已知的列表缩略图：追加图从没在列表里出现过，没有低清版本
+                        if (page == 0 && underlayUrl != null) {
+                            AsyncImage(
+                                model = underlayUrl,
+                                contentDescription = null,
+                                colorFilter = PikuColors.tameWhiteFilter,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Fit,
+                                onSuccess = { state ->
+                                    // 打底图与首图是同一张（见 detailUnderlayUrl），宽高比先量出来，
+                                    // 图区高度一次到位，下面的内容不会等首图到了再往下跳
+                                    val size = state.painter.intrinsicSize
+                                    if (size.width > 0f && size.height > 0f) {
+                                        aspectCache[page] = size.width / size.height
+                                    }
+                                },
+                            )
+                        }
+                        AsyncImage(
+                            model = rememberAnimatedImage(detail.imageUrls[page]),
+                            contentDescription = detail.title,
+                            colorFilter = PikuColors.tameWhiteFilter,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .combinedClickable(
+                                    onClick = { onImageClick(page) },
+                                    onLongClick = { onImageLongPress(page) },
+                                ),
+                            contentScale = ContentScale.Fit,
+                            onSuccess = { state ->
+                                // 取 painter 的固有尺寸换算宽高比，不依赖 result 的具体图片类型
+                                val size = state.painter.intrinsicSize
+                                if (size.width > 0f && size.height > 0f) {
+                                    aspectCache[page] = size.width / size.height
+                                }
+                                // 首图已经在屏上了：此刻再解析原图 URL，不和它抢带宽
+                                if (page == 0) onFirstImageLoaded()
+                            },
+                        )
+                    }
                 }
             }
             // 角标与按钮一律锚在卡片四角，不跟着图片尺寸走：
             // 图区高度刚固定下来，浮层再随图片高度浮动就等于白固定了。
-            if (detail.imageUrls.size > 1) {
+            // append 未到时不显示：此刻页数只有主图这一张，会从 1/1 跳到 1/12；
+            // 失败时也让位给重试入口——两者锚在同一个角，叠在一起会互相压住
+            if (detail.imageUrls.size > 1 && !loadingMore && !loadFailed) {
                 Text(
                     text = stringResource(
                         R.string.detail_image_index,
@@ -597,6 +653,33 @@ private fun ImagePager(
                         .border(BorderStroke(0.5.dp, OverlayBorder), RoundedCornerShape(999.dp))
                         .padding(horizontal = 10.dp, vertical = 3.dp),
                 )
+            }
+            // 追加图/正文拉取失败：给常驻入口，snackbar 消失后也能重来
+            if (loadFailed) {
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(10.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(OverlayScrim)
+                        .border(BorderStroke(0.5.dp, OverlayBorder), RoundedCornerShape(999.dp))
+                        .clickable(onClick = onRetry)
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Refresh,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(14.dp),
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = stringResource(R.string.home_retry),
+                        color = Color.White,
+                        fontSize = 11.sp,
+                    )
+                }
             }
             if (hasImageModel && onImageTranslateClick != null) {
                 val isCurrentPageTranslating = imageTranslatingPage == pagerState.currentPage
@@ -741,62 +824,62 @@ private fun PasswordBox(
         Spacer(Modifier.height(12.dp))
         OutlinedTextField(
             value = password,
-            onValueChange = { if (it.length <= 16) onPasswordChange(it) },
-            placeholder = {
+                onValueChange = { if (it.length <= 16) onPasswordChange(it) },
+                placeholder = {
+                    Text(
+                        text = stringResource(R.string.detail_password_hint),
+                        fontSize = 13.sp,
+                    )
+                },
+                singleLine = true,
+                enabled = !loading,
+                shape = RoundedCornerShape(16.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = PikuColors.surfaceMuted,
+                    unfocusedContainerColor = PikuColors.surfaceMuted,
+                    focusedBorderColor = PikuColors.border,
+                    unfocusedBorderColor = PikuColors.border,
+                    cursorColor = PikuColors.controlAccent,
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 46.dp),
+            )
+            Spacer(Modifier.height(10.dp))
+            Button(
+                onClick = onPasswordSubmit,
+                enabled = password.isNotBlank() && !loading,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (dark) LoginTextPrimaryDark else AccentSolid,
+                    contentColor = if (dark) LoginBackgroundDark else Color.White,
+                ),
+            ) {
+                if (loading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Text(
+                        text = stringResource(R.string.detail_password_submit),
+                        fontSize = 13.sp,
+                    )
+                }
+            }
+            if (error) {
+                Spacer(Modifier.height(8.dp))
                 Text(
-                    text = stringResource(R.string.detail_password_hint),
-                    fontSize = 13.sp,
-                )
-            },
-            singleLine = true,
-            enabled = !loading,
-            shape = RoundedCornerShape(16.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = PikuColors.surfaceMuted,
-                unfocusedContainerColor = PikuColors.surfaceMuted,
-                focusedBorderColor = PikuColors.border,
-                unfocusedBorderColor = PikuColors.border,
-                cursorColor = PikuColors.controlAccent,
-            ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 46.dp),
-        )
-        Spacer(Modifier.height(10.dp))
-        Button(
-            onClick = onPasswordSubmit,
-            enabled = password.isNotBlank() && !loading,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = if (dark) LoginTextPrimaryDark else AccentSolid,
-                contentColor = if (dark) LoginBackgroundDark else Color.White,
-            ),
-        ) {
-            if (loading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.dp,
-                )
-            } else {
-                Text(
-                    text = stringResource(R.string.detail_password_submit),
-                    fontSize = 13.sp,
+                    text = stringResource(R.string.detail_password_error),
+                    color = PikuColors.error,
+                    fontSize = 12.sp,
                 )
             }
-        }
-        if (error) {
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = stringResource(R.string.detail_password_error),
-                color = PikuColors.error,
-                fontSize = 12.sp,
-            )
-        }
-        if (blocked) {
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = blockedMessage.ifBlank { stringResource(R.string.detail_unlock_blocked) },
-                color = PikuColors.error,
-                fontSize = 12.sp,
+            if (blocked) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = blockedMessage.ifBlank { stringResource(R.string.detail_unlock_blocked) },
+                    color = PikuColors.error,
+                    fontSize = 12.sp,
                 textAlign = TextAlign.Center,
             )
         }

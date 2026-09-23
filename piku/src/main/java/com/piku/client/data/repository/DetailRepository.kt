@@ -12,10 +12,12 @@ import com.piku.client.domain.model.RestrictionReason
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkDetail
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -54,24 +56,33 @@ class DetailRepository @Inject constructor(
      * 拉取作品详情。密码提交解锁时传入 [existing]（已解析的锁页 detail）可跳过重复的
      * 详情页 HTML 请求（Web 解锁也只发一次 append POST）；带密码的请求不受全局
      * append 限速等待，保证解锁立即发出。
+     *
+     * [onPartial] 是"先出首屏"用的阶段一回调：详情页 HTML 解析完、门判定按 HTML 定下
+     * 之后立刻回调一次，UI 可先把标题/描述/标签/作者/主图画出来，不必等限速等待与
+     * append（网页端同样是 HTML 到达即渲染、追加图异步补）。触发条件见
+     * [DetailLoadPolicy.partialFromHtml]——只有 HTML 已给出真实主图的作品才提前画。
      */
     suspend fun getWorkDetail(
         work: Work,
         password: String = "",
         existing: WorkDetail? = null,
+        onPartial: (suspend (WorkDetail) -> Unit)? = null,
     ): Result<WorkDetail> = apiCall {
+        val startedAt = System.nanoTime()
         val loggedIn = authRepository.isLoggedIn()
         // 锁页 detail 的 imageUrls 已被下方 passwordProtected 分支清空（为显示密码框）
         // 直接复用会导致解锁合并（mergeWorkImages）丢失详情页主图，需重新解析 HTML 取回
-        val detail = if (existing != null && existing.imageUrls.isEmpty()) {
-            val html = api.getWorkDetail(work.authorId, work.id).string()
-            WorkDetailParser.parse(html)
+        val detail = if (existing != null && existing.imageUrls.isNotEmpty()) {
+            existing
         } else {
-            existing ?: run {
+            // HTML 解析在主线程上跑过：详情页 HTML 有几百 KB、十几轮正则（含相关作品
+            // 逐条解析），放在 ViewModel 的主线程协程里会卡住出内容那一帧
+            withContext(Dispatchers.Default) {
                 val html = api.getWorkDetail(work.authorId, work.id).string()
                 WorkDetailParser.parse(html)
             }
         }
+        val htmlMs = elapsedMs(startedAt)
         // ---- 门判定（唯一决策点：结果写入 detail.gate，UI 只渲染该字段）----
         // 依据 = 作品属性（IllustItem class / 密码框；服务端静态渲染，反映作品设置
         // 而非浏览者状态，必须结合登录态）+ 服务端 append 响应（真正的权限判定，
@@ -128,15 +139,18 @@ class DetailRepository @Inject constructor(
                 }
                 val appendResp = appendD.await()
                 notifySessionInvalidIfNeeded(appendResp.result_num)
-                val appendUrls = if (appendResp.result_num > 0) {
-                    WorkDetailParser.extractImageUrls(appendResp.html)
-                } else {
-                    emptyList()
+                // 追加图 HTML 含全部图片标签与正文，正则扫描放到 Default 上做
+                val (appendUrls, novelText) = withContext(Dispatchers.Default) {
+                    val urls = if (appendResp.result_num > 0) {
+                        WorkDetailParser.extractImageUrls(appendResp.html)
+                    } else {
+                        emptyList()
+                    }
+                    urls to WorkDetailParser.extractNovelText(appendResp.html)
                 }
                 // 仅列表当前是占位图/空图才替换，判定见 ThumbnailResolver.backfillThumbnailUrl
                 ThumbnailResolver.backfillThumbnailUrl(work.thumbnailUrl, detail.imageUrls + appendUrls)
                     ?.let { url -> thumbnailResolver.rememberThumb(enrichedWork(work, detail), url) }
-                val novelText = WorkDetailParser.extractNovelText(appendResp.html)
                 // -2 在密码作品上是"密码错误"；非密码作品上是未识别的拒绝，
                 // 走服务端原文提示（不混标 passwordError）
                 val passwordError = detail.passwordProtected && appendResp.result_num == -2
@@ -172,6 +186,11 @@ class DetailRepository @Inject constructor(
                     )
                 }
             }
+            Log.d(
+                TAG,
+                "detailTiming warning work=${work.authorId}/${work.id} " +
+                    "html=${htmlMs}ms total=${elapsedMs(startedAt)}ms",
+            )
             return@apiCall result
         }
         if (detail.r18 && !adultEnabled) {
@@ -181,24 +200,39 @@ class DetailRepository @Inject constructor(
             Log.d(TAG, "detail adult-locked work=${work.authorId}/${work.id}")
             return@apiCall gated(RestrictionReason.ADULT)
         }
-        val appendResp = run {
-            thumbnailResolver.throttleAppend(force = password.isNotBlank())
-            runCatching {
-                api.showAppendFile(work.authorId, work.id, password, 0, -1)
-            }.getOrNull()
+        // ---- 阶段一：HTML 已给出首屏需要的一切（标题/描述/标签/作者/主图）----
+        // 门判定到这一步全部只依赖 HTML 与登录态，与 append 无关，所以此刻画出来的
+        // 内容不会被后面的服务端拒绝码推翻（只有 class 漏判的兜底门会退回门卡，
+        // 那种情况本来也得等服务端答复）。
+        // 关键在于这行在限速等待之前：append 有全局限速（两次之间最短 12 秒），
+        // 过去首屏要一起等它；现在首屏只等 HTML 这一个往返。
+        onPartial?.let { callback ->
+            DetailLoadPolicy.partialFromHtml(detail)?.let { partial -> callback(partial) }
         }
+        val throttleStartedAt = System.nanoTime()
+        thumbnailResolver.throttleAppend(force = password.isNotBlank())
+        val throttleWaitMs = elapsedMs(throttleStartedAt)
+        val appendStartedAt = System.nanoTime()
+        val appendResp = runCatching {
+            api.showAppendFile(work.authorId, work.id, password, 0, -1)
+        }.getOrNull()
+        val appendMs = elapsedMs(appendStartedAt)
         appendResp?.let { notifySessionInvalidIfNeeded(it.result_num) }
-        val appendUrls = if (appendResp?.result_num != null && appendResp.result_num > 0) {
-            WorkDetailParser.extractImageUrls(appendResp.html)
-        } else {
-            emptyList()
+        // 追加图 HTML 含全部图片标签与正文，正则扫描放到 Default 上做
+        val (appendUrls, novelText) = withContext(Dispatchers.Default) {
+            val html = appendResp?.html.orEmpty()
+            val urls = if (appendResp != null && appendResp.result_num > 0) {
+                WorkDetailParser.extractImageUrls(html)
+            } else {
+                emptyList()
+            }
+            urls to WorkDetailParser.extractNovelText(html)
         }
         // 回填列表缩略图缓存：点开详情拿到真实图后列表立即显示。
         // 仅占位图/空图才替换——真实缩略图被追加图覆盖会让卡片换图并重新加载，判定见
         // ThumbnailResolver.backfillThumbnailUrl
         ThumbnailResolver.backfillThumbnailUrl(work.thumbnailUrl, detail.imageUrls + appendUrls)
             ?.let { url -> thumbnailResolver.rememberThumb(enrichedWork(work, detail), url) }
-        val novelText = appendResp?.html?.let { WorkDetailParser.extractNovelText(it) }.orEmpty()
         // append 的 -2 只在密码作品上表示"密码错误"；非密码作品拿到 -2 视为未识别
         // 拒绝，走服务端原文提示
         val passwordError = detail.passwordProtected && appendResp?.result_num == -2
@@ -224,6 +258,13 @@ class DetailRepository @Inject constructor(
             else -> ThumbnailResolver.mergeWorkImages(detail.imageUrls, appendUrls)
         }
         rememberWorkPassword(work, password, appendResp?.result_num ?: 0)
+        // 慢开自证：html 是首屏实际等待，throttle 是过去连首屏一起等的限速等待，
+        // append 是补追加图/正文的往返。三者分开记，才能判断下一次该优化哪一段
+        Log.d(
+            TAG,
+            "detailTiming work=${work.authorId}/${work.id} html=${htmlMs}ms " +
+                "throttle=${throttleWaitMs}ms append=${appendMs}ms total=${elapsedMs(startedAt)}ms",
+        )
         when {
             // 服务端要求登录/键推关注/转推（class 判定漏判时的兜底）：门卡接管图区
             gate != null -> detail.copy(
@@ -236,9 +277,8 @@ class DetailRepository @Inject constructor(
                 imageUrls = emptyList(),
                 passwordError = false,
                 unlockBlocked = true,
-                unlockBlockedMessage = appendResp?.html?.let {
-                    WorkDetailParser.extractUnlockBlockedMessage(it)
-                }.orEmpty(),
+                // unlockBlocked 为真就意味着 append 真的答了话（-4），此处 appendResp 必非空
+                unlockBlockedMessage = WorkDetailParser.extractUnlockBlockedMessage(appendResp.html),
                 novelText = novelText,
             )
             else -> detail.copy(
@@ -249,6 +289,9 @@ class DetailRepository @Inject constructor(
             )
         }
     }
+
+    /** 单调时钟差值（毫秒）：只用于诊断计时，不受系统时间调整影响 */
+    private fun elapsedMs(startNanos: Long): Long = (System.nanoTime() - startNanos) / 1_000_000
 
     /**
      * 用解析出的 detail 补全详情页传入的瘦 work（title/authorName 等可能为空），

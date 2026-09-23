@@ -81,6 +81,12 @@ data class DetailUiState(
     val fullImageUrls: List<String> = emptyList(),
     val fullImagesLoading: Boolean = false,
     val loading: Boolean = false,
+    /**
+     * 阶段一内容已经画出来了，append（追加图/正文）还在路上。
+     * 目前只用来压住图区的页码角标：此刻的页数只有 HTML 主图这一张，
+     * 画出来会在 append 到位时从 "1/1" 跳到 "1/12"。
+     */
+    val detailLoadingMore: Boolean = false,
     val errorRes: Int? = null,
     /** 错误副文案：说明可能的成因，仅部分错误类型有（如作品不存在） */
     val errorHintRes: Int? = null,
@@ -241,6 +247,14 @@ class DetailViewModel @Inject constructor(
 
     val authorId: Long = savedStateHandle["authorId"] ?: -1L
     val workId: Long = savedStateHandle["workId"] ?: -1L
+
+    /**
+     * 来源页（feed/历史/收藏/相关作品）的缩略图：与详情页首图是同一张图的两个尺寸
+     * （列表卡片渲染 _360，详情页首图是 _640）。图区拿它当低清打底，避免首图到位前
+     * 空一块，见 DetailContent 的 underlayUrl。
+     */
+    val sourceThumbnailUrl: String = savedStateHandle["thumb"] ?: ""
+
     private val work = Work(
         id = workId,
         authorId = authorId,
@@ -250,7 +264,7 @@ class DetailViewModel @Inject constructor(
         categoryName = "",
         title = "",
         // 来源页（feed/历史/收藏/相关作品）缩略图：密码作品未解锁时用它回填历史/收藏
-        thumbnailUrl = savedStateHandle["thumb"] ?: "",
+        thumbnailUrl = sourceThumbnailUrl,
         imageCount = 0,
         r18 = false,
     )
@@ -404,18 +418,19 @@ class DetailViewModel @Inject constructor(
                 val needsReload = loggedIn != prevLoggedIn && loggedIn &&
                     (_uiState.value.detail != null || _uiState.value.restrictionReason != null)
                 if (needsReload) {
-                    // 登录成功（含从门卡「去登录」回来）：清受限态并重载拿真实内容
-                    _uiState.update { it.copy(restrictionReason = null) }
+                    // 登录成功（含从门卡「去登录」回来）：重载拿真实内容。
+                    // 不清 restrictionReason——重载期间门卡留在屏上，等新 detail 到了由它决定去留，
+                    // 否则这段等待里图区会从门卡闪成"暂无图片"
                     load()
                 }
             }
         }
         viewModelScope.launch {
             // R-18 显示开关（含本页一键开启、抽屉开关、自动重登还原）变化时：
-            // 停留在详情页的 R-18 门卡作品清门卡并整页重载，不用退出重进
+            // 停留在详情页的 R-18 门卡作品整页重载，不用退出重进。
+            // 同样不清 restrictionReason：重载期间门卡留在屏上（见上）
             settingsRepository.showAdultContent.collect { enabled ->
                 if (enabled && _uiState.value.restrictionReason == RestrictionReason.ADULT) {
-                    _uiState.update { it.copy(restrictionReason = null) }
                     load()
                 }
             }
@@ -1062,6 +1077,9 @@ class DetailViewModel @Inject constructor(
         if (detail.gate != null) return
         // 未解锁的密码作品拿不到原图，跳过无效请求（也不烧 append 限速槽）
         if (detail.passwordProtected && password.isBlank()) return
+        // 未登录拿不到原图（服务端 -2）：直接跳过，不白跑请求，也不让退化的 append 链
+        // 吃掉全局限速槽位（下一次进详情页的追加图会因此晚到）
+        if (!state.loggedIn) return
         viewModelScope.launch {
             _uiState.update { it.copy(fullImagesLoading = true) }
             loadWorkFullImagesUseCase(work, password)
@@ -1201,7 +1219,8 @@ class DetailViewModel @Inject constructor(
         val fallbackUrl = detail.imageUrls.getOrNull(page) ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(savingImage = true) }
-            if (!detail.passwordProtected && !detail.warning) {
+            // 未登录拿不到原图，不必空等：直接存当前可见的图
+            if (!detail.passwordProtected && !detail.warning && state.loggedIn) {
                 if (state.viewerImages.getOrNull(page)?.fullUrl == null) {
                     loadFullImages()
                     withTimeoutOrNull(IMAGE_WAIT_MILLIS) {
@@ -1286,7 +1305,9 @@ class DetailViewModel @Inject constructor(
         if (!runningSaveAlls.add(workId)) return
         appScope.launch {
             try {
-                val needFull = !detail.passwordProtected && !detail.warning && state.fullImageUrls.isEmpty()
+                // 未登录拿不到原图，不必空等：直接存当前可见的图
+                val needFull = !detail.passwordProtected && !detail.warning &&
+                    state.loggedIn && state.fullImageUrls.isEmpty()
                 if (needFull) {
                     loadFullImages()
                     withTimeoutOrNull(IMAGE_WAIT_MILLIS) {
@@ -1489,27 +1510,41 @@ class DetailViewModel @Inject constructor(
     private fun load() {
         if (_uiState.value.loading) return
         viewModelScope.launch {
+            // 不动 restrictionReason：门卡触发的重载期间让门卡留在屏上，
+            // 新的 detail 到了由 detail.gate 决定去留（否则等待期会闪成"暂无图片"）
             _uiState.update {
                 it.copy(
                     loading = true,
+                    detailLoadingMore = false,
                     errorRes = null,
                     errorHintRes = null,
                     errorRetryable = true,
-                    restrictionReason = null,
                 )
             }
-            // 保留已输入的密码：自动重登/刷新详情后已解锁作品不会重新锁回。
-            // 预填值不算——用户还没确认过，不能替他发出去
-            val retainedPassword = if (_uiState.value.passwordPrefilled) {
-                ""
-            } else {
-                _uiState.value.password
-            }
-            loadWorkDetailUseCase(work, retainedPassword)
+            // 保留已输入的密码：自动重登/刷新详情后已解锁作品不会重新锁回
+            val retainedPassword = retainedUnlockPassword()
+            loadWorkDetailUseCase(
+                work = work,
+                password = retainedPassword,
+                onPartial = { partial ->
+                    // 阶段一：HTML 解析完（门判定也已定下）就先把标题/描述/标签/作者/主图
+                    // 画出来，不必等 append 与它前面的限速等待；追加图与正文到了原地补上。
+                    // 不碰 loading：整页加载仍在进行，只是屏幕上已经有内容了
+                    _uiState.update {
+                        it.copy(
+                            detail = partial,
+                            detailLoadingMore = true,
+                            errorRes = null,
+                            errorHintRes = null,
+                        )
+                    }
+                },
+            )
                 .onSuccess { detail ->
                     _uiState.update {
                         it.copy(
                             detail = detail,
+                            detailLoadingMore = false,
                             loading = false,
                             errorRes = null,
                             errorHintRes = null,
@@ -1520,7 +1555,9 @@ class DetailViewModel @Inject constructor(
                     }
                     showServerNoticeOnce(detail)
                     recordHistory(detail)
-                    loadFullImages(retainedPassword)
+                    // 密码作品的原图要带上解锁口令才拿得到，是保存/查看的前提，照旧即时预热；
+                    // 普通作品等首图渲染完再解析（见 ensureFullImages）
+                    if (detail.passwordProtected) loadFullImages(retainedPassword)
                     maybeAutoUnlock(detail)
                     translate(showAfter = settingsRepository.aiTranslateEnabled.value)
                 }
@@ -1538,24 +1575,57 @@ class DetailViewModel @Inject constructor(
                     // 这里只需处理真正的错误
                     val notFound = error is AppError.NotFound
                     val blockedAuthor = error is AppError.BlockedAuthor
+                    val errorRes = when {
+                        blockedAuthor -> R.string.detail_blocked_notice
+                        notFound -> R.string.detail_error_not_found
+                        else -> (error as? AppError)?.toFeedErrorRes() ?: R.string.home_error_parse
+                    }
+                    val errorHintRes = when {
+                        blockedAuthor -> R.string.detail_blocked_notice_hint
+                        notFound -> R.string.detail_error_not_found_hint
+                        else -> null
+                    }
+                    val retryable = !notFound && !blockedAuthor
+                    // 屏幕上已经有内容（这次画出来的部分态，或上一次加载的详情）时，
+                    // 失败只轻提示：不能把用户已经看到的内容换成整页错误页——网页端同样
+                    // 如此，追加图/正文拉不到不挡整页。只有真的没东西可显示才让错误页接管
+                    val hasContent = _uiState.value.detail != null
+                    // 屏幕上有内容时也把 errorRes 留着：UI 据此在图区角落给一个常驻「重试」
+                    // （只靠 snackbar 的话，提示消失后用户没有重来的入口）
                     _uiState.update {
                         it.copy(
                             loading = false,
-                            errorRes = when {
-                                blockedAuthor -> R.string.detail_blocked_notice
-                                notFound -> R.string.detail_error_not_found
-                                else -> (error as? AppError)?.toFeedErrorRes() ?: R.string.home_error_parse
-                            },
-                            errorHintRes = when {
-                                blockedAuthor -> R.string.detail_blocked_notice_hint
-                                notFound -> R.string.detail_error_not_found_hint
-                                else -> null
-                            },
-                            errorRetryable = !notFound && !blockedAuthor,
+                            detailLoadingMore = false,
+                            errorRes = errorRes,
+                            errorHintRes = if (hasContent) null else errorHintRes,
+                            errorRetryable = retryable,
                         )
+                    }
+                    if (hasContent) {
+                        // 终态（作品已删除 / 作者被屏蔽）不给重试：重试只会反复失败
+                        if (retryable) {
+                            feedback.showAction(errorRes, R.string.home_retry) { retry() }
+                        } else {
+                            feedback.show(errorRes)
+                        }
                     }
                 }
         }
+    }
+
+    /**
+     * 可用于后续请求的解锁口令。预填值不算——用户还没确认过，不能替他发出去。
+     */
+    private fun retainedUnlockPassword(): String =
+        if (_uiState.value.passwordPrefilled) "" else _uiState.value.password
+
+    /**
+     * 解析全尺寸原图 URL（图片字节仍由查看器按需下载）。两个触发点：首图渲染完成
+     * （不和首图抢带宽，且通常赶在用户点图之前）、查看器打开（首图还没画出来就被点开的兜底）。
+     * 幂等，内部有"已就绪/进行中"守卫。
+     */
+    fun ensureFullImages() {
+        loadFullImages(retainedUnlockPassword())
     }
 
     private companion object {

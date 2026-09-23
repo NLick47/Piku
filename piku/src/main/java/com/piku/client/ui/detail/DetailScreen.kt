@@ -107,6 +107,8 @@ fun DetailScreen(
 ) {
     val viewModel: DetailViewModel = hiltViewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    // 首张原图预热：URL 一就绪就下（只写磁盘），点开查看器时通常已经是原图
+    rememberFullImagePrefetch(state.fullImageUrls.firstOrNull())
     val catalogModels by viewModel.catalogModels.collectAsStateWithLifecycle()
     val shareRequest by viewModel.shareRequest.collectAsStateWithLifecycle()
     val dark = LocalDarkTheme.current
@@ -321,7 +323,16 @@ fun DetailScreen(
                         dark = dark,
                         sharedKey = workSharedKey(viewModel.authorId, viewModel.workId),
                         scrollState = scrollState,
-                        onImageClick = { page -> viewerPage = page },
+                        sourceThumbnailUrl = viewModel.sourceThumbnailUrl,
+                        loadingMore = state.detailLoadingMore,
+                        onFirstImageLoaded = viewModel::ensureFullImages,
+                        // 加载失败但屏上已有内容：图区角落给常驻重试
+                        loadFailed = state.errorRes != null && state.errorRetryable,
+                        onRetry = viewModel::retry,
+                        onImageClick = { page ->
+                            viewModel.ensureFullImages()
+                            viewerPage = page
+                        },
                         onImageLongPress = { page -> imageActionPage = page },
                         password = state.password,
                         onPasswordChange = viewModel::updatePassword,

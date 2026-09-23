@@ -81,9 +81,6 @@ class ThumbnailResolver @Inject constructor(
 
     private fun workKey(work: Work): String = "${work.authorId}/${work.id}"
 
-    private fun thumbUrl(url: String): String =
-        url.replace("_640.jpg", "_360.jpg")
-
     private fun persistThumb(key: String, url: String) {
         prefs.edit().putStringSet(
             KEY_THUMBS,
@@ -117,6 +114,42 @@ class ThumbnailResolver @Inject constructor(
          */
         fun needsThumbnailBackfill(currentThumbnailUrl: String): Boolean =
             currentThumbnailUrl.isBlank() || isPlaceholderImage(currentThumbnailUrl)
+
+        /**
+         * 点击卡片时预热详情页首图用的 URL；null = 不值得预热。
+         *
+         * 列表卡片渲染的是同一张图的 _360 版本（见 ui.common.feedThumbUrl），详情页
+         * 首图是 _640，URL 不同 → Coil 缓存互不相通。点按瞬间按 _640 预热，正好与
+         * 详情页 HTML / append 请求并行，等首屏内容到位时图也差不多到了。
+         *
+         * 空图与占位图（登录墙/关注墙/密码/R-18/警告）返回 null：详情页要么走门卡，
+         * 要么由 append 出真实图，预热一张用不上的图只是白下载。
+         */
+        fun detailPrefetchUrl(thumbnailUrl: String): String? =
+            thumbnailUrl.takeIf { !needsThumbnailBackfill(it) }
+
+        /**
+         * 详情页首图的低清打底 URL（同一张图的 _360 版本）；null = 不打底。
+         *
+         * 列表卡片渲染的是 _360、详情页首图是 _640，URL 不同 → Coil 缓存互不相通，首图
+         * 必然要重新下载。先把卡片那张（刚在列表里解码过、缓存必中）垫在下面，_640 到位
+         * 后盖上去，共享元素过渡落地时图区就是有图的、不会先空一块。
+         *
+         * 只有来源缩略图确实是首图本身时才打底：
+         * - 空图/占位图（登录墙/关注墙/密码墙）是卡片上那张"墙"，垫在真实图下面只会让人
+         *   短暂看到一张墙图（关注墙作品关注后、密码作品解锁后正是这种情况）；
+         * - 首图与来源缩略图不是同一张（作品被改过、或首图本来来自 append）时，垫一张别的
+         *   图比空着更误导。
+         */
+        fun detailUnderlayUrl(sourceThumbnailUrl: String, firstImageUrl: String?): String? {
+            if (needsThumbnailBackfill(sourceThumbnailUrl)) return null
+            if (firstImageUrl.isNullOrBlank()) return null
+            val thumb = thumbUrl(sourceThumbnailUrl)
+            return thumb.takeIf { it == thumbUrl(firstImageUrl) }
+        }
+
+        private fun thumbUrl(url: String): String =
+            url.replace("_640.jpg", "_360.jpg")
 
         /**
          * 详情页解析到真实图后，列表缩略图该回填成哪个 URL；null = 不回填。

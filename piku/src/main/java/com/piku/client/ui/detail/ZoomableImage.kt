@@ -84,6 +84,9 @@ private const val DOUBLE_TAP_SCALE = 2.5f
 private const val SCALE_EPSILON = 0.01f
 private const val AUTO_HIDE_DELAY_MS = 2500L
 
+/** 原图淡入时长（ImageLoader 的 crossfade 是 200ms，留一点余量） */
+private const val FULL_IMAGE_FADE_MS = 250L
+
 /** 缩放状态（纯数据，便于测试） */
 data class ZoomState(val scale: Float = MIN_SCALE, val offset: Offset = Offset.Zero)
 
@@ -167,9 +170,16 @@ private fun ZoomableImage(
 ) {
     var zoom by remember { mutableStateOf(ZoomState()) }
     var viewport by remember { mutableStateOf(IntSize.Zero) }
-    // 原图就绪后撤掉打底的缩略图：静态图留着只是多占一份内存，动图留着则是两张
-    // 叠在一起各自逐帧解码，纯属白烧 CPU
+    // 原图就绪后撤掉打底的缩略图：静态图留着多占一份内存，动图留着是两张各自逐帧解码。
+    // 但要等淡入结束（ImageLoader 配了 200ms crossfade）——淡入没完就撤，底下露出背景色，
+    // 观感会从"渐变清晰"变成"闪一下变暗再变清楚"。
     var fullReady by remember(image.fullUrl) { mutableStateOf(false) }
+    var thumbnailVisible by remember(image.fullUrl) { mutableStateOf(true) }
+    LaunchedEffect(image.fullUrl, fullReady) {
+        if (!fullReady) return@LaunchedEffect
+        delay(FULL_IMAGE_FADE_MS)
+        thumbnailVisible = false
+    }
     val currentOnTap by rememberUpdatedState(onTap)
     val currentOnLongPress by rememberUpdatedState(onLongPress)
 
@@ -257,7 +267,7 @@ private fun ZoomableImage(
             },
         contentAlignment = Alignment.Center,
     ) {
-        if (!fullReady) {
+        if (thumbnailVisible) {
             AsyncImage(
                 model = rememberAnimatedImage(image.thumbnailUrl),
                 contentDescription = contentDescription,
@@ -274,7 +284,11 @@ private fun ZoomableImage(
                 colorFilter = PikuColors.tameWhiteFilter,
                 modifier = Modifier.fillMaxSize(),
                 onSuccess = { fullReady = true },
-                onError = { fullReady = false },
+                // 失败时把缩略图放回来：原图可能是在缩略图已经撤掉之后才失败的
+                onError = {
+                    fullReady = false
+                    thumbnailVisible = true
+                },
                 loading = {},
                 error = {},
             )
