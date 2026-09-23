@@ -19,7 +19,9 @@ import com.piku.client.domain.model.PopularTag
 import com.piku.client.domain.model.TagCard
 import com.piku.client.domain.model.UserWorksPage
 import com.piku.client.domain.model.Work
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.jvm.Volatile
@@ -33,50 +35,60 @@ class FeedRepository @Inject constructor(
     private val popularTagCacheRepository: PopularTagCacheRepository,
 ) {
 
+    // 列表解析放 Default：正则扫描留在主线程会卡住"新一页到达"那一帧
     suspend fun getNewArrivals(page: Int, categoryCd: Int): Result<List<Work>> =
         apiCall {
             val adultEnabled = settingsRepository.showAdultContent.first()
-            NewArrivalParser.parse(api.getNewArrivals(page, categoryCd).string())
-                .let { if (adultEnabled) it else it.filter { !it.warning } }
+            withContext(Dispatchers.Default) {
+                NewArrivalParser.parse(api.getNewArrivals(page, categoryCd).string())
+            }.let { if (adultEnabled) it else it.filter { !it.warning } }
         }
 
     suspend fun getPopularIllusts(page: Int): Result<List<Work>> =
         apiCall {
             val adultEnabled = settingsRepository.showAdultContent.first()
-            NewArrivalParser.parse(api.getPopularIllusts(page).string())
-                .let { if (adultEnabled) it else it.filter { !it.warning } }
+            withContext(Dispatchers.Default) {
+                NewArrivalParser.parse(api.getPopularIllusts(page).string())
+            }.let { if (adultEnabled) it else it.filter { !it.warning } }
         }
 
     suspend fun getRandomPickups(): Result<List<Work>> =
         apiCall {
             val adultEnabled = settingsRepository.showAdultContent.first()
-            NewArrivalParser.parse(api.getRandomPickup().string())
-                .let { if (adultEnabled) it else it.filter { !it.warning } }
+            withContext(Dispatchers.Default) {
+                NewArrivalParser.parse(api.getRandomPickup().string())
+            }.let { if (adultEnabled) it else it.filter { !it.warning } }
         }
 
     suspend fun getFollowFeed(page: Int): Result<List<Work>> =
         apiCall {
             val adultEnabled = settingsRepository.showAdultContent.first()
-            val html = api.getFollowFeed(page).string()
+            val html = withContext(Dispatchers.Default) { api.getFollowFeed(page).string() }
             if (authRepository.isLoggedIn() && FollowFeedParser.isLoginPage(html)) {
                 sessionMonitor.notifySessionCleared()
             }
-            FollowFeedParser.parse(html)
+            withContext(Dispatchers.Default) { FollowFeedParser.parse(html) }
                 .let { if (adultEnabled) it else it.filter { !it.warning } }
         }
 
     suspend fun getFollowUsers(page: Int): Result<FollowUserPage> =
         apiCall {
-            val html = if (page == 0) {
-                api.getFollowSettingPage("FOLLOW").string()
-            } else {
-                api.getFollowList(FOLLOW_LIST_MAX, 0, page).string()
+            val html = withContext(Dispatchers.Default) {
+                if (page == 0) {
+                    api.getFollowSettingPage("FOLLOW").string()
+                } else {
+                    api.getFollowList(FOLLOW_LIST_MAX, 0, page).string()
+                }
             }
             if (authRepository.isLoggedIn() && FollowUserParser.isLoginPage(html)) {
                 sessionMonitor.notifySessionCleared()
             }
-            val users = FollowUserParser.parse(html)
-            val total = if (page == 0) FollowUserParser.parseTotal(html) else null
+            val users = withContext(Dispatchers.Default) { FollowUserParser.parse(html) }
+            val total = if (page == 0) {
+                withContext(Dispatchers.Default) { FollowUserParser.parseTotal(html) }
+            } else {
+                null
+            }
             FollowUserPage(users = users, total = total ?: users.size)
         }
 
@@ -86,11 +98,13 @@ class FeedRepository @Inject constructor(
      */
     suspend fun getBlockUsers(page: Int): Result<List<FollowUser>> =
         apiCall {
-            val html = api.getBlockList(FOLLOW_LIST_MAX, BLOCK_LIST_MD, page).string()
+            val html = withContext(Dispatchers.Default) {
+                api.getBlockList(FOLLOW_LIST_MAX, BLOCK_LIST_MD, page).string()
+            }
             if (authRepository.isLoggedIn() && FollowUserParser.isLoginPage(html)) {
                 sessionMonitor.notifySessionCleared()
             }
-            FollowUserParser.parse(html)
+            withContext(Dispatchers.Default) { FollowUserParser.parse(html) }
         }
 
 
@@ -98,29 +112,35 @@ class FeedRepository @Inject constructor(
         apiCall {
             val adultEnabled = settingsRepository.showAdultContent.first()
             val self = authRepository.currentUserId() == userId
-            val html = if (self) {
-                api.getMyIllusts(userId, page).string()
-            } else {
-                api.getUserIllusts(userId, "", page).string()
+            val html = withContext(Dispatchers.Default) {
+                if (self) {
+                    api.getMyIllusts(userId, page).string()
+                } else {
+                    api.getUserIllusts(userId, "", page).string()
+                }
             }
-            val pageInfo = when {
-                page != 0 -> null
-                self -> runCatching { api.getUserIllusts(userId, "", 0).string() }
-                    .getOrNull()
-                    ?.let(UserPageParser::parse)
-                else -> UserPageParser.parse(html)
+            val pageInfo = withContext(Dispatchers.Default) {
+                when {
+                    page != 0 -> null
+                    self -> runCatching { api.getUserIllusts(userId, "", 0).string() }
+                        .getOrNull()
+                        ?.let(UserPageParser::parse)
+                    else -> UserPageParser.parse(html)
+                }
             }
             val profile = authRepository.userProfile.value
-            val parsed = if (self) {
-                // マイボックス列表块内不带作者区，用页主资料（页面优先，本地资料兜底）回填
-                NewArrivalParser.parse(
-                    html = html,
-                    authorFallbackId = userId,
-                    authorFallbackName = pageInfo?.userName ?: profile?.name.orEmpty(),
-                    authorFallbackAvatarUrl = pageInfo?.avatarUrl ?: profile?.avatarUrl,
-                )
-            } else {
-                NewArrivalParser.parse(html)
+            val parsed = withContext(Dispatchers.Default) {
+                if (self) {
+                    // マイボックス列表块内不带作者区，用页主资料（页面优先，本地资料兜底）回填
+                    NewArrivalParser.parse(
+                        html = html,
+                        authorFallbackId = userId,
+                        authorFallbackName = pageInfo?.userName ?: profile?.name.orEmpty(),
+                        authorFallbackAvatarUrl = pageInfo?.avatarUrl ?: profile?.avatarUrl,
+                    )
+                } else {
+                    NewArrivalParser.parse(html)
+                }
             }
             val works = if (adultEnabled) parsed else parsed.filter { !it.warning }
             UserWorksPage(works = works, pageInfo = pageInfo)
@@ -133,7 +153,9 @@ class FeedRepository @Inject constructor(
     suspend fun getPopularTags(): Result<List<PopularTag>> {
         popularTagsMemo?.let { return Result.success(it) }
         val fetched = apiCall {
-            PopularTagParser.parse(api.getPopularTags().string())
+            withContext(Dispatchers.Default) {
+                PopularTagParser.parse(api.getPopularTags().string())
+            }
         }
         if (fetched.isSuccess) {
             val tags = fetched.getOrThrow()
@@ -147,11 +169,11 @@ class FeedRepository @Inject constructor(
 
     suspend fun getUserSearch(keyword: String, page: Int): Result<List<FollowUser>> =
         apiCall {
-            val html = api.getUserSearch(keyword, page).string()
+            val html = withContext(Dispatchers.Default) { api.getUserSearch(keyword, page).string() }
             if (authRepository.isLoggedIn() && UserSearchParser.isLoginPage(html)) {
                 sessionMonitor.notifySessionCleared()
             }
-            UserSearchParser.parse(html)
+            withContext(Dispatchers.Default) { UserSearchParser.parse(html) }
         }.onFailure { error ->
             if (authRepository.isLoggedIn() && (error as? AppError.Http)?.code == 404) {
                 sessionMonitor.notifySessionCleared()
@@ -162,14 +184,17 @@ class FeedRepository @Inject constructor(
     suspend fun getTagFeed(tag: String, page: Int): Result<List<Work>> =
         apiCall {
             val adultEnabled = settingsRepository.showAdultContent.first()
-            NewArrivalParser.parse(api.getTagSearch(tag, page).string())
-                .let { if (adultEnabled) it else it.filter { !it.warning } }
+            withContext(Dispatchers.Default) {
+                NewArrivalParser.parse(api.getTagSearch(tag, page).string())
+            }.let { if (adultEnabled) it else it.filter { !it.warning } }
         }
 
     /** 标签建议（SearchTagByKeywordPcV，返回包含关键字的标签卡片） */
     suspend fun getTagSuggestions(tag: String, page: Int): Result<List<TagCard>> =
         apiCall {
-            TagCardParser.parse(api.getTagSuggestions(tag, page).string())
+            withContext(Dispatchers.Default) {
+                TagCardParser.parse(api.getTagSuggestions(tag, page).string())
+            }
         }
 
     /** 标签自动补全建议（GetTagSuggestionF，输入时实时调用） */
@@ -182,8 +207,9 @@ class FeedRepository @Inject constructor(
     suspend fun getKeywordFeed(keyword: String, page: Int): Result<List<Work>> =
         apiCall {
             val adultEnabled = settingsRepository.showAdultContent.first()
-            NewArrivalParser.parse(api.getKeywordSearch(keyword, page).string())
-                .let { if (adultEnabled) it else it.filter { !it.warning } }
+            withContext(Dispatchers.Default) {
+                NewArrivalParser.parse(api.getKeywordSearch(keyword, page).string())
+            }.let { if (adultEnabled) it else it.filter { !it.warning } }
         }
 }
 
