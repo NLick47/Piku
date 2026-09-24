@@ -18,6 +18,7 @@ import com.piku.client.data.remote.translation.Role
 import com.piku.client.data.remote.translation.RoleDefaultIds
 import com.piku.client.data.remote.translation.TranslationRepository
 import com.piku.client.data.repository.AuthRepository
+import com.piku.client.data.repository.ProfileRepository
 import com.piku.client.data.repository.reloadOnSessionChange
 import com.piku.client.data.repository.BlockListRepository
 import com.piku.client.data.repository.ThumbnailResolver
@@ -208,6 +209,7 @@ class HomeViewModel @Inject constructor(
     private val selectTranslateImageModelUseCase: SelectTranslateImageModelUseCase,
     private val setAiTranslateEnabledUseCase: SetAiTranslateEnabledUseCase,
     private val authRepository: AuthRepository,
+    private val profileRepository: ProfileRepository,
     private val thumbnailResolver: ThumbnailResolver,
     private val webDavSyncRepository: WebDavSyncRepository,
     private val imageSaver: ImageSaver,
@@ -471,15 +473,14 @@ class HomeViewModel @Inject constructor(
                     it.copy(
                         loggedIn = loggedIn,
                         userAvatarUrl = if (loggedIn) {
-                            authRepository.userProfile.value?.avatarUrl
+                            profileRepository.userProfile.value?.avatarUrl
                         } else null,
                     )
                 }
-                if (loggedIn) authRepository.refreshUserProfile()
             }
         }
         viewModelScope.launch {
-            authRepository.userProfile.collect { profile ->
+            profileRepository.userProfile.collect { profile ->
                 android.util.Log.d("PikuDiag", "userProfile=$profile")
                 _uiState.update {
                     it.copy(userProfile = profile, userAvatarUrl = profile?.avatarUrl)
@@ -661,7 +662,7 @@ class HomeViewModel @Inject constructor(
     /** 已登录但资料缺失（如启动时离线）时，打开抽屉触发重试 */
     fun retryUserProfile() {
         if (_uiState.value.loggedIn && _uiState.value.userProfile == null) {
-            viewModelScope.launch { authRepository.refreshUserProfile() }
+            viewModelScope.launch { profileRepository.refresh() }
         }
     }
 

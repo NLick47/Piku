@@ -31,6 +31,7 @@ class FeedRepository @Inject constructor(
     private val api: PoipikuApi,
     private val settingsRepository: SettingsRepository,
     private val authRepository: AuthRepository,
+    private val profileRepository: ProfileRepository,
     private val sessionMonitor: SessionMonitor,
     private val popularTagCacheRepository: PopularTagCacheRepository,
 ) {
@@ -119,7 +120,7 @@ class FeedRepository @Inject constructor(
                     else -> UserPageParser.parse(html)
                 }
             }
-            val profile = authRepository.userProfile.value
+            val profile = profileRepository.userProfile.value
             val parsed = withContext(Dispatchers.Default) {
                 if (self) {
                     // マイボックス列表块内不带作者区，用页主资料（页面优先，本地资料兜底）回填

@@ -79,17 +79,25 @@ class FeedRepositorySessionTest {
     ): FeedRepository {
         val credentials = credentialStore(loggedInUid = loggedIn)
         val store = cookieStore(withSession = loggedIn)
+        val runtime = SessionRuntime(Dispatchers.Unconfined) { 0L }
+        val auth = AuthRepository(
+            authApi = AuthApiProxy().api,
+            cookieJar = PersistentCookieJar(store, monitor),
+            cookieStore = store,
+            sessionMonitor = monitor,
+            credentialStore = credentials,
+            blockListRepository = BlockListRepository(),
+            runtime = runtime,
+        )
         return FeedRepository(
             api = PoipikuApiProxy(apiThrowing404).api,
             settingsRepository = SettingsRepository(InMemorySharedPreferences()),
-            authRepository = AuthRepository(
+            authRepository = auth,
+            profileRepository = ProfileRepository(
                 authApi = AuthApiProxy().api,
-                cookieJar = PersistentCookieJar(store, monitor),
-                cookieStore = store,
-                sessionMonitor = monitor,
                 credentialStore = credentials,
-                blockListRepository = BlockListRepository(),
-                runtime = SessionRuntime(Dispatchers.Unconfined) { 0L },
+                authRepository = auth,
+                runtime = runtime,
             ),
             sessionMonitor = monitor,
             popularTagCacheRepository = PopularTagCacheRepository(InMemorySharedPreferences()),

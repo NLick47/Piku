@@ -10,6 +10,7 @@ import com.piku.client.data.local.ImageShareHelper
 import com.piku.client.data.local.WorkPasswordRepository
 import com.piku.client.data.repository.AdultContentRepository
 import com.piku.client.data.repository.AuthRepository
+import com.piku.client.data.repository.ProfileRepository
 import com.piku.client.data.repository.reloadOnSessionChange
 import com.piku.client.data.repository.BlockResult
 import com.piku.client.data.repository.DetailRepository
@@ -232,6 +233,7 @@ class DetailViewModel @Inject constructor(
     private val observeAuthStatusUseCase: ObserveAuthStatusUseCase,
     private val detailRepository: DetailRepository,
     private val authRepository: AuthRepository,
+    private val profileRepository: ProfileRepository,
     private val adultContentRepository: AdultContentRepository,
     private val thumbnailResolver: ThumbnailResolver,
     private val workPasswordRepository: WorkPasswordRepository,
@@ -410,7 +412,7 @@ class DetailViewModel @Inject constructor(
             if (_uiState.value.detail != null || _uiState.value.restrictionReason != null) load()
         }
         viewModelScope.launch {
-            authRepository.userProfile.collect { profile ->
+            profileRepository.userProfile.collect { profile ->
                 _uiState.update { it.copy(isSelf = profile?.uid?.toLongOrNull() == authorId) }
             }
         }

@@ -5,13 +5,11 @@ import com.piku.client.data.local.CredentialStore
 import com.piku.client.data.remote.ApiConfig
 import com.piku.client.data.remote.AuthApi
 import com.piku.client.data.remote.SessionMonitor
-import com.piku.client.data.remote.UserPageParser
 import com.piku.client.data.remote.apiCall
 import com.piku.client.domain.model.AppError
 import com.piku.client.domain.model.AuthStatus
 import com.piku.client.domain.model.LoginError
 import com.piku.client.domain.model.RegisterError
-import com.piku.client.domain.model.UserProfile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -54,9 +52,6 @@ class AuthRepository @Inject constructor(
     private val _sessionVersion = MutableStateFlow(0L)
     val sessionVersion: StateFlow<Long> = _sessionVersion.asStateFlow()
 
-    private val _userProfile = MutableStateFlow<UserProfile?>(null)
-    val userProfile: StateFlow<UserProfile?> = _userProfile.asStateFlow()
-
     @Volatile
     private var uid: Long? = null
 
@@ -76,8 +71,7 @@ class AuthRepository @Inject constructor(
         val restoredUid = if (hasSession()) credentialStore.loadUid() else null
         if (restoredUid != null) {
             uid = restoredUid
-            _userProfile.value = credentialStore.loadProfile()
-            Log.d(TAG, "cold start: restored uid=$uid profile=${_userProfile.value != null}")
+            Log.d(TAG, "cold start: restored uid=$uid")
         } else {
             // 有 cookie 但没 uid（数据不一致，或被系统杀进程打断了重登），
             // 以及 cookie 已被服务端作废（失效回包里的空 cookie 会落盘）都走恢复：
@@ -136,7 +130,6 @@ class AuthRepository @Inject constructor(
                             reloginPolicy.onSessionEstablished()
                             _sessionVersion.update { it + 1 }
                             Log.d(TAG, "login ok, uid=${login.result} session=${hasSession()}")
-                            refreshUserProfile()
                             Result.success(Unit)
                         }
                     }
@@ -195,119 +188,9 @@ class AuthRepository @Inject constructor(
         )
     }
 
-    suspend fun refreshUserProfile() {
-        if (_authStatus.value != AuthStatus.LOGGED_IN) {
-            Log.d(TAG, "refreshUserProfile: not logged in, skip")
-            _userProfile.value = null
-            return
-        }
-        val myUid = uid
-        if (myUid == null) {
-            Log.d(TAG, "refreshUserProfile: uid null, skip")
-            return
-        }
-        val profile = runCatching {
-            val settingResponse = authApi.getMyEditSetting(myUid)
-            val settingHtml = settingResponse.body()?.string() ?: ""
-            val preview = PREVIEW_IMG_REGEX
-                .find(settingHtml)?.groupValues?.get(1)
-            Log.d(
-                TAG,
-                "getMyEditSetting: uid=$myUid code=${settingResponse.code()} len=${settingHtml.length} " +
-                    "previewRaw=$preview",
-            )
-            val avatarUrl = preview?.let { url ->
-                if (AVATAR_SUFFIX_REGEX.containsMatchIn(url)) {
-                    url
-                } else {
-                    url + "_120.jpg"
-                }
-            }
-            val profileUrl = Regex("""href="(https?://[^"]*?poipiku\.com/$myUid/)""")
-                .find(settingHtml)?.groupValues?.get(1)
-                ?: "https://poipiku.com/$myUid/"
-            UserProfile(
-                uid = myUid.toString(),
-                avatarUrl = avatarUrl,
-                profileUrl = profileUrl,
-                name = fetchDisplayName(myUid),
-            )
-        }.getOrNull()
-        Log.d(TAG, "profile=$profile")
-        // 失败保留旧缓存；校验会话与 uid，防登出/换号后在途请求写回
-        if (profile != null && _authStatus.value == AuthStatus.LOGGED_IN && uid == myUid) {
-            _userProfile.value = profile
-            credentialStore.saveProfile(profile)
-        }
-    }
-
-    /** 从公开用户主页取昵称，解析规则见 [UserPageParser.parseDisplayName]；失败保留旧缓存 */
-    private suspend fun fetchDisplayName(uid: Long): String? = runCatching {
-        val response = authApi.getUserTop(uid)
-        val html = response.body()?.string()
-        Log.d(TAG, "getUserTop: uid=$uid code=${response.code()} len=${html?.length ?: -1}")
-        val name = html?.takeIf { it.isNotEmpty() }?.let(UserPageParser::parseDisplayName)
-        Log.d(TAG, "fetchDisplayName: uid=$uid name=$name")
-        name
-    }.getOrNull()
-
     fun logout() {
         Log.d(TAG, "logout")
         clearSession()
-    }
-
-    /**
-     * 修改昵称（网页端 MyEditSettingPcV 的 UpdateNickName 同款）。
-     * 成功（result>0）后立即更新本地 profile，无需整页刷新。
-     */
-    suspend fun updateNickName(name: String): Result<Unit> {
-        val myUid = uid
-        if (myUid == null) {
-            Log.d(TAG, "updateNickName: uid null, skip")
-            return Result.failure(AppError.Unknown)
-        }
-        val response = apiCall { authApi.updateNickName(myUid, name) }
-            .getOrElse { return Result.failure(it) }
-        Log.d(TAG, "updateNickName: result=${response.result}")
-        return if (response.result > 0) {
-            _userProfile.value = _userProfile.value?.copy(name = name)
-            _userProfile.value?.let { credentialStore.saveProfile(it) }
-            Result.success(Unit)
-        } else {
-            Result.failure(UpdateRejected(response.result))
-        }
-    }
-
-    /**
-     * 上传头像（网页端 updateFile("/f/UpdateProfileFileF.jsp", ...) 同款：
-     * form 提交 UID + DATA(base64)，result==0 表示成功）。
-     * 成功后头像 URL 会变化，重新解析设置页刷新 profile。
-     */
-    suspend fun updateAvatar(imageFile: java.io.File): Result<Unit> {
-        val myUid = uid
-        if (myUid == null) {
-            Log.d(TAG, "updateAvatar: uid null, skip")
-            return Result.failure(AppError.Unknown)
-        }
-        val dataBase64 = runCatching {
-            java.util.Base64.getEncoder().encodeToString(imageFile.readBytes())
-        }.getOrElse {
-            Log.d(TAG, "updateAvatar: read/encode failed", it)
-            return Result.failure(AppError.Unknown)
-        }
-        if (dataBase64.length > MAX_AVATAR_BASE64_LEN) {
-            Log.d(TAG, "updateAvatar: too large b64Len=${dataBase64.length}")
-            return Result.failure(AvatarTooLarge)
-        }
-        val response = apiCall { authApi.updateProfileFile(myUid, dataBase64) }
-            .getOrElse { return Result.failure(it) }
-        Log.d(TAG, "updateAvatar: result=${response.result}")
-        return if (response.result == 0) {
-            refreshUserProfile()
-            Result.success(Unit)
-        } else {
-            Result.failure(UpdateRejected(response.result))
-        }
     }
 
     /**
@@ -344,7 +227,6 @@ class AuthRepository @Inject constructor(
         cookieStore.removeAll()
         credentialStore.clear()
         uid = null
-        _userProfile.value = null
         _authStatus.value = AuthStatus.LOGGED_OUT
         // 匿名状态下的空清不制造版本变化，否则每次无意义清理都会让页面重载
         if (hadSession) _sessionVersion.update { it + 1 }
@@ -368,21 +250,8 @@ class AuthRepository @Inject constructor(
         const val RESULT_INVALID_EMAIL = -7
         const val X_REQUESTED_WITH = "XMLHttpRequest"
         const val TAG = "PikuDiag"
-        /**
-         * 网页端 updateFile 的客户端限制：base64 长度 <= limitMiByte(1.0) * 1e6 * 1.3。
-         * 留一点余量防止服务端 -1。
-         */
-        const val MAX_AVATAR_BASE64_LEN = 1_250_000
 
-        private val PREVIEW_IMG_REGEX = Regex("""PreviewImg" src="([^"]+)""")
-        private val AVATAR_SUFFIX_REGEX = Regex("""_\d+\.(jpg|jpeg|png)$""")
     }
-
-    /** 服务端返回 result<=0 时抛出，携带原始码供上层提示 */
-    class UpdateRejected(val code: Int) : Exception("update rejected: $code")
-
-    /** 头像超出网页端 1MB 限制 */
-    data object AvatarTooLarge : Exception("avatar too large")
 }
 
 /** 注册表单页的 TK 令牌：`"TK":"..."`，每次页面加载都会轮换 */

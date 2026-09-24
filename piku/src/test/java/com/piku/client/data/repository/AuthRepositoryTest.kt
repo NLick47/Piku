@@ -23,9 +23,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import okhttp3.Cookie
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
-import okhttp3.ResponseBody
-import okhttp3.ResponseBody.Companion.toResponseBody
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -35,7 +32,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
-import retrofit2.Response
 
 /**
  * 会话恢复的仓库层行为。运行环境统一注入 [Dispatchers.Unconfined] + 可控时钟：
@@ -459,19 +455,6 @@ class AuthRepositoryTest {
         job.cancel()
     }
 
-    /**
-     * 昵称要走完整链路拿得到：refreshUserProfile → getUserTop → UserPageParser。
-     * 页面里 og:title 与 h2 故意写成不同值，用来钉住"og:title 优先"
-     */
-    @Test
-    fun loginFillsDisplayNameFromTheUserPage() {
-        val repo = build(FakeAuthApi(), cookieStore(sessionValue = BLANK), credentialStore())
-
-        runBlocking { repo.login(EMAIL, PASSWORD) }
-
-        assertEquals("サファイア", repo.userProfile.value?.name)
-    }
-
     // ---- 凭据持久化 ----
 
     @Test
@@ -569,14 +552,9 @@ class AuthRepositoryTest {
                     loginBehaviour()
                 }
                 // 资料页与用户主页：昵称解析链路要它们返回真实形状的 Response
-                "getMyEditSetting" -> htmlResponse("")
-                "getUserTop" -> htmlResponse(USER_PAGE_HTML)
                 else -> throw UnsupportedOperationException(method.name)
             }
         } as AuthApi
-
-        private fun htmlResponse(html: String): Response<ResponseBody> =
-            Response.success(html.toResponseBody("text/html".toMediaTypeOrNull()))
     }
 
     private class FakeCipher : CredentialCipher {
@@ -617,10 +595,5 @@ class AuthRepositoryTest {
         const val RESULT_INVALID = -1
         const val KEY_EMAIL = "email_enc"
 
-        /** og:title 与 h2 故意不一致：用来钉住昵称取的是哪个来源 */
-        val USER_PAGE_HTML = """
-            <meta property="og:title" content="サファイアのポイピク | イラストとか箱「ポイピク」">
-            <h2 class="IllustUserName">别人</h2>
-        """.trimIndent()
     }
 }

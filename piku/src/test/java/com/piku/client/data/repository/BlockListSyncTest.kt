@@ -98,6 +98,12 @@ class BlockListSyncTest {
             api = blockListApi(),
             settingsRepository = SettingsRepository(InMemorySharedPreferences()),
             authRepository = auth,
+            profileRepository = ProfileRepository(
+                authApi = AuthApiProxy().api,
+                credentialStore = CredentialStore(FakeStorage(), FakeCipher()),
+                authRepository = auth,
+                runtime = SessionRuntime(Dispatchers.Unconfined) { 0L },
+            ),
             sessionMonitor = monitor,
             popularTagCacheRepository = PopularTagCacheRepository(InMemorySharedPreferences()),
         )
