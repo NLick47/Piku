@@ -21,7 +21,6 @@ import com.piku.client.data.remote.translation.NovelStreamEvent
 import com.piku.client.data.remote.translation.TranslationRepository
 import com.piku.client.data.remote.translation.ModelCatalogRepository
 import com.piku.client.data.remote.translation.ModelEntry
-import com.piku.client.data.remote.translation.Role
 import com.piku.client.data.remote.translation.ImageTranslateEngine
 import com.piku.client.data.remote.translation.ImageTranslationPrompts
 import com.piku.client.data.remote.translation.ImageTranslateError
@@ -142,7 +141,7 @@ data class DetailUiState(
     val novelProgressPercent: Int = 0,
     /** AI 翻译开关是否开启（只控制自动翻译，不影响手动入口） */
     val aiTranslateEnabled: Boolean = false,
-    /** 配置了可用 key（顶栏手动翻译按钮的显示条件） */
+    /** 文本通道可用，顶栏短字段翻译按钮的显示条件 */
     val canTranslate: Boolean = false,
     /** 译文拉取中 */
     val translating: Boolean = false,
@@ -179,6 +178,8 @@ data class DetailUiState(
     val showTranslatedImage: Boolean = false,
     /** 是否有可用的 image 模型 */
     val hasImageModel: Boolean = false,
+    /** 是否有可用的正文翻译模型，宁缺毋滥：无则正文保留原文，阅读器不提供翻译入口 */
+    val hasNovelModel: Boolean = false,
     /** 分享图片时的 loading 状态 */
     val sharingImage: Boolean = false,
     /** 正在分享的目标包名（null = 系统面板）：loading 只转圈在被点的那一行 */
@@ -192,6 +193,10 @@ data class DetailUiState(
     /** 是否有任何译文可展示（决定顶栏按钮高亮与各字段 chip 是否出现） */
     val hasTranslation: Boolean
         get() = detail?.translated?.hasAny == true
+
+    /** 正文译文是否为历史缓存：有缓存但当前无正文模型，阅读器展示时须标注历史译文 */
+    val novelTranslationStale: Boolean
+        get() = detail?.translated?.novelText != null && !hasNovelModel
 
     /** 查看器图片对：缩略图 + 原图（未就绪时为 null），长度不等时互相兜底 */
     val viewerImages: List<ViewerImage>
@@ -287,7 +292,7 @@ class DetailViewModel @Inject constructor(
             guideVisible = showBottomGuide,
             imageHintVisible = showImageHint,
             novelProgressPercent = settingsRepository.getNovelProgress(workId),
-            canTranslate = translationRepository.hasKey(),
+            canTranslate = translationRepository.hasTextModel(),
         ),
     )
     val uiState: StateFlow<DetailUiState> = _uiState.asStateFlow()
@@ -448,25 +453,28 @@ class DetailViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            modelCatalogRepository.models.collect { models ->
-                _catalogModels.value = models
-                // 检查是否有可用的 image 模型
-                val hasImage = models.any {
-                    Role.IMAGE in it.roles && it.available && !it.apiKey.isNullOrBlank()
-                }
-                _uiState.update { it.copy(hasImageModel = hasImage) }
-            }
+            modelCatalogRepository.models.collect { models -> _catalogModels.value = models }
         }
         viewModelScope.launch {
-            // key 可用性（远程目录内置）变化时同步手动按钮可见性；
-            // 冷启动时目录常晚于首个详情页到达，此前打开的作品会被无 key 静默跳过——
-            // key 一到位就对当前作品补翻，否则"开自动翻译却不翻"直到下次进页
-            translationRepository.hasKeyFlow.collect { hasKey ->
-                _uiState.update { state -> state.copy(canTranslate = hasKey) }
-                if (hasKey && _uiState.value.aiTranslateEnabled &&
+            // 各角色模型可用性变化时按自己的角色闸门入口：顶栏/短字段看文本通道，
+            // 正文/图片各看各的，冷启动目录晚到时也由此同步显隐
+            translationRepository.roleModelAvailability.collect { avail ->
+                _uiState.update {
+                    it.copy(
+                        canTranslate = avail.text,
+                        hasImageModel = avail.image,
+                        hasNovelModel = avail.novel,
+                    )
+                }
+                // 补翻：文本或正文通道有模型时补上此前被无 key 静默跳过的作品，按角色判定不算兜底
+                if ((avail.text || avail.novel) && _uiState.value.aiTranslateEnabled &&
                     _uiState.value.detail?.translated == null
                 ) {
                     translate(showAfter = true)
+                }
+                // 图片模型失效时清掉内存译图：无法再生的译图不该继续展示
+                if (!avail.image && _uiState.value.imageTranslatingPage == null) {
+                    clearImageTranslations()
                 }
             }
         }
@@ -515,6 +523,7 @@ class DetailViewModel @Inject constructor(
     /**
      * 阅读器内"原/译"切换（长正文的唯一翻译入口）：
      * - 流式翻译进行中 → 仅切换显示，后台继续翻（发射后不管，已完成块已入缓存）；
+     * - 正文模型不可用时只允许看已有缓存译文，无缓存则轻提示，绝不发起注定空跑的流；
      * - 正文尚无译文且未在翻 → 此刻才发起分块流式拉取（显式意图才花额度），并预切到译文展示态；
      * - 已有（或原文本身为空）→ 仅切换显示。
      */
@@ -524,12 +533,20 @@ class DetailViewModel @Inject constructor(
             toggleField(TranslateField.NOVEL)
             return
         }
+        if (!_uiState.value.hasNovelModel) {
+            if (detail.translated?.novelText != null) {
+                toggleField(TranslateField.NOVEL)
+            } else {
+                feedback.show(R.string.detail_novel_model_unavailable)
+            }
+            return
+        }
         val novelDone = detail.translated?.novelText != null || detail.novelText.isNullOrBlank()
         if (novelDone) {
             toggleField(TranslateField.NOVEL)
             return
         }
-        startNovelStream(forcedEntry = null)
+        startNovelStream()
         _uiState.update { it.copy(showTranslationAll = true, fieldOverrides = emptySet()) }
     }
 
@@ -538,20 +555,19 @@ class DetailViewModel @Inject constructor(
      * 阅读器按 "已译前缀 + 剩余原文" 拼接实现边翻边读。失败块由仓库层回退原文继续流，
      * 全部结束后若有失败段给 snackbar——重试重启流，缓存命中让成功块秒过。
      */
-    private fun startNovelStream(forcedEntry: ModelEntry?) {
+    private fun startNovelStream() {
         val detail = _uiState.value.detail ?: return
         if (detail.novelText.isBlank()) return
-        if (!translationRepository.hasKey()) return
+        // 正文流必须以正文模型为闸门，文本通道的 key 不能放行
+        if (!translationRepository.hasNovelModel()) return
         cancelNovelStream()
         lastManualTranslateIncludeNovel = true
-        lastForcedEntry = forcedEntry
         novelStreamJob = viewModelScope.launch {
             _uiState.update { it.copy(novelStreamProgress = 0) }
             try {
                 translationRepository.translateNovelStreaming(
                     detail,
                     observeLanguageUseCase().value,
-                    forcedEntry,
                 ).collect { event ->
                     when (event) {
                         is NovelStreamEvent.Progress -> _uiState.update { state ->
@@ -635,7 +651,7 @@ class DetailViewModel @Inject constructor(
      *
      * @param includeLongNovel 长正文是否随本次一起翻；仅阅读器入口传 true
      * @param requireAutoEnabled 自动路径要求总开关打开；顶栏/阅读器的显式点击不受限
-     * @param forcedEntry 一次性重翻：指定则短字段与小说正文都强制用此模型
+     * @param forcedEntry 一次性重翻：指定则短字段强制用此模型，正文只走正文默认
      */
     private fun translate(
         includeLongNovel: Boolean = false,
@@ -707,28 +723,9 @@ class DetailViewModel @Inject constructor(
         }
     }
 
-    /**
-     * 换模型重翻：一次性用指定模型重翻当前作品（含小说正文如有），不写入默认设置。
-     * 失败照常给 snackbar 可重试；重试会复用所选模型。
-     * 长正文走分块流式；短字段（标题/简介/标签）仍走整批通道——两条管线并行，
-     * 各写各的字段，与原"短字段+正文都用 forced 模型"的语义保持一致。
-     */
+    /** 换模型重翻：一次性重翻短字段，不写入默认设置，失败可重试并复用所选模型
+     *  正文不在此列，正文模型由 AI 翻译设置统一决定，正文失败的重试在阅读器内重启流 */
     fun reTranslateWith(entry: ModelEntry) {
-        val hasNovel = _uiState.value.detail?.novelText?.isNotBlank() == true
-        if (hasNovel) {
-            startNovelStream(forcedEntry = entry)
-            translate(
-                includeLongNovel = false,
-                requireAutoEnabled = false,
-                showAfter = true,
-                forcedEntry = entry,
-                forceShow = true,
-            )
-            _uiState.update {
-                it.copy(showModelPicker = false, showTranslationAll = true, fieldOverrides = emptySet())
-            }
-            return
-        }
         translate(
             includeLongNovel = false,
             requireAutoEnabled = false,
@@ -739,9 +736,9 @@ class DetailViewModel @Inject constructor(
         _uiState.update { it.copy(showModelPicker = false) }
     }
 
-    /** 打开"换模型重翻"模型选择弹窗 */
+    /** 打开换模型重翻弹窗，可选列表为空则不开 */
     fun openModelPicker() {
-        if (!translationRepository.hasKey()) return
+        if (retranslatePickableModels(_catalogModels.value).isEmpty()) return
         _uiState.update { it.copy(showModelPicker = true) }
     }
 
@@ -750,18 +747,21 @@ class DetailViewModel @Inject constructor(
         _uiState.update { it.copy(showModelPicker = false) }
     }
 
-    /** 手动翻译失败的 snackbar 重试：按上次入口原样重发（含一次性重翻模型）。
-     *  小说流式的失败重试直接重启流——缓存命中让已成功块秒过，只补失败块；
-     *  不能走 onReaderTranslateToggle：部分失败后 translated.novelText 已非空，
-     *  会被它误判为"已有译文"而只切换显示。 */
+    /** 手动翻译失败的 snackbar 重试：按上次入口原样重发
+     *  正文流式的失败重试直接重启流，缓存命中让已成功块秒过，只补失败块
+     *  不能走 onReaderTranslateToggle：部分失败后 novelText 已非空，会被误判为已有译文
+     *  正文重试一律走正文默认模型，一次性强制模型只服务短字段 */
     fun retryLastTranslate() {
+        if (lastManualTranslateIncludeNovel) {
+            startNovelStream()
+            return
+        }
         val forced = lastForcedEntry
         if (forced != null) {
             reTranslateWith(forced)
             return
         }
-        if (lastManualTranslateIncludeNovel) startNovelStream(forcedEntry = null)
-        else onTopBarTranslateClick()
+        onTopBarTranslateClick()
     }
 
     // =====================================================================

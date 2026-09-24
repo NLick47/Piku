@@ -66,7 +66,7 @@ internal fun DetailTopBar(
     translationAvailable: Boolean = false,
     showTranslation: Boolean = false,
     translating: Boolean = false,
-    /** 配置了 key 就常驻显示：未翻译时点击即翻 */
+    /** 文本通道可用就常驻显示：未翻译时点击即翻短字段 */
     canTranslate: Boolean = false,
     /** 顶栏翻译按钮：切换原文/译文 */
     onTranslateClick: () -> Unit = {},

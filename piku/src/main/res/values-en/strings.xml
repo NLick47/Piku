@@ -426,12 +426,11 @@
     <string name="detail_translating">Translating…</string>
     <string name="detail_translating_progress">Translating %1$d%%</string>
     <string name="detail_novel_partial_failed">Some paragraphs failed. Tap to retry (finished parts are cached)</string>
+    <string name="detail_novel_model_unavailable">Novel model is offline; the novel text stays untranslated</string>
+    <string name="detail_novel_translation_stale">Cached translation (novel model is offline)</string>
     <string name="detail_translate_failed">Translation failed. Try again later.</string>
     <string name="detail_translate_retry">Retry</string>
     <string name="detail_retry_with_model_title">Pick a model (this re-translation only)</string>
-    <string name="detail_model_kind_text">Text</string>
-    <string name="detail_model_kind_novel">Novel</string>
-    <string name="detail_model_kind_image">Image</string>
     <string name="detail_action_save">Save to album</string>
     <string name="detail_action_share">Share</string>
     <string name="detail_action_save_all">Save all (%1$d)</string>

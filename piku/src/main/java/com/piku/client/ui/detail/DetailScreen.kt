@@ -113,6 +113,8 @@ fun DetailScreen(
     // 首张原图预热：URL 一就绪就下（只写磁盘），点开查看器时通常已经是原图
     rememberFullImagePrefetch(state.fullImageUrls.firstOrNull())
     val catalogModels by viewModel.catalogModels.collectAsStateWithLifecycle()
+    // 换模型重翻可选模型，同时决定弹层内容与入口显隐，列表为空则入口不出现
+    val pickableModels = remember(catalogModels) { retranslatePickableModels(catalogModels) }
     val shareRequest by viewModel.shareRequest.collectAsStateWithLifecycle()
     val dark = LocalDarkTheme.current
     val scrollState = rememberScrollState()
@@ -399,7 +401,7 @@ fun DetailScreen(
             onOpenBrowser = {
                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(state.shareUrl)))
             },
-            onOpenModelPicker = if (state.canTranslate) viewModel::openModelPicker else null,
+            onOpenModelPicker = if (pickableModels.isNotEmpty()) viewModel::openModelPicker else null,
             blocked = state.detail?.blocked == true,
             onToggleBlock = if (state.isSelf) {
                 null
@@ -514,8 +516,11 @@ fun DetailScreen(
                     onLightChange = viewModel::setNovelReaderLight,
                     onClose = { viewModel.setNovelReaderOpen(false) },
                     onWorkClick = onRelatedWorkClick,
-                    // 有原文正文就给原/译切换：没翻过时点击会在阅读器内触发拉取（长篇唯一入口）
-                    translationAvailable = !it.novelText.isNullOrBlank(),
+                    // 原/译切换出现条件：有可用正文模型或本地已有缓存译文，
+                    // 皆无时不渲染，避免幽灵入口
+                    translationAvailable = !it.novelText.isNullOrBlank() &&
+                        (state.hasNovelModel || it.translated?.novelText != null),
+                    novelStale = state.novelTranslationStale,
                     showTranslation = showingTranslation,
                     // 只有本轮真的在拉正文才显示加载态，元数据拉取不误标
                     translating = state.fetchingNovelText,
@@ -526,7 +531,6 @@ fun DetailScreen(
             }
         }
         if (state.showModelPicker) {
-            val models = catalogModels.filter { it.available && !it.apiKey.isNullOrBlank() }
             PikuBottomSheet(
                 onDismissRequest = viewModel::dismissModelPicker,
                 dark = dark,
@@ -537,10 +541,9 @@ fun DetailScreen(
                     LazyColumn(
                         Modifier.fillMaxWidth().heightIn(max = 360.dp),
                     ) {
-                        items(models, key = { it.id }) { entry ->
+                        items(pickableModels, key = { it.id }) { entry ->
                             ModelPickerRow(
                                 entry = entry,
-                                dark = dark,
                                 onClick = { viewModel.reTranslateWith(entry) },
                             )
                         }

@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -55,19 +54,18 @@ import com.piku.client.ui.theme.ShadowSpotHeavy
 import com.piku.client.ui.theme.SoftBorderDark
 import com.piku.client.ui.theme.SoftBorderLight
 
+internal fun retranslatePickableModels(models: List<ModelEntry>): List<ModelEntry> =
+    models.filter { entry ->
+        entry.available && !entry.apiKey.isNullOrBlank() && Role.TEXT in entry.roles
+    }
+
 @Composable
 internal fun ModelPickerRow(
     entry: ModelEntry,
-    dark: Boolean,
     onClick: () -> Unit,
 ) {
     val primary = PikuColors.textPrimary
     val hint = PikuColors.textSecondary
-    val kindLabel = when {
-        Role.NOVEL in entry.roles -> stringResource(R.string.detail_model_kind_novel)
-        Role.IMAGE in entry.roles -> stringResource(R.string.detail_model_kind_image)
-        else -> stringResource(R.string.detail_model_kind_text)
-    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -87,18 +85,6 @@ internal fun ModelPickerRow(
                 Text(text = entry.hint, color = hint, fontSize = 11.sp)
             }
         }
-        Spacer(Modifier.width(8.dp))
-        Text(
-            text = kindLabel,
-            color = PikuColors.controlAccent,
-            fontSize = 11.sp,
-            modifier = Modifier
-                .border(
-                    BorderStroke(0.5.dp, PikuColors.border),
-                    RoundedCornerShape(8.dp),
-                )
-                .padding(horizontal = 6.dp, vertical = 2.dp),
-        )
     }
 }
 

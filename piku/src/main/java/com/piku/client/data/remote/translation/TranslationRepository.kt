@@ -12,8 +12,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -58,6 +58,13 @@ sealed interface NovelStreamEvent {
         val totalChunks: Int,
     ) : NovelStreamEvent
 }
+
+/** 各翻译角色的模型可用性快照，入口只认自己的角色，不借用其他角色的可用性 */
+data class RoleModelAvailability(
+    val text: Boolean,
+    val novel: Boolean,
+    val image: Boolean,
+)
 
 /**
  * 短文本字段译文（类型安全：替代裸 [List] 的下标约定）。
@@ -119,18 +126,36 @@ class TranslationRepository @Inject constructor(
         }
     }
 
-    /** 只看 key 是否可用（手动翻译入口的显示条件，不依赖自动开关）。
-     *  文本模型或小说正文模型（含默认小说模型）任一有可用 key 即视为可翻译。 */
-    fun hasKey(): Boolean {
-        if (effectiveTextEntry()?.let { apiKeyFor(it) }?.isNotBlank() == true) return true
-        return effectiveNovelEntry()?.let { apiKeyFor(it) }?.isNotBlank() == true
-    }
+    /** 管线预检：短字段或正文任一通道能开工即可翻译；短字段一侧含跨角色兜底，入口显隐另走各角色闸门 */
+    fun hasKey(): Boolean =
+        effectiveTextEntry()?.let { apiKeyFor(it) }?.isNotBlank() == true || hasNovelModel()
+
+    /** 文本通道闸门：只认文本角色内的解析，不拿跨角色兜底当依据，否则顶栏会借别的通道幽灵可用 */
+    fun hasTextModel(): Boolean =
+        textEntryWithinRole()?.let { apiKeyFor(it) }?.isNotBlank() == true
+
+    /** 是否有可用于正文翻译的模型，宁缺毋滥：无则正文保留原文，阅读器不提供翻译入口 */
+    fun hasNovelModel(): Boolean =
+        effectiveNovelEntry()?.let { apiKeyFor(it) }?.isNotBlank() == true
+
+    /** 是否有可用于图片翻译的模型，图片入口闸门 */
+    fun hasImageModel(): Boolean =
+        effectiveImageEntry()?.let { apiKeyFor(it) }?.isNotBlank() == true
 
     /**
-     * key 可用性流：远程目录（内置共享 key）变化时发射。
-     * 冷启动时目录晚于首个详情页到达，UI 靠它同步手动入口并对被跳过的作品补翻。
+     * 各角色模型可用性流：目录列表或 defaults.roles 变化时重算，
+     * 供 UI 按自己的角色闸门入口，冷启动目录晚到时同步显隐
      */
-    val hasKeyFlow: Flow<Boolean> = modelCatalogRepository.models.map { hasKey() }
+    val roleModelAvailability: Flow<RoleModelAvailability> = combine(
+        modelCatalogRepository.models,
+        modelCatalogRepository.catalogDefaults,
+    ) { _, _ ->
+        RoleModelAvailability(
+            text = hasTextModel(),
+            novel = hasNovelModel(),
+            image = hasImageModel(),
+        )
+    }.distinctUntilChanged()
 
     /**
      * 各场景默认模型 id 流：目录列表或 defaults.roles 变化时重算。
@@ -160,7 +185,7 @@ class TranslationRepository @Inject constructor(
         detail: WorkDetail,
         language: AppLanguage,
         includeLongNovel: Boolean = false,
-        /** 一次性重翻覆盖：传入则短字段与小说正文都强制用此模型（不写入默认设置） */
+        /** 一次性重翻覆盖：传入则短字段强制用此模型，正文仍走正文专用通道，不写入默认设置 */
         forcedEntry: ModelEntry? = null,
     ): TranslationOutcome {
         if (!hasKey()) return TranslationOutcome(fields = null, failed = false)
@@ -179,11 +204,11 @@ class TranslationRepository @Inject constructor(
         // 小说正文单独走小说专用通道；解析不出可用小说模型时正文保留原文（宁缺毋滥），
         // 绝不静默借用文本模型——两条通道彻底隔离。正文整条单单元送翻，
         // 散文跨行句保持上下文，行内罕见链接走摘除+末尾拼回兜底。
-        // 一次性重翻时，短字段已用 forcedEntry，小说正文同样强制用它以保证一致。
+        // forcedEntry 只作用于短字段，正文仍走正文默认
         val novelTranslated = if (novelSource == null) {
             null
         } else {
-            val novelEntry = forcedEntry ?: effectiveNovelEntry()
+            val novelEntry = effectiveNovelEntry()
             novelEntry?.let {
                 translateAll(
                     listOf(novelSource),
@@ -232,11 +257,10 @@ class TranslationRepository @Inject constructor(
     fun translateNovelStreaming(
         detail: WorkDetail,
         language: AppLanguage,
-        forcedEntry: ModelEntry? = null,
     ): Flow<NovelStreamEvent> = flow {
         val source = detail.novelText
         if (source.isBlank()) return@flow
-        val entry = forcedEntry ?: effectiveNovelEntry()
+        val entry = effectiveNovelEntry()
         val engine = entry?.let {
             engineFactory.create(apiKeyFor(it), Role.NOVEL, it, modelCatalogRepository.catalogDefaults.value)
         }
@@ -577,14 +601,19 @@ class TranslationRepository @Inject constructor(
      * - 选中项带内置共享 key 就用它；
      * - 否则（如历史遗留的自选模型没有内置 key）降级到文本场景默认，
      *   再降级到任一带 key 的可用模型，避免整段翻译静默不可用。
+     *
+     * 最后一层兜底不过滤角色，只供管线使用；入口闸门要走 [textEntryWithinRole] 以免借用别的场景
      */
-    internal fun effectiveTextEntry(): ModelEntry? {
+    internal fun effectiveTextEntry(): ModelEntry? =
+        textEntryWithinRole() ?: modelCatalogRepository.models.value.firstOrNull {
+            it.available && !it.apiKey.isNullOrBlank()
+        }
+
+    /** 文本角色内的解析，与 [effectiveTextEntry] 只差最后一层跨角色兜底，闸门用它 */
+    private fun textEntryWithinRole(): ModelEntry? {
         val selected = selectedEntry()
         if (selected != null && !selected.apiKey.isNullOrBlank()) return selected
         return defaultRoleEntry(Role.TEXT)
-            ?: modelCatalogRepository.models.value.firstOrNull {
-                it.available && !it.apiKey.isNullOrBlank()
-            }
     }
 
     /**

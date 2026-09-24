@@ -115,8 +115,10 @@ fun FullNovelViewer(
     onLightChange: (Boolean) -> Unit,
     onClose: () -> Unit,
     onWorkClick: (Long, Long, String) -> Unit,
-    /** 正文有原文时显示原/译切换；未翻译时点击触发拉取 */
+    /** 正文有原文且有可用正文模型或已有缓存译文时显示原/译切换，未翻译时点击触发拉取 */
     translationAvailable: Boolean = false,
+    /** 展示的正文译文是否为历史缓存，模型已下线；为真且显示译文时正文上方标注 */
+    novelStale: Boolean = false,
     showTranslation: Boolean = false,
     /** 拉取中：切换钮禁用并显示进行中，防连点重复扣额度 */
     translating: Boolean = false,
@@ -199,14 +201,25 @@ fun FullNovelViewer(
                 .verticalScroll(scrollState)
                 .padding(start = 20.dp, end = 20.dp, top = 64.dp, bottom = 88.dp),
         ) {
-            Text(
-                text = remember(text, linkColor, context, currentOnWorkClick) {
-                    linkifyNovel(text, linkColor, context, currentOnWorkClick)
-                },
-                color = fg,
-                fontSize = fontSize.sp,
-                lineHeight = (fontSize * 1.7f).sp,
-            )
+            Column {
+                // 历史译文标注：正文模型已下线时展示的缓存译文须明示来源，避免误当现译
+                if (novelStale && showTranslation) {
+                    Text(
+                        text = stringResource(R.string.detail_novel_translation_stale),
+                        color = fg.copy(alpha = 0.55f),
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
+                }
+                Text(
+                    text = remember(text, linkColor, context, currentOnWorkClick) {
+                        linkifyNovel(text, linkColor, context, currentOnWorkClick)
+                    },
+                    color = fg,
+                    fontSize = fontSize.sp,
+                    lineHeight = (fontSize * 1.7f).sp,
+                )
+            }
         }
 
         // 顶部栏：返回 + 标题

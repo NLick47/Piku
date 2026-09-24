@@ -426,12 +426,11 @@
     <string name="detail_translating">翻訳中…</string>
     <string name="detail_translating_progress">翻訳中 %1$d%%</string>
     <string name="detail_novel_partial_failed">一部の段落を翻訳できませんでした。タップで再試行（済み部分は再翻訳されません）</string>
+    <string name="detail_novel_model_unavailable">本文翻訳モデルが利用できないため、現在本文は翻訳できません</string>
+    <string name="detail_novel_translation_stale">過去の翻訳（本文翻訳モデルはオフライン）</string>
     <string name="detail_translate_failed">翻訳に失敗しました。しばらくしてからもう一度お試しください。</string>
     <string name="detail_translate_retry">再試行</string>
     <string name="detail_retry_with_model_title">翻訳モデルを選択（今回の再翻訳のみ）</string>
-    <string name="detail_model_kind_text">テキスト</string>
-    <string name="detail_model_kind_novel">小説</string>
-    <string name="detail_model_kind_image">画像</string>
     <string name="detail_action_save">アルバムに保存</string>
     <string name="detail_action_share">シェアする</string>
     <string name="detail_action_save_all">すべて保存（%1$d枚）</string>
