@@ -18,14 +18,16 @@ class BlockListSync @Inject constructor(
     private val loadBlockUsersUseCase: LoadBlockUsersUseCase,
     private val blockListRepository: BlockListRepository,
     private val authRepository: AuthRepository,
+    /** 预热跑的线程，注入是为了让 JVM 单测能用测试调度推进那 800ms 冷启动延迟 */
+    private val runtime: SessionRuntime,
 ) {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + runtime.dispatcher)
     private val lock = Mutex()
 
-    /** 本次登录态是否已拉过：authStatus 重复发射时不重复请求 */
+    /** 已为哪个会话版本预热过：同一版本只预热一次（登录时登录态与版本号会同时变，别各拉一轮） */
     @Volatile
-    private var warmedForSession = false
+    private var warmedVersion = -1L
 
     /** 登出/换账号时自增，用于丢弃在途分页结果，避免把上个账号的名单写回内存 */
     @Volatile
@@ -37,27 +39,25 @@ class BlockListSync @Inject constructor(
             // 冷启动先让一头：首屏那一波请求（feed/资料/收藏）先发出去，预热不跟它们抢
             // HomeViewModel 会在 blockedIds 变化时重放快照重新过滤
             delay(COLD_START_DELAY_MS)
-            authRepository.authStatus.collect { status ->
-                if (status == AuthStatus.LOGGED_IN) {
-                    warmUp()
-                } else {
+            // sessionVersion 是 StateFlow：订阅即发当前值，所以冷启动首拉与之后的
+            // 每次会话变化都走这一条，不用再分别盯 authStatus 与版本号（那样会拉两轮）
+            authRepository.sessionVersion.collect { version ->
+                if (!authRepository.isLoggedIn()) {
                     generation++
-                    warmedForSession = false
+                    warmedVersion = -1L
+                    return@collect
                 }
+                if (warmedVersion == version) return@collect
+                warmedVersion = version
+                warmUp()
             }
-        }
-        scope.launch {
-            // 自动重登成功：cookie 已换新，重新对齐一次
-            authRepository.sessionRefreshed.collect { warmUp(force = true) }
         }
     }
 
-    private fun warmUp(force: Boolean = false) {
+    private fun warmUp() {
         scope.launch {
             lock.withLock {
-                if (!force && warmedForSession) return@withLock
-                // 先置位再拉取：失败也不再重试，避免反复打服务端
-                warmedForSession = true
+                // 先在调用处置 warmedVersion 再拉取：失败也不再重试，避免反复打服务端
                 val gen = generation
                 var page = 0
                 while (page < MAX_PAGES) {

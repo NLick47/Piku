@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.piku.client.R
 import com.piku.client.data.repository.AuthRepository
+import com.piku.client.data.repository.reloadOnSessionChange
 import com.piku.client.data.repository.BlockListRepository
 import com.piku.client.data.repository.BlockResult
 import com.piku.client.data.repository.DetailRepository
@@ -64,23 +65,9 @@ class BlockUsersViewModel @Inject constructor(
                 _uiState.update { s -> s.copy(users = list.toFollowUsers()) }
             }
         }
-        viewModelScope.launch {
-            authRepository.authStatus.collect { status ->
-                val loggedIn = status == AuthStatus.LOGGED_IN
-                // 需要登录（登出时的占位态）或还没有数据时拉取；已有本地数据则直接展示
-                if (loggedIn && !_uiState.value.loading &&
-                    (_uiState.value.needLogin || _uiState.value.users.isEmpty())
-                ) {
-                    reload()
-                }
-            }
-        }
-        viewModelScope.launch {
-            // 自动重登成功后登录态未变化，但列表已因会话失效而加载失败，重新拉取
-            authRepository.sessionRefreshed.collect {
-                reload()
-            }
-        }
+        // 会话一变就重拉：重登成功后要补回失效期间拉不到的数据，登出后名单已由
+        // clearSession 清空，再拉一次拿到的是未登录态
+        viewModelScope.reloadOnSessionChange(authRepository.sessionVersion) { reload() }
         loadFirstPage()
     }
 

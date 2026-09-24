@@ -69,16 +69,6 @@ class FollowFeedParserTest {
     }
 
     @Test
-    fun `detects login page`() {
-        val loginPage = """
-            <title>ログイン | イラストとか箱「ポイピク」</title>
-            <form action="/f/LoginUserF.jsp" method="post">...</form>
-        """.trimIndent()
-        assertTrue(FollowFeedParser.isLoginPage(loginPage))
-        assertFalse(FollowFeedParser.isLoginPage("<html><body>no form here</body></html>"))
-    }
-
-    @Test
     fun `warning thumbnails are flagged`() {
         val html = """
             <div class="IllustItem Upload" id="IllustItem_1"><div class="IllustItemUser"><a class="IllustItemUserThumb" href="/7/" style="background-image:url('https://cdn.poipiku.com/0007/profile.jpg')"></a><h2 class="IllustItemUserName"><a href="/7/">a</a></h2></div><h1 id="IllustItemDesc_1" class="IllustItemDesc">t</h1>

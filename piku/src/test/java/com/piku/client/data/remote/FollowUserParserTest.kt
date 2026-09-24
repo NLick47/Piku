@@ -1,7 +1,6 @@
 package com.piku.client.data.remote
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -48,20 +47,6 @@ class FollowUserParserTest {
         // f/FollowListF.jsp 匿名调用返回 21 个空行（无 JSON/HTML）
         val blank = "\n".repeat(21)
         assertTrue(FollowUserParser.parse(blank).isEmpty())
-    }
-
-    @Test
-    fun `detects login page`() {
-        val loginPage = """
-            <html><body>
-            <form method="post" action="/f/LoginUserF.jsp">
-            <input name="EM" type="text">
-            <input name="PW" type="password">
-            </form>
-            </body></html>
-        """.trimIndent()
-        assertTrue(FollowUserParser.isLoginPage(loginPage))
-        assertFalse(FollowUserParser.isLoginPage(readResource("followusers.html")))
     }
 
     @Test

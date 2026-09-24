@@ -10,7 +10,6 @@ import com.piku.client.domain.model.Work
  * 作者信息在条目头部（IllustItemUser），配图为大图（IllustItemThumbImg）。
  *
  * 未关注任何创作者时页面只有 `#InfoMsg` 欢迎语，解析结果为空列表（由 UI 呈现空态）；
- * 未登录访问时服务端返回登录页，可用 [isLoginPage] 判定会话失效。
  */
 object FollowFeedParser {
 
@@ -41,8 +40,6 @@ object FollowFeedParser {
     /** 追加图提示，语言无关取第一个 （+N / (+N：显示全部（+4 个图像）、すべて表示（+4枚の画像） */
     private val APPEND_COUNT = Regex("""[(（]\+(\d+)""")
 
-    /** 登录页标记：登录表单 POST 到 /f/LoginUserF.jsp */
-    private val LOGIN_FORM = Regex("""LoginUserF\.jsp""")
 
     fun parse(html: String): List<Work> {
         val tags = ITEM_TAG.findAll(html).toList()
@@ -53,9 +50,6 @@ object FollowFeedParser {
             parseBlock(match.groupValues[1], html.substring(start, end))
         }
     }
-
-    /** 未登录时服务端返回登录页（HTTP 200 + 登录表单），据此可判定会话失效 */
-    fun isLoginPage(html: String): Boolean = LOGIN_FORM.containsMatchIn(html)
 
     private fun parseBlock(classAttr: String, block: String): Work? {
         val call = DETAIL_CALL.find(block)?.groupValues ?: return null

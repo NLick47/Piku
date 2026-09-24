@@ -10,6 +10,7 @@ import com.piku.client.data.local.ImageShareHelper
 import com.piku.client.data.local.WorkPasswordRepository
 import com.piku.client.data.repository.AdultContentRepository
 import com.piku.client.data.repository.AuthRepository
+import com.piku.client.data.repository.reloadOnSessionChange
 import com.piku.client.data.repository.BlockResult
 import com.piku.client.data.repository.DetailRepository
 import com.piku.client.data.repository.FavoriteRepository
@@ -402,11 +403,11 @@ class DetailViewModel @Inject constructor(
                 _uiState.update { it.copy(novelReaderLight = light) }
             }
         }
-        viewModelScope.launch {
-            // 自动重登成功后重新加载详情（登录墙作品的真实图依赖有效会话）
-            authRepository.sessionRefreshed.collect {
-                if (_uiState.value.detail != null) load()
-            }
+        // 会话变更后重新加载详情（登录墙作品的真实图依赖有效会话）；
+        // detail==null 的受限态（append 抛 Restricted）也要求重载：
+        // 门卡页去登录回来，同样要重新拉详情拿真实内容
+        viewModelScope.reloadOnSessionChange(authRepository.sessionVersion) {
+            if (_uiState.value.detail != null || _uiState.value.restrictionReason != null) load()
         }
         viewModelScope.launch {
             authRepository.userProfile.collect { profile ->
@@ -415,19 +416,7 @@ class DetailViewModel @Inject constructor(
         }
         viewModelScope.launch {
             observeAuthStatusUseCase().collect { status ->
-                val loggedIn = status == AuthStatus.LOGGED_IN
-                val prevLoggedIn = _uiState.value.loggedIn
-                _uiState.update { it.copy(loggedIn = loggedIn) }
-                // detail==null 的受限态（append 抛 Restricted）也要求重载：
-                // 门卡页去登录回来，同样要重新拉详情拿真实内容
-                val needsReload = loggedIn != prevLoggedIn && loggedIn &&
-                    (_uiState.value.detail != null || _uiState.value.restrictionReason != null)
-                if (needsReload) {
-                    // 登录成功（含从门卡「去登录」回来）：重载拿真实内容。
-                    // 不清 restrictionReason——重载期间门卡留在屏上，等新 detail 到了由它决定去留，
-                    // 否则这段等待里图区会从门卡闪成"暂无图片"
-                    load()
-                }
+                _uiState.update { it.copy(loggedIn = status == AuthStatus.LOGGED_IN) }
             }
         }
         viewModelScope.launch {

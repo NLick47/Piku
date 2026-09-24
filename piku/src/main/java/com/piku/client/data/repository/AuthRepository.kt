@@ -5,6 +5,7 @@ import com.piku.client.data.local.CredentialStore
 import com.piku.client.data.remote.ApiConfig
 import com.piku.client.data.remote.AuthApi
 import com.piku.client.data.remote.SessionMonitor
+import com.piku.client.data.remote.UserPageParser
 import com.piku.client.data.remote.apiCall
 import com.piku.client.domain.model.AppError
 import com.piku.client.domain.model.AuthStatus
@@ -14,11 +15,9 @@ import com.piku.client.domain.model.UserProfile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
@@ -48,11 +47,12 @@ class AuthRepository @Inject constructor(
     val authStatus: StateFlow<AuthStatus> = _authStatus.asStateFlow()
 
     /**
-     * 自动重登成功且登录态未变化时的事件，供页面感知"会话已更新"并刷新数据。
-     * 登录态真的变了时不发：页面已经在 authStatus 上重载过了，两个都发会重载两遍
+     * 会话版本号：登录成功、登出、自动重登成功都会 +1，页面统一观察它决定重载。
+     * 用 StateFlow 而不是一次性事件：晚订阅也能看到当前值，不会静默丢；
+     * 也不再需要各页面自己比较"登录态变没变"
      */
-    private val _sessionRefreshed = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    val sessionRefreshed: SharedFlow<Unit> = _sessionRefreshed.asSharedFlow()
+    private val _sessionVersion = MutableStateFlow(0L)
+    val sessionVersion: StateFlow<Long> = _sessionVersion.asStateFlow()
 
     private val _userProfile = MutableStateFlow<UserProfile?>(null)
     val userProfile: StateFlow<UserProfile?> = _userProfile.asStateFlow()
@@ -134,6 +134,7 @@ class AuthRepository @Inject constructor(
                         } else {
                             // 会话已重建，重登的失败计数与退避都归零
                             reloginPolicy.onSessionEstablished()
+                            _sessionVersion.update { it + 1 }
                             Log.d(TAG, "login ok, uid=${login.result} session=${hasSession()}")
                             refreshUserProfile()
                             Result.success(Unit)
@@ -240,40 +241,15 @@ class AuthRepository @Inject constructor(
         }
     }
 
-    /**
-     * 从公开用户主页解析昵称，按优先级：
-     * 1. 第一个 `<h2 class="IllustUserName">`（即页主）
-     * 2. `<title>` 中的 `{昵称}のポイピク | イラストとか箱「ポイピク」`
-     * 3. 第一个头像 `<img class="IllustUserThumb" ... alt="昵称">`
-     */
+    /** 从公开用户主页取昵称，解析规则见 [UserPageParser.parseDisplayName]；失败保留旧缓存 */
     private suspend fun fetchDisplayName(uid: Long): String? = runCatching {
         val response = authApi.getUserTop(uid)
         val html = response.body()?.string()
         Log.d(TAG, "getUserTop: uid=$uid code=${response.code()} len=${html?.length ?: -1}")
-        if (html.isNullOrEmpty()) return@runCatching null
-        val fromH2 = H2_NAME_REGEX
-            .find(html)?.groupValues?.get(1)
-        val fromTitle = TITLE_NAME_REGEX
-            .find(html)?.groupValues?.get(1)
-        val fromAlt = ALT_NAME_REGEX
-            .find(html)?.groupValues?.get(1)
-        val raw = fromH2 ?: fromTitle ?: fromAlt
-        Log.d(TAG, "fetchDisplayName: uid=$uid h2=$fromH2 title=$fromTitle alt=$fromAlt")
-        raw
-            ?.let { decodeHtmlEntities(it) }
-            ?.trim()
-            ?.takeIf { it.isNotEmpty() }
+        val name = html?.takeIf { it.isNotEmpty() }?.let(UserPageParser::parseDisplayName)
+        Log.d(TAG, "fetchDisplayName: uid=$uid name=$name")
+        name
     }.getOrNull()
-
-    private fun decodeHtmlEntities(input: String): String = input
-        .replace("&amp;", "&")
-        .replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&quot;", "\"")
-        .replace("&#39;", "'")
-        .replace(HTML_ENTITY_DECIMAL_REGEX) { m ->
-            m.groupValues[1].toIntOrNull()?.let { it.toChar().toString() } ?: m.value
-        }
 
     fun logout() {
         Log.d(TAG, "logout")
@@ -342,8 +318,6 @@ class AuthRepository @Inject constructor(
      * - 网络等瞬态失败 → 只拉长退避，不淘汰会话（弱网抖动不该删掉用户密码）
      */
     private suspend fun autoReLogin() = sessionMutex.withLock<Unit> {
-        // 登录态变了会由 authStatus 驱动页面重载，这里再发一次会重载两遍
-        val wasLoggedIn = isLoggedIn()
         if (!reloginPolicy.allowAttempt(runtime.now())) return@withLock
         val credentials = credentialStore.load()
         if (credentials == null) {
@@ -352,10 +326,7 @@ class AuthRepository @Inject constructor(
             return@withLock
         }
         loginLocked(credentials.email, credentials.password)
-            .onSuccess {
-                Log.d(TAG, "auto re-login ok")
-                if (wasLoggedIn) _sessionRefreshed.tryEmit(Unit)
-            }
+            .onSuccess { Log.d(TAG, "auto re-login ok") }
             .onFailure { error ->
                 // 在途期间用户已登出：login 已作废结果，这里不再计数
                 if (!isLoggedIn()) return@onFailure
@@ -368,12 +339,15 @@ class AuthRepository @Inject constructor(
 
     /** 清除 cookie、凭据与登录态 */
     private fun clearSession() {
+        val hadSession = isLoggedIn() || uid != null
         sessionEpoch.incrementAndGet()
         cookieStore.removeAll()
         credentialStore.clear()
         uid = null
         _userProfile.value = null
         _authStatus.value = AuthStatus.LOGGED_OUT
+        // 匿名状态下的空清不制造版本变化，否则每次无意义清理都会让页面重载
+        if (hadSession) _sessionVersion.update { it + 1 }
         // 屏蔽名单属于账号：不清掉的话，换账号登录后内存名单会把新账号的内容误过滤。
         // 在途的预热分页由 BlockListSync 自己按登录态作废
         blockListRepository.clear()
@@ -402,10 +376,6 @@ class AuthRepository @Inject constructor(
 
         private val PREVIEW_IMG_REGEX = Regex("""PreviewImg" src="([^"]+)""")
         private val AVATAR_SUFFIX_REGEX = Regex("""_\d+\.(jpg|jpeg|png)$""")
-        private val H2_NAME_REGEX = Regex("""<h2 class="IllustUserName">([^<]+)</h2>""")
-        private val TITLE_NAME_REGEX = Regex("""<title>([^<]+)のポイピク \| イラストとか箱「ポイピク」</title>""")
-        private val ALT_NAME_REGEX = Regex("""<img class="IllustUserThumb"[^>]*alt="([^"]+)"""")
-        private val HTML_ENTITY_DECIMAL_REGEX = Regex("&#(\\d+);")
     }
 
     /** 服务端返回 result<=0 时抛出，携带原始码供上层提示 */

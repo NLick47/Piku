@@ -20,10 +20,12 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import okhttp3.Cookie
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.ResponseBody
+import okhttp3.ResponseBody.Companion.toResponseBody
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -33,6 +35,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import retrofit2.Response
 
 /**
  * 会话恢复的仓库层行为。运行环境统一注入 [Dispatchers.Unconfined] + 可控时钟：
@@ -44,7 +47,10 @@ class AuthRepositoryTest {
     @get:Rule
     val tmp = TemporaryFolder()
 
-    /** 订阅类的辅助协程不挂在 runBlocking 上：那样 runBlocking 会等它结束而挂死 */
+    /**
+     * 订阅 SessionMonitor 这类一次性事件用。Unconfined 下 launch 会内联跑到 collect 挂起，
+     * 所以 launch 返回时订阅已生效；不能挂在 runBlocking 里，那样会等子协程而挂死
+     */
     private val collectScope = CoroutineScope(Dispatchers.Unconfined)
 
     // ---- 冷启动 ----
@@ -177,17 +183,13 @@ class AuthRepositoryTest {
         assertFalse(repo.isLoggedIn())
         assertEquals(1, api.loginCalls)
 
-        val events = mutableListOf<Unit>()
-        val collector = repo.recordSessionRefreshes(events)
-
         api.loginBehaviour = { LoginResponse(UID) }
         nowMs += 300_000
         monitor.notifySessionCleared()
 
         assertEquals(2, api.loginCalls)
         assertTrue(repo.isLoggedIn())
-        assertEquals("登录态从登出变成登录时不该再发 sessionRefreshed，页面已由 authStatus 驱动", 0, events.size)
-        collector.cancel()
+        assertEquals("登录成功一次只 +1", 1L, repo.sessionVersion.value)
     }
 
     // ---- 失败分类 ----
@@ -353,25 +355,121 @@ class AuthRepositoryTest {
         assertFalse("登出后不许留下有效会话 cookie", hasValidSessionCookie(store))
     }
 
-    // ---- 会话更新通知 ----
+    // ---- 会话版本（页面统一的重载信号）----
 
-    /** 登录态没变的重登才需要 sessionRefreshed：变了的话页面已经在 authStatus 上重载过了 */
+    /**
+     * 冷启动恢复只该 +1：多了会让页面重载两遍。
+     * 版本号是 StateFlow，构造完就能读，所以这个能直接断言。
+     */
     @Test
-    fun sessionRefreshedOnlyFiresWhenLoginStateUnchanged() {
+    fun coldStartRecoveryBumpsSessionVersionOnce() {
+        val api = FakeAuthApi()
+        val repo = build(
+            api = api,
+            store = cookieStore(sessionValue = BLANK),
+            credentials = credentialStore().apply { save(EMAIL, PASSWORD) },
+        )
+
+        assertEquals(1, api.loginCalls)
+        assertEquals("恢复一次只该 +1", 1L, repo.sessionVersion.value)
+    }
+
+    /** 会话失效后的重登：登录态没变，页面只能靠版本号自增知道数据该重拉 */
+    @Test
+    fun expiryReLoginBumpsSessionVersion() {
         val credentials = credentialStore().apply {
             save(EMAIL, PASSWORD)
             saveUid(UID.toLong())
         }
-        val api = FakeAuthApi()
         val monitor = SessionMonitor()
-        val repo = build(api, cookieStore(sessionValue = TOKEN), credentials, monitor)
-        val events = mutableListOf<Unit>()
-        val collector = repo.recordSessionRefreshes(events)
+        val repo = build(FakeAuthApi(), cookieStore(sessionValue = TOKEN), credentials, monitor)
+        val before = repo.sessionVersion.value
 
         monitor.notifySessionCleared()
 
-        assertEquals(1, events.size)
-        collector.cancel()
+        assertEquals(before + 1, repo.sessionVersion.value)
+    }
+
+    @Test
+    fun loginAndLogoutEachBumpSessionVersion() {
+        val repo = build(FakeAuthApi(), cookieStore(sessionValue = BLANK), credentialStore())
+        assertEquals(0L, repo.sessionVersion.value)
+
+        runBlocking { repo.login(EMAIL, PASSWORD) }
+        assertEquals(1L, repo.sessionVersion.value)
+
+        repo.logout()
+        assertEquals(2L, repo.sessionVersion.value)
+    }
+
+    @Test
+    fun failedLoginDoesNotBumpSessionVersion() {
+        val api = FakeAuthApi()
+        val repo = build(api, cookieStore(sessionValue = BLANK), credentialStore())
+        api.loginBehaviour = { throw IOException("offline") }
+
+        val result = runBlocking { repo.login(EMAIL, PASSWORD) }
+
+        assertTrue(result.isFailure)
+        assertEquals("登录失败不该让页面重载", 0L, repo.sessionVersion.value)
+    }
+
+    /** 本来就登出时再清一次不制造版本变化，否则每次无意义清理都会让页面重载 */
+    @Test
+    fun clearingAnAlreadyEmptySessionDoesNotBumpSessionVersion() {
+        val repo = build(FakeAuthApi(), cookieStore(sessionValue = BLANK), credentialStore())
+
+        repo.logout()
+
+        assertEquals(0L, repo.sessionVersion.value)
+    }
+
+    /** 会话变化必须真的送到订阅方：生产者（sessionVersion）与消费模式（helper）的接缝 */
+    @Test
+    fun sessionChangeReachesObserverRegisteredThroughTheHelper() {
+        val credentials = credentialStore().apply {
+            save(EMAIL, PASSWORD)
+            saveUid(UID.toLong())
+        }
+        val monitor = SessionMonitor()
+        val repo = build(FakeAuthApi(), cookieStore(sessionValue = TOKEN), credentials, monitor)
+        val reloads = mutableListOf<Unit>()
+        val job = collectScope.reloadOnSessionChange(repo.sessionVersion) { reloads += Unit }
+
+        monitor.notifySessionCleared()
+
+        assertEquals("自动重登成功是会话变化，订阅方必须重载一次", 1, reloads.size)
+        job.cancel()
+    }
+
+    /** 登出同样是会话变化：页面不能继续留着上一个账号的数据 */
+    @Test
+    fun logoutReachesObserverRegisteredThroughTheHelper() {
+        val credentials = credentialStore().apply {
+            save(EMAIL, PASSWORD)
+            saveUid(UID.toLong())
+        }
+        val repo = build(FakeAuthApi(), cookieStore(sessionValue = TOKEN), credentials)
+        val reloads = mutableListOf<Unit>()
+        val job = collectScope.reloadOnSessionChange(repo.sessionVersion) { reloads += Unit }
+
+        repo.logout()
+
+        assertEquals(1, reloads.size)
+        job.cancel()
+    }
+
+    /**
+     * 昵称要走完整链路拿得到：refreshUserProfile → getUserTop → UserPageParser。
+     * 页面里 og:title 与 h2 故意写成不同值，用来钉住"og:title 优先"
+     */
+    @Test
+    fun loginFillsDisplayNameFromTheUserPage() {
+        val repo = build(FakeAuthApi(), cookieStore(sessionValue = BLANK), credentialStore())
+
+        runBlocking { repo.login(EMAIL, PASSWORD) }
+
+        assertEquals("サファイア", repo.userProfile.value?.name)
     }
 
     // ---- 凭据持久化 ----
@@ -441,13 +539,6 @@ class AuthRepositoryTest {
         path = "/"
     }
 
-    /**
-     * 订阅 sessionRefreshed 并记录事件。Unconfined 下 launch 会内联跑到 collect 挂起，
-     * 所以返回时订阅已经生效——不能只在 runBlocking 里 launch，那会等子协程而挂死。
-     */
-    private fun AuthRepository.recordSessionRefreshes(sink: MutableList<Unit>): Job =
-        collectScope.launch { sessionRefreshed.collect { sink += it } }
-
     private fun hasValidSessionCookie(store: CookieStore): Boolean =
         store.getCookies().any { it.name == SESSION_COOKIE && it.value.isNotBlank() }
 
@@ -470,15 +561,22 @@ class AuthRepositoryTest {
             AuthApi::class.java.classLoader,
             arrayOf(AuthApi::class.java),
         ) { _, method, args ->
-            if (method.name == "login") {
-                loginCalls++
-                lastPassword = args?.getOrNull(1) as? String
-                beforeLoginReturns?.invoke()
-                loginBehaviour()
-            } else {
-                throw UnsupportedOperationException(method.name)
+            when (method.name) {
+                "login" -> {
+                    loginCalls++
+                    lastPassword = args?.getOrNull(1) as? String
+                    beforeLoginReturns?.invoke()
+                    loginBehaviour()
+                }
+                // 资料页与用户主页：昵称解析链路要它们返回真实形状的 Response
+                "getMyEditSetting" -> htmlResponse("")
+                "getUserTop" -> htmlResponse(USER_PAGE_HTML)
+                else -> throw UnsupportedOperationException(method.name)
             }
         } as AuthApi
+
+        private fun htmlResponse(html: String): Response<ResponseBody> =
+            Response.success(html.toResponseBody("text/html".toMediaTypeOrNull()))
     }
 
     private class FakeCipher : CredentialCipher {
@@ -518,5 +616,11 @@ class AuthRepositoryTest {
         const val UID = 14189264
         const val RESULT_INVALID = -1
         const val KEY_EMAIL = "email_enc"
+
+        /** og:title 与 h2 故意不一致：用来钉住昵称取的是哪个来源 */
+        val USER_PAGE_HTML = """
+            <meta property="og:title" content="サファイアのポイピク | イラストとか箱「ポイピク」">
+            <h2 class="IllustUserName">别人</h2>
+        """.trimIndent()
     }
 }

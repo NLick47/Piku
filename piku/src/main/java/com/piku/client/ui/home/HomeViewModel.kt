@@ -18,6 +18,7 @@ import com.piku.client.data.remote.translation.Role
 import com.piku.client.data.remote.translation.RoleDefaultIds
 import com.piku.client.data.remote.translation.TranslationRepository
 import com.piku.client.data.repository.AuthRepository
+import com.piku.client.data.repository.reloadOnSessionChange
 import com.piku.client.data.repository.BlockListRepository
 import com.piku.client.data.repository.ThumbnailResolver
 import com.piku.client.data.repository.WebDavSyncRepository
@@ -419,12 +420,10 @@ class HomeViewModel @Inject constructor(
                 _uiState.update { it.copy(catalogSources = sources) }
             }
         }
-        viewModelScope.launch {
-            // 自动重登成功后登录态未变化，但数据已过期（登录墙作品缩略图等），需重新加载
-            authRepository.sessionRefreshed.collect {
-                android.util.Log.d("PikuDiag", "session refreshed, reloading feed")
-                reloadAllFeeds()
-            }
+        // 登录、登出、自动重登成功都算会话变化：统一在这里重载
+        viewModelScope.reloadOnSessionChange(authRepository.sessionVersion) {
+            android.util.Log.d("PikuDiag", "session changed, reloading feed")
+            reloadAllFeeds()
         }
         viewModelScope.launch {
             // 屏蔽名单变化（如详情页/用户主页屏蔽后返回）：loader 快照不会重新请求，
@@ -465,7 +464,6 @@ class HomeViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            var prevLoggedIn: Boolean? = null
             authRepository.authStatus.collect { status ->
                 android.util.Log.d("PikuDiag", "authStatus=$status")
                 val loggedIn = status == AuthStatus.LOGGED_IN
@@ -477,8 +475,6 @@ class HomeViewModel @Inject constructor(
                         } else null,
                     )
                 }
-                if (prevLoggedIn != null && loggedIn != prevLoggedIn) reloadAllFeeds()
-                prevLoggedIn = loggedIn
                 if (loggedIn) authRepository.refreshUserProfile()
             }
         }

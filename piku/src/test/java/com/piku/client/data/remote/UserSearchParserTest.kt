@@ -64,20 +64,6 @@ class UserSearchParserTest {
     }
 
     @Test
-    fun `detects login page`() {
-        val loginPage = """
-            <html><body>
-            <form method="post" action="/f/LoginUserF.jsp">
-            <input name="EM" type="text">
-            <input name="PW" type="password">
-            </form>
-            </body></html>
-        """.trimIndent()
-        assertTrue(UserSearchParser.isLoginPage(loginPage))
-        assertFalse(UserSearchParser.isLoginPage(sampleHtml))
-    }
-
-    @Test
     fun `keeps null avatar for card without image`() {
         val html = """
             <a class="UserInfo Thumb" href="/10000003/">
