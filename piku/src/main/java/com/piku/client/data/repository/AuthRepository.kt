@@ -1,6 +1,5 @@
 package com.piku.client.data.repository
 
-import android.os.SystemClock
 import android.util.Log
 import com.piku.client.data.local.CredentialStore
 import com.piku.client.data.remote.ApiConfig
@@ -13,7 +12,6 @@ import com.piku.client.domain.model.LoginError
 import com.piku.client.domain.model.RegisterError
 import com.piku.client.domain.model.UserProfile
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -23,10 +21,12 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.withLock
 import okhttp3.CookieJar
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import java.net.CookieStore
+import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -39,39 +39,56 @@ class AuthRepository @Inject constructor(
     private val credentialStore: CredentialStore,
     /** 屏蔽名单随账号存在，清除会话时必须一并清掉 */
     private val blockListRepository: BlockListRepository,
+    /** 会话状态的调度与时钟，单测靠它注入确定性的时间和调度 */
+    private val runtime: SessionRuntime,
 ) {
 
     private val _authStatus =
         MutableStateFlow(if (hasSession()) AuthStatus.LOGGED_IN else AuthStatus.LOGGED_OUT)
     val authStatus: StateFlow<AuthStatus> = _authStatus.asStateFlow()
 
-    /** 自动重登成功但登录态未变化时的事件，供页面感知"会话已更新"并刷新数据 */
+    /**
+     * 自动重登成功且登录态未变化时的事件，供页面感知"会话已更新"并刷新数据。
+     * 登录态真的变了时不发：页面已经在 authStatus 上重载过了，两个都发会重载两遍
+     */
     private val _sessionRefreshed = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val sessionRefreshed: SharedFlow<Unit> = _sessionRefreshed.asSharedFlow()
 
     private val _userProfile = MutableStateFlow<UserProfile?>(null)
     val userProfile: StateFlow<UserProfile?> = _userProfile.asStateFlow()
 
+    @Volatile
     private var uid: Long? = null
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + runtime.dispatcher)
 
-    /** 自动重登互斥与防抖状态 */
-    private val reloginLock = Mutex()
-    private var lastReloginAt = 0L
-    private var reloginFailures = 0
+    /**
+     * 串行化所有登录尝试：手动登录与自动重登不能同时在途，否则后到的响应会盖掉先到的账号。
+     * 登录路径都在 runtime.dispatcher 上，所以 ReloginPolicy 只被这一条线碰
+     */
+    private val sessionMutex = Mutex()
+    private val reloginPolicy = ReloginPolicy()
+
+    /** 每次清除会话自增：在途的登录请求据此判定期间是否已登出 */
+    private val sessionEpoch = AtomicInteger(0)
 
     init {
-        // 冷启动恢复：已有会话 cookie 但 uid 尚未赋值时，从持久化恢复，
-        // 否则 refreshUserProfile 会因 uid 为 null 而跳过（头像/昵称都拿不到）
-        if (hasSession()) {
-            uid = credentialStore.loadUid()
+        val restoredUid = if (hasSession()) credentialStore.loadUid() else null
+        if (restoredUid != null) {
+            uid = restoredUid
             _userProfile.value = credentialStore.loadProfile()
             Log.d(TAG, "cold start: restored uid=$uid profile=${_userProfile.value != null}")
+        } else {
+            // 有 cookie 但没 uid（数据不一致，或被系统杀进程打断了重登），
+            // 以及 cookie 已被服务端作废（失效回包里的空 cookie 会落盘）都走恢复：
+            // 没凭据的会被 autoReLogin 清成登出态，不会留下"假登录"
+            if (hasSession()) Log.d(TAG, "cold start: session cookie without uid, recovering")
+            scope.launch { autoReLogin() }
         }
         scope.launch {
             sessionMonitor.sessionCleared.collect {
-                reloginLock.withLock { autoReLogin() }
+                // 匿名浏览同样会收到空 cookie：没有保存的凭据就不要自作聪明
+                if (isLoggedIn() || hasSavedCredentials()) autoReLogin()
             }
         }
     }
@@ -80,7 +97,14 @@ class AuthRepository @Inject constructor(
 
     fun currentUserId(): Long? = uid
 
-    suspend fun login(email: String, password: String): Result<Unit> {
+    suspend fun login(email: String, password: String): Result<Unit> =
+        withContext(runtime.dispatcher) {
+            sessionMutex.withLock { loginLocked(email, password) }
+        }
+
+    private suspend fun loginLocked(email: String, password: String): Result<Unit> {
+        // 登录在途期间用户可能已登出：回来后据此丢弃结果，不写回登录态与凭据
+        val epoch = sessionEpoch.get()
         val response = apiCall { authApi.login(email, password) }
         return response.fold(
             onSuccess = { login ->
@@ -88,14 +112,32 @@ class AuthRepository @Inject constructor(
                 when {
                     login.result == RESULT_LOCKED -> Result.failure(LoginError.Locked)
                     login.result < 0 -> Result.failure(LoginError.InvalidCredentials)
+                    sessionEpoch.get() != epoch -> {
+                        // 响应里的会话 cookie 是 cookie jar 在回调之前就落盘的，必须清掉，
+                        // 否则磁盘上会留下"有效 cookie + 无凭据"，冷启动就成了假登录态
+                        Log.d(TAG, "login ok but session cleared meanwhile, discard")
+                        clearSession()
+                        Result.failure(LoginError.Cancelled)
+                    }
                     else -> {
                         uid = login.result.toLong()
                         _authStatus.value = AuthStatus.LOGGED_IN
                         credentialStore.save(email, password)
                         credentialStore.saveUid(login.result.toLong())
-                        Log.d(TAG, "login ok, uid=${login.result} session=${hasSession()}")
-                        refreshUserProfile()
-                        Result.success(Unit)
+                        // 响应里的会话 cookie 由 cookie jar 在回调之前就落盘了，
+                        // 若这期间用户登出，整体回滚（clearSession 会连 cookie 一起清掉），
+                        // 否则磁盘上会留下"有效 cookie + 无凭据"，冷启动就成了假登录态
+                        if (sessionEpoch.get() != epoch) {
+                            Log.d(TAG, "session cleared while writing back, rollback")
+                            clearSession()
+                            Result.failure(LoginError.Cancelled)
+                        } else {
+                            // 会话已重建，重登的失败计数与退避都归零
+                            reloginPolicy.onSessionEstablished()
+                            Log.d(TAG, "login ok, uid=${login.result} session=${hasSession()}")
+                            refreshUserProfile()
+                            Result.success(Unit)
+                        }
                     }
                 }
             },
@@ -293,40 +335,40 @@ class AuthRepository @Inject constructor(
     }
 
     /**
-     * session 失效后的自动重登：
-     * - 无保存凭据 → 直接登出
-     * - 距上次尝试过近 → 跳过（防抖，避免错误响应反复触发）
-     * - 登录成功 → 恢复登录态（页面观察 authStatus 自动刷新）
-     * - 连续失败超限 → 清除凭据并登出（避免死循环/被限频）
+     * 会话失效（或冷启动没拿到有效会话）后的自动重登：
+     * - 无保存凭据 → 自认为登录中则登出，否则什么都不做
+     * - 在防抖/退避窗口内 → 跳过，避免错误响应反复触发
+     * - 凭据失效或账号锁定连续多次 → 清除凭据并登出
+     * - 网络等瞬态失败 → 只拉长退避，不淘汰会话（弱网抖动不该删掉用户密码）
      */
-    private suspend fun autoReLogin() {
-        if (_authStatus.value != AuthStatus.LOGGED_IN) return
-        val now = SystemClock.elapsedRealtime()
-        if (now - lastReloginAt < RELOGIN_MIN_INTERVAL_MS) return
-        lastReloginAt = now
+    private suspend fun autoReLogin() = sessionMutex.withLock<Unit> {
+        // 登录态变了会由 authStatus 驱动页面重载，这里再发一次会重载两遍
+        val wasLoggedIn = isLoggedIn()
+        if (!reloginPolicy.allowAttempt(runtime.now())) return@withLock
         val credentials = credentialStore.load()
         if (credentials == null) {
             Log.d(TAG, "auto re-login: no saved credentials")
-            clearSession()
-            return
+            if (isLoggedIn()) clearSession()
+            return@withLock
         }
-        login(credentials.email, credentials.password)
+        loginLocked(credentials.email, credentials.password)
             .onSuccess {
-                reloginFailures = 0
                 Log.d(TAG, "auto re-login ok")
-                _sessionRefreshed.tryEmit(Unit)
+                if (wasLoggedIn) _sessionRefreshed.tryEmit(Unit)
             }
             .onFailure { error ->
-                reloginFailures++
-                Log.d(TAG, "auto re-login failed: $error failures=$reloginFailures")
-                if (reloginFailures >= MAX_RELOGIN_FAILURES) {
-                    clearSession()
-                }
+                // 在途期间用户已登出：login 已作废结果，这里不再计数
+                if (!isLoggedIn()) return@onFailure
+                Log.d(TAG, "auto re-login failed: $error")
+                if (reloginPolicy.onFailure(error)) clearSession()
             }
     }
 
+    private fun hasSavedCredentials(): Boolean = credentialStore.load() != null
+
     /** 清除 cookie、凭据与登录态 */
     private fun clearSession() {
+        sessionEpoch.incrementAndGet()
         cookieStore.removeAll()
         credentialStore.clear()
         uid = null
@@ -351,8 +393,6 @@ class AuthRepository @Inject constructor(
         const val RESULT_INVALID_NICKNAME = -6
         const val RESULT_INVALID_EMAIL = -7
         const val X_REQUESTED_WITH = "XMLHttpRequest"
-        const val RELOGIN_MIN_INTERVAL_MS = 30_000L
-        const val MAX_RELOGIN_FAILURES = 3
         const val TAG = "PikuDiag"
         /**
          * 网页端 updateFile 的客户端限制：base64 长度 <= limitMiByte(1.0) * 1e6 * 1.3。

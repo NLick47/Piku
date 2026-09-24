@@ -103,9 +103,20 @@ class UserWorksViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
+            var prevLoggedIn: Boolean? = null
             authRepository.authStatus.collect { status ->
-                _uiState.update { it.copy(loggedIn = status == AuthStatus.LOGGED_IN) }
+                val loggedIn = status == AuthStatus.LOGGED_IN
+                _uiState.update { it.copy(loggedIn = loggedIn) }
+                // 冷启动补登成功时登录态会变，而那种情况不再发 sessionRefreshed，
+                // 本页又只会被这个流改标志：不重拉就会停在失效时那份空列表上
+                if (prevLoggedIn == false && loggedIn) retry()
+                prevLoggedIn = loggedIn
             }
+        }
+        viewModelScope.launch {
+            // 自动重登成功后登录态未变化，但マイボックス失效时服务端回的是 200 + 空 body，
+            // 列表已被当成空、endReached 也被误置为 true，必须重拉第一页
+            authRepository.sessionRefreshed.collect { retry() }
         }
         viewModelScope.launch {
             authRepository.userProfile.collect { profile ->
