@@ -1,11 +1,5 @@
 package com.piku.client.data.remote
 
-/**
- * 自己设置页（MyEditSettingPcV）解析器：目前只取头像。
- *
- * 与 [UserPageParser] 不同：那是公开用户主页，这里是登录后的设置页，
- * 头像取页面上的 PreviewImg 预览图。
- */
 object MySettingPageParser {
 
     /** 头像：`... PreviewImg" src="https://cdn.poipiku.com/{uid}/profile_xxx.jpeg"` */

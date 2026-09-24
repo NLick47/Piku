@@ -7,10 +7,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * 契约：**调用 reloadOnSessionChange 那一刻之后**发生的会话变化必须触发重载，
- * 之前已有的版本不算变化。不看实现，只按这条判。
- */
 class SessionReloadTest {
 
     @Test

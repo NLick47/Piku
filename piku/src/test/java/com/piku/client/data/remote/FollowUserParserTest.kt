@@ -60,4 +60,43 @@ class FollowUserParserTest {
         assertEquals(2, users.size)
         assertTrue(users.none { it.userId == 99999999L })
     }
+
+    // 下面用内联 HTML：上面依赖快照的用例在本机之外一律被 assumeTrue 跳过
+
+    @Test
+    fun `parses follow users from inline html`() {
+        val users = FollowUserParser.parse(
+            """
+            <a class="UserInfo Thumb" href="/14189264/" style="">
+              <span class="UserInfoUserThumb" style="background-image:url('https://cdn.poipiku.com/014189264/profile_x.png_120.jpg')"></span>
+              <span class="UserInfoUserName">サファイア</span>
+            </a>
+            <a class="UserInfo Thumb" href="/13955571/" style="">
+              <span class="UserInfoUserThumb" style="background-image:url('')"></span>
+              <span class="UserInfoUserName">植被</span>
+            </a>
+            """.trimIndent(),
+        )
+
+        assertEquals(listOf(14189264L, 13955571L), users.map { it.userId })
+        assertEquals("サファイア", users[0].name)
+        assertEquals("https://cdn.poipiku.com/014189264/profile_x.png_120.jpg", users[0].avatarUrl)
+        assertNull("头像 url 为空视为没有头像", users[1].avatarUrl)
+    }
+
+    @Test
+    fun `extracts total from an inline script`() {
+        assertEquals(2, FollowUserParser.parseTotal("<script>var TOTAL=2;</script>"))
+    }
+
+    @Test
+    fun `skips user blocks without a name`() {
+        val html = """
+            <a class="UserInfo Thumb" href="/14189264/" style="">
+              <span class="UserInfoUserName"></span>
+            </a>
+        """.trimIndent()
+
+        assertTrue("没有昵称的块要丢掉，不能产出半成品", FollowUserParser.parse(html).isEmpty())
+    }
 }

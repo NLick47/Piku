@@ -17,12 +17,6 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * 登录者自己的资料卡（头像 / 昵称 / 主页地址）。
- *
- * 刷新跟着 [AuthRepository.sessionVersion] 走：登录、重登成功、冷启动拿回会话都是
- * 一次会话变化，所以"谁负责刷资料"只有一个主人，别的层不用再自己触发
- */
 @Singleton
 class ProfileRepository @Inject constructor(
     private val authApi: AuthApi,

@@ -107,8 +107,6 @@ class AuthRepository @Inject constructor(
                     login.result == RESULT_LOCKED -> Result.failure(LoginError.Locked)
                     login.result < 0 -> Result.failure(LoginError.InvalidCredentials)
                     sessionEpoch.get() != epoch -> {
-                        // 响应里的会话 cookie 是 cookie jar 在回调之前就落盘的，必须清掉，
-                        // 否则磁盘上会留下"有效 cookie + 无凭据"，冷启动就成了假登录态
                         Log.d(TAG, "login ok but session cleared meanwhile, discard")
                         clearSession()
                         Result.failure(LoginError.Cancelled)
@@ -118,15 +116,11 @@ class AuthRepository @Inject constructor(
                         _authStatus.value = AuthStatus.LOGGED_IN
                         credentialStore.save(email, password)
                         credentialStore.saveUid(login.result.toLong())
-                        // 响应里的会话 cookie 由 cookie jar 在回调之前就落盘了，
-                        // 若这期间用户登出，整体回滚（clearSession 会连 cookie 一起清掉），
-                        // 否则磁盘上会留下"有效 cookie + 无凭据"，冷启动就成了假登录态
                         if (sessionEpoch.get() != epoch) {
                             Log.d(TAG, "session cleared while writing back, rollback")
                             clearSession()
                             Result.failure(LoginError.Cancelled)
                         } else {
-                            // 会话已重建，重登的失败计数与退避都归零
                             reloginPolicy.onSessionEstablished()
                             _sessionVersion.update { it + 1 }
                             Log.d(TAG, "login ok, uid=${login.result} session=${hasSession()}")

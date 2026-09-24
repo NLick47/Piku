@@ -33,11 +33,6 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
-/**
- * 会话恢复的仓库层行为。运行环境统一注入 [Dispatchers.Unconfined] + 可控时钟：
- * 不注入的话协程在真实 IO 线程上跑、elapsedRealtime 恒为 0，
- * 断言与协程之间没有同步点，负向断言会"因为还没跑到"而假通过。
- */
 class AuthRepositoryTest {
 
     @get:Rule

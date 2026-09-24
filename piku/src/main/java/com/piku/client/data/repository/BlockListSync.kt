@@ -25,7 +25,6 @@ class BlockListSync @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + runtime.dispatcher)
     private val lock = Mutex()
 
-    /** 已为哪个会话版本预热过：同一版本只预热一次（登录时登录态与版本号会同时变，别各拉一轮） */
     @Volatile
     private var warmedVersion = -1L
 

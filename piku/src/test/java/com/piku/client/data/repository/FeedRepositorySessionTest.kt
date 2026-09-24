@@ -29,12 +29,6 @@ import org.junit.rules.TemporaryFolder
 import retrofit2.HttpException
 import retrofit2.Response
 
-/**
- * FeedRepository 的会话失效兜底。
- *
- * 实测：会话过期时 `SearchUserByKeywordPcV.jsp` 直接回 **HTTP 404**（不是登录页），
- * 而 apiCall 把 404 映射成 AppError.NotFound——所以这里必须判 NotFound。
- */
 class FeedRepositorySessionTest {
 
     @get:Rule

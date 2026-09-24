@@ -24,10 +24,6 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import retrofit2.Response
 
-/**
- * 资料卡：刷新由 [AuthRepository.sessionVersion] 驱动，一次会话变化只刷一次。
- * 以前这条链路的"谁该刷"散在两处（login 一次 + 首页一次），这里是它的守卫。
- */
 class ProfileRepositoryTest {
 
     @get:Rule

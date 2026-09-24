@@ -409,7 +409,9 @@ class DetailViewModel @Inject constructor(
         // detail==null 的受限态（append 抛 Restricted）也要求重载：
         // 门卡页去登录回来，同样要重新拉详情拿真实内容
         viewModelScope.reloadOnSessionChange(authRepository.sessionVersion) {
-            if (_uiState.value.detail != null || _uiState.value.restrictionReason != null) load()
+            if (_uiState.value.detail != null || _uiState.value.restrictionReason != null) {
+                reloadForSessionChange()
+            }
         }
         viewModelScope.launch {
             profileRepository.userProfile.collect { profile ->
@@ -1498,6 +1500,9 @@ class DetailViewModel @Inject constructor(
         }
     }
 
+    /** 加载期间收到的会话变化：结束后补跑一次 */
+    private var sessionReloadPending = false
+
     private fun load() {
         if (_uiState.value.loading) return
         viewModelScope.launch {
@@ -1601,7 +1606,25 @@ class DetailViewModel @Inject constructor(
                         }
                     }
                 }
+            // 这次加载期间来的会话变化：现在补跑。不补的话屏幕上会一直留着重登前那次
+            // 响应（例如登录门卡），要退出重进才刷新
+            if (sessionReloadPending) {
+                sessionReloadPending = false
+                load()
+            }
         }
+    }
+
+    /**
+     * 会话变化触发的重载。正在加载时不能直接调 [load]——它开头就 `if (loading) return`，
+     * 会把这次变化吞掉；先记成待办，等当前这次结束补跑一次
+     */
+    private fun reloadForSessionChange() {
+        if (_uiState.value.loading) {
+            sessionReloadPending = true
+            return
+        }
+        load()
     }
 
     /**

@@ -2,6 +2,7 @@ package com.piku.client.data.remote
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
@@ -78,5 +79,33 @@ class FollowFeedParserTest {
         assertTrue(work.warning)
         assertFalse(work.r18)
         assertEquals("https://cdn.poipiku.com/0007/profile.jpg", work.authorAvatarUrl)
+    }
+
+    /**
+     * 多条按顺序解析，且尾部噪音里的 showIllustDetail(999, 888, -1) 缺作者/描述/配图时
+     * 不该产出条目。上面依赖 followfeed.html 的两条在本机之外一律被 assumeTrue 跳过
+     */
+    @Test
+    fun `parses timeline items in order and ignores the footer decoy`() {
+        val html = """
+            <div class="IllustItem R18" id="IllustItem_1"><div class="IllustItemUser"><a class="IllustItemUserThumb" href="/7/" style="background-image:url('https://cdn.poipiku.com/0007/profile.jpg')"></a><h2 class="IllustItemUserName"><a href="/7/">作者一</a></h2></div><h1 id="IllustItemDesc_1" class="IllustItemDesc">标题一</h1>
+            <a class="IllustItemThumb" href="javascript:void(0)" onclick="showIllustDetail(7, 11, -1)"><img class="IllustItemThumbImg" src="https://cdn.poipiku.com/0007/11_a.png_640.jpg">显示全部（+2 个图像）</a></div>
+            <div class="IllustItem" id="IllustItem_2"><div class="IllustItemUser"><a class="IllustItemUserThumb" href="/8/" style="background-image:url('')"></a><h2 class="IllustItemUserName"><a href="/8/">作者二</a></h2></div><h1 id="IllustItemDesc_2" class="IllustItemDesc">标题二</h1>
+            <a class="IllustItemThumb" href="javascript:void(0)" onclick="showIllustDetail(8, 22, -1)"><img class="IllustItemThumbImg" src="https://cdn.poipiku.com/0008/22_b.png_640.jpg"></a></div>
+            <div id="Footer"><a href="javascript:void(0)" onclick="showIllustDetail(999, 888, -1)">相关作品</a></div>
+        """.trimIndent()
+
+        val works = FollowFeedParser.parse(html)
+
+        assertEquals(listOf(11L, 22L), works.map { it.id })
+        assertEquals(listOf(7L, 8L), works.map { it.authorId })
+        assertEquals(listOf("作者一", "作者二"), works.map { it.authorName })
+        assertEquals(listOf("标题一", "标题二"), works.map { it.title })
+        assertTrue("R18 记在条目 class 上", works[0].r18)
+        assertFalse(works[1].r18)
+        assertNull("头像 url 为空视为没有头像", works[1].authorAvatarUrl)
+        assertEquals("追加图提示 +2 表示共 3 张", 3, works[0].imageCount)
+        assertEquals(1, works[1].imageCount)
+        assertTrue("尾部诱饵不该产出条目", works.none { it.id == 888L })
     }
 }

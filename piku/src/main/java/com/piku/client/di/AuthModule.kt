@@ -47,7 +47,6 @@ object AuthModule {
     @Singleton
     fun provideCredentialCipher(): CredentialCipher = KeystoreCredentialCipher(KEY_ALIAS)
 
-    /** 登录路径与自动重登都在这一条线程上跑（登出是同步的例外），别换成多线程池 */
     @Provides
     @Singleton
     fun provideSessionRuntime(): SessionRuntime = SessionRuntime(

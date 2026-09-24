@@ -31,11 +31,6 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
-/**
- * 屏蔽名单预热：**一次会话变化只该拉一轮**。
- * 登录时登录态与 sessionVersion 会同时变，两条路各预热一次就会白拉两轮
- * （每轮最多 5 页），这是本测试要钉住的回归。
- */
 class BlockListSyncTest {
 
     @get:Rule
