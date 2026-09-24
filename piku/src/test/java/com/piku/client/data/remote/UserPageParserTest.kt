@@ -120,4 +120,79 @@ class UserPageParserTest {
         assertNull(info.bgColorHex)
         assertNull(info.bgImageUrl)
     }
+
+    // 以下用内联 HTML：resources 里的快照不在仓库，fixture 用例在本机之外会被 assumeTrue 跳过
+
+    @Test
+    fun `parseDisplayName prefers og title and strips the poipiku suffix`() {
+        val html = """<meta property="og:title" content="サファイアのポイピク | イラストとか箱「ポイピク」">"""
+
+        assertEquals("サファイア", UserPageParser.parseDisplayName(html))
+    }
+
+    @Test
+    fun `parseDisplayName falls back to owner h2`() {
+        val html = """<h2 class="IllustUserName">国家二级保护植被</h2>"""
+
+        assertEquals("国家二级保护植被", UserPageParser.parseDisplayName(html))
+    }
+
+    @Test
+    fun `parseDisplayName falls back to page title`() {
+        val html = """<title>pipaのポイピク | イラストとか箱「ポイピク」</title>"""
+
+        assertEquals("pipa", UserPageParser.parseDisplayName(html))
+    }
+
+    @Test
+    fun `parseDisplayName falls back to avatar alt`() {
+        val html = """<img class="IllustUserThumb" src="x.jpg" alt="サファイア">"""
+
+        assertEquals("サファイア", UserPageParser.parseDisplayName(html))
+    }
+
+    @Test
+    fun `parseDisplayName ignores not-found page title`() {
+        val html = """<title>ご指定のページが見つかりません</title>"""
+
+        assertNull(UserPageParser.parseDisplayName(html))
+    }
+
+    /**
+     * 站点首页的 og:title 是「イラストとか箱「ポイピク」」，没有「のポイピク」后缀。
+     * 没有这道守卫的话，非用户页的 og:title 会被当成昵称，而且 refreshUserProfile
+     * 会把它持久化进抽屉，一直挂着直到下次刷新成功
+     */
+    @Test
+    fun `parseDisplayName ignores og title without the poipiku suffix`() {
+        val siteTop = """<meta property="og:title" content="イラストとか箱「ポイピク」">"""
+
+        assertNull(UserPageParser.parseDisplayName(siteTop))
+    }
+
+    @Test
+    fun `parseDisplayName decodes html entities`() {
+        val html =
+            """<meta property="og:title" content="A&amp;B&#39;sのポイピク | イラストとか箱「ポイピク」">"""
+
+        assertEquals("A&B's", UserPageParser.parseDisplayName(html))
+    }
+
+    @Test
+    fun `parseDisplayName returns null for blank html`() {
+        assertNull(UserPageParser.parseDisplayName(""))
+        assertNull(UserPageParser.parseDisplayName("""<h2 class="IllustUserName">  </h2>"""))
+    }
+
+    /** 页主页与用户主页共用同一份昵称实现，别让它们再分叉 */
+    @Test
+    fun `parse uses the same nickname source`() {
+        val html = """
+            <meta property="og:title" content="サファイアのポイピク | イラストとか箱「ポイピク」">
+            <h2 class="IllustUserName">别人</h2>
+        """.trimIndent()
+
+        assertEquals(UserPageParser.parseDisplayName(html), UserPageParser.parse(html).userName)
+        assertEquals("サファイア", UserPageParser.parse(html).userName)
+    }
 }

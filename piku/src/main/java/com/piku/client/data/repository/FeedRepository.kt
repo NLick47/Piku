@@ -31,6 +31,7 @@ class FeedRepository @Inject constructor(
     private val api: PoipikuApi,
     private val settingsRepository: SettingsRepository,
     private val authRepository: AuthRepository,
+    private val profileRepository: ProfileRepository,
     private val sessionMonitor: SessionMonitor,
     private val popularTagCacheRepository: PopularTagCacheRepository,
 ) {
@@ -64,9 +65,6 @@ class FeedRepository @Inject constructor(
         apiCall {
             val adultEnabled = settingsRepository.showAdultContent.first()
             val html = withContext(Dispatchers.Default) { api.getFollowFeed(page).string() }
-            if (authRepository.isLoggedIn() && FollowFeedParser.isLoginPage(html)) {
-                sessionMonitor.notifySessionCleared()
-            }
             withContext(Dispatchers.Default) { FollowFeedParser.parse(html) }
                 .let { if (adultEnabled) it else it.filter { !it.warning } }
         }
@@ -79,9 +77,6 @@ class FeedRepository @Inject constructor(
                 } else {
                     api.getFollowList(FOLLOW_LIST_MAX, 0, page).string()
                 }
-            }
-            if (authRepository.isLoggedIn() && FollowUserParser.isLoginPage(html)) {
-                sessionMonitor.notifySessionCleared()
             }
             val users = withContext(Dispatchers.Default) { FollowUserParser.parse(html) }
             val total = if (page == 0) {
@@ -100,9 +95,6 @@ class FeedRepository @Inject constructor(
         apiCall {
             val html = withContext(Dispatchers.Default) {
                 api.getBlockList(FOLLOW_LIST_MAX, BLOCK_LIST_MD, page).string()
-            }
-            if (authRepository.isLoggedIn() && FollowUserParser.isLoginPage(html)) {
-                sessionMonitor.notifySessionCleared()
             }
             withContext(Dispatchers.Default) { FollowUserParser.parse(html) }
         }
@@ -128,7 +120,7 @@ class FeedRepository @Inject constructor(
                     else -> UserPageParser.parse(html)
                 }
             }
-            val profile = authRepository.userProfile.value
+            val profile = profileRepository.userProfile.value
             val parsed = withContext(Dispatchers.Default) {
                 if (self) {
                     // マイボックス列表块内不带作者区，用页主资料（页面优先，本地资料兜底）回填
@@ -170,12 +162,11 @@ class FeedRepository @Inject constructor(
     suspend fun getUserSearch(keyword: String, page: Int): Result<List<FollowUser>> =
         apiCall {
             val html = withContext(Dispatchers.Default) { api.getUserSearch(keyword, page).string() }
-            if (authRepository.isLoggedIn() && UserSearchParser.isLoginPage(html)) {
-                sessionMonitor.notifySessionCleared()
-            }
             withContext(Dispatchers.Default) { UserSearchParser.parse(html) }
         }.onFailure { error ->
-            if (authRepository.isLoggedIn() && (error as? AppError.Http)?.code == 404) {
+            // 会话失效的正路是 cookie jar 的空白 POIPIKU_LK；这里兜的是
+            // 过期 token 下该接口直接 404 那一路（注意 apiCall 把 404 映射成 NotFound）
+            if (authRepository.isLoggedIn() && error is AppError.NotFound) {
                 sessionMonitor.notifySessionCleared()
             }
         }

@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.piku.client.R
 import com.piku.client.data.local.ImageSaver
 import com.piku.client.data.repository.AuthRepository
+import com.piku.client.data.repository.ProfileRepository
+import com.piku.client.data.repository.reloadOnSessionChange
 import com.piku.client.data.repository.BlockListRepository
 import com.piku.client.data.repository.BlockResult
 import com.piku.client.data.repository.DetailRepository
@@ -61,6 +63,7 @@ class UserWorksViewModel @Inject constructor(
     private val detailRepository: DetailRepository,
     private val blockListRepository: BlockListRepository,
     private val authRepository: AuthRepository,
+    private val profileRepository: ProfileRepository,
     private val imageSaver: ImageSaver,
 ) : ViewModel() {
 
@@ -107,8 +110,11 @@ class UserWorksViewModel @Inject constructor(
                 _uiState.update { it.copy(loggedIn = status == AuthStatus.LOGGED_IN) }
             }
         }
+        // マイボックス失效时服务端回的是 200 + 空 body，列表已被当成空、
+        // endReached 也被误置为 true；登录/登出/重登成功都要重拉第一页
+        viewModelScope.reloadOnSessionChange(authRepository.sessionVersion) { retry() }
         viewModelScope.launch {
-            authRepository.userProfile.collect { profile ->
+            profileRepository.userProfile.collect { profile ->
                 _uiState.update { it.copy(isSelf = profile?.uid?.toLongOrNull() == userId) }
             }
         }

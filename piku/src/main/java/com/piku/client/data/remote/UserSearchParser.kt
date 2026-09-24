@@ -24,9 +24,6 @@ object UserSearchParser {
     /** 关注按钮：`UserInfoCmdFollow` class 含 Selected = 已关注（匿名恒无） */
     private val FOLLOW_BTN = Regex("""class="([^"]*UserInfoCmdFollow[^"]*)"""")
 
-    /** 登录页：`LoginUserF.jsp`（会话失效时服务端返回登录页而非结果页） */
-    private val LOGIN_FORM = Regex("""LoginUserF\.jsp""")
-
     fun parse(html: String): List<FollowUser> {
         val tags = ITEM_TAG.findAll(html).toList()
         if (tags.isEmpty()) return emptyList()
@@ -45,5 +42,4 @@ object UserSearchParser {
         }
     }
 
-    fun isLoginPage(html: String): Boolean = LOGIN_FORM.containsMatchIn(html)
 }

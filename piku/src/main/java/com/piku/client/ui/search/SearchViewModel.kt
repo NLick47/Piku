@@ -5,10 +5,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.piku.client.R
 import com.piku.client.data.repository.AuthRepository
+import com.piku.client.data.repository.reloadOnSessionChange
 import com.piku.client.data.repository.DetailRepository
 import com.piku.client.data.repository.FollowResult
 import com.piku.client.domain.model.AppError
-import com.piku.client.domain.model.AuthStatus
 import com.piku.client.domain.model.FollowUser
 import com.piku.client.domain.model.PopularTag
 import com.piku.client.domain.model.TagCard
@@ -174,26 +174,13 @@ class SearchViewModel @Inject constructor(
                 _uiState.update { it.copy(popularTagNames = names) }
             }
         }
-        viewModelScope.launch {
-            var prevLoggedIn: Boolean? = null
-            authRepository.authStatus.collect { status ->
-                val loggedIn = status == AuthStatus.LOGGED_IN
-                // 登录成功（含从登录引导回来）后重载三个 tab 的搜索
-                if (prevLoggedIn == false && loggedIn) {
-                    usersPage = 0
-                    loadUsers(append = false)
-                    loadWorks(append = false)
-                    loadTagsByMode(append = false)
-                }
-                prevLoggedIn = loggedIn
-            }
-        }
-        viewModelScope.launch {
-            authRepository.sessionRefreshed.collect {
-                loadUsers(append = false)
-                loadWorks(append = false)
-                loadTagsByMode(append = false)
-            }
+        // 登录成功（含从登录引导回来）、自动重登、登出都要重载三个 tab：
+        // 搜索结果与身份相关，登出后不能继续显示上一个账号才看得见的内容
+        viewModelScope.reloadOnSessionChange(authRepository.sessionVersion) {
+            usersPage = 0
+            loadUsers(append = false)
+            loadWorks(append = false)
+            loadTagsByMode(append = false)
         }
         if (base.isNotEmpty() || presetTag.isNotEmpty()) {
             // 作品 tab 始终预载（关键词搜索，切 tab 免等待）

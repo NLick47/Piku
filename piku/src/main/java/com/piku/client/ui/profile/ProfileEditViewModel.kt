@@ -7,7 +7,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.piku.client.R
-import com.piku.client.data.repository.AuthRepository
+import com.piku.client.data.repository.ProfileRepository
 import com.piku.client.domain.model.AppError
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -34,7 +34,7 @@ data class ProfileEditUiState(
 
 @HiltViewModel
 class ProfileEditViewModel @Inject constructor(
-    private val authRepository: AuthRepository,
+    private val profileRepository: ProfileRepository,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
@@ -51,7 +51,7 @@ class ProfileEditViewModel @Inject constructor(
         if (_uiState.value.savingName || _uiState.value.uploadingAvatar) return
         viewModelScope.launch {
             _uiState.update { it.copy(savingName = true, errorRes = null) }
-            authRepository.updateNickName(trimmed)
+            profileRepository.updateNickName(trimmed)
                 .onSuccess { _uiState.update { it.copy(savingName = false, saved = true) } }
                 .onFailure { error ->
                     android.util.Log.d(
@@ -76,7 +76,7 @@ class ProfileEditViewModel @Inject constructor(
                 return@launch
             }
             val sizedFile = withContext(Dispatchers.IO) { ensureSize(cacheFile) }
-            authRepository.updateAvatar(sizedFile)
+            profileRepository.updateAvatar(sizedFile)
                 .onSuccess {
                     cacheFile.delete()
                     _uiState.update { it.copy(uploadingAvatar = false, saved = true) }
@@ -157,8 +157,8 @@ class ProfileEditViewModel @Inject constructor(
 
     private fun Throwable.toErrorRes(): Int = when (this) {
         is AppError.Network -> R.string.profile_edit_error_network
-        is AuthRepository.UpdateRejected -> R.string.profile_edit_error_rejected
-        is AuthRepository.AvatarTooLarge -> R.string.profile_edit_error_size
+        is ProfileRepository.UpdateRejected -> R.string.profile_edit_error_rejected
+        is ProfileRepository.AvatarTooLarge -> R.string.profile_edit_error_size
         else -> R.string.profile_edit_error_unknown
     }
 

@@ -19,8 +19,22 @@ object UserPageParser {
     /** 头像（全尺寸）：`<meta name="twitter:image" content="...">` */
     private val TWITTER_IMAGE = Regex("""<meta name="twitter:image" content="([^"]+)"""")
 
-    /** 昵称：`<meta property="og:title" content="XXXのポイピク | イラストとか箱「ポイピク」">` */
-    private val OG_TITLE = Regex("""<meta property="og:title" content="([^"]+)"""")
+    /**
+     * 昵称：`<meta property="og:title" content="XXXのポイピク | イラストとか箱「ポイピク」">`。
+     * 后缀是必须的：站点首页的 og:title 没有它，不能把一个"不是用户页"的标题当成昵称
+     */
+    private val OG_USER_NAME = Regex("""<meta property="og:title" content="([^"]+?)のポイピク""")
+
+    /** 昵称（页主区块）：`<h2 class="IllustUserName">XXX</h2>` */
+    private val H2_USER_NAME = Regex("""<h2 class="IllustUserName">([^<]+)</h2>""")
+
+    /** 昵称（页标题）：必须带完整后缀，否则"页面不存在"那种标题会被当成昵称 */
+    private val PAGE_TITLE = Regex("""<title>([^<]+)のポイピク \| イラストとか箱「ポイピク」</title>""")
+
+    /** 昵称（头像 alt）：`<img class="IllustUserThumb" ... alt="XXX">` */
+    private val AVATAR_ALT = Regex("""<img class="IllustUserThumb"[^>]*alt="([^"]+)"""")
+
+    private val HTML_ENTITY_DECIMAL = Regex("&#(\\d+);")
 
     /** 作品数：`<meta property="og:description" content="XXXはポイピクにN枚のイラストとかをポイポイしています。">` */
     private val OG_DESCRIPTION = Regex("""<meta property="og:description" content="([^"]+)"""")
@@ -44,14 +58,36 @@ object UserPageParser {
     /** 屏蔽状态：`UserInfoCmdBlock` 按钮 class 含 Selected = 当前登录用户已屏蔽（整页唯一） */
     private val BLOCK_BTN = Regex("""class="([^"]*UserInfoCmdBlock[^"]*)"""")
 
+    /**
+     * 昵称。四个来源在真实用户页上实测完全一致（2026-09-24 核对了 3 个 uid），
+     * 按 og:title → 页主 h2 → <title> → 头像 alt 取第一个命中，并解 HTML 实体。
+     * 页主页和用户主页共用这一份实现。
+     */
+    fun parseDisplayName(html: String): String? {
+        val raw = OG_USER_NAME.find(html)?.groupValues?.get(1)
+            ?: H2_USER_NAME.find(html)?.groupValues?.get(1)
+            ?: PAGE_TITLE.find(html)?.groupValues?.get(1)
+            ?: AVATAR_ALT.find(html)?.groupValues?.get(1)
+        return raw?.let(::decodeHtmlEntities)?.trim()?.takeIf { it.isNotEmpty() }
+    }
+
+    private fun decodeHtmlEntities(input: String): String = input
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace(HTML_ENTITY_DECIMAL) { m ->
+            m.groupValues[1].toIntOrNull()?.let { it.toChar().toString() } ?: m.value
+        }
+
     fun parse(html: String): UserPageInfo {
         val headerUrl = HEADER_IMAGE.find(html)?.groupValues?.get(1)?.takeIf { it.isNotBlank() }
 
         val avatarUrl = TWITTER_IMAGE.find(html)?.groupValues?.get(1)
             ?.takeIf { it.isNotBlank() && !it.contains("default_user") }
 
-        val ogTitle = OG_TITLE.find(html)?.groupValues?.get(1)
-        val userName = ogTitle?.substringBefore("のポイピク")?.takeIf { it.isNotBlank() }
+        val userName = parseDisplayName(html)
 
         val ogDesc = OG_DESCRIPTION.find(html)?.groupValues?.get(1).orEmpty()
         val workCount = WORK_COUNT.find(ogDesc)?.groupValues?.get(1)?.toIntOrNull()

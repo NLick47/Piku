@@ -2,6 +2,7 @@ package com.piku.client.di
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.os.SystemClock
 import com.piku.client.data.local.CredentialCipher
 import com.piku.client.data.local.CredentialStore
 import com.piku.client.data.local.KeystoreCredentialCipher
@@ -10,15 +11,18 @@ import com.piku.client.data.remote.FileCookieStore
 import com.piku.client.data.remote.PersistentCookieJar
 import com.piku.client.data.remote.AuthApi
 import com.piku.client.data.remote.SessionMonitor
+import com.piku.client.data.repository.SessionRuntime
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.asCoroutineDispatcher
 import okhttp3.CookieJar
 import retrofit2.Retrofit
 import java.io.File
 import java.net.CookieStore
+import java.util.concurrent.Executors
 import javax.inject.Singleton
 
 @Module
@@ -42,6 +46,14 @@ object AuthModule {
     @Provides
     @Singleton
     fun provideCredentialCipher(): CredentialCipher = KeystoreCredentialCipher(KEY_ALIAS)
+
+    @Provides
+    @Singleton
+    fun provideSessionRuntime(): SessionRuntime = SessionRuntime(
+        dispatcher = Executors.newSingleThreadExecutor { Thread(it, "piku-session") }
+            .asCoroutineDispatcher(),
+        now = SystemClock::elapsedRealtime,
+    )
 
     @Provides
     @Singleton

@@ -12,7 +12,6 @@ object FollowUserParser {
 
     private val TOTAL = Regex("""TOTAL=(\d+)""")
 
-    private val LOGIN_FORM = Regex("""LoginUserF\.jsp""")
 
     fun parse(html: String): List<FollowUser> {
         val tags = ITEM_TAG.findAll(html).toList()
@@ -30,5 +29,4 @@ object FollowUserParser {
 
     fun parseTotal(html: String): Int? = TOTAL.find(html)?.groupValues?.get(1)?.toIntOrNull()
 
-    fun isLoginPage(html: String): Boolean = LOGIN_FORM.containsMatchIn(html)
 }
