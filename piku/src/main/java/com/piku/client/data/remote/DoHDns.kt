@@ -71,7 +71,7 @@ class DoHDns(
     private val failures = ConcurrentHashMap<String, FailureEntry>()
     private val inflight = ConcurrentHashMap<String, CompletableFuture<List<InetAddress>>>()
 
-    private val sourceExecutor = Executors.newFixedThreadPool(5) { runnable ->
+    private val sourceExecutor = Executors.newCachedThreadPool { runnable ->
         Thread(runnable, "piku-dns-source").apply { isDaemon = true }
     }
     private val probeExecutor = Executors.newCachedThreadPool { runnable ->
