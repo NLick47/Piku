@@ -389,6 +389,12 @@ class SearchViewModel @Inject constructor(
         }
     }
 
+    // 站点作者搜索会返回重复条目，而列表以 userId 作 key，重复 key 会让 LazyColumn 直接崩
+    private fun mergeUsers(current: List<FollowUser>, incoming: List<FollowUser>): List<FollowUser> {
+        val seen = current.mapTo(mutableSetOf()) { it.userId }
+        return current + incoming.filter { seen.add(it.userId) }
+    }
+
     private fun loadWorks(append: Boolean) {
         if (base.isEmpty()) return
         val targetPage = if (append) worksPage + 1 else 0
@@ -476,12 +482,13 @@ class SearchViewModel @Inject constructor(
                 .onSuccess { list ->
                     usersPage = targetPage
                     _uiState.update {
+                        val merged = if (append) mergeUsers(it.users, list) else list.distinctBy { u -> u.userId }
                         it.copy(
                             usersLoading = false,
                             usersLoadingMore = false,
                             usersLoadMoreErrorRes = null,
-                            users = if (append) it.users + list else list,
-                            usersEndReached = list.isEmpty(),
+                            users = merged,
+                            usersEndReached = list.isEmpty() || (append && merged.size == it.users.size),
                         )
                     }
                 }
