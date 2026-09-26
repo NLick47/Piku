@@ -654,10 +654,10 @@
     <string name="my_posts_delete_confirm_body">删除后无法恢复，投稿《%1$s》将从主页移除。确定删除吗？</string>
     <string name="my_posts_deleted">已删除</string>
     <string name="my_posts_delete_failed">删除失败，请重试</string>
-    <string name="menu_image_route">图片加载方式</string>
-    <string name="image_route_select_title">图片加载方式</string>
-    <string name="image_route_select_hint">图片显示不出来时，试试切到「兼容模式」。</string>
+    <string name="menu_image_route">图片网络线路</string>
+    <string name="image_route_select_title">图片网络线路</string>
+    <string name="image_route_select_hint">图片显示不出来多是网络线路问题，试试切到「中转」。</string>
     <string name="image_route_auto">自动（推荐）</string>
-    <string name="image_route_direct">普通模式</string>
-    <string name="image_route_relay">兼容模式</string>
+    <string name="image_route_direct">直连</string>
+    <string name="image_route_relay">中转</string>
 </resources>
