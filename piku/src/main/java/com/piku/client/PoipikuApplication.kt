@@ -11,6 +11,8 @@ import coil3.request.allowHardware
 import coil3.request.crossfade
 import coil3.serviceLoaderEnabled
 import coil3.size.Precision
+import com.piku.client.data.remote.ImageRelayInterceptor
+import com.piku.client.data.remote.ImageRouteController
 import com.piku.client.data.remote.translation.ModelCatalogRepository
 import com.piku.client.data.repository.BlockListSync
 import dagger.hilt.EntryPoint
@@ -23,6 +25,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.util.concurrent.TimeUnit
 
 @HiltAndroidApp
 class PoipikuApplication : Application() {
@@ -78,12 +82,36 @@ class PoipikuApplication : Application() {
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             entryPoint.blockListSync().start()
         }
+
+        // 探测直连 cdn.poipiku.com 是否可用，决定图片走直连还是中转。
+        // 与首屏并行、带 2.5s 上限，不影响启动；结果持久化，图片请求就不必再"先失败一遍"。
+        // 仅 AUTO 模式需要探测；手动选了直连/中转的用户直接跳过，省一次请求。
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            val controller = entryPoint.imageRouteController()
+            if (!controller.shouldRunProbe()) return@launch
+            val probeClient = entryPoint.okHttpClient().newBuilder()
+                .callTimeout(3000, TimeUnit.MILLISECONDS)
+                .build()
+            val request = Request.Builder()
+                .url(ImageRelayInterceptor.PROBE_URL)
+                .head()
+                .header(ImageRelayInterceptor.BYPASS_HEADER, "1")
+                .build()
+            // 只要能拿到任意 HTTP 响应（包括 404）就说明直连链路通，不依赖特定资源存在，
+            // 避免资源被删/改名时把全部 AUTO 用户误判为直连不可用、强制走中转。
+            val directOk = runCatching {
+                probeClient.newCall(request).execute().use { true }
+            }.getOrDefault(false)
+            controller.applyProbe(directOk)
+        }
     }
 
     @EntryPoint
     @InstallIn(SingletonComponent::class)
     interface AppEntryPoint {
         fun okHttpClient(): OkHttpClient
+
+        fun imageRouteController(): ImageRouteController
 
         fun modelCatalogRepository(): ModelCatalogRepository
 

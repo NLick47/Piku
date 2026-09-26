@@ -44,6 +44,7 @@ import com.piku.client.R
 import com.piku.client.domain.model.AppLanguage
 import com.piku.client.domain.model.CATEGORY_GROUPS
 import com.piku.client.domain.model.PoipikuCategory
+import com.piku.client.domain.model.ImageRouteMode
 import com.piku.client.domain.model.ThemeMode
 import com.piku.client.ui.common.PikuBottomSheet
 import com.piku.client.ui.common.PikuSheetSubtitle
@@ -154,6 +155,45 @@ internal fun ThemeModeSheet(
                 onClick = { onSelect(ThemeMode.DARK) },
                 dark = dark,
             )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun ImageRouteSheet(
+    selected: ImageRouteMode,
+    onSelect: (ImageRouteMode) -> Unit,
+    onDismiss: () -> Unit,
+    dark: Boolean,
+) {
+    PikuBottomSheet(
+        onDismissRequest = onDismiss,
+        dark = dark,
+    ) {
+        PikuSheetTitle(text = stringResource(R.string.image_route_select_title))
+        Spacer(Modifier.height(4.dp))
+        PikuSheetSubtitle(text = stringResource(R.string.image_route_select_hint))
+        Spacer(Modifier.height(16.dp))
+        SettingsOptionRow(
+            text = stringResource(R.string.image_route_auto),
+            selected = selected == ImageRouteMode.AUTO,
+            onClick = { onSelect(ImageRouteMode.AUTO) },
+            dark = dark,
+        )
+        Spacer(Modifier.height(8.dp))
+        SettingsOptionRow(
+            text = stringResource(R.string.image_route_direct),
+            selected = selected == ImageRouteMode.DIRECT,
+            onClick = { onSelect(ImageRouteMode.DIRECT) },
+            dark = dark,
+        )
+        Spacer(Modifier.height(8.dp))
+        SettingsOptionRow(
+            text = stringResource(R.string.image_route_relay),
+            selected = selected == ImageRouteMode.RELAY,
+            onClick = { onSelect(ImageRouteMode.RELAY) },
+            dark = dark,
+        )
     }
 }
 

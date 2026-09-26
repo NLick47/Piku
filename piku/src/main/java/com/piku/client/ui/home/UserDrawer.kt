@@ -45,6 +45,7 @@ import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PostAdd
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.Tag
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.outlined.Wallpaper
@@ -76,6 +77,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.piku.client.R
 import com.piku.client.domain.model.AppLanguage
+import com.piku.client.domain.model.ImageRouteMode
 import com.piku.client.domain.model.ThemeMode
 import com.piku.client.domain.model.UserProfile
 import com.piku.client.ui.common.UserAvatar
@@ -90,6 +92,7 @@ fun UserDrawer(
     loggedIn: Boolean,
     adultEnabled: Boolean,
     themeMode: ThemeMode,
+    imageRouteMode: ImageRouteMode,
     customBackgroundPath: String?,
     language: AppLanguage,
     currentVersion: String,
@@ -98,6 +101,7 @@ fun UserDrawer(
     onSettingsClick: () -> Unit,
     onAboutClick: () -> Unit,
     onThemeClick: () -> Unit,
+    onImageRouteClick: () -> Unit,
     onBackgroundClick: () -> Unit,
     onHistoryClick: () -> Unit,
     onCollectionClick: () -> Unit,
@@ -131,6 +135,7 @@ fun UserDrawer(
                 loggedIn = loggedIn,
                 adultEnabled = adultEnabled,
                 themeMode = themeMode,
+                imageRouteMode = imageRouteMode,
                 customBackgroundPath = customBackgroundPath,
                 language = language,
                 currentVersion = currentVersion,
@@ -142,6 +147,7 @@ fun UserDrawer(
                 },
                 onAboutClick = onAboutClick,
                 onThemeClick = onThemeClick,
+                onImageRouteClick = onImageRouteClick,
                 onBackgroundClick = onBackgroundClick,
                 onHistoryClick = onHistoryClick,
                 onCollectionClick = onCollectionClick,
@@ -176,6 +182,7 @@ private fun DrawerPanel(
     loggedIn: Boolean,
     adultEnabled: Boolean,
     themeMode: ThemeMode,
+    imageRouteMode: ImageRouteMode,
     customBackgroundPath: String?,
     language: AppLanguage,
     currentVersion: String,
@@ -184,6 +191,7 @@ private fun DrawerPanel(
     onSettingsClick: () -> Unit,
     onAboutClick: () -> Unit,
     onThemeClick: () -> Unit,
+    onImageRouteClick: () -> Unit,
     onBackgroundClick: () -> Unit,
     onHistoryClick: () -> Unit,
     onCollectionClick: () -> Unit,
@@ -435,6 +443,14 @@ private fun DrawerPanel(
                         label = stringResource(R.string.menu_history_retention),
                         trailing = retentionLabel(historyRetentionDays),
                         onClick = onRetentionClick,
+                        dark = dark,
+                        accent = iconAccent,
+                    )
+                    DrawerMenuRow(
+                        icon = Icons.Outlined.SwapHoriz,
+                        label = stringResource(R.string.menu_image_route),
+                        trailing = stringResource(imageRouteMode.labelRes()),
+                        onClick = onImageRouteClick,
                         dark = dark,
                         accent = iconAccent,
                     )
@@ -730,6 +746,12 @@ private fun ThemeMode.labelRes(): Int = when (this) {
     ThemeMode.SYSTEM -> R.string.theme_mode_system
     ThemeMode.LIGHT -> R.string.theme_mode_light
     ThemeMode.DARK -> R.string.theme_mode_dark
+}
+
+private fun ImageRouteMode.labelRes(): Int = when (this) {
+    ImageRouteMode.AUTO -> R.string.image_route_auto
+    ImageRouteMode.DIRECT -> R.string.image_route_direct
+    ImageRouteMode.RELAY -> R.string.image_route_relay
 }
 
 fun AppLanguage.labelRes(): Int = when (this) {

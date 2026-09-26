@@ -155,6 +155,7 @@ fun HomeScreen(
     val context = LocalContext.current
     var showCategories by rememberSaveable { mutableStateOf(false) }
     var showThemeSheet by rememberSaveable { mutableStateOf(false) }
+    var showImageRouteSheet by rememberSaveable { mutableStateOf(false) }
     var originalOffsetX by remember { mutableFloatStateOf(0f) }
     var originalOffsetY by remember { mutableFloatStateOf(0f) }
     var originalDim by remember { mutableFloatStateOf(SettingsRepository.BACKGROUND_DIM_DEFAULT) }
@@ -346,6 +347,7 @@ fun HomeScreen(
         loggedIn = state.loggedIn,
         adultEnabled = state.adultEnabled,
         themeMode = state.themeMode,
+        imageRouteMode = state.imageRouteMode,
         customBackgroundPath = state.customBackgroundPath,
         language = state.language,
         currentVersion = displayVersionName(),
@@ -354,6 +356,7 @@ fun HomeScreen(
         onSettingsClick = {},
         onAboutClick = { showAboutSheet = true },
         onThemeClick = { showThemeSheet = true },
+        onImageRouteClick = { showImageRouteSheet = true },
         onBackgroundClick = {
             scope.launch { drawerState.close() }
             viewModel.consumeBackgroundError()
@@ -825,6 +828,18 @@ fun HomeScreen(
                         showThemeSheet = false
                     },
                     onDismiss = { showThemeSheet = false },
+                    dark = dark,
+                )
+            }
+
+            if (showImageRouteSheet) {
+                ImageRouteSheet(
+                    selected = state.imageRouteMode,
+                    onSelect = { mode ->
+                        viewModel.setImageRouteMode(mode)
+                        showImageRouteSheet = false
+                    },
+                    onDismiss = { showImageRouteSheet = false },
                     dark = dark,
                 )
             }

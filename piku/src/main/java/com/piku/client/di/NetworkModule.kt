@@ -2,8 +2,11 @@ package com.piku.client.di
 
 import android.content.SharedPreferences
 import com.piku.client.BuildConfig
+import com.piku.client.data.local.SettingsRepository
 import com.piku.client.data.remote.ApiConfig
 import com.piku.client.data.remote.DoHDns
+import com.piku.client.data.remote.ImageRelayInterceptor
+import com.piku.client.data.remote.ImageRouteController
 import com.piku.client.data.remote.LenientJsonConverterFactory
 import com.piku.client.data.remote.PoipikuHostnameVerifier
 import com.piku.client.data.remote.PoipikuApi
@@ -54,7 +57,18 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(cookieJar: CookieJar, dns: Dns): OkHttpClient {
+    fun provideImageRouteController(
+        settings: SettingsRepository,
+        prefs: SharedPreferences,
+    ): ImageRouteController = ImageRouteController(settings, prefs)
+
+    @Provides
+    @Singleton
+    fun provideOkHttpClient(
+        cookieJar: CookieJar,
+        dns: Dns,
+        routeController: ImageRouteController,
+    ): OkHttpClient {
         val doHDns = dns as DoHDns
         val sniFactory = SniStrippingSocketFactory()
         val builder = OkHttpClient.Builder()
@@ -106,6 +120,7 @@ object NetworkModule {
                 }
             }
             .cookieJar(cookieJar)
+            .addInterceptor(ImageRelayInterceptor(routeController))
             .addInterceptor(RefererInterceptor())
             .addInterceptor(RetryInterceptor(doHDns))
             .addInterceptor { chain ->

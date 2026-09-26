@@ -29,6 +29,7 @@ import com.piku.client.data.repository.SyncState
 import com.piku.client.domain.model.AppLanguage
 import com.piku.client.domain.model.AuthStatus
 import com.piku.client.domain.model.PoipikuCategory
+import com.piku.client.domain.model.ImageRouteMode
 import com.piku.client.domain.model.ThemeMode
 import com.piku.client.domain.model.UserProfile
 import com.piku.client.domain.model.Work
@@ -44,6 +45,7 @@ import com.piku.client.domain.usecase.ObserveCustomBackgroundUseCase
 import com.piku.client.domain.usecase.ObserveFavoriteIdsUseCase
 import com.piku.client.domain.usecase.ObserveHistoryRetentionUseCase
 import com.piku.client.domain.usecase.ObserveLanguageUseCase
+import com.piku.client.domain.usecase.ObserveImageRouteModeUseCase
 import com.piku.client.domain.usecase.ObserveThemeModeUseCase
 import com.piku.client.domain.usecase.RestoreAdultContentUseCase
 import com.piku.client.domain.usecase.SelectTranslateImageModelUseCase
@@ -56,6 +58,7 @@ import com.piku.client.domain.usecase.SetBackgroundDimUseCase
 import com.piku.client.domain.usecase.SetCustomBackgroundUseCase
 import com.piku.client.domain.usecase.SetHistoryRetentionUseCase
 import com.piku.client.domain.usecase.SetLanguageUseCase
+import com.piku.client.domain.usecase.SetImageRouteModeUseCase
 import com.piku.client.domain.usecase.SetThemeModeUseCase
 import com.piku.client.domain.usecase.ToggleFavoriteUseCase
 import com.piku.client.ui.common.toFeedErrorRes
@@ -100,6 +103,7 @@ data class HomeUiState(
     val favoriteIds: Set<Long> = emptySet(),
     val adultEnabled: Boolean = false,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    val imageRouteMode: ImageRouteMode = ImageRouteMode.AUTO,
     val historyRetentionDays: Int = 0,
     val language: AppLanguage = AppLanguage.SYSTEM,
     val userProfile: UserProfile? = null,
@@ -189,6 +193,8 @@ class HomeViewModel @Inject constructor(
     private val setAdultContentUseCase: SetAdultContentUseCase,
     private val observeThemeModeUseCase: ObserveThemeModeUseCase,
     private val setThemeModeUseCase: SetThemeModeUseCase,
+    private val observeImageRouteModeUseCase: ObserveImageRouteModeUseCase,
+    private val setImageRouteModeUseCase: SetImageRouteModeUseCase,
     private val observeHistoryRetentionUseCase: ObserveHistoryRetentionUseCase,
     private val setHistoryRetentionUseCase: SetHistoryRetentionUseCase,
     private val observeLanguageUseCase: ObserveLanguageUseCase,
@@ -248,6 +254,11 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             observeThemeModeUseCase().collect { mode ->
                 _uiState.update { it.copy(themeMode = mode) }
+            }
+        }
+        viewModelScope.launch {
+            observeImageRouteModeUseCase().collect { mode ->
+                _uiState.update { it.copy(imageRouteMode = mode) }
             }
         }
         viewModelScope.launch {
@@ -677,6 +688,10 @@ class HomeViewModel @Inject constructor(
 
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch { setThemeModeUseCase(mode) }
+    }
+
+    fun setImageRouteMode(mode: ImageRouteMode) {
+        viewModelScope.launch { setImageRouteModeUseCase(mode) }
     }
 
     fun setCustomBackground(uri: android.net.Uri) {

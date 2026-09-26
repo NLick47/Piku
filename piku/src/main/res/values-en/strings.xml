@@ -644,4 +644,10 @@
     <string name="my_posts_delete_confirm_body">This cannot be undone. \"%1$s\" will be removed from your profile. Delete it?</string>
     <string name="my_posts_deleted">Deleted</string>
     <string name="my_posts_delete_failed">Delete failed, please retry</string>
+    <string name="menu_image_route">Image loading</string>
+    <string name="image_route_select_title">Image loading mode</string>
+    <string name="image_route_select_hint">If images do not show up, try Compatible mode.</string>
+    <string name="image_route_auto">Automatic (recommended)</string>
+    <string name="image_route_direct">Standard</string>
+    <string name="image_route_relay">Compatible</string>
 </resources>

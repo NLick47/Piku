@@ -644,4 +644,10 @@
     <string name="my_posts_delete_confirm_body">削除すると元に戻せません。「%1$s」を主页から削除します。よろしいですか？</string>
     <string name="my_posts_deleted">削除しました</string>
     <string name="my_posts_delete_failed">削除に失敗しました。再試行してください</string>
+    <string name="menu_image_route">画像の読み込み</string>
+    <string name="image_route_select_title">画像の読み込み方法</string>
+    <string name="image_route_select_hint">画像が表示されないときは「互換モード」をお試しください。</string>
+    <string name="image_route_auto">自動（推奨）</string>
+    <string name="image_route_direct">標準</string>
+    <string name="image_route_relay">互換モード</string>
 </resources>

@@ -4,6 +4,7 @@ import android.content.SharedPreferences
 import com.piku.client.data.repository.SyncResult
 import com.piku.client.data.repository.SyncState
 import com.piku.client.domain.model.FolderSort
+import com.piku.client.domain.model.ImageRouteMode
 import com.piku.client.domain.model.ReadingProgress
 import com.piku.client.domain.model.ThemeMode
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -55,6 +56,14 @@ class SettingsRepository @Inject constructor(
             ?: ThemeMode.SYSTEM,
     )
     val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
+
+    /** 图片取源线路：自动 / 强制直连 / 强制中转。默认自动（启动探测 + 失败回退）。 */
+    private val _imageRouteMode = MutableStateFlow(
+        prefs.getString(KEY_IMAGE_ROUTE_MODE, null)
+            ?.let { name -> runCatching { ImageRouteMode.valueOf(name) }.getOrNull() }
+            ?: ImageRouteMode.AUTO,
+    )
+    val imageRouteMode: StateFlow<ImageRouteMode> = _imageRouteMode.asStateFlow()
 
     /** 收藏夹内的排序方式；纯本地偏好，与账号无关 */
     private val _folderSort = MutableStateFlow(
@@ -189,6 +198,11 @@ class SettingsRepository @Inject constructor(
     fun setThemeMode(mode: ThemeMode) {
         prefs.edit().putString(KEY_THEME_MODE, mode.name).apply()
         _themeMode.value = mode
+    }
+
+    fun setImageRouteMode(mode: ImageRouteMode) {
+        prefs.edit().putString(KEY_IMAGE_ROUTE_MODE, mode.name).apply()
+        _imageRouteMode.value = mode
     }
 
     fun setFolderSort(sort: FolderSort) {
@@ -736,6 +750,7 @@ class SettingsRepository @Inject constructor(
     companion object {
         const val KEY_SHOW_ADULT_CONTENT = "show_adult_content"
         const val KEY_THEME_MODE = "theme_mode"
+        const val KEY_IMAGE_ROUTE_MODE = "image_route_mode"
         const val KEY_FOLDER_SORT = "folder_sort"
         const val KEY_HISTORY_RETENTION_DAYS = "history_retention_days"
         const val KEY_AUTO_CHECK_ENABLED = "auto_check_update_enabled"
