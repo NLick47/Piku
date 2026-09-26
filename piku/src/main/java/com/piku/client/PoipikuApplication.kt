@@ -85,13 +85,13 @@ class PoipikuApplication : Application() {
         }
 
         // 探测直连 cdn.poipiku.com 是否可用，决定图片走直连还是中转。
-        // 与首屏并行、带 2.5s 上限，不影响启动；结果持久化，图片请求就不必再"先失败一遍"。
+        // 与首屏并行、带 5s 上限，不影响启动；结果持久化，图片请求就不必再"先失败一遍"。
         // 仅 AUTO 模式需要探测；手动选了直连/中转的用户直接跳过，省一次请求。
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             val controller = entryPoint.imageRouteController()
             if (!controller.shouldRunProbe()) return@launch
             val probeClient = entryPoint.okHttpClient().newBuilder()
-                .callTimeout(3000, TimeUnit.MILLISECONDS)
+                .callTimeout(5, TimeUnit.SECONDS)
                 .build()
             val request = Request.Builder()
                 .url(ImageRelayInterceptor.PROBE_URL)
