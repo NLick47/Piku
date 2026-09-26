@@ -4,11 +4,17 @@ import okhttp3.Interceptor
 import okhttp3.Request
 import okhttp3.Response
 import java.io.IOException
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicReference
 
 class ImageRelayInterceptor(
     private val controller: ImageRouteController,
     private val relayHosts: List<String> = RELAY_HOSTS,
 ) : Interceptor {
+
+    // 中继健康记忆：连不上的冷却期内跳过，可用的一次性提到最前，避免每张图都先踩死路
+    private val cooldownUntil = ConcurrentHashMap<String, Long>()
+    private val order = AtomicReference(relayHosts)
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
@@ -32,16 +38,25 @@ class ImageRelayInterceptor(
     }
 
     private fun tryRelays(chain: Interceptor.Chain, request: Request): Response? {
-        for (host in relayHosts) {
-            try {
-                val resp = chain.proceed(rewrite(request, host))
-                // 只有 2xx 才算中转成功：404/502 这类 HTTP 响应不能直接当作可用，
-                // 否则会漏掉"试下一个中转"和"回退直连"，导致图裂且不自愈。
-                if (resp.isSuccessful) return resp
-                resp.close()
+        val now = System.currentTimeMillis()
+        for (host in order.get()) {
+            if (now < (cooldownUntil[host] ?: 0L)) continue
+            val resp = try {
+                chain.proceed(rewrite(request, host))
             } catch (_: IOException) {
-                // 换下一个中转地址
+                // 整体已超时/取消（如 callTimeout）不算中继故障，否则会把本来健康的中继也冷却掉、
+                // 且被取消的后续尝试会连锁把每个中继都记一遍。
+                if (chain.call().isCanceled()) return null
+                cooldownUntil[host] = System.currentTimeMillis() + RELAY_COOLDOWN_MS
+                continue
             }
+            if (resp.isSuccessful) {
+                cooldownUntil.remove(host)
+                order.updateAndGet { cur -> listOf(host) + cur.filter { it != host } }
+                return resp
+            }
+            // 非 2xx（404/502）只换这张图的下一个，不冷却整个中继
+            resp.close()
         }
         return null
     }
@@ -60,5 +75,7 @@ class ImageRelayInterceptor(
             "pic-relay.cyou",
             "piku-img.pages.dev",
         )
+
+        private const val RELAY_COOLDOWN_MS = 30_000L
     }
 }

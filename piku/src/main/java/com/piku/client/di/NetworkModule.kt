@@ -142,6 +142,18 @@ object NetworkModule {
         return builder.build()
     }
 
+    /**
+     * 图片专用 client：复用主 client 的连接池与拦截器（含中转改写），只加一个总超时上限——
+     * 坏网下单张图不再因 30s 读超时叠加多次重试而拖到一分钟。
+     */
+    @Provides
+    @Singleton
+    @Named("image")
+    fun provideImageOkHttpClient(client: OkHttpClient): OkHttpClient =
+        client.newBuilder()
+            .callTimeout(15, TimeUnit.SECONDS)
+            .build()
+
     @Provides
     @Singleton
     fun provideRetrofit(client: OkHttpClient, json: Json): Retrofit =

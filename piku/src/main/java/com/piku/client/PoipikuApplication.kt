@@ -27,6 +27,7 @@ import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.TimeUnit
+import javax.inject.Named
 
 @HiltAndroidApp
 class PoipikuApplication : Application() {
@@ -40,7 +41,7 @@ class PoipikuApplication : Application() {
                 // 与 API 共用同一 OkHttpClient，图片 CDN（cdn.poipiku.com）
                 // 同样走防 DNS 污染解析
                 .components {
-                    add(OkHttpNetworkFetcherFactory(callFactory = { entryPoint.okHttpClient() }))
+                    add(OkHttpNetworkFetcherFactory(callFactory = { entryPoint.imageOkHttpClient() }))
                     // 这里刻意不注册动画解码器：动图播放走白名单，由
                     // ui.common.rememberAnimatedImage 先用文件名判定（xxx.gif_640.jpg
                     // 里的 .gif 是 poipiku CDN 留下的动图指纹），再单独挂解码器
@@ -110,6 +111,9 @@ class PoipikuApplication : Application() {
     @InstallIn(SingletonComponent::class)
     interface AppEntryPoint {
         fun okHttpClient(): OkHttpClient
+
+        @Named("image")
+        fun imageOkHttpClient(): OkHttpClient
 
         fun imageRouteController(): ImageRouteController
 
