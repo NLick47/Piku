@@ -171,6 +171,7 @@ fun HomeScreen(
     var showCatalogSource by rememberSaveable { mutableStateOf(false) }
     var showAboutSheet by rememberSaveable { mutableStateOf(false) }
     var showWebDavSettings by rememberSaveable { mutableStateOf(false) }
+    var showNetworkDiag by rememberSaveable { mutableStateOf(false) }
     var showHistoryPage by rememberSaveable { mutableStateOf(false) }
     var showCollectionPage by rememberSaveable { mutableStateOf(false) }
     var showTagsPage by rememberSaveable { mutableStateOf(false) }
@@ -949,11 +950,26 @@ fun HomeScreen(
                     onOpenFeedback = {
                         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(GITHUB_ISSUES_URL)))
                     },
+                    onOpenNetworkDiag = {
+                        viewModel.refreshNetworkReport(live = false)
+                        showNetworkDiag = true
+                    },
                     onDismiss = { showAboutSheet = false },
                     dark = dark,
                 )
             }
 
+            if (showNetworkDiag) {
+                val report by viewModel.networkReport.collectAsStateWithLifecycle()
+                NetworkDiagDialog(
+                    text = report.text,
+                    loading = report.loading,
+                    onRefresh = { viewModel.refreshNetworkReport(live = true) },
+                    onClear = { viewModel.clearNetworkDiagnostics() },
+                    onDismiss = { showNetworkDiag = false },
+                    dark = dark,
+                )
+            }
             if (showWebDavSettings) {
                 Dialog(
                     onDismissRequest = { showWebDavSettings = false },

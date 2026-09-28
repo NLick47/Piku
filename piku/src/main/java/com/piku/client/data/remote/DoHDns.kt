@@ -7,27 +7,34 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.dnsoverhttps.DnsOverHttps
 import java.net.InetAddress
-import java.net.InetSocketAddress
-import java.net.Socket
 import java.net.UnknownHostException
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.ExecutorCompletionService
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
-import javax.net.ssl.SSLException
-import javax.net.ssl.SSLSocket
 
 /**
  * 仅向 OkHttp 返回完成真实 TLS 握手和证书校验的业务域名地址。
  *
  * 最近成功地址会写入 SharedPreferences。进程重启后的首次请求先验证这些地址；
  * 300ms 内没有成功地址时，系统 DNS 与 DoH 才会并行解析并参与 TLS 竞速。
+ *
+ * 选谁、给几条、失败的地址多久能再试，交给 [AddressHealth] 与 [AddressSelector]；
+ * 这里只负责编排（竞速、去重、持久化）。一次 lookup 返回的是**有序候选**，
+ * 赢家在最先，其余已知地址作备选，OkHttp 在同一次请求内就能换 IP。
  */
-class DoHDns(
+class DoHDns internal constructor(
     private val prefs: SharedPreferences,
+    private val clock: () -> Long = System::currentTimeMillis,
+    private val prober: AddressProbe = TlsAddressProbe(),
+    jitter: (Long) -> Long = AddressHealth.RANDOM_JITTER,
+    private val diagnostics: NetworkDiagnostics = NetworkDiagnostics(),
+    sourcesOverride: List<AddressSource> = emptyList(),
 ) : Dns {
 
     private class DohSource(
@@ -46,30 +53,17 @@ class DoHDns(
             .build()
     }
 
-    private val dohSources: List<DohSource> = listOf(
-        DohSource(
-            url = "https://dns.alidns.com/dns-query",
-            bootstrap = listOf(
-                InetAddress.getByName("223.5.5.5"),
-                InetAddress.getByName("2400:3200::1"),
-            ),
-        ),
-        DohSource(
-            url = "https://cloudflare-dns.com/dns-query",
-            bootstrap = listOf(
-                InetAddress.getByName("1.1.1.1"),
-                InetAddress.getByName("2606:4700:4700::1111"),
-            ),
-        ),
-    )
+    private val health = AddressHealth(clock, jitter = jitter)
+    private val selector = AddressSelector(health, clock)
 
-    private val socketFactory = SniStrippingSocketFactory()
-    private val hostnameVerifier = PoipikuHostnameVerifier()
-    private val systemCache = ConcurrentHashMap<String, AddressCacheEntry>()
-    private val dohCache = ConcurrentHashMap<String, AddressCacheEntry>()
+    /** 系统 DNS 与双 DoH 各自带 TTL 缓存；单测传入假来源驱动竞速 */
+    private val sources: List<AddressSource> = sourcesOverride.ifEmpty { defaultSources() }
+
     private val winners = ConcurrentHashMap<String, WinnerEntry>()
-    private val failures = ConcurrentHashMap<String, FailureEntry>()
     private val inflight = ConcurrentHashMap<String, CompletableFuture<List<InetAddress>>>()
+
+    /** 每个域名最近一次解析的链路，供诊断报告；迟到的来源会继续落进列表 */
+    private val traces = ConcurrentHashMap<String, ResolveTrace>()
 
     private val sourceExecutor = Executors.newCachedThreadPool { runnable ->
         Thread(runnable, "piku-dns-source").apply { isDaemon = true }
@@ -80,10 +74,10 @@ class DoHDns(
     override fun lookup(hostname: String): List<InetAddress> {
         if (!isBusinessDomain(hostname)) return Dns.SYSTEM.lookup(hostname)
 
-        val now = System.currentTimeMillis()
-        winners[hostname]
-            ?.takeIf { now < it.expiresAt && !isFailed(hostname, it.address, now) }
-            ?.let { return listOf(it.address) }
+        val now = clock()
+        val winner = winners[hostname]
+            ?.takeIf { now < it.expiresAt && !health.isOnProbation(hostname, it.address) }
+        if (winner != null) return routes(hostname, winner.address, now)
 
         // 同一域名并发 miss 时共享同一次竞速，避免首屏等场景重复解析与探测。
         inflight[hostname]?.let { return awaitRace(it, hostname) }
@@ -91,7 +85,7 @@ class DoHDns(
         val existing = inflight.putIfAbsent(hostname, future)
         if (existing != null) return awaitRace(existing, hostname)
         try {
-            val result = resolveRace(hostname, now)
+            val result = resolveRace(hostname)
             future.complete(result)
             return result
         } catch (e: Exception) {
@@ -125,29 +119,43 @@ class DoHDns(
         null
     }
 
-    private fun resolveRace(hostname: String, now: Long): List<InetAddress> {
+    private fun resolveRace(hostname: String): List<InetAddress> {
         val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(RESOLUTION_TIMEOUT_MS)
         val completion = ExecutorCompletionService<InetAddress?>(sourceExecutor)
         val tasks = mutableListOf<Future<InetAddress?>>()
+        val racedAt = clock()
+        val sourcesSeen = ConcurrentLinkedQueue<SourceTrace>()
+        val probesSeen = ConcurrentLinkedQueue<ProbeTrace>()
         var completedTasks = 0
-        val persisted = persistedAddresses(hostname, now)
+        val persisted = persistedAddresses(hostname, clock())
         if (persisted.isNotEmpty()) {
-            tasks += completion.submit { probeFirst(hostname, persisted) }
+            tasks += completion.submit { probeSource(hostname, persisted, PERSISTED_VIA, probesSeen) }
             completion.poll(PERSISTED_HEAD_START_MS, TimeUnit.MILLISECONDS)?.let { completed ->
                 completedTasks++
                 safeGet(completed)?.let { winner ->
-                    acceptWinner(hostname, winner)
-                    return listOf(winner)
+                    return acceptAndRoute(hostname, winner, racedAt, sourcesSeen, probesSeen)
                 }
             }
         }
 
-        tasks += completion.submit {
-            probeFirst(hostname, resolveSystem(hostname))
-        }
-        dohSources.forEachIndexed { index, _ ->
+        sources.forEach { source ->
             tasks += completion.submit {
-                probeFirst(hostname, resolveDoh(hostname, index))
+                val via = sourceName(source)
+                val startedAt = clock()
+                val resolved = runCatching { source.resolve(hostname) }
+                val answers = resolved.getOrDefault(emptyList())
+                // 被中断（调用方取消）不算这个来源失败，照实记会误报"DoH 不可用"
+                val cancelled = resolved.exceptionOrNull()?.isCancellation() == true
+                sourcesSeen += SourceTrace(
+                    name = via,
+                    answers = answers.map { it.hostAddress.orEmpty() },
+                    candidates = answers.distinct().count { !health.isOnProbation(hostname, it) },
+                    elapsedMs = clock() - startedAt,
+                    // 记下失败原因：诊断要能区分"连不上/被拦"与"查询成功但没有记录"
+                    detail = resolved.exceptionOrNull()?.takeUnless { cancelled }?.describeChain(),
+                    cancelled = cancelled,
+                )
+                probeSource(hostname, answers, via, probesSeen)
             }
         }
 
@@ -159,16 +167,128 @@ class DoHDns(
                 val completed = completion.poll(waitNanos, TimeUnit.NANOSECONDS) ?: break
                 remaining--
                 safeGet(completed)?.let { winner ->
-                    tasks.forEach { if (!it.isDone) it.cancel(true) }
-                    acceptWinner(hostname, winner)
-                    return listOf(winner)
+                    // 刻意不取消其余任务：它们手里的地址正在通过 TLS 校验，
+                    // 取消等于把"污染 DNS 下的退路"丢掉。可靠性优先，不省这点流量
+                    return acceptAndRoute(hostname, winner, racedAt, sourcesSeen, probesSeen)
                 }
             }
-        } finally {
-            tasks.forEach { if (!it.isDone) it.cancel(true) }
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
         }
-        throw UnknownHostException("no TLS-verified address for $hostname")
+
+        // 兜底：还有曾经验证过的地址时，交给真实请求判定，而不是抛"域名不存在"——
+        // 后者会让 App 看起来像没网，而用户唯一的出路是重启
+        val fallback = selector.order(
+            hostname,
+            persistedAddresses(hostname, clock()),
+            NetworkTuning.MAX_FALLBACK_ROUTES,
+            includeWaiting = true,
+        )
+        traces[hostname] = ResolveTrace(
+            hostname = hostname,
+            elapsedMs = clock() - racedAt,
+            sources = sourcesSeen,
+            probes = probesSeen,
+            winner = null,
+            routed = fallback.map { it.hostAddress.orEmpty() },
+            fallback = true,
+        )
+        if (fallback.isEmpty()) {
+            diagnostics.warn("resolve failed host=$hostname: no verified address")
+            throw UnknownHostException("no TLS-verified address for $hostname")
+        }
+        diagnostics.warn("resolve fallback host=$hostname -> ${fallback.first().hostAddress}")
+        return fallback
     }
+
+    private fun acceptAndRoute(
+        hostname: String,
+        winner: InetAddress,
+        racedAt: Long,
+        sourcesSeen: Collection<SourceTrace>,
+        probesSeen: Collection<ProbeTrace>,
+    ): List<InetAddress> {
+        diagnostics.info("resolve ok host=$hostname addr=${winner.hostAddress}")
+        acceptWinner(hostname, winner)
+        val routes = routes(hostname, winner, clock())
+        val winnerAddress = winner.hostAddress.orEmpty()
+        traces[hostname] = ResolveTrace(
+            hostname = hostname,
+            elapsedMs = clock() - racedAt,
+            sources = sourcesSeen,
+            probes = probesSeen,
+            winner = winnerAddress,
+            routed = routes.map { it.hostAddress.orEmpty() },
+            fallback = false,
+        )
+        return routes
+    }
+
+    private fun sourceName(source: AddressSource): String =
+        (source as? NamedAddressSource)?.name ?: "未知来源"
+
+    /** 诊断用：最近一次解析的链路快照（来源 → 探测 → 采用） */
+    internal fun lastTrace(hostname: String): ResolveTrace? = traces[hostname]
+
+    /** 诊断用：当前赢家与候选池里每个地址的健康度 */
+    internal fun status(hostname: String): HostStatus {
+        val now = clock()
+        val winner = winners[hostname]?.takeIf { now < it.expiresAt }
+        val persisted = persistedAddresses(hostname, now)
+        val pool = buildList {
+            winner?.let { add(it.address) }
+            addAll(persisted)
+            addAll(cachedAddresses(hostname))
+            addAll(health.snapshot(hostname).map { it.address })
+        }.distinct()
+        return HostStatus(
+            hostname = hostname,
+            winner = winner?.address?.hostAddress,
+            winnerAgeMs = winner?.let { now - it.verifiedAt },
+            addresses = pool.map { address ->
+                val failures = health.failures(hostname, address)
+                val retryIn = health.retryAt(hostname, address) - now
+                AddressStatus(
+                    address = address.hostAddress.orEmpty(),
+                    persisted = address in persisted,
+                    failures = failures,
+                    retryInMs = retryIn.takeIf { failures > 0 && it > 0 },
+                )
+            },
+        )
+    }
+
+    /** 交给 OkHttp 的候选：赢家最前，其余已知地址作备选，失败时 OkHttp 自己换下一条 */
+    private fun routes(hostname: String, winner: InetAddress, now: Long): List<InetAddress> =
+        selector.order(hostname, candidatePool(hostname, winner, now), NetworkTuning.MAX_ROUTES)
+
+    private fun candidatePool(hostname: String, winner: InetAddress, now: Long): List<InetAddress> =
+        buildList {
+            add(winner)
+            addAll(persistedAddresses(hostname, now))
+            addAll(cachedAddresses(hostname))
+        }
+
+    private fun cachedAddresses(hostname: String): List<InetAddress> =
+        sources.mapNotNull { (it as? CachingAddressSource)?.cached(hostname) }.flatten()
+
+    private fun defaultSources(): List<AddressSource> = listOf(
+        CachingAddressSource(SYSTEM_CACHE_TTL_MS, clock, ::isUsable, name = SYSTEM_SOURCE_NAME) { hostname ->
+            Dns.SYSTEM.lookup(hostname)
+        },
+        dohSource("alidns", "https://dns.alidns.com/dns-query", listOf("223.5.5.5", "2400:3200::1")),
+        dohSource("cloudflare", "https://cloudflare-dns.com/dns-query", listOf("1.1.1.1", "2606:4700:4700::1111")),
+    )
+
+    private fun dohSource(name: String, url: String, bootstrap: List<String>): AddressSource {
+        val source = DohSource(url, bootstrap.map { InetAddress.getByName(it) })
+        return CachingAddressSource(DOH_CACHE_TTL_MS, clock, ::isUsable, name = name) { hostname ->
+            source.client.lookup(hostname)
+        }
+    }
+
+    private fun isUsable(hostname: String, address: InetAddress): Boolean =
+        !health.isOnProbation(hostname, address)
 
     /** 主客户端成功完成 TLS 握手后刷新赢家和持久化记录。 */
     fun reportSuccess(hostname: String, address: InetAddress) {
@@ -176,137 +296,118 @@ class DoHDns(
         acceptWinner(hostname, address)
     }
 
-    /** 主客户端连接失败时立即淘汰对应赢家，避免后续请求继续命中。 */
+    /** 主客户端连接失败时立即淘汰对应赢家，并按失败类型给该地址定缓刑期。 */
     fun reportFailure(hostname: String, address: InetAddress, type: FailureType) {
         if (!isBusinessDomain(hostname)) return
         winners.computeIfPresent(hostname) { _, winner ->
             if (winner.address == address) null else winner
         }
-        val ttl = ttlFor(type)
-        failures[failureKey(hostname, address)] = FailureEntry(
-            expiresAt = System.currentTimeMillis() + ttl,
-        )
+        val retryIn = health.onFailure(hostname, address, type) - clock()
         if (type == FailureType.TLS) removePersistedAddress(hostname, address)
-    }
-
-    private fun ttlFor(type: FailureType): Long = when (type) {
-        FailureType.TLS -> TLS_FAILURE_TTL_MS
-        FailureType.CONNECT -> CONNECT_FAILURE_TTL_MS
-        FailureType.STREAM -> STREAM_FAILURE_TTL_MS
+        diagnostics.warn("degrade host=$hostname addr=${address.hostAddress} type=$type retryIn=${retryIn}ms")
     }
 
     /**
-     * 强制下一次 lookup 跳过赢家缓存，从保留的解析缓存 + 黑名单过滤中换 IP，
+     * 强制下一次 lookup 跳过赢家缓存，从保留的解析缓存 + 缓刑过滤中换 IP，
      * 不重新查询 DNS。由重试拦截器在连接失败后调用。
      *
-     * 解析缓存（systemCache/dohCache）保持有效；仅当缓存内地址全部被封禁时，
-     * [resolveSystem]/[resolveDoh] 才会忽略缓存重新查询。
+     * 解析缓存保持有效；仅当缓存内地址全部在缓刑期时，来源才会忽略缓存重新查询。
      */
     fun forceReResolve(hostname: String) {
         winners.remove(hostname)
     }
 
-    private fun resolveSystem(hostname: String): List<InetAddress> {
-        val now = System.currentTimeMillis()
-        val cached = systemCache[hostname]
-        if (cached != null && now < cached.expiresAt &&
-            cached.addresses.any { !isFailed(hostname, it, now) }
-        ) {
-            return cached.addresses
-        }
-        val addresses = try {
-            Dns.SYSTEM.lookup(hostname)
-        } catch (_: Exception) {
-            emptyList()
-        }
-        if (addresses.isNotEmpty()) {
-            systemCache[hostname] = AddressCacheEntry(addresses, now + SYSTEM_CACHE_TTL_MS)
-        }
-        return addresses
-    }
-
-    private fun resolveDoh(hostname: String, sourceIndex: Int): List<InetAddress> {
-        val now = System.currentTimeMillis()
-        val cacheKey = "$sourceIndex|$hostname"
-        val cached = dohCache[cacheKey]
-        if (cached != null && now < cached.expiresAt &&
-            cached.addresses.any { !isFailed(hostname, it, now) }
-        ) {
-            return cached.addresses
-        }
-        val addresses = try {
-            dohSources[sourceIndex].client.lookup(hostname)
-        } catch (_: Exception) {
-            emptyList()
-        }
-        if (addresses.isNotEmpty()) {
-            dohCache[cacheKey] = AddressCacheEntry(addresses, now + DOH_CACHE_TTL_MS)
-        }
-        return addresses
-    }
-
-    private fun probeFirst(hostname: String, addresses: List<InetAddress>): InetAddress? {
-        val now = System.currentTimeMillis()
-        val candidates = addresses.distinct().filterNot { isFailed(hostname, it, now) }
+    /**
+     * 一个来源的候选全部并发探测：
+     * - 第一个通过的立刻返回给竞速（不拖慢请求）；
+     * - 其余探测继续跑完，**通过 TLS 校验的一律入信任列表**，不只竞速赢家——
+     *   多一个已验证地址，系统 DNS 被污染时就多一条退路；
+     * - 全程不取消：取消会把就要通过的地址一起丢掉。
+     */
+    private fun probeSource(
+        hostname: String,
+        addresses: List<InetAddress>,
+        via: String,
+        probesSeen: MutableCollection<ProbeTrace>,
+    ): InetAddress? {
+        val candidates = addresses.distinct().filterNot { health.isOnProbation(hostname, it) }
         if (candidates.isEmpty()) return null
 
-        val completion = ExecutorCompletionService<InetAddress?>(probeExecutor)
-        val probes = candidates.map { address ->
-            completion.submit { probe(hostname, address) }
-        }
-        try {
-            repeat(probes.size) {
-                completion.take().get()?.let { winner ->
-                    probes.forEach { if (!it.isDone) it.cancel(true) }
-                    return winner
+        val verified = CompletableFuture<InetAddress?>()
+        val remaining = AtomicInteger(candidates.size)
+        candidates.forEach { address ->
+            probeExecutor.execute {
+                val passed = probe(hostname, address, via, probesSeen)
+                if (passed != null) {
+                    acceptVerified(hostname, passed, via)
+                    verified.complete(passed)
                 }
+                if (remaining.decrementAndGet() == 0) verified.complete(null)
             }
-        } finally {
-            probes.forEach { if (!it.isDone) it.cancel(true) }
         }
-        return null
+        return try {
+            verified.get()
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            null
+        } catch (e: ExecutionException) {
+            null
+        }
     }
 
-    private fun probe(hostname: String, address: InetAddress): InetAddress? {
-        val startedAt = System.currentTimeMillis()
-        val rawSocket = Socket()
-        try {
-            try {
-                rawSocket.connect(InetSocketAddress(address, HTTPS_PORT), TCP_PROBE_TIMEOUT_MS)
-            } catch (e: Exception) {
-                recordProbeFailure(hostname, address, FailureType.CONNECT, startedAt)
-                return null
-            }
+    /**
+     * 通过 TLS 校验的地址进信任列表（持久化）并解除缓刑。
+     *
+     * 刻意与 [acceptWinner] 分开：赢家要额外写 winner 缓存，而这里只负责让地址可用，
+     * 所以落败来源验证通过的地址同样能进池、下次直接成为候选或备选。
+     */
+    private fun acceptVerified(hostname: String, address: InetAddress, via: String) {
+        health.onSuccess(hostname, address)
+        // 只在真正写进信任列表时记一条：否则每次解析都写，事件会被刷屏
+        if (persistSuccess(hostname, address, clock())) {
+            diagnostics.info("trusted add host=$hostname addr=${address.hostAddress} via=$via")
+        }
+    }
 
-            try {
-                val sslSocket = socketFactory.createSocket(rawSocket, hostname, HTTPS_PORT, true) as SSLSocket
-                sslSocket.use {
-                    it.soTimeout = TLS_HANDSHAKE_TIMEOUT_MS
-                    it.startHandshake()
-                    if (!hostnameVerifier.verify(hostname, it.session)) {
-                        recordProbeFailure(hostname, address, FailureType.TLS, startedAt)
-                        return null
-                    }
-                }
-            } catch (e: SSLException) {
-                recordProbeFailure(hostname, address, FailureType.TLS, startedAt)
-                return null
-            } catch (e: Exception) {
+    private fun probe(
+        hostname: String,
+        address: InetAddress,
+        via: String,
+        probesSeen: MutableCollection<ProbeTrace>,
+    ): InetAddress? {
+        val startedAt = clock()
+        val report = prober.probe(hostname, address)
+        probesSeen += ProbeTrace(
+            address = address.hostAddress.orEmpty(),
+            via = via,
+            outcome = when (report.outcome) {
+                ProbeOutcome.OK -> "通过"
+                ProbeOutcome.CONNECT_FAILED -> "连接失败"
+                ProbeOutcome.TLS_FAILED -> "握手/证书失败"
+            },
+            tcpMs = report.tcpMs ?: (clock() - startedAt),
+            tlsMs = report.tlsMs,
+            detail = report.detail,
+        )
+        return when (report.outcome) {
+            ProbeOutcome.OK -> address
+            ProbeOutcome.CONNECT_FAILED -> {
                 recordProbeFailure(hostname, address, FailureType.CONNECT, startedAt)
-                return null
+                null
             }
-            return address
-        } finally {
-            runCatching { rawSocket.close() }
+            ProbeOutcome.TLS_FAILED -> {
+                recordProbeFailure(hostname, address, FailureType.TLS, startedAt)
+                null
+            }
         }
     }
 
     private fun acceptWinner(hostname: String, address: InetAddress) {
-        val now = System.currentTimeMillis()
-        failures.remove(failureKey(hostname, address))
+        val now = clock()
+        health.onSuccess(hostname, address)
         winners[hostname] = WinnerEntry(address, now, now + WINNER_TTL_MS)
         persistSuccess(hostname, address, now)
-        Log.d("PikuDiag", "dns verified: $hostname -> ${address.hostAddress}")
+        Log.d(TAG, "dns verified: $hostname -> ${address.hostAddress}")
     }
 
     private fun recordProbeFailure(
@@ -315,22 +416,14 @@ class DoHDns(
         type: FailureType,
         probeStartedAt: Long,
     ) {
+        // 探测期间该地址刚被真实请求验证过：以更新鲜的成功为准，不记这次失败
         val currentWinner = winners[hostname]
         if (currentWinner?.address == address && currentWinner.verifiedAt >= probeStartedAt) return
-        val ttl = ttlFor(type)
-        failures[failureKey(hostname, address)] = FailureEntry(System.currentTimeMillis() + ttl)
+        health.onFailure(hostname, address, type)
         winners.computeIfPresent(hostname) { _, winner ->
             if (winner.address == address) null else winner
         }
         if (type == FailureType.TLS) removePersistedAddress(hostname, address)
-    }
-
-    private fun isFailed(hostname: String, address: InetAddress, now: Long): Boolean {
-        val key = failureKey(hostname, address)
-        val failure = failures[key] ?: return false
-        if (now < failure.expiresAt) return true
-        failures.remove(key, failure)
-        return false
     }
 
     private fun persistedAddresses(hostname: String, now: Long): List<InetAddress> =
@@ -338,14 +431,16 @@ class DoHDns(
             .filter { now - it.succeededAt < PERSISTED_TTL_MS }
             .mapNotNull { runCatching { InetAddress.getByName(it.address) }.getOrNull() }
 
-    private fun persistSuccess(hostname: String, address: InetAddress, now: Long) {
-        val hostAddress = address.hostAddress ?: return
+    /** 返回是否真的写入了（同一地址一小时内不重复写，避免每次解析都改磁盘） */
+    private fun persistSuccess(hostname: String, address: InetAddress, now: Long): Boolean {
+        val hostAddress = address.hostAddress ?: return false
         val current = readPersisted(hostname)
         val existing = current.firstOrNull { it.address == hostAddress }
-        if (existing != null && now - existing.succeededAt < PERSIST_WRITE_INTERVAL_MS) return
+        if (existing != null && now - existing.succeededAt < PERSIST_WRITE_INTERVAL_MS) return false
         val updated = listOf(PersistedAddress(hostAddress, now)) +
             current.filterNot { it.address == hostAddress }.take(MAX_PERSISTED_IPS - 1)
         prefs.edit().putString(persistKey(hostname), encodePersisted(updated)).apply()
+        return true
     }
 
     private fun removePersistedAddress(hostname: String, address: InetAddress) {
@@ -372,27 +467,29 @@ class DoHDns(
     private fun isBusinessDomain(hostname: String): Boolean =
         hostname == "poipiku.com" || hostname.endsWith(".poipiku.com")
 
-    private fun failureKey(hostname: String, address: InetAddress) = "$hostname|${address.hostAddress}"
     private fun persistKey(hostname: String) = "$PERSIST_PREFIX$hostname"
 
-    private data class AddressCacheEntry(val addresses: List<InetAddress>, val expiresAt: Long)
     private data class WinnerEntry(val address: InetAddress, val verifiedAt: Long, val expiresAt: Long)
-    private data class FailureEntry(val expiresAt: Long)
     private data class PersistedAddress(val address: String, val succeededAt: Long)
     enum class FailureType { TLS, CONNECT, STREAM }
 
-    private companion object {
-        const val HTTPS_PORT = 443
-        const val TCP_PROBE_TIMEOUT_MS = 3_000
-        const val TLS_HANDSHAKE_TIMEOUT_MS = 2_000
+    internal companion object {
+        /** 诊断报告里逐条展示的域名 */
+        val BUSINESS_HOSTS = listOf("poipiku.com", "cdn.poipiku.com")
+
+        const val TAG = "PikuDiag"
         const val DOH_TIMEOUT_MS = 5_000L
         const val PERSISTED_HEAD_START_MS = 300L
+
+        /** 探测来源里的"持久化信任地址"这一路 */
+        const val PERSISTED_VIA = "持久化信任"
+
+        /** 系统 DNS 来源的名字：诊断判定里要区分"只有系统 DNS 有答案" */
+        const val SYSTEM_SOURCE_NAME = "系统 DNS"
+
         const val RESOLUTION_TIMEOUT_MS = 11_000L
         const val SYSTEM_CACHE_TTL_MS = 30_000L
         const val WINNER_TTL_MS = 60_000L
-        const val CONNECT_FAILURE_TTL_MS = 2 * 60_000L
-        const val STREAM_FAILURE_TTL_MS = 15_000L
-        const val TLS_FAILURE_TTL_MS = 10 * 60_000L
         const val DOH_CACHE_TTL_MS = 10 * 60_000L
         const val PERSISTED_TTL_MS = 7 * 24 * 60 * 60_000L
         const val PERSIST_WRITE_INTERVAL_MS = 60 * 60_000L

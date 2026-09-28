@@ -5,9 +5,18 @@ import com.piku.client.BuildConfig
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.data.remote.ApiConfig
 import com.piku.client.data.remote.DoHDns
+import com.piku.client.data.remote.DoHEventListener
+import com.piku.client.data.remote.ImageDiagnostics
+import com.piku.client.data.remote.ImageNetworkInterceptor
 import com.piku.client.data.remote.ImageRelayInterceptor
+import com.piku.client.data.remote.ImageRetryInterceptor
+import com.piku.client.data.remote.ImageRouteProbe
 import com.piku.client.data.remote.ImageRouteController
 import com.piku.client.data.remote.LenientJsonConverterFactory
+import com.piku.client.data.remote.NetworkDiagnosis
+import com.piku.client.data.remote.NetworkDiagnostics
+import com.piku.client.data.remote.NetworkRuntime
+import com.piku.client.data.remote.NetworkTuning
 import com.piku.client.data.remote.PoipikuHostnameVerifier
 import com.piku.client.data.remote.PoipikuApi
 import com.piku.client.data.remote.RefererInterceptor
@@ -21,23 +30,14 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import kotlinx.serialization.json.Json
-import okhttp3.Call
-import okhttp3.Connection
 import okhttp3.CookieJar
 import okhttp3.Dns
-import okhttp3.EventListener
 import okhttp3.OkHttpClient
-import okhttp3.Protocol
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
-import java.io.IOException
-import java.net.InetAddress
-import java.net.InetSocketAddress
-import java.net.Proxy
 import java.util.concurrent.TimeUnit
 import javax.inject.Named
 import javax.inject.Singleton
-import javax.net.ssl.SSLException
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -53,14 +53,61 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideDns(prefs: SharedPreferences): Dns = DoHDns(prefs)
+    fun provideDoHDns(prefs: SharedPreferences, diagnostics: NetworkDiagnostics): DoHDns =
+        DoHDns(prefs, diagnostics = diagnostics)
+
+    @Provides
+    @Singleton
+    fun provideDns(doHDns: DoHDns): Dns = doHDns
+
+    @Provides
+    @Singleton
+    fun provideNetworkDiagnosis(
+        doHDns: DoHDns,
+        diagnostics: NetworkDiagnostics,
+        imageProbe: ImageRouteProbe,
+        routeController: ImageRouteController,
+        imageDiagnostics: ImageDiagnostics,
+    ): NetworkDiagnosis =
+        NetworkDiagnosis(doHDns, diagnostics, imageProbe, routeController, imageDiagnostics)
+
+    @Provides
+    @Singleton
+    fun provideNetworkRuntime(): NetworkRuntime = NetworkRuntime()
+
+    @Provides
+    @Singleton
+    fun provideNetworkDiagnostics(runtime: NetworkRuntime): NetworkDiagnostics =
+        NetworkDiagnostics(runtime)
+
+    @Provides
+    @Singleton
+    fun provideImageDiagnostics(runtime: NetworkRuntime): ImageDiagnostics = ImageDiagnostics(runtime)
+
+    @Provides
+    @Singleton
+    fun provideImageRetryInterceptor(
+        runtime: NetworkRuntime,
+        diagnostics: NetworkDiagnostics,
+    ): ImageRetryInterceptor = ImageRetryInterceptor(runtime, diagnostics = diagnostics)
+
+    @Provides
+    @Singleton
+    fun provideImageRouteProbe(client: OkHttpClient, routeController: ImageRouteController): ImageRouteProbe =
+        ImageRouteProbe(
+            client.newBuilder()
+                .callTimeout(NetworkTuning.PROBE_CALL_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                .build(),
+            routeController,
+        )
 
     @Provides
     @Singleton
     fun provideImageRouteController(
         settings: SettingsRepository,
         prefs: SharedPreferences,
-    ): ImageRouteController = ImageRouteController(settings, prefs)
+        runtime: NetworkRuntime,
+    ): ImageRouteController = ImageRouteController(settings, prefs, runtime)
 
     @Provides
     @Singleton
@@ -68,6 +115,8 @@ object NetworkModule {
         cookieJar: CookieJar,
         dns: Dns,
         routeController: ImageRouteController,
+        runtime: NetworkRuntime,
+        diagnostics: NetworkDiagnostics,
     ): OkHttpClient {
         val doHDns = dns as DoHDns
         val sniFactory = SniStrippingSocketFactory()
@@ -75,63 +124,20 @@ object NetworkModule {
             .dns(dns)
             .sslSocketFactory(sniFactory, sniFactory.trustManager())
             .hostnameVerifier(PoipikuHostnameVerifier())
-            .eventListenerFactory {
-                object : EventListener() {
-                    private var address: InetAddress? = null
-
-                    override fun connectionAcquired(call: Call, connection: Connection) {
-                        address = connection.route().socketAddress.address
-                        doHDns.reportSuccess(
-                            call.request().url.host,
-                            connection.route().socketAddress.address,
-                        )
-                    }
-
-                    override fun connectFailed(
-                        call: Call,
-                        inetSocketAddress: InetSocketAddress,
-                        proxy: Proxy,
-                        protocol: Protocol?,
-                        ioe: IOException,
-                    ) {
-                        doHDns.reportFailure(
-                            call.request().url.host,
-                            inetSocketAddress.address,
-                            if (ioe is SSLException) DoHDns.FailureType.TLS
-                            else DoHDns.FailureType.CONNECT,
-                        )
-                    }
-
-                    override fun responseFailed(call: Call, ioe: IOException) {
-                        if (call.isCanceled()) return
-                        val host = call.request().url.host
-                        address?.let {
-                            doHDns.reportFailure(host, it, DoHDns.FailureType.STREAM)
-                        }
-                    }
-
-                    override fun requestFailed(call: Call, ioe: IOException) {
-                        if (call.isCanceled()) return
-                        val host = call.request().url.host
-                        address?.let {
-                            doHDns.reportFailure(host, it, DoHDns.FailureType.STREAM)
-                        }
-                    }
-                }
-            }
+            .eventListenerFactory { DoHEventListener(doHDns, diagnostics) }
             .cookieJar(cookieJar)
-            .addInterceptor(ImageRelayInterceptor(routeController))
+            .addInterceptor(ImageRelayInterceptor(routeController, diagnostics))
             .addInterceptor(RefererInterceptor())
-            .addInterceptor(RetryInterceptor(doHDns))
+            .addInterceptor(RetryInterceptor(doHDns, diagnostics = diagnostics))
             .addInterceptor { chain ->
                 val request = chain.request().newBuilder()
                     .header("User-Agent", USER_AGENT)
                     .build()
                 chain.proceed(request)
             }
-            .connectTimeout(5, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .writeTimeout(30, TimeUnit.SECONDS)
+            .connectTimeout(NetworkTuning.CONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            .readTimeout(NetworkTuning.READ_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            .writeTimeout(NetworkTuning.WRITE_TIMEOUT_MS, TimeUnit.MILLISECONDS)
         if (BuildConfig.DEBUG) {
             builder.addInterceptor(
                 HttpLoggingInterceptor().apply {
@@ -149,9 +155,15 @@ object NetworkModule {
     @Provides
     @Singleton
     @Named("image")
-    fun provideImageOkHttpClient(client: OkHttpClient): OkHttpClient =
+    fun provideImageOkHttpClient(
+        client: OkHttpClient,
+        imageDiagnostics: ImageDiagnostics,
+        runtime: NetworkRuntime,
+    ): OkHttpClient =
         client.newBuilder()
-            .callTimeout(15, TimeUnit.SECONDS)
+            .callTimeout(NetworkTuning.IMAGE_CALL_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            // 加在最后：它离网络最近，看到的是中转改写之后的域名
+            .addInterceptor(ImageNetworkInterceptor(imageDiagnostics, runtime))
             .build()
 
     @Provides

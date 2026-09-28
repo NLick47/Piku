@@ -2,6 +2,7 @@ package com.piku.client.ui.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.piku.client.BuildConfig
 import com.piku.client.R
 import com.piku.client.data.local.BackgroundStore
 import com.piku.client.data.local.CatalogSource
@@ -11,6 +12,9 @@ import com.piku.client.data.local.SampledImage
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.data.local.newCatalogSourceId
 import com.piku.client.data.remote.GitHubRelease
+import com.piku.client.data.remote.NetworkDiagnosis
+import com.piku.client.data.remote.NetworkDiagnostics
+import com.piku.client.data.remote.NetworkEnvironmentReader
 import com.piku.client.data.remote.translation.ModelCatalog
 import com.piku.client.data.remote.translation.ModelCatalogRepository
 import com.piku.client.data.remote.translation.ModelEntry
@@ -65,11 +69,13 @@ import com.piku.client.ui.common.toFeedErrorRes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 enum class FeedTab { HOT, LATEST, FOLLOW, RANDOM }
@@ -220,7 +226,13 @@ class HomeViewModel @Inject constructor(
     private val webDavSyncRepository: WebDavSyncRepository,
     private val imageSaver: ImageSaver,
     private val blockListRepository: BlockListRepository,
+    private val networkDiagnostics: NetworkDiagnostics,
+    private val networkDiagnosis: NetworkDiagnosis,
+    private val environmentReader: NetworkEnvironmentReader,
 ) : ViewModel() {
+
+    /** 网络诊断弹窗的内容与忙碌状态 */
+    data class NetworkReportState(val text: String = "", val loading: Boolean = false)
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
@@ -585,6 +597,37 @@ class HomeViewModel @Inject constructor(
 
     private fun obtainLoader(key: FeedKey): FeedLoader =
         loaders.getOrPut(key) { createLoader(key) }
+
+    private val _networkReport = MutableStateFlow(NetworkReportState())
+    val networkReport: StateFlow<NetworkReportState> = _networkReport.asStateFlow()
+
+    /**
+     * 生成网络诊断报告。[live] 会强制重新解析并对候选逐个做 TCP/TLS 探测，有真实网络
+     * 开销，所以跑在 IO 上、由用户点「重新诊断」触发；打开弹窗时只出静态快照。
+     */
+    fun refreshNetworkReport(live: Boolean) {
+        _networkReport.value = _networkReport.value.copy(loading = true)
+        viewModelScope.launch {
+            val report = withContext(Dispatchers.IO) {
+                runCatching {
+                    networkDiagnosis.report(
+                        appVersion = BuildConfig.VERSION_NAME,
+                        environment = environmentReader.read(),
+                        live = live,
+                    )
+                }.getOrElse { error ->
+                    "诊断生成失败：${error.javaClass.simpleName}: ${error.message}"
+                }
+            }
+            _networkReport.value = NetworkReportState(text = report, loading = false)
+        }
+    }
+
+    /** 清空事件缓冲后立刻重出报告（不重新探测） */
+    fun clearNetworkDiagnostics() {
+        networkDiagnostics.clear()
+        refreshNetworkReport(live = false)
+    }
 
     private fun createLoader(key: FeedKey): FeedLoader {
         val loader = FeedLoader(

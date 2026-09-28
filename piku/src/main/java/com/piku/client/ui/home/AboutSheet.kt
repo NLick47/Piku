@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.outlined.NetworkCheck
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -31,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -58,6 +60,7 @@ internal fun AboutSheet(
     onOpenUpdate: () -> Unit,
     onOpenGithub: () -> Unit,
     onOpenFeedback: () -> Unit,
+    onOpenNetworkDiag: () -> Unit,
     onDismiss: () -> Unit,
     dark: Boolean,
 ) {
@@ -107,6 +110,12 @@ internal fun AboutSheet(
                 text = stringResource(R.string.menu_feedback),
                 onClick = onOpenFeedback,
                 dark = dark,
+            )
+            AboutLinkRow(
+                text = stringResource(R.string.about_network_diag),
+                onClick = onOpenNetworkDiag,
+                dark = dark,
+                icon = Icons.Outlined.NetworkCheck,
             )
     }
 }
@@ -221,6 +230,7 @@ private fun AboutLinkRow(
     text: String,
     onClick: () -> Unit,
     dark: Boolean,
+    icon: ImageVector = Icons.AutoMirrored.Outlined.OpenInNew,
 ) {
     val faint = PikuColors.textFaint
     Row(
@@ -238,7 +248,7 @@ private fun AboutLinkRow(
             modifier = Modifier.weight(1f),
         )
         Icon(
-            imageVector = Icons.AutoMirrored.Outlined.OpenInNew,
+            imageVector = icon,
             contentDescription = null,
             tint = faint,
             modifier = Modifier.size(14.dp),

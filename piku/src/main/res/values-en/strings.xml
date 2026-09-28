@@ -58,6 +58,14 @@
     <string name="about_retry">Check failed. Tap to retry</string>
     <string name="about_version">Version %1$s</string>
     <string name="about_update_download">New version %1$s · Get it</string>
+    <string name="about_network_diag">Network diagnostics</string>
+    <string name="network_diag_running">probing…</string>
+    <string name="network_diag_done">done</string>
+    <string name="network_diag_copy">Copy</string>
+    <string name="network_diag_cleared">Event log cleared</string>
+    <string name="network_diag_clear">Clear</string>
+    <string name="network_diag_copied">Diagnostic report copied</string>
+    <string name="network_diag_refresh">Re-run</string>
     <string name="menu_github">Project URL</string>
     <string name="menu_feedback">Feedback</string>
     <string name="logout_confirm">Log out</string>

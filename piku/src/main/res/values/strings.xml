@@ -58,6 +58,14 @@
     <string name="about_retry">检查失败，点击重试</string>
     <string name="about_version">版本 %1$s</string>
     <string name="about_update_download">发现新版本 %1$s · 前往下载</string>
+    <string name="about_network_diag">网络诊断</string>
+    <string name="network_diag_running">正在探测…</string>
+    <string name="network_diag_done">完成</string>
+    <string name="network_diag_copy">复制</string>
+    <string name="network_diag_cleared">已清空事件记录</string>
+    <string name="network_diag_clear">清空</string>
+    <string name="network_diag_copied">已复制诊断报告</string>
+    <string name="network_diag_refresh">重新诊断</string>
     <string name="menu_github">项目地址</string>
     <string name="menu_feedback">问题反馈</string>
     <string name="logout_confirm">退出登录</string>

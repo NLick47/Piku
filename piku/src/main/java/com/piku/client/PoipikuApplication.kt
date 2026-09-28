@@ -11,8 +11,8 @@ import coil3.request.allowHardware
 import coil3.request.crossfade
 import coil3.serviceLoaderEnabled
 import coil3.size.Precision
-import com.piku.client.data.remote.ImageRelayInterceptor
-import com.piku.client.data.remote.ImageRouteController
+import com.piku.client.data.remote.ImageRetryInterceptor
+import com.piku.client.data.remote.ImageRouteProbe
 import com.piku.client.data.remote.translation.ModelCatalogRepository
 import com.piku.client.data.repository.BlockListSync
 import dagger.hilt.EntryPoint
@@ -25,8 +25,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
-import okhttp3.Request
-import java.util.concurrent.TimeUnit
 import javax.inject.Named
 
 @HiltAndroidApp
@@ -42,6 +40,8 @@ class PoipikuApplication : Application() {
                 // 同样走防 DNS 污染解析
                 .components {
                     add(OkHttpNetworkFetcherFactory(callFactory = { entryPoint.imageOkHttpClient() }))
+                    // 取图失败后的整单重试：传输失败隔一会儿再取一次，最多 3 次
+                    add(entryPoint.imageRetryInterceptor())
                     // 这里刻意不注册动画解码器：动图播放走白名单，由
                     // ui.common.rememberAnimatedImage 先用文件名判定（xxx.gif_640.jpg
                     // 里的 .gif 是 poipiku CDN 留下的动图指纹），再单独挂解码器
@@ -84,26 +84,10 @@ class PoipikuApplication : Application() {
             entryPoint.blockListSync().start()
         }
 
-        // 探测直连 cdn.poipiku.com 是否可用，决定图片走直连还是中转。
-        // 与首屏并行、带 5s 上限，不影响启动；结果持久化，图片请求就不必再"先失败一遍"。
-        // 仅 AUTO 模式需要探测；手动选了直连/中转的用户直接跳过，省一次请求。
+        // 探测直连 cdn.poipiku.com 是否可用，决定图片走直连还是中转；
+        // 与首屏并行、带超时上限，不影响启动，结果持久化，图片请求就不必再"先失败一遍"。
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
-            val controller = entryPoint.imageRouteController()
-            if (!controller.shouldRunProbe()) return@launch
-            val probeClient = entryPoint.okHttpClient().newBuilder()
-                .callTimeout(5, TimeUnit.SECONDS)
-                .build()
-            val request = Request.Builder()
-                .url(ImageRelayInterceptor.PROBE_URL)
-                .head()
-                .header(ImageRelayInterceptor.BYPASS_HEADER, "1")
-                .build()
-            // 只要能拿到任意 HTTP 响应（包括 404）就说明直连链路通，不依赖特定资源存在，
-            // 避免资源被删/改名时把全部 AUTO 用户误判为直连不可用、强制走中转。
-            val directOk = runCatching {
-                probeClient.newCall(request).execute().use { true }
-            }.getOrDefault(false)
-            controller.applyProbe(directOk)
+            entryPoint.imageRouteProbe().run()
         }
     }
 
@@ -115,7 +99,9 @@ class PoipikuApplication : Application() {
         @Named("image")
         fun imageOkHttpClient(): OkHttpClient
 
-        fun imageRouteController(): ImageRouteController
+        fun imageRetryInterceptor(): ImageRetryInterceptor
+
+        fun imageRouteProbe(): ImageRouteProbe
 
         fun modelCatalogRepository(): ModelCatalogRepository
 

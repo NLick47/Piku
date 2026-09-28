@@ -58,6 +58,14 @@
     <string name="about_retry">確認に失敗しました。タップして再試行</string>
     <string name="about_version">バージョン %1$s</string>
     <string name="about_update_download">新しいバージョン %1$s · ダウンロード</string>
+    <string name="about_network_diag">ネットワーク診断</string>
+    <string name="network_diag_running">計測中…</string>
+    <string name="network_diag_done">完了</string>
+    <string name="network_diag_copy">コピー</string>
+    <string name="network_diag_cleared">イベント記録をクリアしました</string>
+    <string name="network_diag_clear">クリア</string>
+    <string name="network_diag_copied">診断レポートをコピーしました</string>
+    <string name="network_diag_refresh">再診断</string>
     <string name="menu_github">プロジェクトURL</string>
     <string name="menu_feedback">フィードバック</string>
     <string name="logout_confirm">ログアウト</string>
