@@ -286,6 +286,64 @@ class DoHDnsRoutingTest {
         assertEquals(listOf(DoHDns.SYSTEM_SOURCE_NAME, "alidns"), winnerSourcesOf(trace))
     }
 
+    @Test
+    fun pixivNeverConsultsTheSystemDnsWhilePoipikuStillLeadsWithIt() {
+        val dns = dns()
+
+        // 系统 DNS 对 pixiv 只会给投毒答案，问了等于白花一次探测
+        assertFalse(DoHDns.SYSTEM_SOURCE_NAME in dns.sourceNamesFor("www.pixiv.net"))
+        assertFalse(DoHDns.SYSTEM_SOURCE_NAME in dns.sourceNamesFor("i.pximg.net"))
+        assertTrue(DoHDns.STATIC_SOURCE_NAME in dns.sourceNamesFor("www.pixiv.net"))
+        assertEquals(DoHDns.SYSTEM_SOURCE_NAME, dns.sourceNamesFor("poipiku.com").first())
+    }
+
+    @Test
+    fun builtInAddressesCoverOurOwnHostsSoPoisonedOrExpiredDnsCannotStrandUs() {
+        val hosts = listOf("www.pixiv.net", "i.pximg.net", "piku-img.pages.dev", "pic-relay.cyou")
+
+        hosts.forEach { host ->
+            val ips = DoHDns.STATIC_ADDRESSES[host]
+            assertTrue("$host 缺一条内置 IP", !ips.isNullOrEmpty())
+            // 必须是 IP 字面量：写成域名的话这条路照样要解析，等于没兜底
+            ips!!.forEach { assertEquals(it, InetAddress.getByName(it).hostAddress) }
+            assertTrue(DoHDns.BUSINESS_DOMAINS.any { host == it || host.endsWith(".$it") })
+        }
+    }
+
+    @Test
+    fun staticSourceAnswersOnlyTheHostsItHas() {
+        val source = StaticAddressSource()
+
+        assertTrue(source.resolve("i.pximg.net").isNotEmpty())
+        assertTrue(source.resolve("poipiku.com").isEmpty())
+    }
+
+    @Test
+    fun lastResortSourceIsAskedAgainAfterEveryOtherSourceFailed() {
+        var workerCalls = 0
+        val silent = AddressSource { emptyList() }
+        val worker = CachingAddressSource(
+            ttlMs = 60_000,
+            clock = { now },
+            isUsable = { _, _ -> true },
+            name = DoHDns.WORKER_SOURCE_NAME,
+            delegate = AddressSource {
+                workerCalls++
+                if (workerCalls == 1) emptyList() else listOf(ipC)
+            },
+        )
+        val dns = dns(
+            sources = listOf(silent, worker),
+            probe = AddressProbe { _, address ->
+                if (address == ipC) ProbeReport.ok() else ProbeReport.connectFailed()
+            },
+        )
+
+        // 竞速里自建 DoH 第一次没给答案：全灭后必须再问它一次，而不是直接判"域名不存在"
+        assertEquals(listOf(ipC), dns.lookup(HOST))
+        assertTrue("自建 DoH 应被问第二次", workerCalls >= 2)
+    }
+
     private companion object {
         const val HOST = "poipiku.com"
     }

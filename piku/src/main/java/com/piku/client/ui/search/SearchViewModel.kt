@@ -13,6 +13,7 @@ import com.piku.client.domain.model.FollowUser
 import com.piku.client.domain.model.PopularTag
 import com.piku.client.domain.model.TagCard
 import com.piku.client.domain.model.Work
+import com.piku.client.domain.model.WorkKey
 import com.piku.client.domain.usecase.ClearSearchHistoryUseCase
 import com.piku.client.domain.usecase.LoadKeywordFeedUseCase
 import com.piku.client.domain.usecase.LoadPopularTagsUseCase
@@ -87,7 +88,7 @@ data class SearchUiState(
      */
     val tagNeedLogin: Boolean = false,
     val customTags: List<String> = emptyList(),
-    val favoriteIds: Set<Long> = emptySet(),
+    val favoriteIds: Set<WorkKey> = emptySet(),
     /** 正在切换关注状态的用户 ID 集合，防止连点 */
     val followPendingIds: Set<Long> = emptySet(),
     /** 本地乐观覆盖：userId -> 目标关注态，服务端确认后以服务端结果为准 */

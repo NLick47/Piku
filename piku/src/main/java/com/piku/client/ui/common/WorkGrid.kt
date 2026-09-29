@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.piku.client.R
 import com.piku.client.domain.model.Work
+import com.piku.client.domain.model.WorkSource
 import com.piku.client.ui.theme.PikuColors
 import com.piku.client.ui.theme.PikuLayout
 import com.piku.client.ui.theme.SoftBorderLight
@@ -89,6 +90,10 @@ fun WorkCard(
     onAuthorClick: ((Work) -> Unit)? = null,
     /** 阅读进度；null 表示不显示（首页/搜索等没有"读到哪"语义的场景） */
     progress: CardProgress? = null,
+    /** 跨源列表（收藏/历史）里标出源；poipiku 是默认源，不标注 */
+    showSourceLabel: Boolean = false,
+    /** 名次（榜单流）：非空时在缩略图右上角挂名次角标 */
+    rank: Int? = null,
 ) {
     val shape = RoundedCornerShape(PikuLayout.CardCorner)
     var heartVisible by remember { mutableStateOf(false) }
@@ -189,6 +194,15 @@ fun WorkCard(
                         )
                     }
                 }
+            }
+            if (rank != null) {
+                RankBadge(
+                    rank = rank,
+                    large = false,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp),
+                )
             }
             if (work.imageCount > 1) {
                 Box(
@@ -315,6 +329,13 @@ fun WorkCard(
                         fontSize = 10.sp,
                         maxLines = 1,
                     )
+                } else if (showSourceLabel && work.source != WorkSource.POIPIKU) {
+                    Text(
+                        text = stringResource(work.source.labelRes()),
+                        color = PikuColors.textFaint,
+                        fontSize = 10.sp,
+                        maxLines = 1,
+                    )
                 }
             }
         }
@@ -374,5 +395,34 @@ fun LoaderDots(dark: Boolean) {
                     .background(dotColor, CircleShape),
             )
         }
+    }
+}
+
+/** 名次角标：前三金银铜，其余白底深字。榜单流的 hero 与网格卡片共用 */
+@Composable
+internal fun RankBadge(
+    rank: Int,
+    large: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val (bg, fg) = when (rank) {
+        1 -> Color(0xFFE6B422) to Color(0xFF3A2A00)
+        2 -> Color(0xFFC6CBD1) to Color(0xFF2B3238)
+        3 -> Color(0xFFD08A54) to Color(0xFF3A2100)
+        else -> Color(0xE6FFFFFF) to Color(0xFF3A3632)
+    }
+    Box(
+        modifier = modifier
+            .size(if (large) 26.dp else 20.dp)
+            .clip(CircleShape)
+            .background(bg),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = rank.toString(),
+            color = fg,
+            fontSize = if (large) 13.sp else 11.sp,
+            fontWeight = FontWeight.Bold,
+        )
     }
 }

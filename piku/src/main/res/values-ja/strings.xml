@@ -664,6 +664,13 @@
     <string name="home_source_select_title">データソースを選択</string>
     <string name="home_source_select_hint">発見フィードのみに適用。検索・お気に入り・履歴には影響しません。</string>
     <string name="home_source_pixiv">Pixiv</string>
+    <string name="pixiv_hint_daily">毎日更新</string>
+    <string name="pixiv_hint_weekly">毎週月曜更新</string>
+    <string name="pixiv_hint_monthly">毎月1日更新</string>
+    <string name="pixiv_hint_rookie">毎日更新</string>
+    <string name="pixiv_tab_ranking">ランキング</string>
+    <string name="pixiv_tab_recommend">おすすめ</string>
+    <string name="home_coming_soon">近日公開</string>
     <string name="pixiv_tab_daily">デイリー</string>
     <string name="pixiv_tab_weekly">ウィークリー</string>
     <string name="pixiv_tab_monthly">マンスリー</string>

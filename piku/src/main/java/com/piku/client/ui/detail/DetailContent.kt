@@ -88,6 +88,7 @@ import com.piku.client.common.LinkSegment
 import com.piku.client.common.LinkText
 import com.piku.client.data.repository.ThumbnailResolver
 import com.piku.client.domain.model.WorkDetail
+import com.piku.client.domain.model.TranslatedFields
 import com.piku.client.domain.model.RestrictionReason
 import com.piku.client.ui.common.ExpandableIconAction
 import com.piku.client.ui.common.localizedCategoryName
@@ -112,13 +113,17 @@ import kotlin.math.roundToInt
 internal const val DESCRIPTION_COLLAPSE_THRESHOLD = 4
 
 /** 页面内容区左右各自的 padding（与底部操作栏的 20dp 对齐），图区据此推算可用宽度 */
-private const val CONTENT_PADDING_DP = 20
+internal const val CONTENT_PADDING_DP = 20
 /** 图区默认高度：图片尺寸还没量出来时的占位 */
-private const val IMAGE_HEIGHT_DEFAULT_DP = 320
+internal const val IMAGE_HEIGHT_DEFAULT_DP = 320
 /** 图区高度下限：超宽横图不至于被压成一条 */
-private const val IMAGE_HEIGHT_MIN_DP = 180
+internal const val IMAGE_HEIGHT_MIN_DP = 180
 /** 图区高度上限：超长竖图不至于顶满整屏 */
-private const val IMAGE_HEIGHT_MAX_DP = 520
+internal const val IMAGE_HEIGHT_MAX_DP = 520
+/** 通栏图区的高度上限：屏高的这个比例——p站竖图/多格漫画不该被 520dp 压成一条 */
+private const val FULL_BLEED_MAX_HEIGHT_FRACTION = 0.75f
+/** 通栏图区：图左右到边、顶到状态栏底下，信息块整体后移 */
+internal enum class DetailLayout { AuthorFirst, ImageFirst }
 /** 无图空状态高度：只有一行提示，不必占满 360dp */
 private const val EMPTY_HEIGHT_DP = 160
 /** 密码解锁框高度：标签 + 输入框 + 按钮 + 错误提示 */
@@ -132,6 +137,26 @@ private const val IMAGE_HINT_EXPAND_MILLIS = 5_000L
 
 private val POIPIKU_WORK_REGEX = Regex("""https?://poipiku\.com/(\d+)/(\d+)\.html""")
 
+/**
+ * 图区高度：按宽高比换算并钳在上下限内；骨架与内容共用同一把尺子，接手时高度不跳。
+ * [availableWidthDp] 是图区实际可用的宽度（通栏时就是屏宽），[maxHeightDp] 由版面给。
+ */
+internal fun imageHeightForAspect(
+    aspect: Float,
+    availableWidthDp: Int,
+    maxHeightDp: Int = IMAGE_HEIGHT_MAX_DP,
+): Int {
+    if (aspect <= 0f) return IMAGE_HEIGHT_DEFAULT_DP
+    return (availableWidthDp / aspect).roundToInt().coerceIn(IMAGE_HEIGHT_MIN_DP, maxHeightDp)
+}
+
+/**
+ * 通栏版面的图区高度上限：屏高的 3/4，给下面的信息块留出余量。
+ * 矮屏上不低于记录卡式的上限——通栏图的余地只该更大，不该反而更小。
+ */
+internal fun fullBleedMaxHeightDp(screenHeightDp: Int): Int =
+    maxOf((screenHeightDp * FULL_BLEED_MAX_HEIGHT_FRACTION).roundToInt(), IMAGE_HEIGHT_MAX_DP)
+
 @Composable
 internal fun DetailContent(
     detail: WorkDetail,
@@ -144,6 +169,10 @@ internal fun DetailContent(
     topInset: Dp = 12.dp,
     /** 来源页缩略图（列表卡片的 _360）：首图到位前的低清打底，空串表示没有 */
     sourceThumbnailUrl: String = "",
+    /** 内联图区画哪一档（长度与 [WorkDetail.imageUrls] 一致）；null = 用后者，OCR/分享也取后者 */
+    displayImageUrls: List<String>? = null,
+    /** 版面：[DetailLayout.AuthorFirst] 记录卡式（作者在图前），[DetailLayout.ImageFirst] p站版（图通栏置顶） */
+    layout: DetailLayout = DetailLayout.AuthorFirst,
     /** append 还在路上（HTML 阶段的内容已画出）：图区先不显示页码角标 */
     loadingMore: Boolean = false,
     /** 首图渲染完成：据此开始解析原图 URL（见 DetailViewModel.ensureFullImages） */
@@ -187,211 +216,370 @@ internal fun DetailContent(
      */
     restrictionReason: RestrictionReason? = null,
 ) {
-    var descriptionExpanded by remember { mutableStateOf(false) }
+    val imageFirst = layout == DetailLayout.ImageFirst
     val translated = detail.translated
-    // 只有该字段真有译文时才显示 chip，避免出现点了没反应的按钮
-    fun chipVisible(field: TranslateField): Boolean = translationAvailable && when (field) {
-        TranslateField.TITLE -> !translated?.title.isNullOrBlank()
-        TranslateField.DESCRIPTION -> !translated?.description.isNullOrBlank()
-        TranslateField.AUTHOR_PROFILE -> !translated?.authorProfile.isNullOrBlank()
-        TranslateField.TAGS -> !translated?.tags.isNullOrEmpty()
-        TranslateField.NOVEL -> !translated?.novelText.isNullOrBlank()
-    }
     Column(
         Modifier
             .fillMaxSize()
-            .verticalScroll(scrollState)
-            .padding(start = 20.dp, end = 20.dp, top = topInset, bottom = 96.dp),
+            .verticalScroll(scrollState),
     ) {
-        AuthorRow(detail = detail, dark = dark, onAuthorClick = onAuthorClick)
-        if (detail.authorProfile.isNotBlank()) {
-            val profileTranslated = showTranslation(TranslateField.AUTHOR_PROFILE)
-            val profileText = translated?.authorProfile
-                ?.takeIf { profileTranslated && it.isNotBlank() }
-                ?: detail.authorProfile
-            Row(
-                verticalAlignment = Alignment.Top,
-                modifier = Modifier.padding(top = 6.dp),
-            ) {
-                Text(
-                    text = linkify(profileText, dark, onRelatedWorkClick),
-                    color = PikuColors.textSecondary,
-                    fontSize = 12.sp,
-                    modifier = Modifier.weight(1f),
-                )
-                if (chipVisible(TranslateField.AUTHOR_PROFILE)) {
-                    TranslateChip(
-                        showTranslation = profileTranslated,
-                        onClick = { onToggleField(TranslateField.AUTHOR_PROFILE) },
-                        modifier = Modifier.padding(start = 6.dp, top = 1.dp),
-                    )
-                }
-            }
-        }
-        Spacer(Modifier.height(10.dp))
-        ImagePager(
-            detail = detail,
-            dark = dark,
-            sharedKey = sharedKey,
-            sourceThumbnailUrl = sourceThumbnailUrl,
-            loadingMore = loadingMore,
-            onFirstImageLoaded = onFirstImageLoaded,
-            loadFailed = loadFailed,
-            onRetry = onRetry,
-            onImageClick = onImageClick,
-            onImageLongPress = onImageLongPress,
-            onWorkClick = onRelatedWorkClick,
-            password = password,
-            onPasswordChange = onPasswordChange,
-            onPasswordSubmit = onPasswordSubmit,
-            passwordLoading = passwordLoading,
-            onGateAction = onGateAction,
-            gateLoading = gateLoading,
-            restrictionReason = restrictionReason,
-            onOpenNovelReader = onOpenNovelReader,
-            hasImageModel = hasImageModel,
-            imageTranslated = imageTranslated,
-            imageTranslatingPage = imageTranslatingPage,
-            translatedImages = translatedImages,
-            onImageTranslateClick = onImageTranslateClick,
-            onPageChanged = onPageChanged,
-            autoExpandImageHint = autoExpandImageHint,
-            onImageHintShown = onImageHintShown,
-        )
-        Spacer(Modifier.height(14.dp))
-        if (detail.title.isNotBlank()) {
-            val titleTranslated = showTranslation(TranslateField.TITLE)
-            val titleText = translated?.title
-                ?.takeIf { titleTranslated && it.isNotBlank() }
-                ?: detail.title
-            val titleSelection = remember { SelectionState() }
-            Row(verticalAlignment = Alignment.Top) {
-                SelectionContainer(
-                    state = titleSelection,
-                    modifier = Modifier
-                        .weight(1f)
-                        .pointerInput(titleSelection) {
-                            detectTapGestures(onTap = { titleSelection.clear() })
-                        },
-                ) {
-                    Text(
-                        text = linkify(titleText, dark, onRelatedWorkClick),
-                        color = PikuColors.textPrimary,
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
-                if (chipVisible(TranslateField.TITLE)) {
-                    TranslateChip(
-                        showTranslation = titleTranslated,
-                        onClick = { onToggleField(TranslateField.TITLE) },
-                        modifier = Modifier.padding(start = 6.dp, top = 2.dp),
-                    )
-                }
-            }
-        }
-        if (detail.description.isNotBlank()) {
-            Spacer(Modifier.height(8.dp))
-            val descriptionTranslated = showTranslation(TranslateField.DESCRIPTION)
-            val descriptionText = translated?.description
-                ?.takeIf { descriptionTranslated && it.isNotBlank() }
-                ?: detail.description
-            val descriptionSelection = remember { SelectionState() }
-            val textMeasurer = rememberTextMeasurer()
-            val linkifiedDescription = linkify(descriptionText, dark, onRelatedWorkClick)
-            var containerWidthPx by remember { mutableIntStateOf(0) }
-            val descriptionStyle = LocalTextStyle.current.copy(fontSize = 13.sp, lineHeight = 20.sp)
-            val fullLineCount = if (containerWidthPx > 0) {
-                remember(linkifiedDescription, containerWidthPx, dark) {
-                    textMeasurer.measure(
-                        text = linkifiedDescription,
-                        style = descriptionStyle,
-                        constraints = Constraints(maxWidth = containerWidthPx),
-                        overflow = TextOverflow.Clip,
-                    ).lineCount
-                }
-            } else {
-                0
-            }
-            val collapsible = fullLineCount > DESCRIPTION_COLLAPSE_THRESHOLD
-            SelectionContainer(
-                state = descriptionSelection,
-                modifier = Modifier
-                    .animateContentSize()
-                    .pointerInput(descriptionSelection) {
-                        detectTapGestures(onTap = { descriptionSelection.clear() })
-                    },
-            ) {
-                Text(
-                    text = linkifiedDescription,
-                    color = PikuColors.textSecondary,
-                    fontSize = 13.sp,
-                    lineHeight = 20.sp,
-                    maxLines = if (collapsible && !descriptionExpanded) 3 else Int.MAX_VALUE,
-                    overflow = if (collapsible && !descriptionExpanded) {
-                        TextOverflow.Ellipsis
-                    } else {
-                        TextOverflow.Clip
-                    },
-                    modifier = Modifier.onSizeChanged { containerWidthPx = it.width },
-                )
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (collapsible) {
-                    Text(
-                        text = stringResource(
-                            if (descriptionExpanded) R.string.detail_show_less else R.string.detail_show_more
-                        ),
-                        color = PikuColors.textPrimary,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier
-                            .padding(top = 4.dp, bottom = 8.dp)
-                            .clickable { descriptionExpanded = !descriptionExpanded },
-                    )
-                }
-                if (chipVisible(TranslateField.DESCRIPTION)) {
-                    if (collapsible) Spacer(Modifier.width(8.dp))
-                    TranslateChip(
-                        showTranslation = descriptionTranslated,
-                        onClick = { onToggleField(TranslateField.DESCRIPTION) },
-                        modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
-                    )
-                }
-            }
-        }
-        if (detail.tags.isNotEmpty()) {
-            Spacer(Modifier.height(10.dp))
-            val tagsTranslated = showTranslation(TranslateField.TAGS)
-            // 译文标签与原文标签一一对应；点击筛选始终用原文，否则搜不到结果
-            val displayTags = translated?.tags
-                ?.takeIf { tagsTranslated && it.size == detail.tags.size }
-                ?: detail.tags
-            TagFlow(
-                tags = detail.tags,
-                displayTags = displayTags,
-                customTags = customTags,
+        // 图区两种版面只有位置不同，参数一样：抽成 lambda，避免把整串参数抄两遍
+        val imageSection: @Composable () -> Unit = {
+            ImagePager(
+                detail = detail,
                 dark = dark,
-                onTagClick = onTagClick,
-                onToggleCustomTag = onToggleCustomTag,
-                trailing = if (chipVisible(TranslateField.TAGS)) {
-                    {
-                        TranslateChip(
-                            showTranslation = tagsTranslated,
-                            onClick = { onToggleField(TranslateField.TAGS) },
-                        )
-                    }
-                } else {
-                    null
-                },
+                sharedKey = sharedKey,
+                sourceThumbnailUrl = sourceThumbnailUrl,
+                displayImageUrls = displayImageUrls,
+                fullBleed = imageFirst,
+                loadingMore = loadingMore,
+                onFirstImageLoaded = onFirstImageLoaded,
+                loadFailed = loadFailed,
+                onRetry = onRetry,
+                onImageClick = onImageClick,
+                onImageLongPress = onImageLongPress,
+                onWorkClick = onRelatedWorkClick,
+                password = password,
+                onPasswordChange = onPasswordChange,
+                onPasswordSubmit = onPasswordSubmit,
+                passwordLoading = passwordLoading,
+                onGateAction = onGateAction,
+                gateLoading = gateLoading,
+                restrictionReason = restrictionReason,
+                onOpenNovelReader = onOpenNovelReader,
+                hasImageModel = hasImageModel,
+                imageTranslated = imageTranslated,
+                imageTranslatingPage = imageTranslatingPage,
+                translatedImages = translatedImages,
+                onImageTranslateClick = onImageTranslateClick,
+                onPageChanged = onPageChanged,
+                autoExpandImageHint = autoExpandImageHint,
+                onImageHintShown = onImageHintShown,
             )
         }
-        if (detail.relatedWorks.isNotEmpty()) {
-            Spacer(Modifier.height(18.dp))
-            RelatedWorksSection(
-                works = detail.relatedWorks,
+        // p站版：图左右到边、排在首位，但不钻到顶栏底下——状态栏图标与挖孔摄像头都落在页面底色上
+        if (imageFirst) {
+            Column(Modifier.padding(top = topInset)) { imageSection() }
+        }
+        Column(
+            Modifier.padding(
+                start = CONTENT_PADDING_DP.dp,
+                end = CONTENT_PADDING_DP.dp,
+                top = if (imageFirst) 14.dp else topInset,
+                bottom = 96.dp,
+            ),
+        ) {
+            if (!imageFirst) {
+                AuthorSection(
+                    detail = detail,
+                    dark = dark,
+                    translated = translated,
+                    translationAvailable = translationAvailable,
+                    showTranslation = showTranslation,
+                    onToggleField = onToggleField,
+                    onAuthorClick = onAuthorClick,
+                    onRelatedWorkClick = onRelatedWorkClick,
+                )
+                Spacer(Modifier.height(10.dp))
+                imageSection()
+                Spacer(Modifier.height(14.dp))
+            }
+            TitleSection(
+                detail = detail,
                 dark = dark,
-                onClick = onRelatedWorkClick,
+                translated = translated,
+                translationAvailable = translationAvailable,
+                showTranslation = showTranslation,
+                onToggleField = onToggleField,
+                onRelatedWorkClick = onRelatedWorkClick,
+            )
+            if (imageFirst) {
+                Spacer(Modifier.height(12.dp))
+                AuthorSection(
+                    detail = detail,
+                    dark = dark,
+                    translated = translated,
+                    translationAvailable = translationAvailable,
+                    showTranslation = showTranslation,
+                    onToggleField = onToggleField,
+                    onAuthorClick = onAuthorClick,
+                    onRelatedWorkClick = onRelatedWorkClick,
+                )
+            }
+            DescriptionSection(
+                detail = detail,
+                dark = dark,
+                translated = translated,
+                translationAvailable = translationAvailable,
+                showTranslation = showTranslation,
+                onToggleField = onToggleField,
+                onRelatedWorkClick = onRelatedWorkClick,
+                // 通栏版面：展开行左右分站，短简介下 chip 不再孤立成一行
+                chipTrailing = imageFirst,
+            )
+            TagsSection(
+                detail = detail,
+                dark = dark,
+                translated = translated,
+                customTags = customTags,
+                onTagClick = onTagClick,
+                onToggleCustomTag = onToggleCustomTag,
+                translationAvailable = translationAvailable,
+                showTranslation = showTranslation,
+                onToggleField = onToggleField,
+                chipTrailing = imageFirst,
+            )
+            if (detail.relatedWorks.isNotEmpty()) {
+                Spacer(Modifier.height(18.dp))
+                RelatedWorksSection(
+                    works = detail.relatedWorks,
+                    dark = dark,
+                    onClick = onRelatedWorkClick,
+                )
+            }
+        }
+    }
+}
+
+/** 只有该字段真有译文时才显示 chip，避免出现点了没反应的按钮 */
+private fun detailChipVisible(
+    translated: TranslatedFields?,
+    translationAvailable: Boolean,
+    field: TranslateField,
+): Boolean = translationAvailable && when (field) {
+    TranslateField.TITLE -> !translated?.title.isNullOrBlank()
+    TranslateField.DESCRIPTION -> !translated?.description.isNullOrBlank()
+    TranslateField.AUTHOR_PROFILE -> !translated?.authorProfile.isNullOrBlank()
+    TranslateField.TAGS -> !translated?.tags.isNullOrEmpty()
+    TranslateField.NOVEL -> !translated?.novelText.isNullOrBlank()
+}
+
+/** 作者行 + 作者简介 */
+@Composable
+private fun AuthorSection(
+    detail: WorkDetail,
+    dark: Boolean,
+    translated: TranslatedFields?,
+    translationAvailable: Boolean,
+    showTranslation: (TranslateField) -> Boolean,
+    onToggleField: (TranslateField) -> Unit,
+    onAuthorClick: () -> Unit,
+    onRelatedWorkClick: (Long, Long, String) -> Unit,
+) {
+    AuthorRow(detail = detail, dark = dark, onAuthorClick = onAuthorClick)
+    if (detail.authorProfile.isNotBlank()) {
+        val profileTranslated = showTranslation(TranslateField.AUTHOR_PROFILE)
+        val profileText = translated?.authorProfile
+            ?.takeIf { profileTranslated && it.isNotBlank() }
+            ?: detail.authorProfile
+        Row(
+            verticalAlignment = Alignment.Top,
+            modifier = Modifier.padding(top = 6.dp),
+        ) {
+            Text(
+                text = linkify(profileText, dark, onRelatedWorkClick),
+                color = PikuColors.textSecondary,
+                fontSize = 12.sp,
+                modifier = Modifier.weight(1f),
+            )
+            if (detailChipVisible(translated, translationAvailable, TranslateField.AUTHOR_PROFILE)) {
+                TranslateChip(
+                    showTranslation = profileTranslated,
+                    onClick = { onToggleField(TranslateField.AUTHOR_PROFILE) },
+                    modifier = Modifier.padding(start = 6.dp, top = 1.dp),
+                )
+            }
+        }
+    }
+}
+
+/** 标题 */
+@Composable
+private fun TitleSection(
+    detail: WorkDetail,
+    dark: Boolean,
+    translated: TranslatedFields?,
+    translationAvailable: Boolean,
+    showTranslation: (TranslateField) -> Boolean,
+    onToggleField: (TranslateField) -> Unit,
+    onRelatedWorkClick: (Long, Long, String) -> Unit,
+) {
+    if (detail.title.isBlank()) return
+    val titleTranslated = showTranslation(TranslateField.TITLE)
+    val titleText = translated?.title
+        ?.takeIf { titleTranslated && it.isNotBlank() }
+        ?: detail.title
+    val titleSelection = remember { SelectionState() }
+    Row(verticalAlignment = Alignment.Top) {
+        SelectionContainer(
+            state = titleSelection,
+            modifier = Modifier
+                .weight(1f)
+                .pointerInput(titleSelection) {
+                    detectTapGestures(onTap = { titleSelection.clear() })
+                },
+        ) {
+            Text(
+                text = linkify(titleText, dark, onRelatedWorkClick),
+                color = PikuColors.textPrimary,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        if (detailChipVisible(translated, translationAvailable, TranslateField.TITLE)) {
+            TranslateChip(
+                showTranslation = titleTranslated,
+                onClick = { onToggleField(TranslateField.TITLE) },
+                modifier = Modifier.padding(start = 6.dp, top = 2.dp),
+            )
+        }
+    }
+}
+
+/** 简介：超过三行折叠，展开/收起与译文 chip 同一行 */
+@Composable
+private fun DescriptionSection(
+    detail: WorkDetail,
+    dark: Boolean,
+    translated: TranslatedFields?,
+    translationAvailable: Boolean,
+    showTranslation: (TranslateField) -> Boolean,
+    onToggleField: (TranslateField) -> Unit,
+    onRelatedWorkClick: (Long, Long, String) -> Unit,
+    /** 展开行两端对齐：短简介没有「展开」时，chip 靠右站而不是孤零零留在行首 */
+    chipTrailing: Boolean = false,
+) {
+    if (detail.description.isBlank()) return
+    var descriptionExpanded by remember { mutableStateOf(false) }
+    Spacer(Modifier.height(8.dp))
+    val descriptionTranslated = showTranslation(TranslateField.DESCRIPTION)
+    val descriptionText = translated?.description
+        ?.takeIf { descriptionTranslated && it.isNotBlank() }
+        ?: detail.description
+    val descriptionSelection = remember { SelectionState() }
+    val textMeasurer = rememberTextMeasurer()
+    val linkifiedDescription = linkify(descriptionText, dark, onRelatedWorkClick)
+    var containerWidthPx by remember { mutableIntStateOf(0) }
+    val descriptionStyle = LocalTextStyle.current.copy(fontSize = 13.sp, lineHeight = 20.sp)
+    val fullLineCount = if (containerWidthPx > 0) {
+        remember(linkifiedDescription, containerWidthPx, dark) {
+            textMeasurer.measure(
+                text = linkifiedDescription,
+                style = descriptionStyle,
+                constraints = Constraints(maxWidth = containerWidthPx),
+                overflow = TextOverflow.Clip,
+            ).lineCount
+        }
+    } else {
+        0
+    }
+    val collapsible = fullLineCount > DESCRIPTION_COLLAPSE_THRESHOLD
+    SelectionContainer(
+        state = descriptionSelection,
+        modifier = Modifier
+            .animateContentSize()
+            .pointerInput(descriptionSelection) {
+                detectTapGestures(onTap = { descriptionSelection.clear() })
+            },
+    ) {
+        Text(
+            text = linkifiedDescription,
+            color = PikuColors.textSecondary,
+            fontSize = 13.sp,
+            lineHeight = 20.sp,
+            maxLines = if (collapsible && !descriptionExpanded) 3 else Int.MAX_VALUE,
+            overflow = if (collapsible && !descriptionExpanded) {
+                TextOverflow.Ellipsis
+            } else {
+                TextOverflow.Clip
+            },
+            modifier = Modifier.onSizeChanged { containerWidthPx = it.width },
+        )
+    }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = when {
+            !chipTrailing -> Arrangement.Start
+            collapsible -> Arrangement.SpaceBetween
+            else -> Arrangement.End
+        },
+        modifier = if (chipTrailing) Modifier.fillMaxWidth() else Modifier,
+    ) {
+        if (collapsible) {
+            Text(
+                text = stringResource(
+                    if (descriptionExpanded) R.string.detail_show_less else R.string.detail_show_more
+                ),
+                color = PikuColors.textPrimary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier
+                    .padding(top = 4.dp, bottom = 8.dp)
+                    .clickable { descriptionExpanded = !descriptionExpanded },
+            )
+        }
+        if (detailChipVisible(translated, translationAvailable, TranslateField.DESCRIPTION)) {
+            if (collapsible && !chipTrailing) Spacer(Modifier.width(8.dp))
+            TranslateChip(
+                showTranslation = descriptionTranslated,
+                onClick = { onToggleField(TranslateField.DESCRIPTION) },
+                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+            )
+        }
+    }
+}
+
+/** 标签流 */
+@Composable
+private fun TagsSection(
+    detail: WorkDetail,
+    dark: Boolean,
+    translated: TranslatedFields?,
+    customTags: Set<String>,
+    onTagClick: (String) -> Unit,
+    onToggleCustomTag: (String) -> Unit,
+    translationAvailable: Boolean,
+    showTranslation: (TranslateField) -> Boolean,
+    onToggleField: (TranslateField) -> Unit,
+    /** p站版面：chip 从标签流里摘出来，右对齐独占一行，免得读成"一个没有 # 的标签" */
+    chipTrailing: Boolean = false,
+) {
+    if (detail.tags.isEmpty()) return
+    Spacer(Modifier.height(10.dp))
+    val tagsTranslated = showTranslation(TranslateField.TAGS)
+    val tagsChipVisible = detailChipVisible(translated, translationAvailable, TranslateField.TAGS)
+    // 译文标签与原文标签一一对应；点击筛选始终用原文，否则搜不到结果
+    val displayTags = translated?.tags
+        ?.takeIf { tagsTranslated && it.size == detail.tags.size }
+        ?: detail.tags
+    TagFlow(
+        tags = detail.tags,
+        displayTags = displayTags,
+        customTags = customTags,
+        dark = dark,
+        onTagClick = onTagClick,
+        onToggleCustomTag = onToggleCustomTag,
+        trailing = if (tagsChipVisible && !chipTrailing) {
+            {
+                TranslateChip(
+                    showTranslation = tagsTranslated,
+                    onClick = { onToggleField(TranslateField.TAGS) },
+                )
+            }
+        } else {
+            null
+        },
+    )
+    if (tagsChipVisible && chipTrailing) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 6.dp),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            TranslateChip(
+                showTranslation = tagsTranslated,
+                onClick = { onToggleField(TranslateField.TAGS) },
             )
         }
     }
@@ -443,6 +631,10 @@ private fun ImagePager(
     sharedKey: String = "",
     /** 来源页缩略图（列表卡片的 _360）：首图到位前的低清打底 */
     sourceThumbnailUrl: String = "",
+    /** 内联画哪一档（长度与 detail.imageUrls 一致）；null = 用 detail.imageUrls */
+    displayImageUrls: List<String>? = null,
+    /** 通栏：图左右到边、高度上限按屏高放宽（p站版）；圆角也去掉 */
+    fullBleed: Boolean = false,
     /** append 还在路上：页码角标先不显示（此刻的页数只有主图这一张） */
     loadingMore: Boolean = false,
     /** 首图渲染完成回调（只报第一页） */
@@ -475,25 +667,30 @@ private fun ImagePager(
     /** 提示真的展开出来时回调，供外部消耗「已展示过」的一次性标记 */
     onImageHintShown: () -> Unit = {},
 ) {
-    val pagerState = rememberPagerState(pageCount = { detail.imageUrls.size })
+    val urls = displayImageUrls ?: detail.imageUrls
+    val pagerState = rememberPagerState(pageCount = { urls.size })
     LaunchedEffect(pagerState.currentPage) {
         onPageChanged?.invoke(pagerState.currentPage)
     }
     // 首图的低清打底：来源缩略图与首图是同一张图时才垫（判定见
     // ThumbnailResolver.detailUnderlayUrl——占位图、首图另有其图都不垫）。
-    // 垫的是卡片刚渲染过的那张 _360，缓存必中：共享元素过渡落地时图区就是有图的，
-    // 不会先空一块或只剩底色，_640 到位后盖上去。
-    val underlayUrl = remember(sourceThumbnailUrl, detail.imageUrls) {
-        ThumbnailResolver.detailUnderlayUrl(sourceThumbnailUrl, detail.imageUrls.firstOrNull())
+    // 垫的是卡片刚渲染过的那张，缓存必中：共享元素过渡落地时图区就是有图的，
+    // 不会先空一块或只剩底色，清晰档到位后盖上去。
+    val underlayUrl = remember(sourceThumbnailUrl, urls) {
+        ThumbnailResolver.detailUnderlayUrl(sourceThumbnailUrl, urls.firstOrNull())
     }
 
     // 图区高度跟随真实宽高比：竖图不再被压成窄带，横图也不再上下留大片空白。
     // 量过的页码缓存下来，翻回看过的图能立刻恢复高度，不会先跳回默认值再跳回来。
     val aspectCache = remember { mutableStateMapOf<Int, Float>() }
-    val availableWidthDp = LocalConfiguration.current.screenWidthDp - CONTENT_PADDING_DP * 2
-    val heightForAspect: (Float) -> Int = { aspect ->
-        (availableWidthDp / aspect).roundToInt().coerceIn(IMAGE_HEIGHT_MIN_DP, IMAGE_HEIGHT_MAX_DP)
+    val configuration = LocalConfiguration.current
+    val availableWidthDp = if (fullBleed) {
+        configuration.screenWidthDp
+    } else {
+        configuration.screenWidthDp - CONTENT_PADDING_DP * 2
     }
+    val maxHeightDp = if (fullBleed) fullBleedMaxHeightDp(configuration.screenHeightDp) else IMAGE_HEIGHT_MAX_DP
+    val heightForAspect: (Float) -> Int = { aspect -> imageHeightForAspect(aspect, availableWidthDp, maxHeightDp) }
     // 外层高度取「已测量过的图里最高的那张」，而不是当前页的高度：
     // 翻页时外层纹丝不动，下面的标题/描述/标签就不会跟着上下跳。
     // 代价是尺寸小的图上下会留出背景色的空白带——用这点留白换下方内容稳定。
@@ -524,7 +721,8 @@ private fun ImagePager(
                     Modifier.height(boxHeightDp.dp)
                 },
             )
-            .clip(RoundedCornerShape(12.dp))
+            // 通栏不加圆角：图左右已经顶到边，圆角会把两侧切出背景色缺口
+            .then(if (fullBleed) Modifier else Modifier.clip(RoundedCornerShape(12.dp)))
             .background(PikuColors.surfaceSoft),
     ) {
         if (detail.imageUrls.isEmpty()) {
@@ -612,7 +810,7 @@ private fun ImagePager(
                             )
                         }
                         AsyncImage(
-                            model = rememberAnimatedImage(detail.imageUrls[page]),
+                            model = rememberAnimatedImage(urls[page]),
                             contentDescription = detail.title,
                             colorFilter = PikuColors.tameWhiteFilter,
                             modifier = Modifier
@@ -639,12 +837,12 @@ private fun ImagePager(
             // 图区高度刚固定下来，浮层再随图片高度浮动就等于白固定了。
             // append 未到时不显示：此刻页数只有主图这一张，会从 1/1 跳到 1/12；
             // 失败时也让位给重试入口——两者锚在同一个角，叠在一起会互相压住
-            if (detail.imageUrls.size > 1 && !loadingMore && !loadFailed) {
+            if (urls.size > 1 && !loadingMore && !loadFailed) {
                 Text(
                     text = stringResource(
                         R.string.detail_image_index,
                         pagerState.currentPage + 1,
-                        detail.imageUrls.size,
+                        urls.size,
                     ),
                     color = Color.White,
                     fontSize = 11.sp,

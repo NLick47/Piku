@@ -66,6 +66,8 @@ data class PixivPage(
 
 @Serializable
 data class PixivPageUrls(
+    @SerialName("thumb_mini") val thumbMini: String = "",
+    val small: String = "",
     val regular: String = "",
     val original: String = "",
 )

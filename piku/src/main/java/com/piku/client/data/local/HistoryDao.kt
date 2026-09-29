@@ -3,6 +3,7 @@ package com.piku.client.data.local
 import androidx.room.Dao
 import androidx.room.Query
 import androidx.room.Upsert
+import com.piku.client.domain.model.WorkSource
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -16,8 +17,8 @@ interface HistoryDao {
     @Query("DELETE FROM history")
     suspend fun clearAll()
 
-    @Query("DELETE FROM history WHERE workId = :workId")
-    suspend fun deleteByWorkId(workId: String)
+    @Query("DELETE FROM history WHERE source = :source AND workId = :workId")
+    suspend fun deleteByWorkId(source: WorkSource, workId: String)
 
     @Query("DELETE FROM history WHERE visitedAt < :cutoff")
     suspend fun deleteOlderThan(cutoff: Long)

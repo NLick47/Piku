@@ -120,6 +120,10 @@ import com.piku.client.domain.model.FavoriteFolder
 import com.piku.client.domain.model.FolderSort
 import com.piku.client.domain.model.ReadingProgress
 import com.piku.client.domain.model.Work
+import com.piku.client.ui.source.SourceWorkOpenHost
+import com.piku.client.domain.model.key
+import com.piku.client.domain.model.WorkSource
+import com.piku.client.domain.model.WorkKey
 import com.piku.client.ui.common.LoaderDots
 import com.piku.client.ui.common.PikuBackButton
 import com.piku.client.ui.common.UserAvatar
@@ -163,6 +167,7 @@ fun CollectionScreen(
 
     var creatingFolder by rememberSaveable { mutableStateOf(false) }
     var renamingFolder by remember { mutableStateOf<FavoriteFolder?>(null) }
+    var openHostWork by remember { mutableStateOf<Work?>(null) }
     var pickMode by remember { mutableStateOf<FolderPickMode?>(null) }
 
     Box(
@@ -196,7 +201,10 @@ fun CollectionScreen(
                 dark = dark,
                 isTablet = isTablet,
                 onBack = viewModel::backToFolders,
-                onWorkClick = onWorkClick,
+                onWorkClick = { work ->
+                    // poipiku 作品走主壳详情路由，其余源交给通用打开入口
+                    if (work.source == WorkSource.POIPIKU) onWorkClick(work) else openHostWork = work
+                },
                 onAuthorClick = onAuthorClick,
                 onEnterSelection = viewModel::enterSelection,
                 onExitSelection = viewModel::exitSelection,
@@ -207,6 +215,10 @@ fun CollectionScreen(
                 onSortChange = viewModel::setSort,
                 onSearchFocusConsumed = viewModel::consumeSearchFocus,
             )
+        }
+
+        openHostWork?.let { work ->
+            SourceWorkOpenHost(work = work, dark = dark, onDismiss = { openHostWork = null })
         }
 
         // 多选工具条与撤销条互斥：批量操作结束会退出多选，撤销条随即接管底部
@@ -858,9 +870,9 @@ private fun FolderDetailContent(
     onBack: () -> Unit,
     onWorkClick: (Work) -> Unit,
     onAuthorClick: (Work) -> Unit,
-    onEnterSelection: (Long?) -> Unit,
+    onEnterSelection: (WorkKey?) -> Unit,
     onExitSelection: () -> Unit,
-    onToggleSelect: (Long) -> Unit,
+    onToggleSelect: (WorkKey) -> Unit,
     onToggleSelectAll: () -> Unit,
     onQueryChange: (String) -> Unit,
     onClearQuery: () -> Unit,
@@ -1103,18 +1115,18 @@ private fun FolderDetailContent(
                                 }
                             }
                         }
-                        items(group.works, key = { it.id }) { work ->
+                        items(group.works, key = { it.key.toString() }) { work ->
                             SelectableWorkCard(
                                 work = work,
-                                selected = work.id in state.selectedIds,
+                                selected = work.key in state.selectedIds,
                                 selectionMode = state.selectionMode,
-                                progress = state.progress[work.id].toCardProgress(work),
+                                progress = (if (work.source == WorkSource.POIPIKU) state.progress[work.id] else null).toCardProgress(work),
                                 dark = dark,
                                 onOpen = { onWorkClick(work) },
                                 // 长按直接进多选并带上这张：单件操作走底部工具条，
                                 // 不再为一件作品弹一个四选项的面板
-                                onLongPress = { onEnterSelection(work.id) },
-                                onToggleSelect = { onToggleSelect(work.id) },
+                                onLongPress = { onEnterSelection(work.key) },
+                                onToggleSelect = { onToggleSelect(work.key) },
                                 onAuthorClick = onAuthorClick,
                             )
                         }
@@ -1176,6 +1188,7 @@ private fun SelectableWorkCard(
             onLongClick = { if (!selectionMode) onLongPress() },
             onAuthorClick = if (selectionMode) null else onAuthorClick,
             progress = progress,
+            showSourceLabel = true,
         )
         if (selectionMode && selected) {
             // 只标记选中的卡：未选中的卡保持原样，避免整片压暗被看成"全都选中了"

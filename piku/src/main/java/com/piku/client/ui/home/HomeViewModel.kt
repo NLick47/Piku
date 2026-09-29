@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.piku.client.BuildConfig
 import com.piku.client.R
+import com.piku.client.data.source.PoipikuContentSource
 import com.piku.client.data.local.BackgroundStore
 import com.piku.client.data.local.CatalogSource
 import com.piku.client.data.local.CatalogSourceCodec
@@ -38,6 +39,7 @@ import com.piku.client.domain.model.ImageRouteMode
 import com.piku.client.domain.model.ThemeMode
 import com.piku.client.domain.model.UserProfile
 import com.piku.client.domain.model.Work
+import com.piku.client.domain.model.WorkKey
 import com.piku.client.domain.usecase.CheckForUpdateUseCase
 import com.piku.client.domain.usecase.ObserveAdultContentUseCase
 import com.piku.client.domain.usecase.ObserveAutoCheckEnabledUseCase
@@ -106,7 +108,7 @@ data class HomeUiState(
     /** 内容换血计数：tab/分类切换、缓存恢复、重载、洗牌时 +1，UI 据此回顶 */
     val feedEpoch: Int = 0,
     val works: List<Work> = emptyList(),
-    val favoriteIds: Set<Long> = emptySet(),
+    val favoriteIds: Set<WorkKey> = emptySet(),
     val adultEnabled: Boolean = false,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val imageRouteMode: ImageRouteMode = ImageRouteMode.AUTO,
@@ -652,7 +654,12 @@ class HomeViewModel @Inject constructor(
     }
 
     private suspend fun fetchPageFor(key: FeedKey, page: Int): Result<List<Work>> =
-        sourceRegistry.byId(WorkSource.POIPIKU).page(key.tab.sourceId, key.category.cd.toString(), page)
+        sourceRegistry.byId(WorkSource.POIPIKU)
+            .page(
+                feedId = key.tab.sourceId,
+                facets = mapOf(PoipikuContentSource.FACET_CATEGORY to key.category.cd.toString()),
+                page = page,
+            )
             .map { result -> result.items }
 
     /**

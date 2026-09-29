@@ -33,6 +33,30 @@ jobs:
         continue-on-error: true
         run: sdkmanager --install "platforms;android-37"
 
+      # pixiv 直连的原生传输（piku-ech）需要 NDK + Rust 交叉编译
+      - name: Install Android NDK
+        run: sdkmanager --install "ndk;27.2.12479018"
+
+      - name: Set up Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Add Android targets and cargo-ndk
+        run: |
+          rustup target add aarch64-linux-android armv7-linux-androideabi
+          cargo install cargo-ndk --locked
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            piku-ech/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('piku-ech/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 

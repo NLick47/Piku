@@ -129,11 +129,10 @@ class ThumbnailResolver @Inject constructor(
             thumbnailUrl.takeIf { !needsThumbnailBackfill(it) }
 
         /**
-         * 详情页首图的低清打底 URL（同一张图的 _360 版本）；null = 不打底。
+         * 详情页首图的低清打底 URL（列表卡片刚渲染过的那一张）；null = 不打底。
          *
-         * 列表卡片渲染的是 _360、详情页首图是 _640，URL 不同 → Coil 缓存互不相通，首图
-         * 必然要重新下载。先把卡片那张（刚在列表里解码过、缓存必中）垫在下面，_640 到位
-         * 后盖上去，共享元素过渡落地时图区就是有图的、不会先空一块。
+         * 列表卡片渲染的是同一张图的另一个尺寸档，URL 不同 → Coil 缓存互不相通，首图
+         * 必然要重新下载。先把卡片那张垫在下面，首图到位后盖上去，图区不会先空一块。
          *
          * 只有来源缩略图确实是首图本身时才打底：
          * - 空图/占位图（登录墙/关注墙/密码墙）是卡片上那张"墙"，垫在真实图下面只会让人
@@ -145,11 +144,17 @@ class ThumbnailResolver @Inject constructor(
             if (needsThumbnailBackfill(sourceThumbnailUrl)) return null
             if (firstImageUrl.isNullOrBlank()) return null
             val thumb = thumbUrl(sourceThumbnailUrl)
-            return thumb.takeIf { it == thumbUrl(firstImageUrl) }
+            return thumb.takeIf { fileKey(it) == fileKey(firstImageUrl) }
         }
 
         private fun thumbUrl(url: String): String =
             url.replace("_640.jpg", "_360.jpg")
+
+        /** 尺寸档归一，只留底层文件：poipiku 的档位在 _640/_360 后缀上，pixiv 的挂在 /c/<尺寸>/ 前缀上 */
+        private fun fileKey(url: String): String =
+            PIXIV_SIZE_PREFIX.replace(thumbUrl(url), "https://i.pximg.net/")
+
+        private val PIXIV_SIZE_PREFIX = Regex("^https://i\\.pximg\\.net/c/\\d+x\\d+(_\\d+)?/")
 
         /**
          * 详情页解析到真实图后，列表缩略图该回填成哪个 URL；null = 不回填。

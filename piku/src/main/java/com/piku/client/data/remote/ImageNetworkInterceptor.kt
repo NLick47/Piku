@@ -24,7 +24,7 @@ class ImageNetworkInterceptor(
                 outcome = if (response.isSuccessful) ImageDiagnostics.Outcome.OK else ImageDiagnostics.Outcome.HTTP_ERROR,
                 detail = "HTTP ${response.code}",
                 elapsedMs = runtime.now() - startedAt,
-                relay = request.url.host != ImageRelayInterceptor.CDN_HOST,
+                relay = !ImageUpstream.isUpstreamHost(request.url.host),
             )
             response
         } catch (e: IOException) {
@@ -36,7 +36,7 @@ class ImageNetworkInterceptor(
                 outcome = if (cancelled) ImageDiagnostics.Outcome.CANCELLED else classify(e),
                 detail = e.describeChain(levels = 2, maxChars = 90),
                 elapsedMs = runtime.now() - startedAt,
-                relay = request.url.host != ImageRelayInterceptor.CDN_HOST,
+                relay = !ImageUpstream.isUpstreamHost(request.url.host),
             )
             throw e
         }

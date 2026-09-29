@@ -19,12 +19,12 @@ class ImageDiagnosticsTest {
         outcome = outcome,
         detail = "",
         elapsedMs = elapsedMs,
-        relay = host != ImageRelayInterceptor.CDN_HOST,
+        relay = host != ImageUpstream.POIPIKU.host,
     )
 
     @Test
     fun countsSuccessFailureAndCancellation() {
-        attempt(ImageRelayInterceptor.CDN_HOST, ImageDiagnostics.Outcome.OK)
+        attempt(ImageUpstream.POIPIKU.host, ImageDiagnostics.Outcome.OK)
         attempt("pic-relay.cyou", ImageDiagnostics.Outcome.HANDSHAKE_FAILED)
         attempt("pic-relay.cyou", ImageDiagnostics.Outcome.CANCELLED)
 
@@ -52,7 +52,7 @@ class ImageDiagnosticsTest {
 
     @Test
     fun clearDropsEverything() {
-        attempt(ImageRelayInterceptor.CDN_HOST, ImageDiagnostics.Outcome.OK)
+        attempt(ImageUpstream.POIPIKU.host, ImageDiagnostics.Outcome.OK)
 
         diagnostics.clear()
 

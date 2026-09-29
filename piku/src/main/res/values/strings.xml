@@ -674,6 +674,13 @@
     <string name="home_source_select_title">选择数据源</string>
     <string name="home_source_select_hint">只作用于发现页，搜索、收藏、历史不跟着切</string>
     <string name="home_source_pixiv">Pixiv</string>
+    <string name="pixiv_hint_daily">每日更新</string>
+    <string name="pixiv_hint_weekly">每周一更新</string>
+    <string name="pixiv_hint_monthly">每月 1 日更新</string>
+    <string name="pixiv_hint_rookie">每日更新</string>
+    <string name="pixiv_tab_ranking">榜单</string>
+    <string name="pixiv_tab_recommend">推荐</string>
+    <string name="home_coming_soon">即将上线</string>
     <string name="pixiv_tab_daily">今日榜</string>
     <string name="pixiv_tab_weekly">周榜</string>
     <string name="pixiv_tab_monthly">月榜</string>

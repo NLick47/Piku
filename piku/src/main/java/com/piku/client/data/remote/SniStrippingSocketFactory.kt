@@ -26,6 +26,8 @@ import javax.net.ssl.X509TrustManager
  * - cdn.poipiku.com：伪装成其 CNAME 目标（CloudFront 按 SNI 选分发，
  *   伪装域名就是同一分发，证书为 *.cloudfront.net）
  *
+ * pixiv 的接口不走这里：那条路要 ECH + HTTP/2，由 piku-ech 的原生通道负责。
+ *
  * SNI 改写后证书 SAN 与 URL 域名不再一致，需配合 [PoipikuHostnameVerifier]。
  */
 class SniStrippingSocketFactory : SSLSocketFactory() {
@@ -36,11 +38,8 @@ class SniStrippingSocketFactory : SSLSocketFactory() {
         tmf.trustManagers.filterIsInstance<X509TrustManager>().first()
     }
 
-    private val sslContext: SSLContext = run {
-        SSLContext.getInstance("TLS").apply {
-            init(null, arrayOf(trustManager), null)
-        }
-    }
+    private val sslContext: SSLContext = SSLContext.getInstance("TLS")
+        .apply { init(null, arrayOf(trustManager), null) }
 
     private val delegate: SSLSocketFactory = sslContext.socketFactory
 

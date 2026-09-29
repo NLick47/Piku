@@ -47,3 +47,17 @@ internal class CachingAddressSource(
         return cache[hostname]?.takeIf { now < it.expiresAt }?.addresses.orEmpty()
     }
 }
+
+/**
+ * 内置固定 IP 来源：不解析任何域名，直接交出表里的地址。
+ * 防的是"投毒答案 + 自家域名解析失效"两条路都断掉的情况，仍然要过 TLS 校验才可用。
+ */
+internal class StaticAddressSource(
+    private val table: Map<String, List<String>> = DoHDns.STATIC_ADDRESSES,
+) : AddressSource, NamedAddressSource {
+
+    override val name: String = DoHDns.STATIC_SOURCE_NAME
+
+    override fun resolve(hostname: String): List<InetAddress> =
+        table[hostname].orEmpty().mapNotNull { runCatching { InetAddress.getByName(it) }.getOrNull() }
+}

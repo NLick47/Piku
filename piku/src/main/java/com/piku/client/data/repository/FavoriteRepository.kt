@@ -10,10 +10,14 @@ import com.piku.client.data.local.FavoriteFolderEntity
 import com.piku.client.data.local.FavoriteMembershipEntity
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.data.local.toFavoriteEntity
+import com.piku.client.data.local.toSyncWork
 import com.piku.client.data.local.toWork
 import com.piku.client.domain.model.FavoriteFolder
 import com.piku.client.domain.model.FolderSort
 import com.piku.client.domain.model.Work
+import com.piku.client.domain.model.WorkKey
+import com.piku.client.domain.model.WorkSource
+import com.piku.client.domain.model.key
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -96,13 +100,12 @@ class FavoriteRepository @Inject constructor(
     }
 
     /**
-     * 收藏 id 集合。「收藏」状态被详情、历史、标签、搜索、首屏等多个界面同时订阅，
-     * shareIn 让一次查询 + 一次 Set 构建喂给所有订阅方；无人订阅一段时间后上游停掉，
-     * 下次订阅由 Room 重新查一遍，不会长期留着脏值。
+     * 收藏键集合。键是 (source, workId)：各源 id 空间互不相通，poipiku 作品 123 与
+     * pixiv 插图 123 是两条收藏。shareIn 让一次查询 + 一次 Set 构建喂给所有订阅方。
      */
-    fun observeFavoriteIds(): Flow<Set<Long>> =
+    fun observeFavoriteIds(): Flow<Set<WorkKey>> =
         favoriteFolderDao.observeAllFavoriteIds()
-            .map { ids -> ids.mapNotNull { it.toLongOrNull() }.toSet() }
+            .map { rows -> rows.mapTo(mutableSetOf()) { WorkKey(it.source, it.workId) } }
             .shareIn(scope, SharingStarted.WhileSubscribed(FAVORITE_IDS_KEEP_ALIVE_MS), replay = 1)
 
     fun observeFavorites(): Flow<List<Work>> =
@@ -159,16 +162,15 @@ class FavoriteRepository @Inject constructor(
         return source.map { list -> list.map { it.toWork() } }
     }
 
-    fun observeWorkFolderIds(workId: Long): Flow<Set<Long>> =
-        favoriteFolderDao.observeFolderIdsForWork(workId.toString()).map { it.toSet() }
+    fun observeWorkFolderIds(key: WorkKey): Flow<Set<Long>> =
+        favoriteFolderDao.observeFolderIdsForWork(key.source, key.workId).map { it.toSet() }
 
     suspend fun toggleFavorite(work: Work): Boolean {
-        val workId = work.id.toString()
         val defaultFolderId = ensureDefaultFolder()
         // 判定与写入必须在同一个事务里：否则两次快速点击会各自读到旧状态，双双走同一条分支
         val added = database.withTransaction {
-            if (defaultFolderId in favoriteFolderDao.folderIdsForWork(workId)) {
-                removeFromFolder(workId, defaultFolderId)
+            if (defaultFolderId in favoriteFolderDao.folderIdsForWork(work.source, work.id.toString())) {
+                removeFromFolder(work.source, work.id.toString(), defaultFolderId)
                 false
             } else {
                 addToFolder(work, defaultFolderId)
@@ -180,10 +182,9 @@ class FavoriteRepository @Inject constructor(
     }
 
     suspend fun toggleFolder(work: Work, folderId: Long) {
-        val workId = work.id.toString()
         database.withTransaction {
-            if (folderId in favoriteFolderDao.folderIdsForWork(workId)) {
-                removeFromFolder(workId, folderId)
+            if (folderId in favoriteFolderDao.folderIdsForWork(work.source, work.id.toString())) {
+                removeFromFolder(work.source, work.id.toString(), folderId)
             } else {
                 addToFolder(work, folderId)
             }
@@ -241,22 +242,22 @@ class FavoriteRepository @Inject constructor(
     }
 
     private suspend fun addToFolder(work: Work, folderId: Long) {
-        val workId = work.id.toString()
         favoriteDao.upsert(work.toFavoriteEntity())
         favoriteFolderDao.upsertMembership(
             FavoriteMembershipEntity(
                 folderId = folderId,
-                workId = workId,
+                source = work.source,
+                workId = work.id.toString(),
                 addedAt = System.currentTimeMillis(),
             ),
         )
     }
 
-    suspend fun removeFromFolder(workId: String, folderId: Long) {
-        favoriteFolderDao.deleteMembership(folderId, workId)
-        val remaining = favoriteFolderDao.folderIdsForWork(workId)
+    private suspend fun removeFromFolder(source: WorkSource, workId: String, folderId: Long) {
+        favoriteFolderDao.deleteMembership(folderId, source, workId)
+        val remaining = favoriteFolderDao.folderIdsForWork(source, workId)
         if (remaining.isEmpty()) {
-            favoriteDao.delete(workId)
+            favoriteDao.delete(source, workId)
         }
     }
 
@@ -270,24 +271,23 @@ class FavoriteRepository @Inject constructor(
     suspend fun addWorksToFolder(works: List<Work>, folderId: Long): CollectionEdit {
         if (works.isEmpty()) return CollectionEdit()
         val edit = database.withTransaction {
-            val workIds = works.map { it.id.toString() }
-            val alreadyInFolder = membershipsIn(folderId, workIds)
-                .map { it.workId }
-                .toSet()
-            val targets = works.filterNot { it.id.toString() in alreadyInFolder }
+            val keys = works.map { it.key }
+            val alreadyInFolder = membershipsIn(folderId, keys)
+                .mapTo(mutableSetOf()) { WorkKey(it.source, it.workId) }
+            val targets = works.filterNot { it.key in alreadyInFolder }
             if (targets.isEmpty()) return@withTransaction CollectionEdit()
 
             // 作品已在别的收藏夹里时保留原 addedAt（收藏时间），只有首次收藏才写新时间
-            val existingFavorites = favoritesByIds(workIds).associateBy { it.workId }
+            val existingFavorites = favoritesByKeys(keys).associateBy { WorkKey(it.source, it.workId) }
             val now = System.currentTimeMillis()
             val added = mutableListOf<FavoriteMembershipEntity>()
             for ((index, work) in targets.withIndex()) {
-                val workId = work.id.toString()
-                favoriteDao.upsert(existingFavorites[workId] ?: work.toFavoriteEntity(now + index))
+                favoriteDao.upsert(existingFavorites[work.key] ?: work.toFavoriteEntity(now + index))
                 // 同一批内 addedAt 递增，保证批量添加后夹内顺序稳定（列表按 addedAt 倒序）
                 val membership = FavoriteMembershipEntity(
                     folderId = folderId,
-                    workId = workId,
+                    source = work.source,
+                    workId = work.id.toString(),
                     addedAt = now + index,
                 )
                 favoriteFolderDao.upsertMembership(membership)
@@ -310,27 +310,27 @@ class FavoriteRepository @Inject constructor(
     ): CollectionEdit {
         if (works.isEmpty() || fromFolderId == toFolderId) return CollectionEdit()
         val edit = database.withTransaction {
-            val workIds = works.map { it.id.toString() }
-            val fromMemberships = membershipsIn(fromFolderId, workIds)
+            val keys = works.map { it.key }
+            val fromMemberships = membershipsIn(fromFolderId, keys)
             if (fromMemberships.isEmpty()) return@withTransaction CollectionEdit()
 
-            val backedUp = favoritesByIds(workIds)
-            val alreadyInTarget = membershipsIn(toFolderId, workIds)
-                .map { it.workId }
-                .toSet()
-            val movedIds = fromMemberships.map { it.workId }
+            val backedUp = favoritesByKeys(keys)
+            val movedKeys = fromMemberships.map { WorkKey(it.source, it.workId) }
+            val alreadyInTarget = membershipsIn(toFolderId, movedKeys)
+                .mapTo(mutableSetOf()) { WorkKey(it.source, it.workId) }
             val now = System.currentTimeMillis()
             val inserted = mutableListOf<FavoriteMembershipEntity>()
-            for ((index, workId) in movedIds.filterNot { it in alreadyInTarget }.withIndex()) {
+            for ((index, key) in movedKeys.filterNot { it in alreadyInTarget }.withIndex()) {
                 val membership = FavoriteMembershipEntity(
                     folderId = toFolderId,
-                    workId = workId,
+                    source = key.source,
+                    workId = key.workId,
                     addedAt = now + index,
                 )
                 favoriteFolderDao.upsertMembership(membership)
                 inserted += membership
             }
-            deleteMembershipsIn(fromFolderId, movedIds)
+            deleteMembershipsIn(fromFolderId, movedKeys)
             CollectionEdit(
                 restored = fromMemberships,
                 removed = inserted,
@@ -345,14 +345,14 @@ class FavoriteRepository @Inject constructor(
      * 批量移出收藏夹；作品不再属于任何收藏夹时同时取消收藏。
      * 返回的快照含作品行备份，撤销可以把它们原样恢复。
      */
-    suspend fun removeWorksFromFolder(workIds: List<String>, folderId: Long): CollectionEdit {
-        if (workIds.isEmpty()) return CollectionEdit()
+    suspend fun removeWorksFromFolder(keys: List<WorkKey>, folderId: Long): CollectionEdit {
+        if (keys.isEmpty()) return CollectionEdit()
         val edit = database.withTransaction {
-            val memberships = membershipsIn(folderId, workIds)
+            val memberships = membershipsIn(folderId, keys)
             if (memberships.isEmpty()) return@withTransaction CollectionEdit()
-            val backedUp = favoritesByIds(workIds)
-            deleteMembershipsIn(folderId, workIds)
-            deleteOrphanFavorites(workIds)
+            val backedUp = favoritesByKeys(keys)
+            deleteMembershipsIn(folderId, keys)
+            deleteOrphanFavorites(keys)
             CollectionEdit(restored = memberships, favoriteBackups = backedUp)
         }
         if (!edit.isEmpty) triggerAutoSync()
@@ -367,7 +367,7 @@ class FavoriteRepository @Inject constructor(
     suspend fun undoCollectionEdit(edit: CollectionEdit) {
         if (edit.isEmpty) return
         database.withTransaction {
-            edit.removed.forEach { favoriteFolderDao.deleteMembership(it.folderId, it.workId) }
+            edit.removed.forEach { favoriteFolderDao.deleteMembership(it.folderId, it.source, it.workId) }
             edit.favoriteBackups.forEach { favoriteDao.upsert(it) }
             edit.restored.forEach { favoriteFolderDao.upsertMembership(it) }
             // 取消「添加」后可能留下不再属于任何收藏夹的作品行，兜底清一次
@@ -381,14 +381,14 @@ class FavoriteRepository @Inject constructor(
      * 「全部收藏」视图里的「移出」只能理解成取消收藏——那里没有"当前收藏夹"可移出。
      * 快照保留了全部归属，撤销能把作品连同它原本所在的每个收藏夹一起恢复。
      */
-    suspend fun unfavoriteWorks(workIds: List<String>): CollectionEdit {
-        if (workIds.isEmpty()) return CollectionEdit()
+    suspend fun unfavoriteWorks(keys: List<WorkKey>): CollectionEdit {
+        if (keys.isEmpty()) return CollectionEdit()
         val edit = database.withTransaction {
-            val memberships = membershipsForWorks(workIds)
+            val memberships = membershipsForKeys(keys)
             if (memberships.isEmpty()) return@withTransaction CollectionEdit()
-            val backedUp = favoritesByIds(workIds)
-            deleteMembershipsForWorks(workIds)
-            favoriteDao.deleteOrphansByIds(workIds)
+            val backedUp = favoritesByKeys(keys)
+            deleteMembershipsForKeys(keys)
+            deleteOrphanFavorites(keys)
             CollectionEdit(restored = memberships, favoriteBackups = backedUp)
         }
         if (!edit.isEmpty) triggerAutoSync()
@@ -402,30 +402,30 @@ class FavoriteRepository @Inject constructor(
     suspend fun moveWorksFromAllFolders(works: List<Work>, toFolderId: Long): CollectionEdit {
         if (works.isEmpty()) return CollectionEdit()
         val edit = database.withTransaction {
-            val workIds = works.map { it.id.toString() }
-            val memberships = membershipsForWorks(workIds)
+            val keys = works.map { it.key }
+            val memberships = membershipsForKeys(keys)
             val leaving = memberships.filterNot { it.folderId == toFolderId }
             // 本来就在目标夹里（且没有其他归属），没什么可收拢的
             if (leaving.isEmpty()) return@withTransaction CollectionEdit()
 
-            val backedUp = favoritesByIds(workIds)
+            val backedUp = favoritesByKeys(keys)
             val alreadyInTarget = memberships.filter { it.folderId == toFolderId }
-                .map { it.workId }
-                .toSet()
+                .mapTo(mutableSetOf()) { WorkKey(it.source, it.workId) }
             val now = System.currentTimeMillis()
             val inserted = mutableListOf<FavoriteMembershipEntity>()
-            for ((index, work) in works.filterNot { it.id.toString() in alreadyInTarget }.withIndex()) {
+            for ((index, work) in works.filterNot { it.key in alreadyInTarget }.withIndex()) {
                 val membership = FavoriteMembershipEntity(
                     folderId = toFolderId,
+                    source = work.source,
                     workId = work.id.toString(),
                     addedAt = now + index,
                 )
                 favoriteFolderDao.upsertMembership(membership)
                 inserted += membership
             }
-            // 逐个来源夹删除：SQL 的 IN 只作用在 workId 上，来源夹各不相同
+            // 逐个来源夹删除：SQL 的 IN 只作用在键上，来源夹各不相同
             leaving.groupBy { it.folderId }.forEach { (folderId, group) ->
-                deleteMembershipsIn(folderId, group.map { it.workId })
+                deleteMembershipsIn(folderId, group.map { WorkKey(it.source, it.workId) })
             }
             CollectionEdit(
                 restored = leaving,
@@ -445,28 +445,44 @@ class FavoriteRepository @Inject constructor(
 
     // IN 子句分片：SQLite 的变量上限在旧系统上只有 999（API 26 对应 SQLite 3.18），
     // 「全选」一个大收藏夹会一次塞进上千个 workId，不分片会直接抛 too many SQL variables。
-    private suspend fun membershipsIn(
-        folderId: Long,
-        workIds: List<String>,
-    ): List<FavoriteMembershipEntity> =
-        workIds.chunked(SQL_VAR_LIMIT).flatMap { favoriteFolderDao.membershipsIn(folderId, it) }
+    // 跨源的键先按源分组：单条 SQL 的 IN 只作用在单一 source 上，各源自成一片。
+    private suspend fun membershipsIn(folderId: Long, keys: List<WorkKey>): List<FavoriteMembershipEntity> =
+        keys.groupBy { it.source }.flatMap { (source, ks) ->
+            ks.map { it.workId }.chunked(SQL_VAR_LIMIT)
+                .flatMap { favoriteFolderDao.membershipsIn(folderId, source, it) }
+        }
 
-    private suspend fun favoritesByIds(workIds: List<String>): List<FavoriteEntity> =
-        workIds.chunked(SQL_VAR_LIMIT).flatMap { favoriteDao.favoritesByIds(it) }
+    private suspend fun favoritesByKeys(keys: List<WorkKey>): List<FavoriteEntity> =
+        keys.groupBy { it.source }.flatMap { (source, ks) ->
+            ks.map { it.workId }.chunked(SQL_VAR_LIMIT)
+                .flatMap { favoriteDao.favoritesByIds(source, it) }
+        }
 
-    private suspend fun deleteMembershipsIn(folderId: Long, workIds: List<String>) {
-        workIds.chunked(SQL_VAR_LIMIT).forEach { favoriteFolderDao.deleteMemberships(folderId, it) }
+    private suspend fun deleteMembershipsIn(folderId: Long, keys: List<WorkKey>) {
+        keys.groupBy { it.source }.forEach { (source, ks) ->
+            ks.map { it.workId }.chunked(SQL_VAR_LIMIT)
+                .forEach { favoriteFolderDao.deleteMemberships(folderId, source, it) }
+        }
     }
 
-    private suspend fun deleteOrphanFavorites(workIds: List<String>) {
-        workIds.chunked(SQL_VAR_LIMIT).forEach { favoriteDao.deleteOrphansByIds(it) }
+    private suspend fun deleteOrphanFavorites(keys: List<WorkKey>) {
+        keys.groupBy { it.source }.forEach { (source, ks) ->
+            ks.map { it.workId }.chunked(SQL_VAR_LIMIT)
+                .forEach { favoriteDao.deleteOrphansByIds(source, it) }
+        }
     }
 
-    private suspend fun membershipsForWorks(workIds: List<String>): List<FavoriteMembershipEntity> =
-        workIds.chunked(SQL_VAR_LIMIT).flatMap { favoriteDao.membershipsForWorks(it) }
+    private suspend fun membershipsForKeys(keys: List<WorkKey>): List<FavoriteMembershipEntity> =
+        keys.groupBy { it.source }.flatMap { (source, ks) ->
+            ks.map { it.workId }.chunked(SQL_VAR_LIMIT)
+                .flatMap { favoriteDao.membershipsForWorks(source, it) }
+        }
 
-    private suspend fun deleteMembershipsForWorks(workIds: List<String>) {
-        workIds.chunked(SQL_VAR_LIMIT).forEach { favoriteDao.deleteMembershipsForWorks(it) }
+    private suspend fun deleteMembershipsForKeys(keys: List<WorkKey>) {
+        keys.groupBy { it.source }.forEach { (source, ks) ->
+            ks.map { it.workId }.chunked(SQL_VAR_LIMIT)
+                .forEach { favoriteDao.deleteMembershipsForWorks(source, it) }
+        }
     }
 
     /**

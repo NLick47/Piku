@@ -20,6 +20,7 @@
 //
 // 客户端改写：
 //   图片  https://cdn.poipiku.com/<path> -> https://<你的域名>/<path>
+//   pixiv 图 https://i.pximg.net/<path>   -> https://<你的域名>/pximg/<path>
 //   接口  https://www.pixiv.net/         -> https://<你的域名>/px/
 //   DoH   https://<你的域名>/dns-query
 
@@ -27,6 +28,10 @@ const IMAGE_UPSTREAM = "https://cdn.poipiku.com";
 const IMAGE_REFERER = "https://poipiku.com/";
 const PIXIV_UPSTREAM = "https://www.pixiv.net";
 const PIXIV_PREFIX = "/px";
+/** pixiv 图床：直连只有几十 KB/s，大图必然超时，走边缘回源快 6–8 倍 */
+const PIXIV_IMG_UPSTREAM = "https://i.pximg.net";
+const PIXIV_IMG_PREFIX = "/pximg";
+const PIXIV_IMG_REFERER = "https://www.pixiv.net/";
 const DOH_UPSTREAM = "https://cloudflare-dns.com/dns-query";
 
 const CACHE_TTL = 604800; // 图片：内容不可变，7 天
@@ -54,6 +59,9 @@ export default {
     if (url.pathname === "/dns-query") return doh(request);
     if (url.pathname === PIXIV_PREFIX || url.pathname.startsWith(PIXIV_PREFIX + "/")) {
       return pixiv(request, url, ctx);
+    }
+    if (url.pathname === PIXIV_IMG_PREFIX || url.pathname.startsWith(PIXIV_IMG_PREFIX + "/")) {
+      return pixivImage(request, url, ctx);
     }
     return image(request, url, ctx);
   },
@@ -130,6 +138,51 @@ async function pixiv(request, url, ctx) {
   if (cacheable && origin.ok && !origin.headers.get("Set-Cookie")) {
     ctx.waitUntil(caches.default.put(cacheKey, resp.clone()));
   }
+  return withCors(resp);
+}
+
+/**
+ * pixiv 图床回源：Referer 必须是站点页（图床防盗链）；**不转发客户端 Cookie**
+ * （客户端带的是 poipiku 会话）；图片不可变，成功响应打 7 天缓存。
+ */
+async function pixivImage(request, url, ctx) {
+  const path = url.pathname.slice(PIXIV_IMG_PREFIX.length) || "/";
+  const upstreamUrl = PIXIV_IMG_UPSTREAM + path + url.search;
+  const cacheable = request.method === "GET" || request.method === "HEAD";
+  const cache = caches.default;
+  const cacheKey = new Request(upstreamUrl, { method: "GET" });
+
+  if (cacheable) {
+    const hit = await cache.match(cacheKey);
+    if (hit) return withCors(hit);
+  }
+
+  const headers = {
+    "User-Agent": "Mozilla/5.0",
+    "Referer": PIXIV_IMG_REFERER,
+    "Accept": "image/avif,image/webp,image/*,*/*;q=0.8",
+  };
+
+  let origin;
+  try {
+    origin = await fetch(upstreamUrl, { method: request.method, headers });
+  } catch (e) {
+    return new Response("pximg upstream error: " + e.message, { status: 502, headers: CORS });
+  }
+
+  const h = new Headers(origin.headers);
+  if (origin.ok) {
+    h.set("Cache-Control", `public, max-age=${CACHE_TTL}, immutable`);
+  } else {
+    h.set("Cache-Control", "no-store");
+  }
+  const resp = new Response(origin.body, {
+    status: origin.status,
+    statusText: origin.statusText,
+    headers: h,
+  });
+
+  if (cacheable && origin.ok) ctx.waitUntil(cache.put(cacheKey, resp.clone()));
   return withCors(resp);
 }
 

@@ -6,6 +6,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.piku.client.R
 import com.piku.client.data.local.SettingsRepository
+import com.piku.client.data.remote.ImageRouteController
+import com.piku.client.data.remote.ImageUpstream
 import com.piku.client.data.remote.translation.ImageTranslateEngine
 import com.piku.client.data.remote.translation.ImageTranslateResult
 import com.piku.client.data.remote.translation.ImageTranslationPrompts
@@ -17,8 +19,8 @@ import com.piku.client.domain.model.WorkDetail
 import com.piku.client.domain.model.mergeTranslatedFields
 import com.piku.client.domain.source.SourceRegistry
 import com.piku.client.domain.source.SourceWorkPage
-import com.piku.client.domain.usecase.ObserveHomeSourceUseCase
 import com.piku.client.domain.usecase.ObserveLanguageUseCase
+import com.piku.client.domain.usecase.RecordHistoryUseCase
 import com.piku.client.ui.detail.DetailViewModel
 import com.piku.client.ui.detail.ViewerImage
 import com.piku.client.ui.detail.TranslateField
@@ -33,6 +35,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import javax.inject.Inject
@@ -41,7 +44,7 @@ import javax.inject.Named
 @HiltViewModel
 class SourceWorkDetailViewModel @Inject constructor(
     private val sourceRegistry: SourceRegistry,
-    observeHomeSourceUseCase: ObserveHomeSourceUseCase,
+    private val recordHistoryUseCase: RecordHistoryUseCase,
     private val translationRepository: TranslationRepository,
     private val imageTranslateEngine: ImageTranslateEngine,
     private val modelCatalogRepository: ModelCatalogRepository,
@@ -50,12 +53,11 @@ class SourceWorkDetailViewModel @Inject constructor(
     private val imageSaver: com.piku.client.data.local.ImageSaver,
     private val imageShareHelper: com.piku.client.data.local.ImageShareHelper,
     @Named("image") private val imageClient: OkHttpClient,
+    private val imageRouteController: ImageRouteController,
 ) : ViewModel() {
 
     /** 保存/分享结果的就地提示，由宿主 SnackbarHost 呈现（与 poipiku 详情同款通道） */
     val feedback = com.piku.client.ui.common.FeedbackChannel()
-
-    private val homeSource = observeHomeSourceUseCase()
 
     data class UiState(
         val loading: Boolean = true,
@@ -78,7 +80,7 @@ class SourceWorkDetailViewModel @Inject constructor(
     ) {
         val hasTranslation: Boolean get() = detail?.translated?.hasAny == true
 
-        /** 与 poipiku 详情同构：缩略打底 + 原图覆盖 */
+        /** 与 poipiku 详情同构：轻量档打底 + 清晰档覆盖（pixiv 是 540 打底、1200 覆盖，原图只走保存） */
         val viewerImages: List<ViewerImage>
             get() = pages.map { page ->
                 ViewerImage(
@@ -119,7 +121,8 @@ class SourceWorkDetailViewModel @Inject constructor(
         imageTranslateJob?.cancel()
         _ui.value = UiState()
         viewModelScope.launch {
-            val source = sourceRegistry.byId(homeSource.first())
+            // 按作品自己的源取页：跨源列表（收藏/历史）点进来的作品不必等于当前首页源
+            val source = sourceRegistry.byId(work.source)
             val pages = source.workPages(work)
             val text = source.workDetailText(work).getOrNull()
             pages.fold(
@@ -135,11 +138,13 @@ class SourceWorkDetailViewModel @Inject constructor(
                         authorAvatarUrl = work.authorAvatarUrl.orEmpty(),
                         categoryCd = -1,
                         categoryName = "",
-                        imageUrls = list.map { it.url },
+                        imageUrls = inlineImageUrls(list, upgradeToFull = worthUpgradingInline(list, imageRouteController)),
                         tags = text?.tags.orEmpty(),
                         r18 = work.r18,
                     )
                     _ui.update { it.copy(loading = false, detail = detail, pages = list) }
+                    // 与 poipiku 详情一致：打开即记历史（upsert 去重）
+                    recordHistoryUseCase(work)
                     // 与 poipiku 详情一致：开了 AI 翻译就自动译一次（失败静默）
                     if (settingsRepository.aiTranslateEnabled.value) translate()
                 },
@@ -205,7 +210,7 @@ class SourceWorkDetailViewModel @Inject constructor(
         if (_ui.value.savingImage) return
         viewModelScope.launch {
             _ui.update { it.copy(savingImage = true) }
-            val url = item.fullUrl.ifBlank { item.url }
+            val url = item.originalUrl.ifBlank { item.fullUrl }.ifBlank { item.url }
             val result = runCatching { imageSaver.save(url, "Piku_${loadedWorkId}_${page + 1}") }
             _ui.update { it.copy(savingImage = false) }
             feedback.show(
@@ -225,7 +230,7 @@ class SourceWorkDetailViewModel @Inject constructor(
             try {
             var ok = 0
             pages.forEachIndexed { index, item ->
-                val url = item.fullUrl.ifBlank { item.url }
+                val url = item.originalUrl.ifBlank { item.fullUrl }.ifBlank { item.url }
                 val result = runCatching { imageSaver.save(url, "Piku_${loadedWorkId}_${index + 1}") }
                 if (result.isSuccess) ok += 1
             }
@@ -252,7 +257,7 @@ class SourceWorkDetailViewModel @Inject constructor(
         shareJob = viewModelScope.launch {
             _ui.update { it.copy(sharingImage = true, sharingTargetPackage = targetPackage) }
             try {
-                val uri = imageShareHelper.getImageUri(item.url, loadedWorkId, page)
+                val uri = imageShareHelper.getImageUri(item.fullUrl.ifBlank { item.url }, loadedWorkId, page)
                 _ui.update { it.copy(sharingImage = false, sharingTargetPackage = null) }
                 _shareRequest.value = DetailViewModel.ImageShareRequest(
                     uri = uri,
@@ -393,3 +398,18 @@ class SourceWorkDetailViewModel @Inject constructor(
         return ImageTranslationPrompts.prompt(targetLang)
     }
 }
+
+/** 内联图区按档取图：默认打底档，实测放行才升清晰档；档位缺失逐级退，原图只留给保存 */
+internal fun inlineImageUrls(pages: List<SourceWorkPage>, upgradeToFull: Boolean): List<String> =
+    pages.mapNotNull { page ->
+        val first = if (upgradeToFull) page.fullUrl else page.url
+        val second = if (upgradeToFull) page.url else page.fullUrl
+        first.ifBlank { second }.ifBlank { null }
+    }
+
+/** 升不升清晰档由各图自己上游的实测说了算：认不出主机或没读数都停在打底档 */
+internal fun worthUpgradingInline(pages: List<SourceWorkPage>, controller: ImageRouteController): Boolean =
+    pages.isNotEmpty() && pages.all { page ->
+        val upstream = page.fullUrl.toHttpUrlOrNull()?.host?.let(ImageUpstream::of)
+        upstream != null && controller.worthFullImageInline(upstream)
+    }

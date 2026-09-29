@@ -20,6 +20,8 @@ import com.piku.client.domain.model.FavoriteSyncData
 import com.piku.client.domain.model.SyncFolder
 import com.piku.client.domain.model.SyncMembership
 import com.piku.client.domain.model.SyncTombstone
+import com.piku.client.domain.model.WorkKey
+import com.piku.client.domain.model.WorkSource
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -312,8 +314,8 @@ class WebDavSyncRepository @Inject constructor(
         },
         works = localFavorites.map { it.toSyncWork() },
         memberships = localMemberships.map { (_, m) ->
-            SyncMembership(folderId = m.folderId, workId = m.workId, addedAt = m.addedAt)
-        }.distinctBy { it.folderId to it.workId },
+            SyncMembership(folderId = m.folderId, source = m.source.name, workId = m.workId, addedAt = m.addedAt)
+        }.distinctBy { Triple(it.folderId, it.source, it.workId) },
     )
 
     private suspend fun uploadMetadata(url: String, credentials: String, data: FavoriteSyncData) {
@@ -337,8 +339,11 @@ class WebDavSyncRepository @Inject constructor(
                         favoriteFolderDao.deleteFolder(folder.id)
                     }
 
-                    SyncTombstone.KIND_MEMBERSHIP ->
-                        favoriteFolderDao.deleteMembership(folder.id, tombstone.workId)
+                    SyncTombstone.KIND_MEMBERSHIP -> {
+                        // 未知源本地永远没写过，无归属可删，跳过
+                        val source = tombstone.workSource ?: continue
+                        favoriteFolderDao.deleteMembership(folder.id, source, tombstone.workId)
+                    }
                 }
             }
 
@@ -367,8 +372,11 @@ class WebDavSyncRepository @Inject constructor(
             }
 
             for (work in data.works) {
+                // 未知源（更新版本客户端写入的）本地写不进去，云端保留原样
+                val source = work.workSource ?: continue
                 favoriteDao.upsert(
                     FavoriteEntity(
+                        source = source,
                         workId = work.workId,
                         authorId = work.authorId,
                         title = work.title,
@@ -384,9 +392,11 @@ class WebDavSyncRepository @Inject constructor(
             }
 
             for (membership in data.memberships) {
+                val source = membership.workSource ?: continue
                 favoriteFolderDao.upsertMembership(
                     FavoriteMembershipEntity(
                         folderId = membership.folderId,
+                        source = source,
                         workId = membership.workId,
                         addedAt = membership.addedAt,
                     ),
@@ -407,12 +417,17 @@ class WebDavSyncRepository @Inject constructor(
         credentials: String,
         data: FavoriteSyncData,
     ): Int {
-        val historyIds = historyDao.observeSince(0).first().map { it.workId }.toSet()
+        // 内容备份走 poipiku 接口，只处理 poipiku 源的作品；
+        // 历史与收藏都按 (source, workId) 配对，避免两源数字 id 撞车误判「已浏览」
+        val historyKeys = historyDao.observeSince(0).first()
+            .mapTo(mutableSetOf()) { WorkKey(it.source, it.workId) }
         // 本地 contentBackedUp = false 才需要尝试，避免对已经备份过的作品再发请求。
         val localBackedUp = favoriteDao.observeAll().first()
-            .associate { it.workId to it.contentBackedUp }
+            .associate { WorkKey(it.source, it.workId) to it.contentBackedUp }
         val worksToBackup = data.works.filter {
-            it.workId in historyIds && !(localBackedUp[it.workId] ?: it.contentBackedUp)
+            it.workSource == WorkSource.POIPIKU &&
+                WorkKey(WorkSource.POIPIKU, it.workId) in historyKeys &&
+                !(localBackedUp[WorkKey(WorkSource.POIPIKU, it.workId)] ?: it.contentBackedUp)
         }
         if (worksToBackup.isEmpty()) return 0
 
@@ -445,7 +460,7 @@ class WebDavSyncRepository @Inject constructor(
                 }
 
                 if (anyUploaded) {
-                    favoriteDao.setContentBackedUp(work.workId, true)
+                    favoriteDao.setContentBackedUp(WorkSource.POIPIKU, work.workId, true)
                     backedUpCount++
                 }
             } catch (e: CancellationException) {
@@ -463,6 +478,7 @@ class WebDavSyncRepository @Inject constructor(
     private fun buildWorkFolderIndex(data: FavoriteSyncData): Map<String, List<String>> {
         val folderNamesById = data.folders.associate { it.id to it.name }
         return data.memberships
+            .filter { it.workSource == WorkSource.POIPIKU }
             .groupBy { it.workId }
             .mapValues { (_, ms) ->
                 ms.mapNotNull { folderNamesById[it.folderId] }

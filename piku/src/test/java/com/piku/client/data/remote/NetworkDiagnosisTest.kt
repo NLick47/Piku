@@ -170,8 +170,8 @@ class NetworkDiagnosisTest {
                 atMillis = now,
             ),
         )
-        routeController.relayHealth.onFailure(ImageRelayInterceptor.RELAY_HOSTS[0])
-        routeController.relayHealth.onSuccess(ImageRelayInterceptor.RELAY_HOSTS[1])
+        routeController.relayHealth(ImageUpstream.POIPIKU).onFailure(ImageRelayInterceptor.RELAY_HOSTS[0])
+        routeController.relayHealth(ImageUpstream.POIPIKU).onSuccess(ImageRelayInterceptor.RELAY_HOSTS[1])
         val dns = dns(AddressProbe { _, _ -> ProbeReport.ok() })
         runCatching { dns.lookup(HOST) }
 
@@ -179,11 +179,14 @@ class NetworkDiagnosisTest {
             .report("9.9.9", environment, live = false)
 
         assertTrue(report.contains("—— 图片线路 ——"))
-        assertTrue(report.contains("模式 自动（AUTO）   当前 走中转"))
-        assertTrue(report.contains("最近判定 切到中转｜启动探测：直连不可用｜"))
-        assertTrue(report.contains("启动探测 直连不可用｜312ms（SocketTimeoutException: connect timed out）"))
-        assertTrue(report.contains("${ImageRelayInterceptor.RELAY_HOSTS[1]}  第 1 位  健康"))
-        assertTrue(report.contains("${ImageRelayInterceptor.RELAY_HOSTS[0]}  第 2 位  健康（累计失败 1 次）"))
+        assertTrue(report.contains("模式 自动（AUTO）"))
+        assertTrue(report.contains("${ImageUpstream.POIPIKU.host}  走中转"))
+        assertTrue(report.contains("最近判定 切到中转｜探测：直连不可用｜"))
+        assertTrue(report.contains("启动探测（poipiku 直连）直连不可用｜312ms（SocketTimeoutException: connect timed out）"))
+        assertTrue(report.contains("中转 ${ImageRelayInterceptor.RELAY_HOSTS[1]}  第 1 位  健康"))
+        assertTrue(report.contains("中转 ${ImageRelayInterceptor.RELAY_HOSTS[0]}  第 2 位  健康（累计失败 1 次）"))
+        // 两条上游各有一份独立状态
+        assertTrue(report.contains("${ImageUpstream.PIXIV.host}  走直连"))
     }
 
     @Test
@@ -194,9 +197,10 @@ class NetworkDiagnosisTest {
         val report = diagnosis(dns, probe).report("9.9.9", environment, live = true)
 
         assertTrue(report.contains("—— 图片线路（实时探测）——"))
-        assertTrue(report.contains("直连 ${ImageRelayInterceptor.CDN_HOST}  可用"))
-        assertTrue(report.contains("中转 ${ImageRelayInterceptor.RELAY_HOSTS[0]}  可用"))
-        assertTrue(report.contains("中转 ${ImageRelayInterceptor.RELAY_HOSTS[1]}  可用"))
+        assertTrue(report.contains("直连 ${ImageUpstream.POIPIKU.host}  可用"))
+        assertTrue(report.contains("中转 ${ImageRelayInterceptor.RELAY_HOSTS[0]}（${ImageUpstream.POIPIKU.host}）  可用"))
+        assertTrue(report.contains("中转 ${ImageRelayInterceptor.RELAY_HOSTS[1]}（${ImageUpstream.POIPIKU.host}）  可用"))
+        assertTrue("pixiv 那条也要探", report.contains("直连 ${ImageUpstream.PIXIV.host}  可用"))
     }
 
     @Test
@@ -305,7 +309,7 @@ class NetworkDiagnosisTest {
             relay = true,
         )
         imageDiagnostics.recordAttempt(
-            host = ImageRelayInterceptor.CDN_HOST,
+            host = ImageUpstream.POIPIKU.host,
             path = "/img/67890_360.jpg",
             outcome = ImageDiagnostics.Outcome.CONNECT_FAILED,
             detail = "SocketTimeoutException",
@@ -322,7 +326,7 @@ class NetworkDiagnosisTest {
         assertTrue(report.contains("线路：直连 1  中转 1（pic-relay.cyou 1）"))
         assertTrue(report.contains("中转 pic-relay.cyou/img/12345_360.jpg"))
         assertTrue(report.contains("握手/连接被重置（常见于 SNI 阻断）  218ms"))
-        assertTrue(report.contains("直连 ${ImageRelayInterceptor.CDN_HOST}/img/67890_360.jpg"))
+        assertTrue(report.contains("直连 ${ImageUpstream.POIPIKU.host}/img/67890_360.jpg"))
     }
 
     @Test

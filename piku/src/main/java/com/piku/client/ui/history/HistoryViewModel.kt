@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.piku.client.domain.model.HistoryItem
 import com.piku.client.domain.model.HistoryTimeRange
 import com.piku.client.domain.model.Work
+import com.piku.client.domain.model.WorkKey
 import com.piku.client.domain.usecase.ClearHistoryUseCase
 import com.piku.client.domain.usecase.ObserveFavoriteIdsUseCase
 import com.piku.client.domain.usecase.ObserveHistoryUseCase
@@ -33,7 +34,7 @@ data class HistorySection(
 
 data class HistoryUiState(
     val sections: List<HistorySection> = emptyList(),
-    val favoriteIds: Set<Long> = emptySet(),
+    val favoriteIds: Set<WorkKey> = emptySet(),
     val selectedRange: HistoryTimeRange = HistoryTimeRange.ALL,
     val loaded: Boolean = false,
     /** 待恢复的删除条数：>0 时页面底部常驻撤销条，不自动消失 */
@@ -88,7 +89,7 @@ class HistoryViewModel @Inject constructor(
 
     fun remove(item: HistoryItem) {
         viewModelScope.launch {
-            removeHistoryUseCase(item.work.id)
+            removeHistoryUseCase(item.work)
             if (removedStack.size == MAX_UNDO) removedStack.removeFirst()
             removedStack.addLast(item)
             _uiState.update { it.copy(pendingRemovedCount = removedStack.size) }

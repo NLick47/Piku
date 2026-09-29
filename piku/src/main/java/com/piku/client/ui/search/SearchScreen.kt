@@ -88,6 +88,8 @@ import coil3.compose.AsyncImage
 import com.piku.client.R
 import com.piku.client.domain.model.FollowUser
 import com.piku.client.domain.model.TagCard
+import com.piku.client.domain.model.WorkKey
+import com.piku.client.domain.model.key
 import com.piku.client.domain.model.Work
 import com.piku.client.ui.common.FeedbackHost
 import com.piku.client.ui.common.FollowPillButton
@@ -1168,7 +1170,7 @@ private fun TagCardItem(
 @Composable
 private fun SearchWorkGrid(
     works: List<Work>,
-    favoriteIds: Set<Long>,
+    favoriteIds: Set<WorkKey>,
     isTablet: Boolean,
     loadingMore: Boolean,
     loadMoreErrorRes: Int?,
@@ -1209,7 +1211,7 @@ private fun SearchWorkGrid(
         items(works, key = { it.id }) { work ->
             WorkCard(
                 work = work,
-                isFavorite = work.id in favoriteIds,
+                isFavorite = work.key in favoriteIds,
                 onToggleFavorite = onToggleFavorite,
                 onClick = onWorkClick,
                 dark = dark,

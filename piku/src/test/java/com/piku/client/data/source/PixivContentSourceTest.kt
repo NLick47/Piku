@@ -15,6 +15,7 @@ import com.piku.client.data.remote.pixiv.PixivRankingResponse
 import com.piku.client.data.repository.PixivRepository
 import com.piku.client.data.repository.pixivTotalPages
 import com.piku.client.data.repository.toWork
+import com.piku.client.domain.source.SourceFacetStyle
 import kotlinx.coroutines.test.runTest
 import okhttp3.ResponseBody.Companion.toResponseBody
 import retrofit2.HttpException
@@ -79,7 +80,7 @@ class PixivContentSourceTest {
     @Test
     fun pageTranslatesZeroBasedPageToOneBasedApi() = runTest {
         val api = FakeApi()
-        source(api).page("daily", "all", 2)
+        source(api).page(PixivContentSource.FEED_RANKING, emptyMap(), 2)
 
         assertEquals(listOf(Triple("daily", "all", 3)), api.calls)
     }
@@ -93,7 +94,7 @@ class PixivContentSourceTest {
             )
         }
 
-        val page = source(api).page("daily", "all", 0).getOrThrow()
+        val page = source(api).page(PixivContentSource.FEED_RANKING, emptyMap(), 0).getOrThrow()
 
         val work = page.items.single()
         assertEquals(7L, work.id)
@@ -117,18 +118,22 @@ class PixivContentSourceTest {
         }
 
         val hidden = PixivContentSource(PixivRepository(api), settings)
-            .page("daily", "all", 0).getOrThrow()
+            .page(PixivContentSource.FEED_RANKING, emptyMap(), 0).getOrThrow()
         assertEquals(listOf(1L), hidden.items.map { it.id })
 
         settings.setShowAdultContent(true)
         val shown = PixivContentSource(PixivRepository(api), settings)
-            .page("daily", "all", 0).getOrThrow()
+            .page(PixivContentSource.FEED_RANKING, emptyMap(), 0).getOrThrow()
         assertEquals(listOf(1L, 2L, 3L), shown.items.map { it.id })
     }
 
-    /** 看图页走详情取页接口，取 regular（master1200）；缺 regular 才落 original */
+    /**
+     * 看图页走详情取页接口，按三档取：
+     * 打底 small(540) → 清晰 regular(master1200) → 原图只留给保存。
+     * 一开详情页就拉 master1200 是 1 MB 起步（原图 3 MB），这条线上直连要几十秒。
+     */
     @Test
-    fun workPagesTakeRegularUrlsFromPagesEndpoint() = runTest {
+    fun workPagesPickSmallForFirstPaintAndMasterForQuality() = runTest {
         val api = FakeApi().apply {
             pagesResponse = PixivPagesResponse(
                 body = listOf(
@@ -136,11 +141,13 @@ class PixivContentSourceTest {
                         width = 1200,
                         height = 900,
                         urls = PixivPageUrls(
+                            small = "https://i.pximg.net/c/540x540_70/img-master/a_p0_master1200.jpg",
                             regular = "https://i.pximg.net/img-master/a_p0_master1200.jpg",
                             original = "https://i.pximg.net/img-original/a_p0.png",
                         ),
                     ),
-                    PixivPage(urls = PixivPageUrls(regular = "", original = "https://i.pximg.net/img-original/b_p1.png")),
+                    // 只给原图的页：打底也要退到它，页面不能空
+                    PixivPage(urls = PixivPageUrls(original = "https://i.pximg.net/img-original/b_p1.png")),
                 ),
             )
         }
@@ -150,7 +157,7 @@ class PixivContentSourceTest {
 
         assertEquals(
             listOf(
-                "https://i.pximg.net/img-master/a_p0_master1200.jpg",
+                "https://i.pximg.net/c/540x540_70/img-master/a_p0_master1200.jpg",
                 "https://i.pximg.net/img-original/b_p1.png",
             ),
             pages.map { it.url },
@@ -158,8 +165,10 @@ class PixivContentSourceTest {
         // 尺寸随页返回：详情页图区按它定高
         assertEquals(1200, pages[0].width)
         assertEquals(900, pages[0].height)
-        // 原图随页返回：查看器按 poipiku 同款「缩略打底 + 原图覆盖」
-        assertEquals("https://i.pximg.net/img-original/a_p0.png", pages[0].fullUrl)
+        // 清晰档：查看器覆盖、图片翻译、分享都用它
+        assertEquals("https://i.pximg.net/img-master/a_p0_master1200.jpg", pages[0].fullUrl)
+        // 原图只给保存
+        assertEquals("https://i.pximg.net/img-original/a_p0.png", pages[0].originalUrl)
     }
 
     /** R-18 等登录墙：HTTP 200 但 error=true → 失败（NotFound 语义，重试无意义） */
@@ -204,11 +213,46 @@ class PixivContentSourceTest {
         val api = FakeApi().apply { failure = http404() }
         val src = source(api)
 
-        val beyond = src.page("daily", "all", 10).getOrThrow()
+        val beyond = src.page(PixivContentSource.FEED_RANKING, emptyMap(), 10).getOrThrow()
         assertTrue(beyond.items.isEmpty())
 
-        val first = src.page("daily", "all", 0)
+        val first = src.page(PixivContentSource.FEED_RANKING, emptyMap(), 0)
         assertTrue(first.isFailure)
+    }
+
+    /** 周期片选驱动接口 mode，内容类型下拉驱动 content */
+    @Test
+    fun periodFacetDrivesMode() = runTest {
+        val api = FakeApi()
+
+        source(api).page(
+            PixivContentSource.FEED_RANKING,
+            mapOf(PixivContentSource.GROUP_PERIOD to "weekly", PixivContentSource.GROUP_CONTENT to "manga"),
+            0,
+        )
+
+        assertEquals(listOf(Triple("weekly", "manga", 1)), api.calls)
+    }
+
+    /** 声明形态：榜单一个 tab（带名次标记）+ 推荐占位；周期是片选组，类型是下拉组 */
+    @Test
+    fun declarationsKeepOneRankingTabWithPeriodChips() {
+        assertEquals(
+            listOf(PixivContentSource.FEED_RECOMMEND, PixivContentSource.FEED_RANKING),
+            PixivContentSource.FEEDS.map { it.id },
+        )
+        assertTrue(PixivContentSource.FEEDS.first { it.id == PixivContentSource.FEED_RECOMMEND }.comingSoon)
+        assertTrue(PixivContentSource.FEEDS.first { it.id == PixivContentSource.FEED_RANKING }.ranked)
+
+        val period = PixivContentSource.FACETS.first { it.id == PixivContentSource.GROUP_PERIOD }
+        assertEquals(SourceFacetStyle.Chips, period.style)
+        assertEquals(listOf("daily", "weekly", "monthly", "rookie"), period.options.map { it.id })
+        assertEquals("daily", period.options.first { it.selectedByDefault }.id)
+        assertTrue("周期菜单项都要带更新节奏提示", period.options.all { it.hintRes != null })
+
+        val content = PixivContentSource.FACETS.first { it.id == PixivContentSource.GROUP_CONTENT }
+        assertEquals(SourceFacetStyle.Dropdown, content.style)
+        assertEquals(listOf("all", "illust", "manga"), content.options.map { it.id })
     }
 
     @Test

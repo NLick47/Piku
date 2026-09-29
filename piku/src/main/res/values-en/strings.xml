@@ -664,6 +664,13 @@
     <string name="home_source_select_title">Choose data source</string>
     <string name="home_source_select_hint">Applies to the discover feed only. Search, favorites and history stay unchanged.</string>
     <string name="home_source_pixiv">Pixiv</string>
+    <string name="pixiv_hint_daily">Updated daily</string>
+    <string name="pixiv_hint_weekly">Updated every Monday</string>
+    <string name="pixiv_hint_monthly">Updated on the 1st</string>
+    <string name="pixiv_hint_rookie">Updated daily</string>
+    <string name="pixiv_tab_ranking">Ranking</string>
+    <string name="pixiv_tab_recommend">For You</string>
+    <string name="home_coming_soon">Coming soon</string>
     <string name="pixiv_tab_daily">Daily</string>
     <string name="pixiv_tab_weekly">Weekly</string>
     <string name="pixiv_tab_monthly">Monthly</string>

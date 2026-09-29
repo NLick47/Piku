@@ -93,6 +93,7 @@ import com.piku.client.domain.model.Work
 import com.piku.client.ui.profile.ProfileEditSheet
 import com.piku.client.ui.publish.PublishScreen
 import com.piku.client.ui.common.AvatarViewerDialog
+import com.piku.client.ui.common.labelRes
 import com.piku.client.ui.collection.CollectionScreen
 import com.piku.client.ui.follow.BlockUsersScreen
 import com.piku.client.ui.follow.FollowUsersScreen
@@ -482,6 +483,7 @@ fun HomeScreen(
                         onTabBand = { tabBand = it },
                         onOpenDrawer = openDrawer,
                         onSearchClick = onSearchClick,
+                        onSourceClick = { showHomeSourceSheet = true },
                     )
                 } else if (isTablet) {
                     Row(Modifier.fillMaxSize()) {
@@ -510,6 +512,8 @@ fun HomeScreen(
                                         onMenuClick = openDrawer,
                                         menuEnabled = drawerButtonEnabled,
                                         onSearchClick = onSearchClick,
+                                        onSourceClick = { showHomeSourceSheet = true },
+                                        sourceLabelRes = state.homeSource.labelRes(),
                                         onDoubleTapTop = { gridState.scrollToTopSmart(scope) },
                                         dark = dark,
                                     )
@@ -551,6 +555,7 @@ fun HomeScreen(
                             onMenuClick = openDrawer,
                             menuEnabled = drawerButtonEnabled,
                             onSearchClick = onSearchClick,
+                            onSourceClick = { showHomeSourceSheet = true },
                             onSelectFeedTab = viewModel::selectFeedTab,
                             onCategoryClick = { showCategories = true },
                             onDoubleTapTop = { gridState.scrollToTopSmart(scope) },

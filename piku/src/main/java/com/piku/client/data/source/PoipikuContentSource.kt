@@ -6,6 +6,8 @@ import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.source.ContentSource
 import com.piku.client.domain.source.SourceFacet
+import com.piku.client.domain.source.SourceFacetGroup
+import com.piku.client.domain.source.SourceFacetStyle
 import com.piku.client.domain.source.SourceFeed
 import com.piku.client.domain.source.SourcePage
 import com.piku.client.domain.source.SourceWorkOpen
@@ -31,20 +33,26 @@ class PoipikuContentSource @Inject constructor(
 
     override val feeds = FEEDS
 
-    override val facets = PoipikuCategory.entries.map { category ->
-        SourceFacet(
-            id = category.cd.toString(),
-            labelRes = category.nameRes,
-            selectedByDefault = category == PoipikuCategory.ALL,
-        )
-    }
+    override val facets = listOf(
+        SourceFacetGroup(
+            id = FACET_CATEGORY,
+            style = SourceFacetStyle.Dropdown,
+            options = PoipikuCategory.entries.map { category ->
+                SourceFacet(
+                    id = category.cd.toString(),
+                    labelRes = category.nameRes,
+                    selectedByDefault = category == PoipikuCategory.ALL,
+                )
+            },
+        ),
+    )
 
-    override suspend fun page(feedId: String, facetId: String?, page: Int): Result<SourcePage> {
+    override suspend fun page(feedId: String, facets: Map<String, String>, page: Int): Result<SourcePage> {
         val works = when (feedId) {
             FEED_HOT -> loadPopularFeedUseCase(page)
             FEED_FOLLOW -> loadFollowFeedUseCase(page)
             FEED_RANDOM -> loadRandomFeedUseCase()
-            else -> loadFeedUseCase(page, facetId?.toIntOrNull() ?: PoipikuCategory.ALL.cd)
+            else -> loadFeedUseCase(page, facets[FACET_CATEGORY]?.toIntOrNull() ?: PoipikuCategory.ALL.cd)
         }
         return works.map { list -> SourcePage(items = list) }
     }
@@ -62,6 +70,7 @@ class PoipikuContentSource @Inject constructor(
         const val FEED_LATEST = "latest"
         const val FEED_FOLLOW = "follow"
         const val FEED_RANDOM = "random"
+        const val FACET_CATEGORY = "category"
 
         /** 流声明是纯数据，单独暴露以便不构造本类（也就无需 DI）即可测试与断言 */
         val FEEDS = listOf(

@@ -1,0 +1,33 @@
+[package]
+name = "piku_ech"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+# rlib 只为主机侧 example/测试能链接进来，发布产物仍是 cdylib
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# rustls 只做 TLS1.3，ECH 的 HPKE 由本仓库 src/hpke.rs 提供（见那里的说明）
+rustls = { version = "=0.23.45", default-features = false, features = ["std", "ring", "tls12", "logging"] }
+ring = "0.17"
+webpki-roots = "1"
+h2 = "0.4"
+http = "1"
+bytes = "1"
+tokio = { version = "1", default-features = false, features = ["rt", "net", "time"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["tls12", "logging"] }
+jni = "0.21"
+
+[dev-dependencies]
+# 只用于按 RFC 9180 向量校验 KEM 派生（ring 不暴露临时私钥，测试里自己算 DH）
+x25519-dalek = "2"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = "symbols"
+# 保留 unwind：JNI 入口用 catch_unwind 兜底，不能让一个数组越界把 App 带走
+panic = "unwind"

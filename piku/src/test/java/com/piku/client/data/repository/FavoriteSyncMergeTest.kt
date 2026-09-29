@@ -8,6 +8,7 @@ import com.piku.client.domain.model.SyncFolder
 import com.piku.client.domain.model.SyncMembership
 import com.piku.client.domain.model.SyncTombstone
 import com.piku.client.domain.model.SyncWork
+import com.piku.client.domain.model.WorkSource
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -23,10 +24,19 @@ class FavoriteSyncMergeTest {
     private fun folder(id: Long, name: String, createdAt: Long = now - 10_000) =
         FavoriteFolderEntity(id = id, name = name, createdAt = createdAt)
 
-    private fun membership(folderId: Long, workId: String, addedAt: Long = now - 5_000) =
-        FavoriteMembershipEntity(folderId = folderId, workId = workId, addedAt = addedAt)
+    private fun membership(
+        folderId: Long,
+        workId: String,
+        source: WorkSource = WorkSource.POIPIKU,
+        addedAt: Long = now - 5_000,
+    ) = FavoriteMembershipEntity(folderId = folderId, source = source, workId = workId, addedAt = addedAt)
 
-    private fun localWork(workId: String, addedAt: Long = now - 5_000) = FavoriteEntity(
+    private fun localWork(
+        workId: String,
+        source: WorkSource = WorkSource.POIPIKU,
+        addedAt: Long = now - 5_000,
+    ) = FavoriteEntity(
+        source = source,
         workId = workId,
         authorId = 1L,
         title = "标题$workId",
@@ -42,7 +52,12 @@ class FavoriteSyncMergeTest {
     private fun remoteFolder(id: Long, name: String, createdAt: Long = now - 10_000) =
         SyncFolder(id = id, name = name, isDefault = false, createdAt = createdAt)
 
-    private fun remoteWork(workId: String, addedAt: Long = now - 5_000) = SyncWork(
+    private fun remoteWork(
+        workId: String,
+        source: String = WorkSource.POIPIKU.name,
+        addedAt: Long = now - 5_000,
+    ) = SyncWork(
+        source = source,
         workId = workId,
         authorId = 1L,
         title = "标题$workId",
@@ -54,8 +69,12 @@ class FavoriteSyncMergeTest {
         addedAt = addedAt,
     )
 
-    private fun remoteMembership(folderId: Long, workId: String, addedAt: Long = now - 5_000) =
-        SyncMembership(folderId = folderId, workId = workId, addedAt = addedAt)
+    private fun remoteMembership(
+        folderId: Long,
+        workId: String,
+        source: String = WorkSource.POIPIKU.name,
+        addedAt: Long = now - 5_000,
+    ) = SyncMembership(folderId = folderId, source = source, workId = workId, addedAt = addedAt)
 
     private fun payload(
         folders: List<SyncFolder> = emptyList(),
@@ -144,7 +163,7 @@ class FavoriteSyncMergeTest {
         )
 
         assertEquals(listOf("w1"), result.memberships.map { it.workId })
-        assertEquals(listOf(SyncTombstone.membership("A", "w2", now)), result.tombstones)
+        assertEquals(listOf(SyncTombstone.membership("A", WorkSource.POIPIKU, "w2", now)), result.tombstones)
     }
 
     @Test
@@ -172,7 +191,7 @@ class FavoriteSyncMergeTest {
     @Test
     fun reAddedAfterDeleteSurvives() {
         // 夹 A 里的 w1 被删过（墓碑时间 = now - 1000），之后又加回来了（addedAt 更晚）
-        val tombstone = SyncTombstone.membership("A", "w1", now - 1_000)
+        val tombstone = SyncTombstone.membership("A", WorkSource.POIPIKU, "w1", now - 1_000)
         val result = merge(
             localFolders = listOf(folder(1L, "A")),
             localMemberships = listOf(1L to membership(1L, "w1", addedAt = now - 500)),
@@ -220,9 +239,11 @@ class FavoriteSyncMergeTest {
 
     @Test
     fun tombstonesAreDedupedAndExpiredOnesDropped() {
-        val fresh = SyncTombstone.membership("A", "w1", now - 1_000)
-        val newer = SyncTombstone.membership("A", "w1", now - 500)
-        val expired = SyncTombstone.membership("A", "w2", now - FavoriteSyncMerge.TOMBSTONE_TTL_MS - 1)
+        val fresh = SyncTombstone.membership("A", WorkSource.POIPIKU, "w1", now - 1_000)
+        val newer = SyncTombstone.membership("A", WorkSource.POIPIKU, "w1", now - 500)
+        val expired = SyncTombstone.membership(
+            "A", WorkSource.POIPIKU, "w2", now - FavoriteSyncMerge.TOMBSTONE_TTL_MS - 1,
+        )
 
         val result = merge(
             remote = payload(tombstones = listOf(fresh, expired)),
@@ -266,6 +287,94 @@ class FavoriteSyncMergeTest {
         assertEquals(listOf("w1"), result.works.map { it.workId })
         assertTrue(result.tombstones.isEmpty())
     }
+
+    @Test
+    fun sameIdOnDifferentSourcesStaySeparate() {
+        // poipiku 作品 123 与 pixiv 插图 123 是两个作品：键带源，互不覆盖
+        val result = merge(
+            localFolders = listOf(folder(1L, "A")),
+            localFavorites = listOf(
+                localWork("123"),
+                localWork("123", source = WorkSource.PIXIV),
+            ),
+            localMemberships = listOf(
+                1L to membership(1L, "123"),
+                1L to membership(1L, "123", source = WorkSource.PIXIV),
+            ),
+            remote = payload(),
+            snapshot = payload(),
+        )
+
+        assertEquals("两条归属都要保留", 2, result.memberships.size)
+        assertEquals("两条作品行都要保留", 2, result.works.size)
+        assertEquals(setOf("POIPIKU", "PIXIV"), result.works.map { it.source }.toSet())
+    }
+
+    @Test
+    fun tombstoneOnlyCoversItsOwnSource() {
+        // 快照里两条同号归属：本机删了 poipiku 的、留了 pixiv 的——只能给 poipiku 出墓碑
+        val snapshot = payload(
+            folders = listOf(remoteFolder(1L, "A")),
+            works = listOf(
+                remoteWork("123"),
+                remoteWork("123", source = WorkSource.PIXIV.name),
+            ),
+            memberships = listOf(
+                remoteMembership(1L, "123"),
+                remoteMembership(1L, "123", source = WorkSource.PIXIV.name),
+            ),
+        )
+        val result = merge(
+            localFolders = listOf(folder(1L, "A")),
+            localFavorites = listOf(localWork("123", source = WorkSource.PIXIV)),
+            localMemberships = listOf(1L to membership(1L, "123", source = WorkSource.PIXIV)),
+            remote = snapshot,
+            snapshot = snapshot,
+        )
+
+        assertEquals(
+            "只有被删的 poipiku 123 出墓碑",
+            listOf(SyncTombstone.membership("A", WorkSource.POIPIKU, "123", now)),
+            result.tombstones,
+        )
+        assertEquals(
+            "pixiv 123 不受影响",
+            listOf("PIXIV" to "123"),
+            result.memberships.map { it.source to it.workId },
+        )
+    }
+
+    @Test
+    fun unknownSourceFromNewerClientIsPreservedInCloud() {
+        // 更高版本客户端写入的源（本机枚举里没有）：本地写不进去，但也不能误删，原样留在云端
+        val remote = payload(
+            folders = listOf(remoteFolder(1L, "A")),
+            works = listOf(remoteWork("9", source = "AO3")),
+            memberships = listOf(remoteMembership(1L, "9", source = "AO3")),
+        )
+
+        val result = merge(localFolders = listOf(folder(1L, "A")), remote = remote, snapshot = remote)
+
+        assertTrue("未知源的缺失不能判成删除", result.tombstones.isEmpty())
+        assertEquals(listOf("AO3" to "9"), result.memberships.map { it.source to it.workId })
+        assertEquals(listOf("AO3" to "9"), result.works.map { it.source to it.workId })
+    }
+
+    @Test
+    fun legacyPayloadWithoutSourceDecodesAsPoipiku() {
+        // 旧版本上传的 JSON 没有 source 字段：解出来必须落在 poipiku，老备份不受影响
+        val legacy = """
+            {"version":1,"syncedAt":7,"folders":[],"works":[{"workId":"123","authorId":1,
+            "title":"t","authorName":"a","thumbnailUrl":"","authorAvatarUrl":null,
+            "imageCount":1,"r18":false,"addedAt":5}],"memberships":[{"folderId":1,
+            "workId":"123","addedAt":5}],"tombstones":[]}
+        """.trimIndent()
+        val parsed = Json { ignoreUnknownKeys = true; explicitNulls = false; isLenient = true }
+            .decodeFromString<FavoriteSyncData>(legacy)
+
+        assertEquals(WorkSource.POIPIKU.name, parsed.works.single().source)
+        assertEquals(WorkSource.POIPIKU.name, parsed.memberships.single().source)
+    }
 }
 
 class FavoriteSyncSnapshotStoreTest {
@@ -283,7 +392,7 @@ class FavoriteSyncSnapshotStoreTest {
             syncedAt = 42L,
             folders = listOf(SyncFolder(1L, "A", isDefault = true, createdAt = 7L)),
             works = emptyList(),
-            memberships = listOf(SyncMembership(1L, "w1", 5L)),
+            memberships = listOf(SyncMembership(folderId = 1L, workId = "w1", addedAt = 5L)),
             tombstones = listOf(SyncTombstone.folder("B", 9L)),
         )
 

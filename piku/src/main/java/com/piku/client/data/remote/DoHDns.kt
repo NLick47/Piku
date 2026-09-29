@@ -34,7 +34,7 @@ class DoHDns internal constructor(
     private val prober: AddressProbe = TlsAddressProbe(),
     jitter: (Long) -> Long = AddressHealth.RANDOM_JITTER,
     private val diagnostics: NetworkDiagnostics = NetworkDiagnostics(),
-    sourcesOverride: List<AddressSource> = emptyList(),
+    private val sourcesOverride: List<AddressSource> = emptyList(),
 ) : Dns {
 
     private class DohSource(
@@ -56,8 +56,43 @@ class DoHDns internal constructor(
     private val health = AddressHealth(clock, jitter = jitter)
     private val selector = AddressSelector(health, clock)
 
-    /** 系统 DNS 与双 DoH 各自带 TTL 缓存；单测传入假来源驱动竞速 */
-    private val sources: List<AddressSource> = sourcesOverride.ifEmpty { defaultSources() }
+    /** 内置固定 IP：域名解析失效（投毒、域名过期）时仍有一条可用的路 */
+    private val staticSource by lazy { StaticAddressSource() }
+    private val systemSource by lazy {
+        CachingAddressSource(SYSTEM_CACHE_TTL_MS, clock, ::isUsable, name = SYSTEM_SOURCE_NAME) { hostname ->
+            Dns.SYSTEM.lookup(hostname)
+        }
+    }
+    private val alidnsSource by lazy {
+        dohSource("alidns", "https://dns.alidns.com/dns-query", listOf("223.5.5.5", "2400:3200::1"))
+    }
+    private val cloudflareSource by lazy {
+        dohSource("cloudflare", "https://cloudflare-dns.com/dns-query", listOf("1.1.1.1", "2606:4700:4700::1111"))
+    }
+
+    /** 自建 DoH（CF→CF 的 cloudflare-dns.com）：名单末尾，也是竞速全灭后的最后一问 */
+    private val workerSource by lazy {
+        dohSource(WORKER_SOURCE_NAME, WORKER_DOH_URL, listOf("172.66.44.124", "172.66.47.132"))
+    }
+
+    /**
+     * 竞速来源按域名分两套：pixiv 不走系统 DNS（投毒答案对它没有价值，只多花一次探测），
+     * 其余域名保持系统 DNS 打头。单测用假来源整体覆盖。
+     */
+    private val pixivSources: List<AddressSource> by lazy {
+        listOf(staticSource, cloudflareSource, workerSource)
+    }
+    private val otherSources: List<AddressSource> by lazy {
+        listOf(systemSource, alidnsSource, cloudflareSource, workerSource)
+    }
+
+    internal fun sourcesFor(hostname: String): List<AddressSource> = when {
+        sourcesOverride.isNotEmpty() -> sourcesOverride
+        isPixivDomain(hostname) -> pixivSources
+        else -> otherSources
+    }
+
+    internal fun sourceNamesFor(hostname: String): List<String> = sourcesFor(hostname).map { sourceName(it) }
 
     private val winners = ConcurrentHashMap<String, WinnerEntry>()
     private val inflight = ConcurrentHashMap<String, CompletableFuture<List<InetAddress>>>()
@@ -138,24 +173,9 @@ class DoHDns internal constructor(
             }
         }
 
-        sources.forEach { source ->
+        sourcesFor(hostname).forEach { source ->
             tasks += completion.submit {
-                val via = sourceName(source)
-                val startedAt = clock()
-                val resolved = runCatching { source.resolve(hostname) }
-                val answers = resolved.getOrDefault(emptyList())
-                // 被中断（调用方取消）不算这个来源失败，照实记会误报"DoH 不可用"
-                val cancelled = resolved.exceptionOrNull()?.isCancellation() == true
-                sourcesSeen += SourceTrace(
-                    name = via,
-                    answers = answers.map { it.hostAddress.orEmpty() },
-                    candidates = answers.distinct().count { !health.isOnProbation(hostname, it) },
-                    elapsedMs = clock() - startedAt,
-                    // 记下失败原因：诊断要能区分"连不上/被拦"与"查询成功但没有记录"
-                    detail = resolved.exceptionOrNull()?.takeUnless { cancelled }?.describeChain(),
-                    cancelled = cancelled,
-                )
-                probeSource(hostname, answers, via, probesSeen)
+                resolveVia(source, hostname, sourcesSeen, probesSeen)
             }
         }
 
@@ -176,29 +196,72 @@ class DoHDns internal constructor(
             Thread.currentThread().interrupt()
         }
 
-        // 兜底：还有曾经验证过的地址时，交给真实请求判定，而不是抛"域名不存在"——
-        // 后者会让 App 看起来像没网，而用户唯一的出路是重启
+        // 兜底一：还有曾经验证过的地址时，交给真实请求判定，而不是抛"域名不存在"——
+        // 后者会让 App 看起来像没网，用户唯一的出路是重启
         val fallback = selector.order(
             hostname,
             persistedAddresses(hostname, clock()),
             NetworkTuning.MAX_FALLBACK_ROUTES,
             includeWaiting = true,
         )
+        if (fallback.isNotEmpty()) {
+            traces[hostname] = ResolveTrace(
+                hostname = hostname,
+                elapsedMs = clock() - racedAt,
+                sources = sourcesSeen,
+                probes = probesSeen,
+                winner = null,
+                routed = fallback.map { it.hostAddress.orEmpty() },
+                fallback = true,
+            )
+            diagnostics.warn("resolve fallback host=$hostname -> ${fallback.first().hostAddress}")
+            return fallback
+        }
+
+        // 兜底二：一个可试地址都没有时，单独再问一次名单末尾的来源（自建 DoH）：
+        // 它是唯一在任何网络下都干净的出口，上一次失败可能只是瞬时
+        sourcesFor(hostname).lastOrNull()?.let { lastResort ->
+            resolveVia(lastResort, hostname, sourcesSeen, probesSeen)?.let { winner ->
+                return acceptAndRoute(hostname, winner, racedAt, sourcesSeen, probesSeen)
+            }
+        }
+
         traces[hostname] = ResolveTrace(
             hostname = hostname,
             elapsedMs = clock() - racedAt,
             sources = sourcesSeen,
             probes = probesSeen,
             winner = null,
-            routed = fallback.map { it.hostAddress.orEmpty() },
+            routed = emptyList(),
             fallback = true,
         )
-        if (fallback.isEmpty()) {
-            diagnostics.warn("resolve failed host=$hostname: no verified address")
-            throw UnknownHostException("no TLS-verified address for $hostname")
-        }
-        diagnostics.warn("resolve fallback host=$hostname -> ${fallback.first().hostAddress}")
-        return fallback
+        diagnostics.warn("resolve failed host=$hostname: no verified address")
+        throw UnknownHostException("no TLS-verified address for $hostname")
+    }
+
+    /** 单个来源的一次解析：记链路 + 探测候选，返回第一个通过 TLS 校验的地址 */
+    private fun resolveVia(
+        source: AddressSource,
+        hostname: String,
+        sourcesSeen: MutableCollection<SourceTrace>,
+        probesSeen: MutableCollection<ProbeTrace>,
+    ): InetAddress? {
+        val via = sourceName(source)
+        val startedAt = clock()
+        val resolved = runCatching { source.resolve(hostname) }
+        val answers = resolved.getOrDefault(emptyList())
+        // 被中断（调用方取消）不算这个来源失败，照实记会误报"DoH 不可用"
+        val cancelled = resolved.exceptionOrNull()?.isCancellation() == true
+        sourcesSeen += SourceTrace(
+            name = via,
+            answers = answers.map { it.hostAddress.orEmpty() },
+            candidates = answers.distinct().count { !health.isOnProbation(hostname, it) },
+            elapsedMs = clock() - startedAt,
+            // 记下失败原因：诊断要能区分"连不上/被拦"与"查询成功但没有记录"
+            detail = resolved.exceptionOrNull()?.takeUnless { cancelled }?.describeChain(),
+            cancelled = cancelled,
+        )
+        return probeSource(hostname, answers, via, probesSeen)
     }
 
     private fun acceptAndRoute(
@@ -270,20 +333,7 @@ class DoHDns internal constructor(
         }
 
     private fun cachedAddresses(hostname: String): List<InetAddress> =
-        sources.mapNotNull { (it as? CachingAddressSource)?.cached(hostname) }.flatten()
-
-    private fun defaultSources(): List<AddressSource> = listOf(
-        CachingAddressSource(SYSTEM_CACHE_TTL_MS, clock, ::isUsable, name = SYSTEM_SOURCE_NAME) { hostname ->
-            Dns.SYSTEM.lookup(hostname)
-        },
-        dohSource("alidns", "https://dns.alidns.com/dns-query", listOf("223.5.5.5", "2400:3200::1")),
-        dohSource("cloudflare", "https://cloudflare-dns.com/dns-query", listOf("1.1.1.1", "2606:4700:4700::1111")),
-        dohSource(
-            "自建",
-            "https://piku-img.pages.dev/dns-query",
-            listOf("172.66.44.124", "172.66.47.132"),
-        ),
-    )
+        sourcesFor(hostname).mapNotNull { (it as? CachingAddressSource)?.cached(hostname) }.flatten()
 
     private fun dohSource(name: String, url: String, bootstrap: List<String>): AddressSource {
         val source = DohSource(url, bootstrap.map { InetAddress.getByName(it) })
@@ -480,7 +530,7 @@ class DoHDns internal constructor(
 
     internal companion object {
         /** 走 DoH 解析与地址固定的域名，含子域；pixiv 主站与图片 CDN 不同 IP 段，分开列 */
-        val BUSINESS_DOMAINS = listOf("poipiku.com", "pixiv.net", "pximg.net")
+        val BUSINESS_DOMAINS = listOf("poipiku.com", "pixiv.net", "pximg.net", "pages.dev", "pic-relay.cyou")
 
         /** 诊断报告里逐条展示的域名，须落在 [BUSINESS_DOMAINS] 之内 */
         val BUSINESS_HOSTS = listOf(
@@ -488,7 +538,30 @@ class DoHDns internal constructor(
             "cdn.poipiku.com",
             "www.pixiv.net",
             "i.pximg.net",
+            "piku-img.pages.dev",
+            "pic-relay.cyou",
         )
+
+        /** pixiv 侧完全不走系统 DNS：污染答案是假地址，只会白花一次探测 */
+        val PIXIV_DOMAINS = listOf("pixiv.net", "pximg.net")
+
+        /** 内置固定 IP：投毒或自家域名过期时仍有一条路。改动前先实测这几个地址可用 */
+        val STATIC_ADDRESSES = mapOf(
+            // Cloudflare anycast，与 DoH 给的答案一致
+            "www.pixiv.net" to listOf("172.64.145.17", "104.18.42.239"),
+            // pixiv 自有网段，图片走清 SNI 直连
+            "i.pximg.net" to listOf("210.140.139.129", "210.140.139.133", "210.140.139.134"),
+            // 我们自己部署的中转（自建 DoH 与图片中转同一个域）
+            "piku-img.pages.dev" to listOf("172.66.44.124", "172.66.47.132"),
+            "pic-relay.cyou" to listOf("104.21.73.233", "172.67.193.18"),
+        )
+
+        const val WORKER_DOH_URL = "https://piku-img.pages.dev/dns-query"
+        const val WORKER_SOURCE_NAME = "自建"
+        const val STATIC_SOURCE_NAME = "内置固定 IP"
+
+        fun isPixivDomain(hostname: String): Boolean =
+            PIXIV_DOMAINS.any { hostname == it || hostname.endsWith(".$it") }
 
         const val TAG = "PikuDiag"
         const val DOH_TIMEOUT_MS = 5_000L

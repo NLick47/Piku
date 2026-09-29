@@ -25,6 +25,10 @@ const IMAGE_UPSTREAM = "https://cdn.poipiku.com";
 const IMAGE_REFERER = "https://poipiku.com/";
 const PIXIV_UPSTREAM = "https://www.pixiv.net";
 const PIXIV_PREFIX = "/px";
+/** pixiv 图床：直连只有几十 KB/s（详情页 1–3 MB 的图必然超时），走边缘回源快 6–8 倍 */
+const PIXIV_IMG_UPSTREAM = "https://i.pximg.net";
+const PIXIV_IMG_PREFIX = "/pximg";
+const PIXIV_IMG_REFERER = "https://www.pixiv.net/";
 /** 应用接口是另一个 zone，bot 策略未必与主站一致，单独开一条便于对比 */
 const PIXIV_APP_UPSTREAM = "https://app-api.pixiv.net";
 const PIXIV_APP_PREFIX = "/pxapi";
@@ -82,6 +86,9 @@ export async function onRequest(context) {
   }
   if (url.pathname === PIXIV_PREFIX || url.pathname.startsWith(PIXIV_PREFIX + "/")) {
     return pixiv(request, url, waitUntil, PIXIV_UPSTREAM, PIXIV_PREFIX);
+  }
+  if (url.pathname === PIXIV_IMG_PREFIX || url.pathname.startsWith(PIXIV_IMG_PREFIX + "/")) {
+    return pixivImage(request, url, waitUntil);
   }
   return image(request, url, waitUntil);
 }
@@ -163,6 +170,54 @@ async function pixiv(request, url, waitUntil, upstream, prefix) {
   if (cacheable && origin.ok && !origin.headers.get("Set-Cookie")) {
     waitUntil(cache.put(cacheKey, resp.clone()));
   }
+  return withCors(resp);
+}
+
+/**
+ * pixiv 图床回源。
+ * 两点与 poipiku 图不同：
+ *   · Referer 必须是 pixiv 站点页（图床有防盗链），UA 用普通浏览器串
+ *   · **不转发客户端 Cookie** —— 客户端带的是 poipiku 会话，发给 pixiv 既没用也不该发
+ * 图片内容不可变，成功响应打 7 天 immutable；错误响应不缓存，免得恢复后还吐错。
+ */
+async function pixivImage(request, url, waitUntil) {
+  const path = url.pathname.slice(PIXIV_IMG_PREFIX.length) || "/";
+  const upstreamUrl = PIXIV_IMG_UPSTREAM + path + url.search;
+  const cacheable = request.method === "GET" || request.method === "HEAD";
+  const cache = caches.default;
+  const cacheKey = new Request(upstreamUrl, { method: "GET" });
+
+  if (cacheable) {
+    const hit = await cache.match(cacheKey);
+    if (hit) return withCors(hit);
+  }
+
+  const headers = {
+    "User-Agent": "Mozilla/5.0",
+    "Referer": PIXIV_IMG_REFERER,
+    "Accept": "image/avif,image/webp,image/*,*/*;q=0.8",
+  };
+
+  let origin;
+  try {
+    origin = await fetch(upstreamUrl, { method: request.method, headers });
+  } catch (e) {
+    return new Response("pximg upstream error: " + e.message, { status: 502, headers: CORS });
+  }
+
+  const h = new Headers(origin.headers);
+  if (origin.ok) {
+    h.set("Cache-Control", `public, max-age=${CACHE_TTL}, immutable`);
+  } else {
+    h.set("Cache-Control", "no-store");
+  }
+  const resp = new Response(origin.body, {
+    status: origin.status,
+    statusText: origin.statusText,
+    headers: h,
+  });
+
+  if (cacheable && origin.ok) waitUntil(cache.put(cacheKey, resp.clone()));
   return withCors(resp);
 }
 

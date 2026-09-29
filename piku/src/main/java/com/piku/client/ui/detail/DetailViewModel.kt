@@ -37,6 +37,8 @@ import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkDetail
 import com.piku.client.ui.common.FeedbackChannel
 import com.piku.client.domain.model.mergeTranslatedFields
+import com.piku.client.domain.model.WorkKey
+import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.usecase.LoadWorkDetailUseCase
 import com.piku.client.domain.usecase.LoadWorkFullImagesUseCase
 import com.piku.client.domain.usecase.ObserveAuthStatusUseCase
@@ -382,7 +384,7 @@ class DetailViewModel @Inject constructor(
         // 注意：图区「翻译图片」提示的标记不在这里写，见 [consumeImageHint]
         viewModelScope.launch {
             observeFavoriteIdsUseCase().collect { ids ->
-                _uiState.update { it.copy(isFavorite = workId in ids) }
+                _uiState.update { it.copy(isFavorite = WorkKey(WorkSource.POIPIKU, workId.toString()) in ids) }
             }
         }
         viewModelScope.launch {
@@ -391,7 +393,7 @@ class DetailViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            favoriteRepository.observeWorkFolderIds(workId).collect { folderIds ->
+            favoriteRepository.observeWorkFolderIds(WorkKey(WorkSource.POIPIKU, workId.toString())).collect { folderIds ->
                 _uiState.update { it.copy(workFavoriteFolderIds = folderIds) }
             }
         }

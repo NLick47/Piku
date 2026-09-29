@@ -79,6 +79,8 @@ import coil3.size.Size as CoilSize
 import com.piku.client.R
 import com.piku.client.data.remote.GitHubRelease
 import com.piku.client.domain.model.Work
+import com.piku.client.domain.model.WorkKey
+import com.piku.client.domain.model.key
 import com.piku.client.ui.common.LoaderDots
 import com.piku.client.ui.common.WorkCard
 import com.piku.client.ui.common.feedThumbUrl
@@ -418,7 +420,7 @@ private fun RefreshNoticeBar(
 @Composable
 private fun WorkWaterfall(
     works: List<Work>,
-    favoriteIds: Set<Long>,
+    favoriteIds: Set<WorkKey>,
     loadingMore: Boolean,
     loadMoreErrorRes: Int?,
     endReached: Boolean,
@@ -507,7 +509,7 @@ private fun WorkWaterfall(
             items(works, key = { it.id }) { work ->
                 WorkCard(
                     work = work,
-                    isFavorite = work.id in favoriteIds,
+                    isFavorite = work.key in favoriteIds,
                     onToggleFavorite = onToggleFavorite,
                     onClick = onWorkClick,
                     dark = dark,

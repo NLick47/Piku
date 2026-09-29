@@ -18,7 +18,7 @@ class ImageRelayInterceptorTest {
     private val controller = ImageRouteController(settings, prefs, runtime)
 
     private val cdnRequest = Request.Builder()
-        .url("https://${ImageRelayInterceptor.CDN_HOST}/assets/img/a.png")
+        .url("https://${ImageUpstream.POIPIKU.host}/assets/img/a.png")
         .build()
 
     private fun interceptor(hosts: List<String> = ImageRelayInterceptor.RELAY_HOSTS) =
@@ -50,7 +50,7 @@ class ImageRelayInterceptorTest {
 
         interceptor().intercept(chain)
 
-        assertEquals(listOf(ImageRelayInterceptor.CDN_HOST), chain.hosts)
+        assertEquals(listOf(ImageUpstream.POIPIKU.host), chain.hosts)
         assertNull(chain.proceeded.single().header(ImageRelayInterceptor.BYPASS_HEADER))
     }
 
@@ -71,7 +71,7 @@ class ImageRelayInterceptorTest {
 
         val first = chain(results = listOf(IOException("boom"), okResponse(cdnRequest)))
         interceptor.intercept(first)
-        assertEquals(listOf("relay-a", ImageRelayInterceptor.CDN_HOST), first.hosts)
+        assertEquals(listOf("relay-a", ImageUpstream.POIPIKU.host), first.hosts)
 
         // 直连不可用时中转是唯一出路：一次失败不能把它挡在候选外
         val second = chain(results = listOf(okResponse(cdnRequest)))
@@ -100,7 +100,7 @@ class ImageRelayInterceptorTest {
 
         val cancelled = chain(results = listOf(IOException("timeout"), okResponse(cdnRequest)), canceled = true)
         interceptor.intercept(cancelled)
-        assertEquals(listOf("relay-a", ImageRelayInterceptor.CDN_HOST), cancelled.hosts)
+        assertEquals(listOf("relay-a", ImageUpstream.POIPIKU.host), cancelled.hosts)
 
         // 取消（整体超时）不算中继故障：下一张图仍然先试它
         val next = chain(results = listOf(okResponse(cdnRequest)))
@@ -123,7 +123,7 @@ class ImageRelayInterceptorTest {
         )
         interceptor.intercept(first)
         assertEquals(
-            listOf("pic-relay.cyou", "piku-img.pages.dev", ImageRelayInterceptor.CDN_HOST),
+            listOf("pic-relay.cyou", "piku-img.pages.dev", ImageUpstream.POIPIKU.host),
             first.hosts,
         )
 
@@ -141,7 +141,7 @@ class ImageRelayInterceptorTest {
 
         interceptor().intercept(chain)
 
-        assertEquals(listOf(ImageRelayInterceptor.CDN_HOST, "pic-relay.cyou"), chain.hosts)
+        assertEquals(listOf(ImageUpstream.POIPIKU.host, "pic-relay.cyou"), chain.hosts)
     }
 
     @Test
@@ -151,6 +151,68 @@ class ImageRelayInterceptorTest {
 
         interceptor().intercept(chain)
 
-        assertEquals(listOf(ImageRelayInterceptor.CDN_HOST), chain.hosts)
+        assertEquals(listOf(ImageUpstream.POIPIKU.host), chain.hosts)
+    }
+
+    @Test
+    fun pixivImageKeepsItsPathUnderTheRelayPrefix() {
+        settings.setImageRouteMode(ImageRouteMode.RELAY)
+        val pixiv = Request.Builder()
+            .url("https://${ImageUpstream.PIXIV.host}/img-master/img/a/b/c_p0_master1200.jpg")
+            .build()
+        val chain = chain(request = pixiv, results = listOf(okResponse(pixiv)))
+
+        interceptor().intercept(chain)
+
+        assertEquals(listOf("pic-relay.cyou"), chain.hosts)
+        // 中继按 /pximg 前缀回源 i.pximg.net，路径不能丢
+        assertEquals(
+            "/pximg/img-master/img/a/b/c_p0_master1200.jpg",
+            chain.proceeded.single().url.encodedPath,
+        )
+    }
+
+    @Test
+    fun poipikuImageKeepsItsOriginalPath() {
+        settings.setImageRouteMode(ImageRouteMode.RELAY)
+        val chain = chain(results = listOf(okResponse(cdnRequest)))
+
+        interceptor().intercept(chain)
+
+        assertEquals(listOf("pic-relay.cyou"), chain.hosts)
+        assertEquals("/assets/img/a.png", chain.proceeded.single().url.encodedPath)
+    }
+
+    @Test
+    fun pixivImageStartsDirectSoGoodNetworksDoNotSpendTheRelay() {
+        val pixiv = Request.Builder()
+            .url("https://${ImageUpstream.PIXIV.host}/img-master/img/a/b/c_p0_master1200.jpg")
+            .build()
+        val chain = chain(request = pixiv, results = listOf(okResponse(pixiv)))
+
+        interceptor().intercept(chain)
+
+        assertEquals(listOf(ImageUpstream.PIXIV.host), chain.hosts)
+    }
+
+    @Test
+    fun pixivDirectFailureSwitchesItToTheRelayForGood() {
+        // 翻转有 20s 冷却，起点挪开一点，免得被冷却拦住（那是另一条测试管的）
+        now = 100_000L
+        val pixiv = Request.Builder()
+            .url("https://${ImageUpstream.PIXIV.host}/img-master/img/a/b/c_p0_master1200.jpg")
+            .build()
+        val controller = ImageRouteController(settings, prefs, runtime)
+        val interceptor = ImageRelayInterceptor(controller)
+
+        // 直连撞超时（大图传不完的典型样子）→ 这次回落中继
+        val first = chain(request = pixiv, results = listOf(IOException("timeout"), okResponse(pixiv)))
+        interceptor.intercept(first)
+        assertEquals(listOf(ImageUpstream.PIXIV.host, "pic-relay.cyou"), first.hosts)
+
+        // 下一张直接从中继开始，不再白等一次 15 秒
+        val second = chain(request = pixiv, results = listOf(okResponse(pixiv)))
+        interceptor.intercept(second)
+        assertEquals(listOf("pic-relay.cyou"), second.hosts)
     }
 }

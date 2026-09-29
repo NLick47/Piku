@@ -34,13 +34,13 @@ class ImageRouteProbeTest {
     )
 
     private fun response(code: Int): Response =
-        okResponse(Request.Builder().url(ImageRelayInterceptor.PROBE_URL).build(), code)
+        okResponse(Request.Builder().url(ImageUpstream.POIPIKU.probeUrl).build(), code)
 
     @Test
     fun anyHttpResponseMeansDirectWorks() {
         probe { response(200) }.run()
 
-        assertFalse(controller.useRelay)
+        assertFalse(controller.useRelay(ImageUpstream.POIPIKU))
     }
 
     @Test
@@ -48,14 +48,14 @@ class ImageRouteProbeTest {
         // 只要拿得到响应就说明链路通：否则资源被删/改名时会把 AUTO 用户全推去中转
         probe { response(404) }.run()
 
-        assertFalse(controller.useRelay)
+        assertFalse(controller.useRelay(ImageUpstream.POIPIKU))
     }
 
     @Test
     fun unreachableDirectSwitchesToRelay() {
         probe { throw SocketTimeoutException("timeout") }.run()
 
-        assertTrue(controller.useRelay)
+        assertTrue(controller.useRelay(ImageUpstream.POIPIKU))
     }
 
     @Test
@@ -69,7 +69,7 @@ class ImageRouteProbeTest {
 
     @Test
     fun probeCanTargetARelayHostWithoutTheBypassHeader() {
-        probe { response(200) }.probe("pic-relay.cyou")
+        probe { response(200) }.probe(ImageUpstream.POIPIKU, relayHost = "pic-relay.cyou")
 
         val request = calls.single()
         assertEquals("pic-relay.cyou", request.url.host)
@@ -79,10 +79,47 @@ class ImageRouteProbeTest {
 
     @Test
     fun failedProbeCarriesTheReason() {
-        val result = probe { throw SocketTimeoutException("connect timed out") }.probe(host = null)
+        val result = probe { throw SocketTimeoutException("connect timed out") }.probe(ImageUpstream.POIPIKU, relayHost = null)
 
         assertEquals(false, result.ok)
         assertEquals("SocketTimeoutException: connect timed out", result.error)
+    }
+
+    @Test
+    fun missingProbeImageDoesNotMoveThePixivRoute() {
+        // 大图探测返回 404：证明不了"传得完"，就不能拿它改线路（否则探测图被删会误判）
+        val result = probe { response(404) }.probe(ImageUpstream.PIXIV, relayHost = null)
+
+        assertEquals(null, ImageRouteProbe(
+            client = object : Call.Factory {
+                override fun newCall(request: Request) = FakeCall(request)
+            },
+            controller = controller,
+        ).verdict(ImageUpstream.PIXIV, result))
+    }
+
+    @Test
+    fun smallProbeResponseMeansDirectWorksEvenIfTheAssetIsGone() {
+        val result = probe { response(404) }.probe(ImageUpstream.POIPIKU, relayHost = null)
+
+        assertEquals(true, ImageRouteProbe(
+            client = object : Call.Factory {
+                override fun newCall(request: Request) = FakeCall(request)
+            },
+            controller = controller,
+        ).verdict(ImageUpstream.POIPIKU, result))
+    }
+
+    @Test
+    fun pixivProbeSuccessMeansDirectWorks() {
+        val result = probe { response(200) }.probe(ImageUpstream.PIXIV, relayHost = null)
+
+        assertEquals(true, ImageRouteProbe(
+            client = object : Call.Factory {
+                override fun newCall(request: Request) = FakeCall(request)
+            },
+            controller = controller,
+        ).verdict(ImageUpstream.PIXIV, result))
     }
 
     @Test
@@ -91,7 +128,47 @@ class ImageRouteProbeTest {
 
         val request = calls.single()
         assertEquals("HEAD", request.method)
-        assertEquals(ImageRelayInterceptor.PROBE_URL, request.url.toString())
+        assertEquals(ImageUpstream.POIPIKU.probeUrl, request.url.toString())
         assertNotNull(request.header(ImageRelayInterceptor.BYPASS_HEADER))
+    }
+
+    @Test
+    fun pixivProbeReadsTheBodyBecauseOnlyBigImagesTellTheTruth() {
+        probe { response(200) }.probe(ImageUpstream.PIXIV, relayHost = null)
+
+        val request = calls.single()
+        // 只看响应头的话，直连"连得上但传不完"也会被判成可用
+        assertEquals("GET", request.method)
+        assertEquals(ImageUpstream.PIXIV.host, request.url.host)
+        assertTrue(request.url.encodedPath.endsWith("_master1200.jpg"))
+    }
+
+    @Test
+    fun pixivRelayProbeGoesThroughThePximgPrefix() {
+        probe { response(200) }.probe(ImageUpstream.PIXIV, relayHost = "piku-img.pages.dev")
+
+        assertEquals(
+            "/pximg${ImageUpstream.PIXIV.probePath}",
+            calls.single().url.encodedPath,
+        )
+    }
+
+    @Test
+    fun pixivVerdictOnlyTouchesThePixivRoute() {
+        // 诊断页拿到结论后落状态（和 NetworkDiagnosis 里一样）
+        val result = probe { throw SocketTimeoutException("timeout") }.probe(ImageUpstream.PIXIV, relayHost = null)
+        controller.applyProbe(ImageUpstream.PIXIV, result.ok)
+
+        assertTrue(controller.useRelay(ImageUpstream.PIXIV))
+        assertFalse("poipiku 那条不该被 pixiv 的探测结果带偏", controller.useRelay(ImageUpstream.POIPIKU))
+    }
+
+    @Test
+    fun startupProbeStaysOnPoipikuAndKeepsPixivDirect() {
+        probe { response(200) }.run()
+
+        val request = calls.single()
+        assertEquals(ImageUpstream.POIPIKU.host, request.url.host)
+        assertFalse(controller.useRelay(ImageUpstream.PIXIV))
     }
 }

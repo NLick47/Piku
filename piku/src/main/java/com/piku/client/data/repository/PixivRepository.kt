@@ -4,6 +4,7 @@ import com.piku.client.data.remote.apiCall
 import com.piku.client.domain.model.AppError
 import com.piku.client.data.remote.pixiv.PixivApi
 import com.piku.client.data.remote.pixiv.PixivApiConfig
+import com.piku.client.data.remote.pixiv.PixivPageUrls
 import com.piku.client.data.remote.pixiv.PixivRankingItem
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkSource
@@ -29,14 +30,7 @@ class PixivRepository @Inject constructor(
             throw AppError.NotFound
         }
         response.body
-            .map { page ->
-                SourceWorkPage(
-                    url = page.urls.regular.ifBlank { page.urls.original },
-                    fullUrl = page.urls.original.ifBlank { page.urls.regular },
-                    width = page.width,
-                    height = page.height,
-                )
-            }
+            .map { page -> page.urls.toSourceWorkPage(page.width, page.height) }
             .filter { it.url.isNotBlank() }
     }
 
@@ -59,6 +53,19 @@ class PixivRepository @Inject constructor(
         )
     }
 }
+
+/**
+ * 尺寸档映射：**打底用 small（540px，几十 KB）**——一开详情页就拉 master1200 是 1 MB 起步，
+ * 这条线上直连还得几十秒；**清晰档用 regular（1200px）**，查看器覆盖、图片翻译、分享都用它；
+ * **原图只在保存时取**。任何一档缺失都往下一档退，保证至少有一张能显示。
+ */
+internal fun PixivPageUrls.toSourceWorkPage(width: Int, height: Int): SourceWorkPage = SourceWorkPage(
+    url = small.ifBlank { regular }.ifBlank { original },
+    fullUrl = regular.ifBlank { original },
+    originalUrl = original,
+    width = width,
+    height = height,
+)
 
 internal fun cleanPixivDescription(raw: String): String = raw
     .replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), "\n")

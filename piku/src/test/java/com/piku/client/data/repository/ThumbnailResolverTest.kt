@@ -179,6 +179,30 @@ class ThumbnailResolverTest {
         )
     }
 
+    /**
+     * pixiv 的列表缩略图与详情档位是同一个文件的尺寸变体（列表 c/480x960、详情
+     * c/540x540_70 或裸 img-master），只差 /c/<尺寸>/ 前缀：归一化后认得出是同一张，
+     * 才敢垫——垫的就是卡片刚渲染过的那张，缓存必中。
+     */
+    @Test
+    fun detailUnderlayUsesFeedThumbnailForPixivWork() {
+        val feed = "https://i.pximg.net/c/480x960/img-master/img/2026/09/26/00/05/02/150105774_p0_master1200.jpg"
+        val small = "https://i.pximg.net/c/540x540_70/img-master/img/2026/09/26/00/05/02/150105774_p0_master1200.jpg"
+        val regular = "https://i.pximg.net/img-master/img/2026/09/26/00/05/02/150105774_p0_master1200.jpg"
+
+        assertEquals(feed, ThumbnailResolver.detailUnderlayUrl(feed, small))
+        assertEquals(feed, ThumbnailResolver.detailUnderlayUrl(feed, regular))
+    }
+
+    /** 换了页或换了作品就不垫：垫一张别的图比空着更误导 */
+    @Test
+    fun detailUnderlaySkipsOtherPixivPageOrWork() {
+        val feed = "https://i.pximg.net/c/480x960/img-master/img/2026/09/26/00/05/02/150105774_p0_master1200.jpg"
+
+        assertNull(ThumbnailResolver.detailUnderlayUrl(feed, feed.replace("_p0_", "_p1_")))
+        assertNull(ThumbnailResolver.detailUnderlayUrl(feed, feed.replace("150105774", "150105775")))
+    }
+
     /** 消费端（列表回填）同一条判定：只有占位图/空图卡片接受替换 */
     @Test
     fun needsThumbnailBackfillCoversPlaceholderAndBlankOnly() {
