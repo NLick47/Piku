@@ -165,7 +165,7 @@ internal fun TabletTopBar(
 }
 
 @Composable
-private fun GlassIconButton(
+internal fun GlassIconButton(
     onClick: () -> Unit,
     dark: Boolean,
     content: @Composable BoxScope.() -> Unit,
@@ -206,7 +206,7 @@ private fun GlassIconButton(
 }
 
 @Composable
-private fun SearchMenuButton(
+internal fun SearchMenuButton(
     onClick: () -> Unit,
     dark: Boolean,
 ) {
@@ -224,7 +224,7 @@ private fun SearchMenuButton(
 internal val GlassHeaderTopPadding = 8.dp
 
 @Composable
-private fun UserMenuButton(
+internal fun UserMenuButton(
     avatarUrl: String?,
     onMenuClick: () -> Unit,
     enabled: Boolean,

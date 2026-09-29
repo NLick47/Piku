@@ -622,7 +622,7 @@ fun DetailScreen(
 }
 
 @Composable
-private fun DetailSkeleton(topInset: Dp = 12.dp) {
+internal fun DetailSkeleton(topInset: Dp = 12.dp) {
     val pulse = rememberSkeletonPulse()
     val block = PikuColors.textFaint.copy(alpha = 0.22f + 0.34f * pulse.value)
     Column(

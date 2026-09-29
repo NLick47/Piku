@@ -1,6 +1,7 @@
 package com.piku.client.ui.home
 
 import com.piku.client.domain.model.AppError
+import com.piku.client.data.source.PoipikuContentSource
 import com.piku.client.domain.model.PoipikuCategory
 import com.piku.client.domain.model.Work
 import kotlinx.coroutines.CompletableDeferred
@@ -74,11 +75,14 @@ class FeedLoaderTest {
         tab: FeedTab = FeedTab.LATEST,
         loggedIn: Boolean = true,
         prefetch: Boolean = false,
-    ): FeedLoader = FeedLoader(
+    ): FeedLoader<FeedKey, Work> = FeedLoader(
         key = FeedKey(tab, PoipikuCategory.ALL),
+        // 行为标志（分页/要登录/时间序）来自源声明，测试不再依赖 FeedTab 的隐含语义
+        feed = PoipikuContentSource.FEEDS.first { it.id == tab.sourceId },
         scope = CoroutineScope(StandardTestDispatcher(testScheduler)),
         fetchPage = api::fetch,
         isLoggedIn = { loggedIn },
+        idOf = { it.id },
         prefetchEnabled = prefetch,
     )
 
@@ -91,7 +95,7 @@ class FeedLoaderTest {
         advanceUntilIdle()
 
         val s = loader.state.value
-        assertEquals(listOf(1L, 2L), s.works.map { it.id })
+        assertEquals(listOf(1L, 2L), s.items.map { it.id })
         assertEquals(0, s.page)
         assertFalse(s.loading)
         assertFalse(s.endReached)
@@ -115,7 +119,7 @@ class FeedLoaderTest {
         loader.refresh(countNotice = false)
         advanceUntilIdle()
         assertNull(loader.state.value.error)
-        assertEquals(listOf(1L), loader.state.value.works.map { it.id })
+        assertEquals(listOf(1L), loader.state.value.items.map { it.id })
     }
 
     @Test
@@ -138,7 +142,7 @@ class FeedLoaderTest {
         assertFalse(loader.state.value.loading)
 
         advanceUntilIdle()
-        assertEquals(listOf(2L), loader.state.value.works.map { it.id })
+        assertEquals(listOf(2L), loader.state.value.items.map { it.id })
         assertEquals(listOf(0, 0), api.pages.toList())
     }
 
@@ -158,7 +162,7 @@ class FeedLoaderTest {
 
         loader.loadMore() // 快路径消费预取的 [2,3]
         advanceUntilIdle()
-        assertEquals(listOf(1L, 2L, 3L), loader.state.value.works.map { it.id })
+        assertEquals(listOf(1L, 2L, 3L), loader.state.value.items.map { it.id })
         assertEquals(1, loader.state.value.page)
 
         loader.loadMore() // 快路径消费预取的空页 → 到底
@@ -210,7 +214,7 @@ class FeedLoaderTest {
         api.release(1)
         advanceUntilIdle()
 
-        assertEquals(listOf(5L), loader.state.value.works.map { it.id })
+        assertEquals(listOf(5L), loader.state.value.items.map { it.id })
         assertEquals(0, loader.state.value.page)
         assertFalse(loader.state.value.loadingMore)
     }
@@ -224,9 +228,9 @@ class FeedLoaderTest {
         advanceUntilIdle()
 
         val s = loader.state.value
-        assertTrue(s.followNeedLogin)
+        assertTrue(s.needLogin)
         assertTrue(s.endReached)
-        assertTrue(s.works.isEmpty())
+        assertTrue(s.items.isEmpty())
         assertTrue(api.pages.isEmpty())
     }
 
@@ -318,14 +322,14 @@ class FeedLoaderTest {
         loader.refresh(countNotice = false)
         advanceUntilIdle()
 
-        loader.updateThumbnail(1, backfilled)
-        loader.updateThumbnail(2, backfilled)
-        loader.updateThumbnail(3, backfilled)
+        loader.backfillThumbnail(1, backfilled)
+        loader.backfillThumbnail(2, backfilled)
+        loader.backfillThumbnail(3, backfilled)
 
         val s = loader.state.value
-        assertEquals("https://img/1.jpg", s.works[0].thumbnailUrl)
-        assertEquals(backfilled, s.works[1].thumbnailUrl)
-        assertEquals(backfilled, s.works[2].thumbnailUrl)
+        assertEquals("https://img/1.jpg", s.items[0].thumbnailUrl)
+        assertEquals(backfilled, s.items[1].thumbnailUrl)
+        assertEquals(backfilled, s.items[2].thumbnailUrl)
     }
 
     @Test
@@ -338,11 +342,11 @@ class FeedLoaderTest {
         loader.refresh(countNotice = false)
         advanceUntilIdle()
 
-        loader.updateThumbnail(1, first)
+        loader.backfillThumbnail(1, first)
         // 卡片已经是真实图：再来一次回填不得再换图（否则又是一次灰白 → 出图）
-        loader.updateThumbnail(1, second)
+        loader.backfillThumbnail(1, second)
 
-        assertEquals(first, loader.state.value.works[0].thumbnailUrl)
+        assertEquals(first, loader.state.value.items[0].thumbnailUrl)
     }
 
     @Test
@@ -353,12 +357,12 @@ class FeedLoaderTest {
         loader.refresh(countNotice = false)
         advanceUntilIdle()
 
-        loader.updateThumbnail(999, "https://cdn.poipiku.com/new/999_360.jpg")
-        loader.updateThumbnail(2, placeholder)
+        loader.backfillThumbnail(999, "https://cdn.poipiku.com/new/999_360.jpg")
+        loader.backfillThumbnail(2, placeholder)
 
         val s = loader.state.value
-        assertEquals("https://img/1.jpg", s.works[0].thumbnailUrl)
-        assertEquals(placeholder, s.works[1].thumbnailUrl)
+        assertEquals("https://img/1.jpg", s.items[0].thumbnailUrl)
+        assertEquals(placeholder, s.items[1].thumbnailUrl)
     }
 
     @Test
@@ -382,7 +386,7 @@ class FeedLoaderTest {
         api.hold(2)
         api.release(1)   // 预取先恢复写 prefetched，loadMore 后恢复追加
         advanceUntilIdle()
-        assertEquals(listOf(1L, 2L), loader.state.value.works.map { it.id })
+        assertEquals(listOf(1L, 2L), loader.state.value.items.map { it.id })
         assertEquals(1, loader.state.value.page)
 
         // 快路径消费过期 prefetched 并杀掉在途的第 2 页请求 → 第 2 页内容被跳过
@@ -397,7 +401,7 @@ class FeedLoaderTest {
         assertEquals(
             "第 2 页内容被跳过",
             listOf(1L, 2L, 9L),
-            loader.state.value.works.map { it.id },
+            loader.state.value.items.map { it.id },
         )
     }
 

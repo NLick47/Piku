@@ -203,7 +203,7 @@ internal fun HomeContent(
         }
         state.works.isEmpty() && !state.loading -> {
             val emptyRes = when {
-                state.feedTab == FeedTab.FOLLOW && state.followNeedLogin -> R.string.home_follow_login
+                state.feedTab == FeedTab.FOLLOW && state.needLogin -> R.string.home_follow_login
                 state.feedTab == FeedTab.FOLLOW -> R.string.home_follow_empty
                 else -> R.string.home_empty
             }
@@ -216,7 +216,7 @@ internal fun HomeContent(
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(horizontal = 32.dp),
                     )
-                    if (state.feedTab == FeedTab.FOLLOW && state.followNeedLogin) {
+                    if (state.feedTab == FeedTab.FOLLOW && state.needLogin) {
                         Spacer(Modifier.height(14.dp))
                         Box(
                             modifier = Modifier
@@ -673,7 +673,7 @@ private fun ShuffleItem(onShuffle: () -> Unit, dark: Boolean) {
 }
 
 @Composable
-private fun SkeletonGrid(dark: Boolean) {
+internal fun SkeletonGrid(dark: Boolean) {
     val isTablet = LocalConfiguration.current.screenWidthDp >= 600
     LazyVerticalStaggeredGrid(
         columns = if (isTablet) StaggeredGridCells.Adaptive(220.dp) else StaggeredGridCells.Fixed(2),
@@ -695,7 +695,7 @@ private fun SkeletonGrid(dark: Boolean) {
 }
 
 @Composable
-private fun SkeletonCard(dark: Boolean) {
+internal fun SkeletonCard(dark: Boolean) {
     val shape = RoundedCornerShape(PikuLayout.CardCorner)
     val placeholder = if (dark) WorkCardPlaceholderDark else Color(0xFFE8E4DE)
     Column(

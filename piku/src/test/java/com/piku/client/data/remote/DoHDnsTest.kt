@@ -84,6 +84,32 @@ class DoHDnsTest {
         assertFalse(persisted()?.contains("1.1.1.1") ?: false)
     }
 
+    /**
+     * 域名字表是匹配出来的：加一个要展示的域名却忘了加它的域名时在这里变红，
+     * 否则诊断会列出一个根本不走 DoH 的域名
+     */
+    @Test
+    fun everyDiagnosedHostActuallyGetsDohTreatment() {
+        DoHDns.BUSINESS_HOSTS.forEach { host ->
+            dns.reportSuccess(host, ipA)
+
+            assertTrue(
+                "$host 列在 BUSINESS_HOSTS 里却不走 DoH",
+                prefs.getString("trusted_dns_ip_$host", null)?.startsWith("1.1.1.1|") ?: false,
+            )
+        }
+    }
+
+    /** 子域规则从硬编码改成域名表匹配后，poipiku 的 CDN 子域不能退化 */
+    @Test
+    fun poipikuSubdomainsSurviveTheDomainListRewrite() {
+        dns.reportSuccess("cdn.poipiku.com", ipA)
+
+        assertTrue(
+            prefs.getString("trusted_dns_ip_cdn.poipiku.com", null)?.startsWith("1.1.1.1|") ?: false,
+        )
+    }
+
     @Test
     fun forceReResolveDoesNotTouchPersisted() {
         dns.reportSuccess("poipiku.com", ipA)

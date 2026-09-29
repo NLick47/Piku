@@ -17,6 +17,7 @@ import com.piku.client.data.remote.NetworkDiagnosis
 import com.piku.client.data.remote.NetworkDiagnostics
 import com.piku.client.data.remote.NetworkRuntime
 import com.piku.client.data.remote.NetworkTuning
+import com.piku.client.data.remote.PikuJson
 import com.piku.client.data.remote.PoipikuHostnameVerifier
 import com.piku.client.data.remote.PoipikuApi
 import com.piku.client.data.remote.RefererInterceptor
@@ -24,6 +25,8 @@ import com.piku.client.data.remote.RetryInterceptor
 import com.piku.client.data.remote.SniStrippingSocketFactory
 import com.piku.client.data.remote.UpdateApi
 import com.piku.client.data.remote.UploadApi
+import com.piku.client.data.remote.pixiv.PixivApi
+import com.piku.client.data.remote.pixiv.PixivApiConfig
 import com.piku.client.data.remote.translation.LlmChatApi
 import dagger.Module
 import dagger.Provides
@@ -35,6 +38,8 @@ import okhttp3.Dns
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
+import java.net.InetSocketAddress
+import java.net.Proxy
 import java.util.concurrent.TimeUnit
 import javax.inject.Named
 import javax.inject.Singleton
@@ -45,11 +50,7 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideJson(): Json = Json {
-        ignoreUnknownKeys = true
-        explicitNulls = false
-        isLenient = true
-    }
+    fun provideJson(): Json = PikuJson
 
     @Provides
     @Singleton
@@ -178,6 +179,65 @@ object NetworkModule {
     @Provides
     @Singleton
     fun providePoipikuApi(retrofit: Retrofit): PoipikuApi = retrofit.create(PoipikuApi::class.java)
+
+    /**
+     * pixiv 专用 client：**刻意不带** cookieJar / RefererInterceptor / 图片中转。
+     * 主 client 会把 poipiku 的会话 cookie 一起发出去，那不该跟到 pixiv。
+     * DNS 用系统解析而不是 DoH：alidns 对 pixiv 返回的是投毒结果（Facebook 段 IP），
+     * 走 DoH 只会拿到更错的地址——真正干净的出口是自建反代（见 [PixivApiConfig]）。
+     */
+    @Provides
+    @Singleton
+    @Named("pixiv")
+    fun providePixivOkHttpClient(): OkHttpClient {
+        val builder = OkHttpClient.Builder()
+            .dns(Dns.SYSTEM)
+            .addInterceptor { chain ->
+                val request = chain.request().newBuilder()
+                    .header("User-Agent", PIXIV_USER_AGENT)
+                    .header("Referer", "https://www.pixiv.net/")
+                    .header("Accept", "application/json")
+                    .build()
+                chain.proceed(request)
+            }
+            .connectTimeout(NetworkTuning.CONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+        // 开发期借本机代理出网（见 PixivApiConfig.DEBUG_PROXY）；发布包里这段不生效
+        if (BuildConfig.DEBUG) {
+            val hostPort = PixivApiConfig.DEBUG_PROXY
+            val port = hostPort?.substringAfter(':')?.toIntOrNull()
+            if (hostPort != null && port != null) {
+                builder.proxy(
+                    Proxy(
+                        Proxy.Type.HTTP,
+                        InetSocketAddress.createUnresolved(hostPort.substringBefore(':'), port),
+                    ),
+                )
+            }
+            builder.addInterceptor(
+                HttpLoggingInterceptor().apply {
+                    level = HttpLoggingInterceptor.Level.BASIC
+                }
+            )
+        }
+        return builder.build()
+    }
+
+    @Provides
+    @Singleton
+    @Named("pixiv")
+    fun providePixivRetrofit(@Named("pixiv") client: OkHttpClient, json: Json): Retrofit =
+        Retrofit.Builder()
+            .baseUrl(PixivApiConfig.BASE_URL)
+            .client(client)
+            .addConverterFactory(LenientJsonConverterFactory(json))
+            .build()
+
+    @Provides
+    @Singleton
+    fun providePixivApi(@Named("pixiv") retrofit: Retrofit): PixivApi =
+        retrofit.create(PixivApi::class.java)
 
     @Provides
     @Singleton
@@ -327,4 +387,9 @@ object NetworkModule {
     private const val GITHUB_API_BASE_URL = "https://api.github.com/"
     private const val TRANSLATE_PLACEHOLDER_BASE_URL = "https://localhost/"
     private const val USER_AGENT = "Piku/0.1.0 (Android)"
+
+    /** pixiv 的网页接口对 UA 敏感，用桌面 Chrome 的 UA */
+    private const val PIXIV_USER_AGENT =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+            "(KHTML, like Gecko) Chrome/126.0 Safari/537.36"
 }

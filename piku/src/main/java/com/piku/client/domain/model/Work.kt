@@ -14,4 +14,5 @@ data class Work(
     val warning: Boolean = false,
     val loginRequired: Boolean = false,
     val isPrivate: Boolean = false,
+    val source: WorkSource = WorkSource.POIPIKU,
 )

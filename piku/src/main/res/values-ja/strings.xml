@@ -658,4 +658,18 @@
     <string name="image_route_auto">自動（推奨）</string>
     <string name="image_route_direct">直結</string>
     <string name="image_route_relay">中継</string>
+
+    <string name="home_source_poipiku">Poipiku</string>
+    <string name="home_source">フィードのソース</string>
+    <string name="home_source_select_title">データソースを選択</string>
+    <string name="home_source_select_hint">発見フィードのみに適用。検索・お気に入り・履歴には影響しません。</string>
+    <string name="home_source_pixiv">Pixiv</string>
+    <string name="pixiv_tab_daily">デイリー</string>
+    <string name="pixiv_tab_weekly">ウィークリー</string>
+    <string name="pixiv_tab_monthly">マンスリー</string>
+    <string name="pixiv_tab_rookie">ルーキー</string>
+    <string name="pixiv_filter_all">総合</string>
+    <string name="pixiv_filter_illust">イラスト</string>
+    <string name="pixiv_filter_manga">マンガ</string>
+    <string name="common_retry">再試行</string>
 </resources>

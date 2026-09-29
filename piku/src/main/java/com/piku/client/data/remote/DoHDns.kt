@@ -278,6 +278,11 @@ class DoHDns internal constructor(
         },
         dohSource("alidns", "https://dns.alidns.com/dns-query", listOf("223.5.5.5", "2400:3200::1")),
         dohSource("cloudflare", "https://cloudflare-dns.com/dns-query", listOf("1.1.1.1", "2606:4700:4700::1111")),
+        dohSource(
+            "自建",
+            "https://piku-img.pages.dev/dns-query",
+            listOf("172.66.44.124", "172.66.47.132"),
+        ),
     )
 
     private fun dohSource(name: String, url: String, bootstrap: List<String>): AddressSource {
@@ -465,7 +470,7 @@ class DoHDns internal constructor(
         addresses.joinToString("\n") { "${it.address}|${it.succeededAt}" }
 
     private fun isBusinessDomain(hostname: String): Boolean =
-        hostname == "poipiku.com" || hostname.endsWith(".poipiku.com")
+        BUSINESS_DOMAINS.any { hostname == it || hostname.endsWith(".$it") }
 
     private fun persistKey(hostname: String) = "$PERSIST_PREFIX$hostname"
 
@@ -474,8 +479,16 @@ class DoHDns internal constructor(
     enum class FailureType { TLS, CONNECT, STREAM }
 
     internal companion object {
-        /** 诊断报告里逐条展示的域名 */
-        val BUSINESS_HOSTS = listOf("poipiku.com", "cdn.poipiku.com")
+        /** 走 DoH 解析与地址固定的域名，含子域；pixiv 主站与图片 CDN 不同 IP 段，分开列 */
+        val BUSINESS_DOMAINS = listOf("poipiku.com", "pixiv.net", "pximg.net")
+
+        /** 诊断报告里逐条展示的域名，须落在 [BUSINESS_DOMAINS] 之内 */
+        val BUSINESS_HOSTS = listOf(
+            "poipiku.com",
+            "cdn.poipiku.com",
+            "www.pixiv.net",
+            "i.pximg.net",
+        )
 
         const val TAG = "PikuDiag"
         const val DOH_TIMEOUT_MS = 5_000L

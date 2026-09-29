@@ -1,9 +1,11 @@
 package com.piku.client.ui.home
 
 import com.piku.client.data.repository.ThumbnailResolver
+import com.piku.client.data.source.PoipikuContentSource
 import com.piku.client.domain.model.AppError
 import com.piku.client.domain.model.PoipikuCategory
 import com.piku.client.domain.model.Work
+import com.piku.client.domain.source.SourceFeed
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,37 +19,49 @@ internal data class FeedKey(
     val category: PoipikuCategory,
 )
 
-internal data class FeedSnapshot(
-    val works: List<Work> = emptyList(),
+/** 首页 tab ↔ poipiku 源的流 id。映射放在 ui 层，免得 domain/data 反过来依赖 FeedTab */
+internal val FeedTab.sourceId: String
+    get() = when (this) {
+        FeedTab.HOT -> PoipikuContentSource.FEED_HOT
+        FeedTab.LATEST -> PoipikuContentSource.FEED_LATEST
+        FeedTab.FOLLOW -> PoipikuContentSource.FEED_FOLLOW
+        FeedTab.RANDOM -> PoipikuContentSource.FEED_RANDOM
+    }
+
+internal data class FeedSnapshot<T : Any>(
+    val items: List<T> = emptyList(),
     val page: Int = 0,
     val endReached: Boolean = false,
     val loading: Boolean = false,
     val loadingMore: Boolean = false,
     val error: AppError? = null,
     val loadMoreError: AppError? = null,
-    val followNeedLogin: Boolean = false,
+    val needLogin: Boolean = false,
     val refreshNotice: Int? = null,
 )
 
-private const val MAX_WORKS = 600
+private const val MAX_ITEMS = 600
 
-internal class FeedLoader(
-    val key: FeedKey,
+internal class FeedLoader<K : Any, T : Any>(
+    val key: K,
+    private val feed: SourceFeed,
     private val scope: CoroutineScope,
-    /** 拉取指定页；RANDOM 忽略页码，由 ViewModel 注入对应 use case */
-    private val fetchPage: suspend (page: Int) -> Result<List<Work>>,
+    /** 拉取指定页 */
+    private val fetchPage: suspend (page: Int) -> Result<List<T>>,
     private val isLoggedIn: () -> Boolean,
+    /** 条目身份，用于去重、上限裁剪与「新增 N 条」的基准比对 */
+    private val idOf: (T) -> Long,
     /** 预取下一页开关；单测可关闭以便确定性编排 */
     private val prefetchEnabled: Boolean = true,
 ) {
-    private val _state = MutableStateFlow(FeedSnapshot())
-    val state: StateFlow<FeedSnapshot> = _state.asStateFlow()
+    private val _state = MutableStateFlow(FeedSnapshot<T>())
+    val state: StateFlow<FeedSnapshot<T>> = _state.asStateFlow()
 
     private var page = 0
     private var refreshJob: Job? = null
     private var loadMoreJob: Job? = null
     private var prefetchJob: Job? = null
-    private var prefetched: List<Work>? = null
+    private var prefetched: List<T>? = null
     /** 下拉刷新是否要计算“新增 N 条”提示，以及对比基准（刷新前的首条 id） */
     private var pendingNoticeRequested = false
     private var pendingNoticeBaselineId: Long? = null
@@ -57,9 +71,9 @@ internal class FeedLoader(
      * [countNotice]=true 时按当前首条 id 计算刷新后新增条数。
      */
     fun refresh(countNotice: Boolean) {
-        // 随机流无时间序语义，首条 id 基准比对无意义：不计算新增提示
-        pendingNoticeRequested = countNotice && key.tab != FeedTab.RANDOM
-        pendingNoticeBaselineId = _state.value.works.firstOrNull()?.id
+        // 无时间序的流首条 id 基准比对无意义：不计算新增提示
+        pendingNoticeRequested = countNotice && feed.chronological
+        pendingNoticeBaselineId = _state.value.items.firstOrNull()?.let(idOf)
         refreshJob?.cancel()
         loadMoreJob?.cancel()
         cancelPrefetch()
@@ -93,22 +107,12 @@ internal class FeedLoader(
     }
 
     /**
-     * 同步替换缩略图字段（密码作品解锁等场景），其余内容保持不变。
-     *
-     * 只接受占位图/空图卡片的替换（见 [ThumbnailResolver.needsThumbnailBackfill]）：真实
-     * 缩略图被追加图覆盖会让卡片换图并重新解码，返回首页先灰白再出图。
+     * 就地替换某一条目（密码作品解锁后回填缩略图等），其余内容保持不变。
+     * 是否该替换由调用方判断——判定条件往往是站点专属的。
      */
-    fun updateThumbnail(workId: Long, thumbnailUrl: String) {
-        fun isBackfillTarget(work: Work): Boolean =
-            work.id == workId &&
-                work.thumbnailUrl != thumbnailUrl &&
-                ThumbnailResolver.needsThumbnailBackfill(work.thumbnailUrl)
-        if (_state.value.works.none(::isBackfillTarget)) return
-        _state.update { s ->
-            s.copy(works = s.works.map { w ->
-                if (isBackfillTarget(w)) w.copy(thumbnailUrl = thumbnailUrl) else w
-            })
-        }
+    fun updateItem(match: (T) -> Boolean, transform: (T) -> T) {
+        if (_state.value.items.none(match)) return
+        _state.update { s -> s.copy(items = s.items.map { if (match(it)) transform(it) else it }) }
     }
 
     /** 停掉本 loader 的全部在途任务（整体失效或被 LRU 逐出时调用） */
@@ -119,24 +123,24 @@ internal class FeedLoader(
     }
 
     private fun startRefresh() {
-        if (key.tab == FeedTab.FOLLOW && !isLoggedIn()) {
-            // 关注流需要登录：不发请求（服务端会返回登录页），直接展示登录引导
+        if (feed.requiresLogin && !isLoggedIn()) {
+            // 需要登录的流：不发请求（服务端会返回登录页），直接展示登录引导
             _state.update {
                 it.copy(
-                    works = emptyList(),
+                    items = emptyList(),
                     endReached = true,
                     loading = false,
                     loadingMore = false,
                     error = null,
                     loadMoreError = null,
-                    followNeedLogin = true,
+                    needLogin = true,
                     refreshNotice = null,
                 )
             }
             return
         }
         _state.update {
-            it.copy(loading = true, loadingMore = false, error = null, loadMoreError = null, followNeedLogin = false)
+            it.copy(loading = true, loadingMore = false, error = null, loadMoreError = null, needLogin = false)
         }
         refreshJob = scope.launch {
             fetchPage(0)
@@ -145,9 +149,9 @@ internal class FeedLoader(
                     val notice = takePendingNotice(list)
                     _state.update {
                         it.copy(
-                            works = capWorks(list),
+                            items = capItems(list),
                             page = 0,
-                            endReached = key.tab == FeedTab.RANDOM || list.isEmpty(),
+                            endReached = !feed.paginated || list.isEmpty(),
                             loading = false,
                             loadingMore = false,
                             error = null,
@@ -171,16 +175,16 @@ internal class FeedLoader(
     }
 
     /** 取出待计算的新增提示并复位标记（只消费一次） */
-    private fun takePendingNotice(list: List<Work>): Int? {
+    private fun takePendingNotice(list: List<T>): Int? {
         if (!pendingNoticeRequested) return null
         pendingNoticeRequested = false
         val baseline = pendingNoticeBaselineId
         pendingNoticeBaselineId = null
-        return if (baseline != null) list.takeWhile { it.id != baseline }.size else 0
+        return if (baseline != null) list.takeWhile { idOf(it) != baseline }.size else 0
     }
 
     private fun startLoadMore() {
-        if (key.tab == FeedTab.FOLLOW && !isLoggedIn()) return
+        if (feed.requiresLogin && !isLoggedIn()) return
         // 作废在途预取：否则同页双发后过期的 prefetched 会被快路径重复消费，
         // 并杀掉合法的下一页请求，导致分页漂移、服务端内容被永久跳过
         cancelPrefetch()
@@ -204,10 +208,10 @@ internal class FeedLoader(
         }
     }
 
-    private fun appendPage(newPage: Int, list: List<Work>) {
+    private fun appendPage(newPage: Int, list: List<T>) {
         _state.update {
             it.copy(
-                works = capWorks(it.works + list),
+                items = capItems(it.items + list),
                 page = newPage,
                 endReached = list.isEmpty(),
                 loadingMore = false,
@@ -223,8 +227,8 @@ internal class FeedLoader(
     /** 后台预取下一页：上滑到尾部时 loadMore 可即时消费 */
     private fun maybePrefetch() {
         if (!prefetchEnabled) return
-        if (key.tab == FeedTab.RANDOM) return
-        if (key.tab == FeedTab.FOLLOW && !isLoggedIn()) return
+        if (!feed.paginated) return
+        if (feed.requiresLogin && !isLoggedIn()) return
         if (_state.value.endReached) return
         val nextPage = page + 1
         prefetchJob?.cancel()
@@ -238,8 +242,20 @@ internal class FeedLoader(
         }
     }
 
-    private fun capWorks(works: List<Work>): List<Work> {
-        val unique = works.distinctBy { it.id }
-        return if (unique.size > MAX_WORKS) unique.takeLast(MAX_WORKS) else unique
+    private fun capItems(list: List<T>): List<T> {
+        val unique = list.distinctBy(idOf)
+        return if (unique.size > MAX_ITEMS) unique.takeLast(MAX_ITEMS) else unique
     }
 }
+
+internal fun FeedLoader<FeedKey, Work>.backfillThumbnail(
+    workId: Long,
+    thumbnailUrl: String,
+) = updateItem(
+    match = { work ->
+        work.id == workId &&
+            work.thumbnailUrl != thumbnailUrl &&
+            ThumbnailResolver.needsThumbnailBackfill(work.thumbnailUrl)
+    },
+    transform = { it.copy(thumbnailUrl = thumbnailUrl) },
+)

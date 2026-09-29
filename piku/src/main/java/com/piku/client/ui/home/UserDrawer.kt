@@ -44,6 +44,7 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PostAdd
+import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.Tag
@@ -123,6 +124,9 @@ fun UserDrawer(
     onLanguageClick: () -> Unit = {},
     onRetentionClick: () -> Unit = {},
     onWebDavClick: () -> Unit = {},
+    /** 发现页数据源（只作用于首页）：当前源的文案资源与换源入口 */
+    homeSourceLabelRes: Int = R.string.home_source_poipiku,
+    onHomeSourceClick: () -> Unit = {},
     content: @Composable () -> Unit,
 ) {
     var settingsExpanded by remember { mutableStateOf(false) }
@@ -168,6 +172,8 @@ fun UserDrawer(
                 onLanguageClick = onLanguageClick,
                 onRetentionClick = onRetentionClick,
                 onWebDavClick = onWebDavClick,
+                homeSourceLabelRes = homeSourceLabelRes,
+                onHomeSourceClick = onHomeSourceClick,
             )
         },
         scrimColor = if (dark) Color(0xB3000000) else Color(0x99000000),
@@ -212,6 +218,8 @@ private fun DrawerPanel(
     onLanguageClick: () -> Unit,
     onRetentionClick: () -> Unit,
     onWebDavClick: () -> Unit,
+    homeSourceLabelRes: Int,
+    onHomeSourceClick: () -> Unit,
 ) {
     val primary = PikuColors.textPrimary
     val faint = PikuColors.textFaint
@@ -337,6 +345,14 @@ private fun DrawerPanel(
             SectionLabel(
                 text = stringResource(R.string.menu_section_settings),
                 color = faint,
+            )
+            DrawerMenuRow(
+                icon = Icons.Outlined.Public,
+                label = stringResource(R.string.home_source),
+                trailing = stringResource(homeSourceLabelRes),
+                onClick = onHomeSourceClick,
+                dark = dark,
+                accent = iconAccent,
             )
             AdultContentRow(
                 adultEnabled = adultEnabled,

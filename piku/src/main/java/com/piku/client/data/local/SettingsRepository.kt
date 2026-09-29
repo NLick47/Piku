@@ -4,6 +4,7 @@ import android.content.SharedPreferences
 import com.piku.client.data.repository.SyncResult
 import com.piku.client.data.repository.SyncState
 import com.piku.client.domain.model.FolderSort
+import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.model.ImageRouteMode
 import com.piku.client.domain.model.ReadingProgress
 import com.piku.client.domain.model.ThemeMode
@@ -96,6 +97,14 @@ class SettingsRepository @Inject constructor(
         prefs.getString(KEY_CUSTOM_BACKGROUND_PATH, null)?.takeIf { File(it).exists() },
     )
     val customBackgroundPath: StateFlow<String?> = _customBackgroundPath.asStateFlow()
+
+    /** 首页发现页的数据源；只作用于首页，搜索/收藏/历史不跟着切 */
+    private val _homeSource = MutableStateFlow(
+        prefs.getString(KEY_HOME_SOURCE, null)
+            ?.let { name -> runCatching { WorkSource.valueOf(name) }.getOrNull() }
+            ?: WorkSource.POIPIKU,
+    )
+    val homeSource: StateFlow<WorkSource> = _homeSource.asStateFlow()
 
     /** 自定义背景压暗程度 0~1，0 表示不压暗 */
     private val _backgroundDim = MutableStateFlow(
@@ -203,6 +212,11 @@ class SettingsRepository @Inject constructor(
     fun setImageRouteMode(mode: ImageRouteMode) {
         prefs.edit().putString(KEY_IMAGE_ROUTE_MODE, mode.name).apply()
         _imageRouteMode.value = mode
+    }
+
+    fun setHomeSource(value: WorkSource) {
+        prefs.edit().putString(KEY_HOME_SOURCE, value.name).apply()
+        _homeSource.value = value
     }
 
     fun setFolderSort(sort: FolderSort) {
@@ -751,6 +765,7 @@ class SettingsRepository @Inject constructor(
         const val KEY_SHOW_ADULT_CONTENT = "show_adult_content"
         const val KEY_THEME_MODE = "theme_mode"
         const val KEY_IMAGE_ROUTE_MODE = "image_route_mode"
+        const val KEY_HOME_SOURCE = "home_source"
         const val KEY_FOLDER_SORT = "folder_sort"
         const val KEY_HISTORY_RETENTION_DAYS = "history_retention_days"
         const val KEY_AUTO_CHECK_ENABLED = "auto_check_update_enabled"

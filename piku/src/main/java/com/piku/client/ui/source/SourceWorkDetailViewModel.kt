@@ -1,0 +1,395 @@
+package com.piku.client.ui.source
+
+import android.graphics.Bitmap
+import android.util.Log
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.piku.client.R
+import com.piku.client.data.local.SettingsRepository
+import com.piku.client.data.remote.translation.ImageTranslateEngine
+import com.piku.client.data.remote.translation.ImageTranslateResult
+import com.piku.client.data.remote.translation.ImageTranslationPrompts
+import com.piku.client.data.remote.translation.LlmTranslateEngine
+import com.piku.client.data.remote.translation.ModelCatalogRepository
+import com.piku.client.data.remote.translation.TranslationRepository
+import com.piku.client.domain.model.Work
+import com.piku.client.domain.model.WorkDetail
+import com.piku.client.domain.model.mergeTranslatedFields
+import com.piku.client.domain.source.SourceRegistry
+import com.piku.client.domain.source.SourceWorkPage
+import com.piku.client.domain.usecase.ObserveHomeSourceUseCase
+import com.piku.client.domain.usecase.ObserveLanguageUseCase
+import com.piku.client.ui.detail.DetailViewModel
+import com.piku.client.ui.detail.ViewerImage
+import com.piku.client.ui.detail.TranslateField
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import javax.inject.Inject
+import javax.inject.Named
+
+@HiltViewModel
+class SourceWorkDetailViewModel @Inject constructor(
+    private val sourceRegistry: SourceRegistry,
+    observeHomeSourceUseCase: ObserveHomeSourceUseCase,
+    private val translationRepository: TranslationRepository,
+    private val imageTranslateEngine: ImageTranslateEngine,
+    private val modelCatalogRepository: ModelCatalogRepository,
+    private val settingsRepository: SettingsRepository,
+    private val observeLanguageUseCase: ObserveLanguageUseCase,
+    private val imageSaver: com.piku.client.data.local.ImageSaver,
+    private val imageShareHelper: com.piku.client.data.local.ImageShareHelper,
+    @Named("image") private val imageClient: OkHttpClient,
+) : ViewModel() {
+
+    /** 保存/分享结果的就地提示，由宿主 SnackbarHost 呈现（与 poipiku 详情同款通道） */
+    val feedback = com.piku.client.ui.common.FeedbackChannel()
+
+    private val homeSource = observeHomeSourceUseCase()
+
+    data class UiState(
+        val loading: Boolean = true,
+        val failed: Boolean = false,
+        val detail: WorkDetail? = null,
+        val translating: Boolean = false,
+        val showTranslationAll: Boolean = false,
+        /** 单字段原/译切换；语义与 poipiku 详情一致：在 showAll 基础上按字段取反 */
+        val toggledFields: Set<TranslateField> = emptySet(),
+        val hasTextModel: Boolean = false,
+        val hasImageModel: Boolean = false,
+        val translatedImages: Map<Int, Bitmap> = emptyMap(),
+        val imageTranslatingPage: Int? = null,
+        val showTranslatedImage: Boolean = false,
+        val savingImage: Boolean = false,
+        val sharingImage: Boolean = false,
+        val sharingTargetPackage: String? = null,
+        /** 看图页（regular 展示 + original 原图）：查看器与保存/分享都从这里取 */
+        val pages: List<SourceWorkPage> = emptyList(),
+    ) {
+        val hasTranslation: Boolean get() = detail?.translated?.hasAny == true
+
+        /** 与 poipiku 详情同构：缩略打底 + 原图覆盖 */
+        val viewerImages: List<ViewerImage>
+            get() = pages.map { page ->
+                ViewerImage(
+                    thumbnailUrl = page.url,
+                    fullUrl = page.fullUrl.takeIf { it.isNotBlank() },
+                )
+            }
+
+        fun showTranslation(field: TranslateField): Boolean = showTranslationAll != (field in toggledFields)
+    }
+
+    private val _ui = MutableStateFlow(UiState())
+    val ui: StateFlow<UiState> = _ui.asStateFlow()
+
+    private var loadedWorkId: Long = -1
+    private val _shareRequest = MutableStateFlow<DetailViewModel.ImageShareRequest?>(null)
+    val shareRequest: StateFlow<DetailViewModel.ImageShareRequest?> = _shareRequest.asStateFlow()
+    /** 失败时收起面板的一次性事件。replay=0：依赖「面板打开期间 collector 必在」——失败只发生在点击后的下载流程里 */
+    private val _shareSheetDismiss = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val shareSheetDismiss: kotlinx.coroutines.flow.SharedFlow<Unit> = _shareSheetDismiss.asSharedFlow()
+    private var shareJob: Job? = null
+    private val translatedImages = mutableMapOf<Int, Bitmap>()
+    private var imageTranslateJob: Job? = null
+
+    init {
+        viewModelScope.launch {
+            translationRepository.roleModelAvailability.collect { avail ->
+                _ui.update { it.copy(hasTextModel = avail.text, hasImageModel = avail.image) }
+            }
+        }
+    }
+
+    /** 打开作品时加载一次；[force] 供失败重试强制重拉 */
+    fun load(work: Work, force: Boolean = false) {
+        if (!force && loadedWorkId == work.id && _ui.value.detail != null) return
+        loadedWorkId = work.id
+        translatedImages.clear()
+        imageTranslateJob?.cancel()
+        _ui.value = UiState()
+        viewModelScope.launch {
+            val source = sourceRegistry.byId(homeSource.first())
+            val pages = source.workPages(work)
+            val text = source.workDetailText(work).getOrNull()
+            pages.fold(
+                onSuccess = { list ->
+                    if (list.isEmpty()) {
+                        _ui.update { it.copy(loading = false, failed = true) }
+                        return@fold
+                    }
+                    val detail = WorkDetail(
+                        title = work.title,
+                        description = text?.description.orEmpty(),
+                        authorName = work.authorName,
+                        authorAvatarUrl = work.authorAvatarUrl.orEmpty(),
+                        categoryCd = -1,
+                        categoryName = "",
+                        imageUrls = list.map { it.url },
+                        tags = text?.tags.orEmpty(),
+                        r18 = work.r18,
+                    )
+                    _ui.update { it.copy(loading = false, detail = detail, pages = list) }
+                    // 与 poipiku 详情一致：开了 AI 翻译就自动译一次（失败静默）
+                    if (settingsRepository.aiTranslateEnabled.value) translate()
+                },
+                onFailure = {
+                    _ui.update { it.copy(loading = false, failed = true) }
+                },
+            )
+        }
+    }
+
+    /** 顶栏翻译按钮：翻短字段；已有译文时整页原/译切换（与 poipiku 同语义） */
+    fun onTranslateClick() {
+        val state = _ui.value
+        if (state.detail?.translated?.hasAny == true) {
+            _ui.update { it.copy(showTranslationAll = !it.showTranslationAll, toggledFields = emptySet()) }
+            return
+        }
+        translate()
+    }
+
+    fun onToggleField(field: TranslateField) {
+        _ui.update {
+            it.copy(toggledFields = if (field in it.toggledFields) it.toggledFields - field else it.toggledFields + field)
+        }
+    }
+
+    private fun translate() {
+        val detail = _ui.value.detail ?: return
+        if (_ui.value.translating) return
+        if (!translationRepository.hasKey()) {
+            Log.d("PikuDiag", "source detail translate skip work=$loadedWorkId: no api key")
+            return
+        }
+        viewModelScope.launch {
+            _ui.update { it.copy(translating = true) }
+            val outcome = runCatching {
+                translationRepository.translate(detail, observeLanguageUseCase().value)
+            }.getOrNull()
+            _ui.update { state ->
+                val current = state.detail ?: return@update state.copy(translating = false)
+                val fields = outcome?.takeUnless { it.failed }?.fields
+                val merged = mergeTranslatedFields(current.translated, fields)
+                // 首次拿到译文翻到译文视图；已有译文后的重跑不动用户的显式选择（同 poipiku）
+                val show = merged != null && (current.translated == null || state.showTranslationAll)
+                state.copy(
+                    translating = false,
+                    detail = current.copy(translated = merged),
+                    showTranslationAll = show,
+                    toggledFields = if (show) state.toggledFields else emptySet(),
+                )
+            }
+        }
+    }
+
+    // ---------------- 保存与分享（与 poipiku 详情同款语义，数据换成源的作品页） ----------------
+
+    private val workUrl: String get() = "https://www.pixiv.net/artworks/$loadedWorkId"
+
+    /** 保存单页：有原图存原图，与 poipiku 一致 */
+    fun saveImage(page: Int) {
+        val pages = _ui.value.pages
+        val item = pages.getOrNull(page) ?: return
+        if (_ui.value.savingImage) return
+        viewModelScope.launch {
+            _ui.update { it.copy(savingImage = true) }
+            val url = item.fullUrl.ifBlank { item.url }
+            val result = runCatching { imageSaver.save(url, "Piku_${loadedWorkId}_${page + 1}") }
+            _ui.update { it.copy(savingImage = false) }
+            feedback.show(
+                if (result.isSuccess) R.string.detail_save_saved else R.string.detail_save_failed,
+            )
+        }
+    }
+
+    private var saveAllRunning = false
+
+    /** 保存全部：逐页保存，结果按成功/失败数报（与 poipiku 同文案）；带重入保护防重复入库 */
+    fun saveAllImages() {
+        val pages = _ui.value.pages
+        if (pages.isEmpty() || saveAllRunning) return
+        saveAllRunning = true
+        viewModelScope.launch {
+            try {
+            var ok = 0
+            pages.forEachIndexed { index, item ->
+                val url = item.fullUrl.ifBlank { item.url }
+                val result = runCatching { imageSaver.save(url, "Piku_${loadedWorkId}_${index + 1}") }
+                if (result.isSuccess) ok += 1
+            }
+            val failed = pages.size - ok
+            when {
+                failed == 0 -> feedback.show(R.string.detail_save_all_success, pages.size)
+                ok == 0 -> feedback.show(R.string.detail_save_failed)
+                else -> feedback.show(R.string.detail_save_all_partial, ok, failed)
+            }
+            } finally {
+                saveAllRunning = false
+            }
+        }
+    }
+
+    /**
+     * 分享第 [page] 张：用页面上当前展示的 regular（与 poipiku 同策略——不等原图）。
+     * [targetPackage] 为 null 走系统分享面板；定向不可解析时由 UI 回落系统面板。
+     */
+    fun shareImage(page: Int, targetPackage: String? = null) {
+        val item = _ui.value.pages.getOrNull(page) ?: return
+        if (_ui.value.sharingImage) return
+        shareJob?.cancel()
+        shareJob = viewModelScope.launch {
+            _ui.update { it.copy(sharingImage = true, sharingTargetPackage = targetPackage) }
+            try {
+                val uri = imageShareHelper.getImageUri(item.url, loadedWorkId, page)
+                _ui.update { it.copy(sharingImage = false, sharingTargetPackage = null) }
+                _shareRequest.value = DetailViewModel.ImageShareRequest(
+                    uri = uri,
+                    targetPackage = targetPackage,
+                    shareText = workUrl,
+                )
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                _ui.update { it.copy(sharingImage = false, sharingTargetPackage = null) }
+                throw e
+            } catch (e: Exception) {
+                Log.d("SourceDetailTranslate", "share fail work=$loadedWorkId page=$page: ${e.message}")
+                _ui.update { it.copy(sharingImage = false, sharingTargetPackage = null) }
+                // 失败时面板仍开着，先让 UI 收起（否则 snackbar 被面板盖住），与 poipiku 同
+                _shareSheetDismiss.tryEmit(Unit)
+                feedback.show(R.string.detail_share_failed)
+            }
+        }
+    }
+
+    /** 用户划掉面板时中断分享下载，避免关了面板分享面板又弹出来 */
+    fun cancelShare() {
+        shareJob?.cancel()
+        shareJob = null
+        if (_ui.value.sharingImage) {
+            _ui.update { it.copy(sharingImage = false, sharingTargetPackage = null) }
+        }
+    }
+
+    fun clearShareRequest() {
+        _shareRequest.value = null
+    }
+
+    /**
+     * 退出详情页时释放重体量状态：图片翻译位图与在途任务。VM 本身按作品驻留在导航栈里，
+     * 不释放的话浏览多个作品会累积位图（poipiku 详情对应 clearImageTranslations 的职责）。
+     */
+    fun release() {
+        imageTranslateJob?.cancel()
+        shareJob?.cancel()
+        translatedImages.clear()
+        _ui.update {
+            it.copy(
+                translatedImages = emptyMap(),
+                imageTranslatingPage = null,
+                showTranslatedImage = false,
+                sharingImage = false,
+                sharingTargetPackage = null,
+            )
+        }
+        _shareRequest.value = null
+    }
+
+    // ---------------- 图片翻译（与 poipiku 详情同款：点按钮翻译，再点切原/译） ----------------
+
+    fun onImagePageChanged(page: Int) {
+        _ui.update { it.copy(showTranslatedImage = translatedImages.containsKey(page)) }
+    }
+
+    fun onImageTranslateClick(page: Int) {
+        if (_ui.value.imageTranslatingPage != null) return
+        if (translatedImages.containsKey(page)) {
+            _ui.update { it.copy(showTranslatedImage = !it.showTranslatedImage) }
+            return
+        }
+        val imageUrl = _ui.value.detail?.imageUrls?.getOrNull(page) ?: return
+        _ui.update { it.copy(imageTranslatingPage = page) }
+        imageTranslateJob?.cancel()
+        imageTranslateJob = viewModelScope.launch {
+            val result = translateImageOnce(imageUrl)
+            when (result) {
+                is ImageTranslateResult.Success -> {
+                    translatedImages[page] = result.bitmap
+                    _ui.update {
+                        it.copy(
+                            translatedImages = HashMap(translatedImages),
+                            imageTranslatingPage = null,
+                            showTranslatedImage = true,
+                        )
+                    }
+                }
+                is ImageTranslateResult.Failure -> {
+                    // 与 poipiku 的失败重试语义一致：复位按钮，用户再点一次即重试
+                    Log.e(
+                        "SourceDetailTranslate",
+                        "page=$page failed: ${result.error::class.simpleName}: ${result.error.message}",
+                    )
+                    _ui.update { it.copy(imageTranslatingPage = null) }
+                }
+            }
+        }
+    }
+
+    private suspend fun translateImageOnce(imageUrl: String): ImageTranslateResult {
+        val bytes = downloadImage(imageUrl)
+            ?: return ImageTranslateResult.Failure(
+                com.piku.client.data.remote.translation.ImageTranslateError.DownloadFailed(),
+            )
+        val language = observeLanguageUseCase().value
+        val targetLang = TranslationRepository.targetLangName(language)
+        val entry = translationRepository.effectiveImageEntry()
+            ?: return ImageTranslateResult.Failure(
+                com.piku.client.data.remote.translation.ImageTranslateError.NoModel(),
+            )
+        return imageTranslateEngine.translate(
+            imageBytes = bytes,
+            prompt = imagePrompt(targetLang),
+            targetLang = targetLang,
+            proxyBaseUrl = entry.baseUrl,
+        )
+    }
+
+    /** 走 App 的图片客户端取字节：i.pximg.net 需要它带的 DoH/SNI 与 pixiv Referer */
+    private suspend fun downloadImage(url: String): ByteArray? = withContext(Dispatchers.IO) {
+        try {
+            val request = Request.Builder().url(url).build()
+            imageClient.newCall(request).execute().use { response ->
+                if (response.isSuccessful) response.body?.bytes() else null
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e("SourceDetailTranslate", "download failed: ${e.message}")
+            null
+        }
+    }
+
+    /** 提示词来源与 poipiku 详情同序：目录默认 → 模型自带 → 内置兜底 */
+    private fun imagePrompt(targetLang: String): String {
+        val key = when (targetLang) {
+            LlmTranslateEngine.TARGET_ZH -> "zh"
+            LlmTranslateEngine.TARGET_JA -> "ja"
+            else -> "en"
+        }
+        val catalogPrompt = modelCatalogRepository.catalogDefaults.value?.prompts?.image?.get(key)
+        if (!catalogPrompt.isNullOrBlank()) return catalogPrompt
+        val modelPrompt = translationRepository.effectiveImageEntry()?.prompts?.image?.get(key)
+        if (!modelPrompt.isNullOrBlank()) return modelPrompt
+        return ImageTranslationPrompts.prompt(targetLang)
+    }
+}

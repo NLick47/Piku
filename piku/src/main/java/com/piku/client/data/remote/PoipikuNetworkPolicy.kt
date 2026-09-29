@@ -27,6 +27,14 @@ object PoipikuNetworkPolicy {
             sni = "d1lm8mp911lcxf.cloudfront.net",
             trustedSans = setOf("d1lm8mp911lcxf.cloudfront.net", "*.cloudfront.net"),
         ),
+        // pixiv 图片 CDN：与主站一样按 IP 提供证书——清空 SNI 后 server 给
+        // CN=pximg.net、SAN 为 pximg.net/*.pximg.net 的证书（2026-09 实测在
+        // 210.140.139.129 上 TLS1.3 握手成功）；而带上 i.pximg.net 的 SNI 会在
+        // 握手阶段被 RST（约 90ms），故必须清空。
+        "i.pximg.net" to SniRule(
+            sni = null,
+            trustedSans = setOf("pximg.net", "*.pximg.net"),
+        ),
     )
 
     /**
