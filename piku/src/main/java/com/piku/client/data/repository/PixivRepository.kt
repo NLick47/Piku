@@ -4,10 +4,13 @@ import com.piku.client.data.remote.apiCall
 import com.piku.client.domain.model.AppError
 import com.piku.client.data.remote.pixiv.PixivApi
 import com.piku.client.data.remote.pixiv.PixivApiConfig
+import com.piku.client.data.remote.pixiv.PixivIllustBody
+import com.piku.client.data.remote.pixiv.PixivWorkCard
 import com.piku.client.data.remote.pixiv.PixivPageUrls
 import com.piku.client.data.remote.pixiv.PixivRankingItem
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkSource
+import com.piku.client.domain.model.WorkStats
 import com.piku.client.domain.source.SourcePage
 import com.piku.client.domain.source.SourceWorkPage
 import com.piku.client.domain.source.SourceWorkText
@@ -43,16 +46,58 @@ class PixivRepository @Inject constructor(
             )
         }
 
-    /** 详情补充文本。简介是 HTML 片段：<br /> 换算行、其余标签剥掉（详情壳按纯文本展示）。 */
+    /**
+     * 详情补充文本与统计。简介是 HTML 片段：<br /> 换算行、其余标签剥掉（详情壳按纯文本展示）。
+     * 计数与元信息同一个接口就带出来了，不再多打一次请求。
+     */
     suspend fun workText(illustId: Long): Result<SourceWorkText?> = apiCall {
         val response = api.illustDetail(illustId)
         if (response.error) return@apiCall null
         SourceWorkText(
             description = cleanPixivDescription(response.body.description),
             tags = response.body.tags.tags.map { it.tag }.filter { it.isNotBlank() },
+            stats = response.body.toWorkStats(),
         )
     }
+
+    /** 详情页底部的相关作品；取不到就当没有，详情页照常展示 */
+    suspend fun recommend(illustId: Long): Result<List<Work>> = apiCall {
+        val response = api.recommend(illustId)
+        if (response.error) return@apiCall emptyList()
+        response.body.illusts.mapNotNull { it.toWork() }
+    }
 }
+
+/** 相关作品卡片只需要 id/标题/缩略图/作者/页数；id 解析不出来的是占位条目，直接丢掉 */
+internal fun PixivWorkCard.toWork(): Work? {
+    val illustId = illustId
+    if (illustId <= 0 || url.isBlank()) return null
+    return Work(
+        id = illustId,
+        authorId = authorIdLong,
+        authorName = userName,
+        authorAvatarUrl = null,
+        categoryCd = -1,
+        categoryName = "",
+        title = title,
+        thumbnailUrl = url,
+        imageCount = pageCount,
+        r18 = xRestrict > 0,
+        source = WorkSource.PIXIV,
+    )
+}
+
+internal fun PixivIllustBody.toWorkStats(): WorkStats = WorkStats(
+    views = viewCount,
+    likes = likeCount,
+    bookmarks = bookmarkCount,
+    comments = commentCount,
+    postedAt = uploadDate.ifBlank { createDate },
+    width = width,
+    height = height,
+    pageCount = pageCount,
+    authorAccount = userAccount,
+)
 
 /**
  * 尺寸档映射：**打底用 small（540px，几十 KB）**——一开详情页就拉 master1200 是 1 MB 起步，

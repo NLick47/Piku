@@ -622,9 +622,10 @@ private fun AuthorRow(detail: WorkDetail, dark: Boolean, onAuthorClick: () -> Un
     }
 }
 
+/** internal：pixiv 详情（ui.source）复用同一个图区，不另抄一份 */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ImagePager(
+internal fun ImagePager(
     detail: WorkDetail,
     dark: Boolean,
     /** 与列表卡片一致的共享元素 key；空串表示不参与过渡 */
@@ -1087,8 +1088,9 @@ private fun PasswordBox(
     }
 }
 
+/** internal：pixiv 详情复用同一套链接识别（非 poipiku 作品链接一律交给浏览器） */
 @Composable
-private fun linkify(
+internal fun linkify(
     raw: String,
     dark: Boolean,
     onWorkClick: (Long, Long, String) -> Unit,

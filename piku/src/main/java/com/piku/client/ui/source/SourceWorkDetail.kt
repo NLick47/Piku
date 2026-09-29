@@ -51,7 +51,6 @@ import com.piku.client.R
 import com.piku.client.data.local.ShareTargets
 import com.piku.client.domain.model.Work
 import com.piku.client.ui.detail.DETAIL_TOP_BAR_HEIGHT
-import com.piku.client.ui.detail.DetailContent
 import com.piku.client.ui.detail.DetailSkeleton
 import com.piku.client.ui.detail.DetailTopBar
 import com.piku.client.ui.common.FeedbackHost
@@ -79,6 +78,9 @@ internal fun SourceWorkDetailDialog(
     viewModel: SourceWorkDetailViewModel = hiltViewModel(key = "source-detail-${work.id}"),
 ) {
     LaunchedEffect(work.id) { viewModel.load(work) }
+    // 点底部相关作品叠一层新详情（新作品 = 新 key = 新 VM）：返回自然回到上一个作品，
+    // 不会一退就把整个详情关掉。连点会叠多层，与浏览器一层层回退同理。
+    var relatedWork by remember(work.id) { mutableStateOf<Work?>(null) }
     // VM 按作品驻留导航栈：退出时释放图片翻译位图等重体量状态（见 release 注释）
     DisposableEffect(work.id) {
         onDispose { viewModel.release() }
@@ -263,20 +265,28 @@ internal fun SourceWorkDetailDialog(
                     )
                 }
                 else -> {
-                    DetailContent(
+                    // pixiv 走自己的版面：图通栏置顶 + 概览卡（计数/元信息），与 poipiku 互不干涉
+                    PixivDetailContent(
                         detail = detail,
+                        stats = state.stats,
                         dark = dark,
+                        language = state.language,
                         scrollState = scrollState,
                         topInset = topInset,
                         sourceThumbnailUrl = work.thumbnailUrl,
-                        onImageClick = { page -> viewerPage = page },
-                        onImageLongPress = { page -> imageActionPage = page },
-                        password = "",
-                        onPasswordChange = {},
-                        onPasswordSubmit = {},
-                        passwordLoading = false,
-                        onTagClick = {},
-                        onRelatedWorkClick = { _, _, _ -> },
+                        // 页表没回来（预览打底期）不允许进看图器：viewerImages 为空会越界
+                        onImageClick = { page -> if (state.pages.isNotEmpty()) viewerPage = page },
+                        onImageLongPress = { page -> if (state.pages.isNotEmpty()) imageActionPage = page },
+                        onTagClick = { tag ->
+                            runCatching {
+                                context.startActivity(
+                                    Intent(
+                                        Intent.ACTION_VIEW,
+                                        Uri.parse("https://www.pixiv.net/tags/${Uri.encode(tag)}"),
+                                    ),
+                                )
+                            }
+                        },
                         onAuthorClick = {
                             runCatching {
                                 context.startActivity(
@@ -287,9 +297,6 @@ internal fun SourceWorkDetailDialog(
                                 )
                             }
                         },
-                        customTags = emptySet(),
-                        onToggleCustomTag = {},
-                        onOpenNovelReader = {},
                         hasImageModel = state.hasImageModel,
                         imageTranslated = state.showTranslatedImage,
                         imageTranslatingPage = state.imageTranslatingPage,
@@ -299,6 +306,8 @@ internal fun SourceWorkDetailDialog(
                         translationAvailable = state.hasTranslation,
                         showTranslation = state::showTranslation,
                         onToggleField = viewModel::onToggleField,
+                        related = state.related,
+                        onRelatedClick = { relatedWork = it },
                     )
                     if (viewerPage >= 0) {
                         FullScreenViewer(
@@ -356,6 +365,10 @@ internal fun SourceWorkDetailDialog(
                         requestSaveAllImages()
                     },
                 )
+            }
+
+            relatedWork?.let { nested ->
+                SourceWorkDetailDialog(work = nested, dark = dark, onDismiss = { relatedWork = null })
             }
 
             FeedbackHost(channel = viewModel.feedback, snackbarHostState = snackbarHostState)

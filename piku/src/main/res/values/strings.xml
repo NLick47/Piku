@@ -688,5 +688,13 @@
     <string name="pixiv_filter_all">综合</string>
     <string name="pixiv_filter_illust">插画</string>
     <string name="pixiv_filter_manga">漫画</string>
+    <string name="pixiv_stat_views">浏览</string>
+    <string name="pixiv_stat_likes">点赞</string>
+    <string name="pixiv_stat_bookmarks">收藏</string>
+    <string name="pixiv_stat_comments">评论</string>
+    <string name="pixiv_meta_posted">投稿 %1$s</string>
+    <string name="pixiv_meta_pages">%1$d 张</string>
+    <string name="pixiv_related_works">相关作品</string>
+    <string name="pixiv_tags_label">标签</string>
     <string name="common_retry">重试</string>
 </resources>

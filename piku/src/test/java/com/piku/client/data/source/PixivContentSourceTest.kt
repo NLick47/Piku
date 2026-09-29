@@ -12,6 +12,7 @@ import com.piku.client.data.remote.pixiv.PixivPage
 import com.piku.client.data.remote.pixiv.PixivPageUrls
 import com.piku.client.data.remote.pixiv.PixivPagesResponse
 import com.piku.client.data.remote.pixiv.PixivRankingResponse
+import com.piku.client.data.remote.pixiv.PixivRecommendResponse
 import com.piku.client.data.repository.PixivRepository
 import com.piku.client.data.repository.pixivTotalPages
 import com.piku.client.data.repository.toWork
@@ -45,6 +46,9 @@ class PixivContentSourceTest {
 
         var detailResponse = PixivIllustResponse()
         override suspend fun illustDetail(illustId: Long): PixivIllustResponse = detailResponse
+
+        var recommendResponse = PixivRecommendResponse()
+        override suspend fun recommend(illustId: Long, limit: Int): PixivRecommendResponse = recommendResponse
     }
 
     private fun http404() = HttpException(Response.error<Any>(404, "".toResponseBody()))

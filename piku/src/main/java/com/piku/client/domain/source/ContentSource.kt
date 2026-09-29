@@ -3,6 +3,7 @@ package com.piku.client.domain.source
 import androidx.annotation.StringRes
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkSource
+import com.piku.client.domain.model.WorkStats
 
 interface ContentSource {
 
@@ -31,12 +32,23 @@ interface ContentSource {
 
     /** 详情页要展示的补充文本（简介/标签）；null = 该源没有，详情壳不显示这两块 */
     suspend fun workDetailText(work: Work): Result<SourceWorkText?> = Result.success(null)
+
+    /**
+     * 详情页底部的相关作品。默认没有（poipiku 的相关投稿走它自己那条链路）；
+     * 这一路是异步的，取不到就整块不显示，不影响详情本身。
+     */
+    suspend fun relatedWorks(work: Work): Result<List<Work>> = Result.success(emptyList())
 }
 
 /** 详情页的源补充文本 */
 data class SourceWorkText(
     val description: String = "",
     val tags: List<String> = emptyList(),
+    /**
+     * 计数与元信息；只有 pixiv 这类接口给得出来的源会填，
+     * poipiku 的作品页没有这些数据，恒为 null（详情 UI 据此跳过整块）。
+     */
+    val stats: WorkStats? = null,
 )
 
 data class SourceWorkPage(

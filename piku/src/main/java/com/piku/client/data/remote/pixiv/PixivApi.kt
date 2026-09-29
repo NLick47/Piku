@@ -12,6 +12,9 @@ object PixivApiConfig {
 
     const val PAGE_SIZE = 50
 
+    /** 相关作品一次取多少：够铺两屏，再多就是白拉流量 */
+    const val RECOMMEND_LIMIT = 18
+
     val DEBUG_PROXY: String? = null
 }
 
@@ -78,11 +81,53 @@ data class PixivIllustResponse(
     val body: PixivIllustBody = PixivIllustBody(),
 )
 
+/**
+ * 只取详情页用得到的字段。计数类（view/like/bookmark/comment）在匿名访问下也在，
+ * 但个别作品（限制公开、接口降级）会缺，缺了按默认值 0 处理——UI 只展示有意义的项。
+ */
 @Serializable
 data class PixivIllustBody(
     val description: String = "",
     val tags: PixivIllustTags = PixivIllustTags(),
+    @SerialName("viewCount") val viewCount: Int = 0,
+    @SerialName("likeCount") val likeCount: Int = 0,
+    @SerialName("bookmarkCount") val bookmarkCount: Int = 0,
+    @SerialName("commentCount") val commentCount: Int = 0,
+    @SerialName("pageCount") val pageCount: Int = 0,
+    val width: Int = 0,
+    val height: Int = 0,
+    /** 上传时间；个别作品只有 createDate */
+    @SerialName("uploadDate") val uploadDate: String = "",
+    @SerialName("createDate") val createDate: String = "",
+    @SerialName("userAccount") val userAccount: String = "",
 )
+
+@Serializable
+data class PixivRecommendResponse(
+    val error: Boolean = false,
+    val body: PixivRecommendBody = PixivRecommendBody(),
+)
+
+@Serializable
+data class PixivRecommendBody(
+    val illusts: List<PixivWorkCard> = emptyList(),
+)
+
+/** 作品卡片（推荐位）；只取成卡需要的字段 */
+@Serializable
+data class PixivWorkCard(
+    val id: String = "",
+    val title: String = "",
+    /** 360x360 缩略图 */
+    val url: String = "",
+    @SerialName("userId") val userId: String = "",
+    @SerialName("userName") val userName: String = "",
+    @SerialName("pageCount") val pageCount: Int = 1,
+    @SerialName("xRestrict") val xRestrict: Int = 0,
+) {
+    val illustId: Long get() = id.toLongOrNull() ?: 0
+    val authorIdLong: Long get() = userId.toLongOrNull() ?: 0
+}
 
 @Serializable
 data class PixivIllustTags(
@@ -102,6 +147,16 @@ interface PixivApi {
     @GET("ajax/illust/{illustId}")
     suspend fun illustDetail(@Path("illustId") illustId: Long): PixivIllustResponse
 
+
+    /**
+     * 作品页底部的相关作品。实测匿名可用（2026-09：HTTP 200、error=false、18 条），
+     * 接口文档标注需要登录，但匿名照样返回。nextIds 供翻页，这里只取首屏。
+     */
+    @GET("ajax/illust/{illustId}/recommend/init")
+    suspend fun recommend(
+        @Path("illustId") illustId: Long,
+        @Query("limit") limit: Int = PixivApiConfig.RECOMMEND_LIMIT,
+    ): PixivRecommendResponse
 
     @GET("ranking.php")
     suspend fun ranking(

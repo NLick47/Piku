@@ -14,8 +14,10 @@ import com.piku.client.data.remote.translation.ImageTranslationPrompts
 import com.piku.client.data.remote.translation.LlmTranslateEngine
 import com.piku.client.data.remote.translation.ModelCatalogRepository
 import com.piku.client.data.remote.translation.TranslationRepository
+import com.piku.client.domain.model.AppLanguage
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkDetail
+import com.piku.client.domain.model.WorkStats
 import com.piku.client.domain.model.mergeTranslatedFields
 import com.piku.client.domain.source.SourceRegistry
 import com.piku.client.domain.source.SourceWorkPage
@@ -26,6 +28,8 @@ import com.piku.client.ui.detail.ViewerImage
 import com.piku.client.ui.detail.TranslateField
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -77,6 +81,12 @@ class SourceWorkDetailViewModel @Inject constructor(
         val sharingTargetPackage: String? = null,
         /** 看图页（regular 展示 + original 原图）：查看器与保存/分享都从这里取 */
         val pages: List<SourceWorkPage> = emptyList(),
+        /** 作品统计与元信息；poipiku 无此数据，pixiv 详情页据此渲染数据条 */
+        val stats: WorkStats? = null,
+        /** 底部相关作品；pixiv 才有，随详情一起回来，没有就不显示这一块 */
+        val related: List<Work> = emptyList(),
+        /** 计数缩写按语言分档（中日「万」/ 英文「K」） */
+        val language: AppLanguage = AppLanguage.SYSTEM,
     ) {
         val hasTranslation: Boolean get() = detail?.translated?.hasAny == true
 
@@ -119,39 +129,69 @@ class SourceWorkDetailViewModel @Inject constructor(
         loadedWorkId = work.id
         translatedImages.clear()
         imageTranslateJob?.cancel()
-        _ui.value = UiState()
+        // 秒进：列表里自带的标题/作者/缩略图先上屏打底，接口回来再补全简介/统计/清晰图
+        _ui.value = UiState(
+            language = observeLanguageUseCase().value,
+            detail = WorkDetail(
+                title = work.title,
+                authorName = work.authorName,
+                authorAvatarUrl = work.authorAvatarUrl.orEmpty(),
+                categoryCd = -1,
+                categoryName = "",
+                imageUrls = listOf(work.thumbnailUrl),
+                tags = emptyList(),
+                r18 = work.r18,
+            ),
+        )
         viewModelScope.launch {
             // 按作品自己的源取页：跨源列表（收藏/历史）点进来的作品不必等于当前首页源
             val source = sourceRegistry.byId(work.source)
-            val pages = source.workPages(work)
-            val text = source.workDetailText(work).getOrNull()
-            pages.fold(
-                onSuccess = { list ->
-                    if (list.isEmpty()) {
-                        _ui.update { it.copy(loading = false, failed = true) }
-                        return@fold
-                    }
-                    val detail = WorkDetail(
-                        title = work.title,
-                        description = text?.description.orEmpty(),
-                        authorName = work.authorName,
-                        authorAvatarUrl = work.authorAvatarUrl.orEmpty(),
-                        categoryCd = -1,
-                        categoryName = "",
-                        imageUrls = inlineImageUrls(list, upgradeToFull = worthUpgradingInline(list, imageRouteController)),
-                        tags = text?.tags.orEmpty(),
-                        r18 = work.r18,
-                    )
-                    _ui.update { it.copy(loading = false, detail = detail, pages = list) }
-                    // 与 poipiku 详情一致：打开即记历史（upsert 去重）
-                    recordHistoryUseCase(work)
-                    // 与 poipiku 详情一致：开了 AI 翻译就自动译一次（失败静默）
-                    if (settingsRepository.aiTranslateEnabled.value) translate()
-                },
-                onFailure = {
-                    _ui.update { it.copy(loading = false, failed = true) }
-                },
-            )
+            // 与榜单同源的过滤口径：关掉成人内容显示时，相关作品里的 R-18 也一并去掉
+            val adultEnabled = settingsRepository.showAdultContent.first()
+            // 取页与取文本并行：总耗时从两次相加变成取最慢的一个
+            coroutineScope {
+                val pagesDeferred = async { source.workPages(work) }
+                val textDeferred = async { source.workDetailText(work) }
+                val pages = pagesDeferred.await()
+                val text = textDeferred.await().getOrNull()
+                pages.fold(
+                    onSuccess = { list ->
+                        if (list.isEmpty()) {
+                            _ui.update { it.copy(loading = false, failed = true, detail = null) }
+                            return@fold
+                        }
+                        val detail = WorkDetail(
+                            title = work.title,
+                            description = text?.description.orEmpty(),
+                            authorName = work.authorName,
+                            authorAvatarUrl = work.authorAvatarUrl.orEmpty(),
+                            categoryCd = -1,
+                            categoryName = "",
+                            imageUrls = inlineImageUrls(list, upgradeToFull = worthUpgradingInline(list, imageRouteController)),
+                            tags = text?.tags.orEmpty(),
+                            r18 = work.r18,
+                        )
+                        _ui.update {
+                            it.copy(loading = false, detail = detail, pages = list, stats = text?.stats)
+                        }
+                        // 相关作品单独一路：详情先出来，它后到就补在底部，取不到就算了
+                        launch {
+                            val related = source.relatedWorks(work).getOrNull().orEmpty()
+                            _ui.update {
+                                it.copy(related = related.filter { item -> adultEnabled || !item.r18 })
+                            }
+                        }
+                        // 与 poipiku 详情一致：打开即记历史（upsert 去重）
+                        recordHistoryUseCase(work)
+                        // 与 poipiku 详情一致：开了 AI 翻译就自动译一次（失败静默）
+                        if (settingsRepository.aiTranslateEnabled.value) translate()
+                    },
+                    onFailure = {
+                        // 打底的预览一并撤掉：重进时「detail != null」守卫才会放行自动重拉
+                        _ui.update { it.copy(loading = false, failed = true, detail = null) }
+                    },
+                )
+            }
         }
     }
 

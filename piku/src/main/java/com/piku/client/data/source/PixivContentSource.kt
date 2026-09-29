@@ -64,6 +64,9 @@ class PixivContentSource @Inject constructor(
     override suspend fun workDetailText(work: Work): Result<SourceWorkText?> =
         repository.workText(work.id)
 
+    override suspend fun relatedWorks(work: Work): Result<List<Work>> =
+        repository.recommend(work.id)
+
     companion object {
         const val FEED_RECOMMEND = "recommend"
         const val FEED_RANKING = "ranking"

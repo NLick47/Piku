@@ -678,5 +678,13 @@
     <string name="pixiv_filter_all">All</string>
     <string name="pixiv_filter_illust">Illust</string>
     <string name="pixiv_filter_manga">Manga</string>
+    <string name="pixiv_stat_views">Views</string>
+    <string name="pixiv_stat_likes">Likes</string>
+    <string name="pixiv_stat_bookmarks">Bookmarks</string>
+    <string name="pixiv_stat_comments">Comments</string>
+    <string name="pixiv_meta_posted">Posted %1$s</string>
+    <string name="pixiv_meta_pages">%1$d pages</string>
+    <string name="pixiv_related_works">Related works</string>
+    <string name="pixiv_tags_label">Tags</string>
     <string name="common_retry">Retry</string>
 </resources>

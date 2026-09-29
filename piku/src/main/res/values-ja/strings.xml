@@ -678,5 +678,13 @@
     <string name="pixiv_filter_all">総合</string>
     <string name="pixiv_filter_illust">イラスト</string>
     <string name="pixiv_filter_manga">マンガ</string>
+    <string name="pixiv_stat_views">閲覧数</string>
+    <string name="pixiv_stat_likes">いいね</string>
+    <string name="pixiv_stat_bookmarks">ブックマーク</string>
+    <string name="pixiv_stat_comments">コメント</string>
+    <string name="pixiv_meta_posted">投稿 %1$s</string>
+    <string name="pixiv_meta_pages">%1$d枚</string>
+    <string name="pixiv_related_works">関連作品</string>
+    <string name="pixiv_tags_label">タグ</string>
     <string name="common_retry">再試行</string>
 </resources>
