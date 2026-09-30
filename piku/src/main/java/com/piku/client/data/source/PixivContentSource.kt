@@ -20,12 +20,6 @@ import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * pixiv 作为内容源。五条流按设计稿排：推荐/关注新稿/榜单/最新/发现——四个登录门流未登录也挂在
- * tab 行上（点开显示登录门，让登录的解锁价值可见），数据等 pixiv 登录工程接入；榜单是唯一实流。
- * 日/周/月/新人是榜单的周期片选，综合/插画/漫画挂行尾下拉，两组维度只属于榜单。
- * novel 与 *_r18 匿名返回空，不声明。榜单接口 p 从 1 计，这里的 page 从 0 计，取页时翻译。
- */
 @Singleton
 class PixivContentSource @Inject constructor(
     private val repository: PixivRepository,
@@ -89,11 +83,31 @@ class PixivContentSource @Inject constructor(
 
         /** 声明是纯数据，单独暴露以便不构造本类（也就无需 DI）即可测试与断言 */
         val FEEDS = listOf(
-            SourceFeed(id = FEED_RECOMMEND, labelRes = R.string.pixiv_tab_recommend, requiresLogin = true),
-            SourceFeed(id = FEED_FOLLOW, labelRes = R.string.pixiv_tab_follow_new, requiresLogin = true),
+            SourceFeed(
+                id = FEED_RECOMMEND,
+                labelRes = R.string.pixiv_tab_recommend,
+                requiresLogin = true,
+                pendingAfterLogin = true,
+            ),
+            SourceFeed(
+                id = FEED_FOLLOW,
+                labelRes = R.string.pixiv_tab_follow_new,
+                requiresLogin = true,
+                pendingAfterLogin = true,
+            ),
             SourceFeed(id = FEED_RANKING, labelRes = R.string.pixiv_tab_ranking, ranked = true),
-            SourceFeed(id = FEED_LATEST, labelRes = R.string.pixiv_tab_new, requiresLogin = true),
-            SourceFeed(id = FEED_DISCOVER, labelRes = R.string.pixiv_tab_discover, requiresLogin = true),
+            SourceFeed(
+                id = FEED_LATEST,
+                labelRes = R.string.pixiv_tab_new,
+                requiresLogin = true,
+                pendingAfterLogin = true,
+            ),
+            SourceFeed(
+                id = FEED_DISCOVER,
+                labelRes = R.string.pixiv_tab_discover,
+                requiresLogin = true,
+                pendingAfterLogin = true,
+            ),
         )
 
         val FACETS = listOf(

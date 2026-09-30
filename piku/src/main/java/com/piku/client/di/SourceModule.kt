@@ -1,16 +1,16 @@
 package com.piku.client.di
 
-import com.piku.client.data.repository.AuthRepository
+import com.piku.client.data.auth.PixivAuthRepository
+import com.piku.client.data.auth.PoipikuAuth
+import com.piku.client.data.repository.FavoriteRepository
 import com.piku.client.data.source.PixivContentSource
 import com.piku.client.data.source.PoipikuContentBackup
 import com.piku.client.data.source.PoipikuContentSource
 import com.piku.client.domain.model.Work
-import com.piku.client.domain.model.WorkSource
-import com.piku.client.data.repository.FavoriteRepository
 import com.piku.client.domain.source.ContentSource
 import com.piku.client.domain.source.ShellFavorites
+import com.piku.client.domain.source.SourceAuth
 import com.piku.client.domain.source.SourceContentBackup
-import com.piku.client.domain.source.SourceLogin
 import com.piku.client.ui.source.SourceFeedConfig
 import dagger.Module
 import dagger.Provides
@@ -37,13 +37,14 @@ object SourceModule {
     @IntoSet
     fun poipikuContentBackup(impl: PoipikuContentBackup): SourceContentBackup = impl
 
-    /** 需要登录的流只问「这个源登录了没」。两套账号体系：poipiku 问 poipiku 会话，
-     *  pixiv 登录工程接入前一律未登录——poipiku 的登录态不得误开 pixiv 的门 */
+    /** 登录插件按源登记；账号管理、备份、登录门都从这里问，不再各自硬编码站点 */
     @Provides
-    @Singleton
-    fun provideSourceLogin(authRepository: AuthRepository): SourceLogin = SourceLogin { source ->
-        if (source == WorkSource.POIPIKU) authRepository.isLoggedIn() else false
-    }
+    @IntoSet
+    fun poipikuAuth(impl: PoipikuAuth): SourceAuth = impl
+
+    @Provides
+    @IntoSet
+    fun pixivAuth(impl: PixivAuthRepository): SourceAuth = impl
 
     /** 收藏态与收藏切换同理：外壳只依赖能力接口 */
     @Provides

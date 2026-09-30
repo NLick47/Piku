@@ -2,6 +2,8 @@ package com.piku.client.di
 
 import android.content.SharedPreferences
 import com.piku.client.BuildConfig
+import com.piku.client.data.auth.PixivAuthStore
+import com.piku.client.data.auth.pixivAuthHeaders
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.data.remote.ApiConfig
 import com.piku.client.data.remote.DoHDns
@@ -207,6 +209,9 @@ object NetworkModule {
      * pixiv 的传输：走原生 ECH 通道（TLS1.3 + ECH + HTTP/2），**刻意不带**
      * cookieJar / RefererInterceptor / 图片中转 —— 主 client 会把 poipiku 的会话 cookie 一起发出去。
      * 地址只用内置固定 IP：pixiv 不问系统 DNS，投毒答案没用。
+     *
+     * 鉴权头从 pixiv 登录插件自己的存储里取（[PixivAuthStore]），**只对 app-api 主机生效**：
+     * poipiku 的 cookie / 鉴权不经过这里，pixiv 的令牌也不会漏到网页接口上去。
      */
     @Provides
     @Singleton
@@ -216,6 +221,7 @@ object NetworkModule {
         doHDns: DoHDns,
         diagnostics: NetworkDiagnostics,
         sniFactory: SniStrippingSocketFactory,
+        pixivAuthStore: PixivAuthStore,
     ): Call.Factory {
         // 开发期借本机代理出网（见 PixivApiConfig.DEBUG_PROXY）：原生通道走不了 HTTP 代理，
         // 这一段保留旧的 OkHttp 路径，发布包里 DEBUG_PROXY 为 null，不生效
@@ -232,6 +238,7 @@ object NetworkModule {
                         .getOrDefault(emptyList())
             },
             userAgent = PIXIV_USER_AGENT,
+            authHeaders = { host -> pixivAuthHeaders(host, pixivAuthStore.accessToken()) },
         )
     }
 

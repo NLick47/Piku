@@ -1,5 +1,6 @@
 package com.piku.client.data.remote.ech
 
+import android.util.Log
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
@@ -29,6 +30,7 @@ class EchCallFactory(
     private val echConfig: () -> ByteArray?,
     private val endpoints: (String) -> List<String>,
     private val userAgent: String,
+    private val authHeaders: (String) -> List<Pair<String, String>> = { emptyList() },
     private val timeoutMs: Int = DEFAULT_TIMEOUT_MS,
 ) : Call.Factory {
 
@@ -100,7 +102,14 @@ class EchCallFactory(
             val body = original.body?.let { requestBody ->
                 Buffer().also { requestBody.writeTo(it) }.readByteArray()
             }
-            val headers = buildHeaders()
+            val headers = buildHeaders(body?.size)
+
+            // 这条通道不走 OkHttp 拦截器，出错时只能靠这行看清"到底发了什么上线路"
+            Log.d(
+                TAG,
+                "ech ${original.method} ${original.url.host}${original.url.encodedPath} " +
+                    "bodyLen=${body?.size ?: 0} headers=${headers.joinToString(",") { it.first }}",
+            )
 
             var lastError: IOException? = null
             for (ip in endpoints(host)) {
@@ -123,8 +132,8 @@ class EchCallFactory(
             throw lastError ?: IOException("没有可用的 pixiv 地址")
         }
 
-        private fun buildHeaders(): List<Pair<String, String>> {
-            val headers = ArrayList<Pair<String, String>>(original.headers.size + 4)
+        private fun buildHeaders(bodyLength: Int?): List<Pair<String, String>> {
+            val headers = ArrayList<Pair<String, String>>(original.headers.size + 6)
             original.headers.forEach { (name, value) -> headers += name to value }
             fun fill(name: String, value: String) {
                 if (headers.none { it.first.equals(name, ignoreCase = true) }) headers += name to value
@@ -134,11 +143,22 @@ class EchCallFactory(
             fill("Accept", "application/json")
             // 原生侧不解压，明确要原文
             fill("Accept-Encoding", "identity")
+            // 本通道是自定义 Call.Factory，OkHttp 的 BridgeInterceptor 不参与，
+            // 而这两个头平时正是它从请求体里补的：少了 Content-Type，服务端不会把请求体当
+            // 表单解析——pixiv 的 token 端点会回 invalid_client「body 里找不到 client_id」。
+            // GET 无请求体，所以这条通道此前一直没暴露过。
+            original.body?.contentType()?.let { fill("Content-Type", it.toString()) }
+            if (bodyLength != null) fill("Content-Length", bodyLength.toString())
+            // 调用方显式设过的头优先，鉴权头只补空缺
+            for ((name, value) in authHeaders(original.url.host)) {
+                if (headers.none { it.first.equals(name, ignoreCase = true) }) headers += name to value
+            }
             return headers
         }
     }
 
     private companion object {
+        const val TAG = "PikuDiag"
         const val THREAD_NAME = "piku-ech-call"
         const val DEFAULT_TIMEOUT_MS = 30_000
     }

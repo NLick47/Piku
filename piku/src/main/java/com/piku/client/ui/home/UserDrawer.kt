@@ -41,6 +41,8 @@ import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.GTranslate
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Login
+import androidx.compose.material.icons.outlined.ManageAccounts
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PostAdd
@@ -90,7 +92,10 @@ import com.piku.client.ui.theme.themedSwitchColors
 fun UserDrawer(
     drawerState: DrawerState,
     userProfile: UserProfile?,
+    /** poipiku（主源）的登录态：抽屉里 poipiku 专属入口用它，与头部显示的源无关 */
     loggedIn: Boolean,
+    /** 头部显示的那一个账号 = 当前首页源的账号；null = 还没算出来（画骨架） */
+    headerAccount: SourceAccountRow?,
     adultEnabled: Boolean,
     themeMode: ThemeMode,
     imageRouteMode: ImageRouteMode,
@@ -110,11 +115,14 @@ fun UserDrawer(
     onFollowUsersClick: () -> Unit,
     onBlockUsersClick: () -> Unit = {},
     onProfileClick: () -> Unit,
-    /** 登录后点头像/名字区域进入自己的个人主页 */
-    onProfileOpen: () -> Unit,
     onPublishClick: () -> Unit = {},
     onLoginClick: () -> Unit,
-    onLogout: () -> Unit,
+    /** 头部左侧：主源进个人主页、其它源进账号页、未登录进对应源的登录页 */
+    onHeaderClick: () -> Unit,
+    /** 头部右侧 chevron 与菜单行：进账号管理页 */
+    onAccountsClick: () -> Unit,
+    /** 底部账号动作（作用于当前源）：未登录去登录、已登录去断开 */
+    onAccountAction: () -> Unit = {},
     onAvatarClick: () -> Unit,
     dark: Boolean,
     gesturesEnabled: Boolean = true,
@@ -137,6 +145,7 @@ fun UserDrawer(
             DrawerPanel(
                 userProfile = userProfile,
                 loggedIn = loggedIn,
+                headerAccount = headerAccount,
                 adultEnabled = adultEnabled,
                 themeMode = themeMode,
                 imageRouteMode = imageRouteMode,
@@ -159,10 +168,11 @@ fun UserDrawer(
                 onFollowUsersClick = onFollowUsersClick,
                 onBlockUsersClick = onBlockUsersClick,
                 onProfileClick = onProfileClick,
-                onProfileOpen = onProfileOpen,
                 onPublishClick = onPublishClick,
                 onLoginClick = onLoginClick,
-                onLogout = onLogout,
+                onHeaderClick = onHeaderClick,
+                onAccountsClick = onAccountsClick,
+                onAccountAction = onAccountAction,
                 onAvatarClick = onAvatarClick,
                 dark = dark,
                 settingsExpanded = settingsExpanded,
@@ -186,6 +196,7 @@ fun UserDrawer(
 private fun DrawerPanel(
     userProfile: UserProfile?,
     loggedIn: Boolean,
+    headerAccount: SourceAccountRow?,
     adultEnabled: Boolean,
     themeMode: ThemeMode,
     imageRouteMode: ImageRouteMode,
@@ -205,10 +216,11 @@ private fun DrawerPanel(
     onFollowUsersClick: () -> Unit,
     onBlockUsersClick: () -> Unit = {},
     onProfileClick: () -> Unit,
-    onProfileOpen: () -> Unit,
     onPublishClick: () -> Unit = {},
     onLoginClick: () -> Unit,
-    onLogout: () -> Unit,
+    onHeaderClick: () -> Unit,
+    onAccountsClick: () -> Unit,
+    onAccountAction: () -> Unit,
     onAvatarClick: () -> Unit,
     dark: Boolean,
     settingsExpanded: Boolean,
@@ -225,6 +237,9 @@ private fun DrawerPanel(
     val faint = PikuColors.textFaint
     val divider = PikuColors.border
     val iconAccent = PikuColors.accent
+
+    // 断开是破坏性动作，先确认；文案由该源自己的插件给
+    var confirmDisconnect by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -250,10 +265,9 @@ private fun DrawerPanel(
             .padding(bottom = 12.dp),
     ) {
         DrawerHeader(
-            userProfile = userProfile,
-            loggedIn = loggedIn,
-            onProfileOpen = onProfileOpen,
-            onLoginClick = onLoginClick,
+            row = headerAccount,
+            onHeaderClick = onHeaderClick,
+            onAccountsClick = onAccountsClick,
             onAvatarClick = onAvatarClick,
             dark = dark,
         )
@@ -269,6 +283,14 @@ private fun DrawerPanel(
                 .fillMaxWidth()
                 .verticalScroll(scrollState),
         ) {
+            DrawerMenuRow(
+                icon = Icons.Outlined.ManageAccounts,
+                label = stringResource(R.string.account_title),
+                onClick = onAccountsClick,
+                dark = dark,
+                accent = iconAccent,
+            )
+            Spacer(Modifier.height(2.dp))
             if (loggedIn) {
                 Spacer(Modifier.height(2.dp))
                 DrawerMenuRow(
@@ -479,15 +501,42 @@ private fun DrawerPanel(
             color = divider,
         )
         Spacer(Modifier.height(6.dp))
-        // 退出登录
-        if (loggedIn) {
-            DrawerMenuRow(
-                icon = Icons.AutoMirrored.Outlined.Logout,
-                label = stringResource(R.string.logout),
-                onClick = onLogout,
+        // 当前源的账号动作：放在抽屉底部，和以前 poipiku 的退出登录同一个位置，
+        // 但现在它作用于**当前显示的源**——看 pixiv 时这里退出的是 pixiv
+        headerAccount?.let { row ->
+            val loggedIn = row.loggedIn
+            val canLogIn = !loggedIn && row.loginRoute != null
+            if (loggedIn || canLogIn) {
+                DrawerMenuRow(
+                    icon = if (loggedIn) {
+                        Icons.AutoMirrored.Outlined.Logout
+                    } else {
+                        Icons.Outlined.Login
+                    },
+                    label = stringResource(if (loggedIn) R.string.logout else R.string.login_button),
+                    onClick = { if (loggedIn) confirmDisconnect = true else onAccountAction() },
+                    dark = dark,
+                    accent = if (loggedIn) PikuColors.error else iconAccent,
+                    showChevron = false,
+                )
+            }
+        }
+    }
+
+    val confirming = headerAccount
+    if (confirmDisconnect && confirming != null) {
+        val message = confirming.logoutMessageRes
+        if (message != null) {
+            ConfirmDestructiveDialog(
+                title = stringResource(R.string.logout),
+                message = stringResource(message, stringResource(confirming.labelRes)),
+                confirmLabel = stringResource(R.string.logout_confirm),
+                onConfirm = {
+                    confirmDisconnect = false
+                    onAccountAction()
+                },
+                onDismiss = { confirmDisconnect = false },
                 dark = dark,
-                accent = PikuColors.error,
-                showChevron = false,
             )
         }
     }
@@ -495,27 +544,33 @@ private fun DrawerPanel(
 
 @Composable
 private fun DrawerHeader(
-    userProfile: UserProfile?,
-    loggedIn: Boolean,
-    onProfileOpen: () -> Unit,
-    onLoginClick: () -> Unit,
+    row: SourceAccountRow?,
+    onHeaderClick: () -> Unit,
+    onAccountsClick: () -> Unit,
     onAvatarClick: () -> Unit,
     dark: Boolean,
 ) {
     val faint = PikuColors.textFaint
-    val primary = PikuColors.textPrimary
+    val titleColor = PikuColors.textPrimary
     val blobPurple = if (dark) Color(0x409A7FC9) else Color(0x4D9A7FC9)
     val blobPink = if (dark) Color(0x30D8A8B8) else Color(0x3DD8A8B8)
     val ring = if (dark) Color(0x66FFFFFF) else AccentDark.copy(alpha = 0.5f)
 
-    // 三态：未登录 / 骨架（已登录但资料未到）/ 就绪
-    val profileReady = userProfile != null
-    val skeleton = loggedIn && !profileReady
-    val headerClickable = when {
-        !loggedIn -> true
-        profileReady -> userProfile?.uid != null
-        else -> false
+    // 三态：未登录 / 骨架（已登录但资料未到，或行还没算出来）/ 就绪
+    val loggedIn = row?.loggedIn == true
+    val skeleton = row == null || row.pending
+    val account = row?.account
+    // 各源平权：副标题一律「源名 · 账号标识」，不因为谁是"主源"就省掉源名
+    val sourceName = row?.let { stringResource(it.labelRes) }.orEmpty()
+    val subtitle = if (loggedIn && !skeleton) {
+        listOfNotNull(
+            sourceName.takeIf { it.isNotBlank() },
+            account?.account?.takeIf { it.isNotBlank() },
+        ).joinToString(" · ").takeIf { it.isNotBlank() }
+    } else {
+        null
     }
+    val canLogIn = row?.loginRoute != null
 
     val pulseState = if (skeleton) rememberSkeletonPulse() else null
     val skelColor = faint.copy(alpha = 0.16f + 0.2f * (pulseState?.value ?: 0f))
@@ -523,9 +578,6 @@ private fun DrawerHeader(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = headerClickable) {
-                if (loggedIn) onProfileOpen() else onLoginClick()
-            }
             .padding(horizontal = 22.dp, vertical = 22.dp),
     ) {
         Canvas(Modifier.matchParentSize()) {
@@ -552,62 +604,43 @@ private fun DrawerHeader(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
+            // 左侧＝"这个人"：主源进个人主页，其它源进账号页，未登录进对应源的登录页
+            Row(
                 modifier = Modifier
-                    .size(60.dp)
-                    .clip(CircleShape)
-                    .border(BorderStroke(1.5.dp, ring), CircleShape)
-                    .padding(3.dp),
+                    .weight(1f)
+                    .clip(RoundedCornerShape(14.dp))
+                    .clickable(enabled = !skeleton) { onHeaderClick() },
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (!skeleton) {
-                    val hasAvatar = !userProfile?.avatarUrl.isNullOrBlank() &&
-                        !(userProfile?.avatarUrl ?: "").contains("default_user")
-                    UserAvatar(
-                        avatarUrl = userProfile?.avatarUrl,
-                        onClick = { if (hasAvatar) onAvatarClick() },
-                        dark = dark,
-                        size = 54.dp,
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .size(54.dp)
-                            .clip(CircleShape)
-                            .background(skelColor),
-                    )
-                }
-            }
-            Spacer(Modifier.width(15.dp))
-            when {
-                profileReady -> {
-                    Column(Modifier.weight(1f)) {
-                        val displayName = userProfile?.name
-                        Text(
-                            text = if (!displayName.isNullOrBlank()) {
-                                displayName
-                            } else {
-                                stringResource(R.string.account_logged_in)
-                            },
-                            color = primary,
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                Box(
+                    modifier = Modifier
+                        .size(60.dp)
+                        .clip(CircleShape)
+                        .border(BorderStroke(1.5.dp, ring), CircleShape)
+                        .padding(3.dp),
+                ) {
+                    if (skeleton) {
+                        Box(
+                            modifier = Modifier
+                                .size(54.dp)
+                                .clip(CircleShape)
+                                .background(skelColor),
                         )
-                        if (userProfile?.uid != null) {
-                            Spacer(Modifier.size(3.dp))
-                            Text(
-                                text = "ID: ${userProfile.uid}",
-                                color = faint,
-                                fontSize = 11.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
+                    } else {
+                        val avatarUrl = account?.avatarUrl
+                        val hasAvatar = !avatarUrl.isNullOrBlank() &&
+                            !avatarUrl.contains("default_user")
+                        UserAvatar(
+                            avatarUrl = avatarUrl,
+                            onClick = { if (hasAvatar) onAvatarClick() },
+                            dark = dark,
+                            size = 54.dp,
+                        )
                     }
                 }
-                skeleton -> {
-                    Column(Modifier.weight(1f)) {
+                Spacer(Modifier.width(15.dp))
+                when {
+                    skeleton -> Column(Modifier.weight(1f)) {
                         Box(
                             modifier = Modifier
                                 .height(15.dp)
@@ -624,33 +657,64 @@ private fun DrawerHeader(
                                 .background(skelColor),
                         )
                     }
-                }
-                else -> {
-                    Column(Modifier.weight(1f)) {
+
+                    loggedIn -> Column(Modifier.weight(1f)) {
                         Text(
-                            text = stringResource(R.string.account_logged_out),
-                            color = primary,
+                            text = account?.displayName?.takeIf { it.isNotBlank() }
+                                ?: stringResource(R.string.account_logged_in),
+                            color = titleColor,
                             fontSize = 17.sp,
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        Spacer(Modifier.size(3.dp))
+                        if (subtitle != null) {
+                            Spacer(Modifier.size(3.dp))
+                            Text(
+                                text = subtitle,
+                                color = faint,
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+
+                    else -> Column(Modifier.weight(1f)) {
                         Text(
-                            text = stringResource(R.string.drawer_login_hint),
-                            color = PikuColors.accent,
-                            fontSize = 12.sp,
+                            text = stringResource(R.string.account_source_logged_out, sourceName),
+                            color = titleColor,
+                            fontSize = 17.sp,
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
+                        // 没有登录页的源别给一个点了没反应的提示
+                        if (canLogIn) {
+                            Spacer(Modifier.size(3.dp))
+                            Text(
+                                text = stringResource(R.string.drawer_login_hint),
+                                color = PikuColors.accent,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
                 }
             }
-            if (!skeleton) {
+            // 右侧＝账号页：左侧管"这个人是谁"，它管"还有谁"
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onAccountsClick),
+                contentAlignment = Alignment.Center,
+            ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-                    contentDescription = null,
+                    contentDescription = stringResource(R.string.account_title),
                     tint = faint,
                     modifier = Modifier.size(18.dp),
                 )

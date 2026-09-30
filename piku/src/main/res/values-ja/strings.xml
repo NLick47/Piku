@@ -692,4 +692,20 @@
     <string name="pixiv_meta_pages">%1$d枚</string>
     <string name="pixiv_related_works">関連作品</string>
     <string name="common_retry">再試行</string>
+
+    <!-- pixivログイン（公式ページをWebViewで開く方式。資格情報はトークンで、poipikuのセッションとは無関係） -->
+    <string name="pixiv_login_title">pixivにログイン</string>
+    <string name="pixiv_login_exchanging">ログインを完了しています…</string>
+    <string name="pixiv_login_page_failed">ログインページを開けません。pixiv に接続できる回線（プロキシ等）が必要です</string>
+    <string name="pixiv_login_error_network">ネットワークに接続できません。pixiv に接続できるかご確認ください（プロキシ等）</string>
+    <string name="pixiv_login_error_rejected">pixivにログインを拒否されました。もう一度お試しください</string>
+    <string name="pixiv_login_error_unknown">ログインに失敗しました。もう一度お試しください</string>
+    <string name="drawer_source_accounts">他のアカウント</string>
+    <string name="account_title">アカウント</string>
+    <string name="account_hint">ソースごとに個別にログインします。切り替えるとそのソースのアカウントが使われます</string>
+    <string name="account_unauthorized">未ログイン</string>
+    <string name="account_logout_message">ログアウトすると、%1$s の内容は再びログインの壁の内側になります</string>
+    <string name="account_source_logged_out">%1$s 未ログイン</string>
+    <string name="pixiv_login_error_blocked">pixiv にリクエストを拒否されました。この回線が制限されている可能性があります</string>
+    <string name="pixiv_login_error_ratelimited">操作が多すぎます。しばらくしてからお試しください</string>
 </resources>

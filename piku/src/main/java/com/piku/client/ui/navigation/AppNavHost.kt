@@ -24,6 +24,7 @@ import androidx.navigation.navArgument
 import com.piku.client.R
 import com.piku.client.domain.model.FollowUser
 import com.piku.client.domain.model.Work
+import com.piku.client.domain.source.SourceAuthRoutes
 import com.piku.client.ui.collection.CollectionScreen
 import com.piku.client.ui.detail.DetailScreen
 import com.piku.client.ui.detail.rememberWorkDetailPrefetch
@@ -34,6 +35,7 @@ import com.piku.client.ui.home.HomeScreen
 import com.piku.client.ui.login.EmailLoginScreen
 import com.piku.client.ui.login.RegisterScreen
 import com.piku.client.ui.myposts.MyPostsScreen
+import com.piku.client.ui.login.PixivLoginScreen
 import com.piku.client.ui.publish.PublishScreen
 import com.piku.client.ui.search.PoipikuLink
 import com.piku.client.ui.search.SearchScreen
@@ -46,8 +48,10 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.tween
 
 object Routes {
-    const val LOGIN = "login"
+    /** poipiku 的登录页也由它的插件声明（SourceAuthRoutes），这里只登记 */
+    const val LOGIN = SourceAuthRoutes.POIPIKU_LOGIN
     const val REGISTER = "register"
+    const val PIXIV_LOGIN = SourceAuthRoutes.PIXIV_LOGIN
     const val HOME = "home"
     const val COLLECTION = "collection"
     const val DETAIL = "detail/{authorId}/{workId}?thumb={thumb}"
@@ -218,6 +222,12 @@ fun AppNavHost(
                 onRegisterClick = { navController.navigate(Routes.REGISTER) },
             )
         }
+        composable(Routes.PIXIV_LOGIN) {
+            PixivLoginScreen(
+                onBack = safePopBack,
+                onSuccess = safePopBack,
+            )
+        }
         composable(Routes.REGISTER) {
             // 注册页从登录页进入：返回键/去登录都弹回登录页
             val canGoBack = navController.previousBackStackEntry != null
@@ -258,6 +268,8 @@ fun AppNavHost(
                         backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = true
                         navController.navigate(Routes.LOGIN)
                     },
+                    // 非 poipiku 源的登录门：路由由该源的登录插件给出，外壳只跳不解释
+                    onSourceLoginClick = { route -> navController.navigate(route) },
                     onHistoryClick = {
                         backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = true
                         navController.navigate(Routes.HISTORY)

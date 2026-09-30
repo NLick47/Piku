@@ -121,6 +121,7 @@ internal fun SourceFeedContent(
     onDismissUpdateBanner: () -> Unit,
     /** 声明 [SourceWorkOpen.NativeDetail] 的源：壳里点开要交给主壳详情路由 */
     onNativeDetail: (Work) -> Unit,
+    onLoginClick: (String) -> Unit = {},
     viewModel: SourceFeedViewModel = hiltViewModel(),
 ) {
     val state by viewModel.ui.collectAsState()
@@ -231,7 +232,12 @@ internal fun SourceFeedContent(
             when {
                 // 占位流（如登录后的推荐）：明说能力未到，而不是给个空态让人以为没内容
                 state.comingSoon -> CenteredMessage(text = stringResource(R.string.home_coming_soon))
-                state.needLogin -> CenteredMessage(text = stringResource(state.loginPromptRes))
+                state.needLogin -> CenteredMessage(
+                    text = stringResource(state.loginPromptRes),
+                    // 该源声明了登录页才给按钮；没声明的源（暂未接入登录）只说明情况
+                    action = state.loginRoute?.let { stringResource(R.string.login_button) },
+                    onAction = state.loginRoute?.let { route -> { onLoginClick(route) } },
+                )
                 state.loading && state.items.isEmpty() -> SkeletonGrid(dark = dark)
                 state.failed && state.items.isEmpty() -> CenteredMessage(
                     text = stringResource(R.string.home_error_network),

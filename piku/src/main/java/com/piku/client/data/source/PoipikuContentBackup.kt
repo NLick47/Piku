@@ -9,7 +9,7 @@ import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.source.BackupWork
 import com.piku.client.domain.source.ContentBackup
 import com.piku.client.domain.source.SourceContentBackup
-import com.piku.client.domain.source.SourceLogin
+import com.piku.client.domain.source.SourceAuthRegistry
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import javax.inject.Inject
@@ -19,7 +19,7 @@ import kotlin.random.Random
 @Singleton
 class PoipikuContentBackup @Inject constructor(
     private val poipikuApi: PoipikuApi,
-    private val sourceLogin: SourceLogin,
+    private val authRegistry: SourceAuthRegistry,
 ) : SourceContentBackup {
 
     override val source = WorkSource.POIPIKU
@@ -95,7 +95,7 @@ class PoipikuContentBackup @Inject constructor(
         workId: Long,
         appendHtml: String,
     ): List<String> {
-        if (!sourceLogin(WorkSource.POIPIKU)) return emptyList()
+        if (!authRegistry.isLoggedIn(WorkSource.POIPIKU)) return emptyList()
 
         val fullUrls = mutableListOf<String>()
         fullUrls.addAll(fetchMainFullImage(authorId, workId))

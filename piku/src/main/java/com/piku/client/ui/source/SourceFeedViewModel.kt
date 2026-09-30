@@ -11,7 +11,7 @@ import com.piku.client.domain.source.SourceFacetGroup
 import com.piku.client.domain.source.SourceFeed
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.source.ShellFavorites
-import com.piku.client.domain.source.SourceLogin
+import com.piku.client.domain.source.SourceAuthRegistry
 import com.piku.client.domain.source.SourceRegistry
 import com.piku.client.domain.source.SourceWorkOpen
 import com.piku.client.domain.usecase.ObserveHomeSourceUseCase
@@ -51,7 +51,7 @@ class SourceFeedViewModel @Inject constructor(
     private val favorites: ShellFavorites,
     private val settingsRepository: SettingsRepository,
     /** 按源问登录态：poipiku 与 pixiv 是两套账号体系，互不放行 */
-    private val isLoggedIn: SourceLogin,
+    private val sourceAuth: SourceAuthRegistry,
     private val config: SourceFeedConfig,
 ) : ViewModel() {
 
@@ -78,6 +78,8 @@ class SourceFeedViewModel @Inject constructor(
         val refreshNotice: Int? = null,
         /** 登录门文案（声明带入），门屏点明是哪个源的账号 */
         val loginPromptRes: Int = R.string.home_follow_login,
+        /** 当前源的登录页路由；null = 该源没有应用内登录页，门屏不显示「去登录」 */
+        val loginRoute: String? = null,
         /** 收藏状态（键带源）：卡片心形与详情都从这里取 */
         val favoriteIds: Set<WorkKey> = emptySet(),
         /** 看图器的 R-18 门：与 poipiku 详情的门同开关，但判定在查看器自己这里 */
@@ -89,6 +91,9 @@ class SourceFeedViewModel @Inject constructor(
 
     private var currentKey: SourceKey? = null
     private var currentCollectJob: Job? = null
+
+    /** 当前源的登录态订阅：登录/登出后缓存里的页（含 needLogin 标记）全脏了 */
+    private var authJob: Job? = null
 
     /** 每个源记住用户选过的流/维度，会话内切回不重置 */
     private val selections = mutableMapOf<WorkSource, Selection>()
@@ -157,11 +162,28 @@ class SourceFeedViewModel @Inject constructor(
     private fun onSourceChanged(source: WorkSource) {
         // poipiku 走 HomeViewModel 的专属壳，这里不为它建加载器
         if (source == WorkSource.POIPIKU) {
+            authJob?.cancel()
+            authJob = null
             _ui.update { it.copy(source = source) }
             return
         }
         _ui.update { it.copy(source = source) }
+        observeSourceAuth(source)
         switchLoader()
+    }
+
+    /**
+     * 跟住当前源的登录态：登录页回来、令牌失效登出都要让门屏/内容立刻换一态。
+     * 只订阅当前源——切源时旧的订阅取消，别的源登录了不影响这一页。
+     */
+    private fun observeSourceAuth(source: WorkSource) {
+        authJob?.cancel()
+        authJob = null
+        val status = sourceAuth.byId(source)?.status ?: return
+        authJob = viewModelScope.launch {
+            // StateFlow 订阅瞬间会补发当前值，那一发不是变化
+            status.drop(1).collect { invalidateAll() }
+        }
     }
 
     private fun switchLoader() {
@@ -172,8 +194,9 @@ class SourceFeedViewModel @Inject constructor(
         selections[source] = selection
         val key = SourceKey(source, selection.feedId, selection.facets)
         currentKey = key
-        // 占位流（能力未到）：不建加载器、不发请求，UI 展示"即将上线"
-        if (declaration.feed(key.feedId).comingSoon) {
+        // 占位流（能力未到，或"登录后才接得上"且已登录）：不建加载器、不发请求，
+        // UI 展示"即将上线"；未登录时它仍是登录门，由 loader 判定
+        if (isComingSoon(declaration, key.feedId)) {
             currentCollectJob?.cancel()
             currentCollectJob = null
             applySnapshot(key, FeedSnapshot<Work>(), declaration)
@@ -190,12 +213,15 @@ class SourceFeedViewModel @Inject constructor(
 
     /**
      * 默认选择：流取声明序第一个"当前可用"的——占位流、未登录时的登录门流都跳过，
+     * "登录后才接得上"的流登录后也没有数据，一并跳过，
      * 例如 pixiv 未登录默认落在榜单而不是占位的推荐；每组维度认 selectedByDefault，
      * 都没有就取该组第一个（有维度必有选中，UI 显示与取参才不会差一档）。
      */
     private fun defaultSelection(declaration: ContentSource): Selection = Selection(
         feedId = declaration.feeds.firstOrNull {
-            !it.comingSoon && (!it.requiresLogin || isLoggedIn(declaration.id))
+            !it.comingSoon &&
+                !(it.pendingAfterLogin && sourceAuth.isLoggedIn(declaration.id)) &&
+                (!it.requiresLogin || sourceAuth.isLoggedIn(declaration.id))
         }?.id ?: declaration.feeds.first().id,
         facets = declaration.facets.associate { group ->
             group.id to (group.options.firstOrNull { it.selectedByDefault }?.id
@@ -222,12 +248,21 @@ class SourceFeedViewModel @Inject constructor(
                         .map { it.items }
                 }
             },
-            isLoggedIn = { isLoggedIn(key.source) },
+            isLoggedIn = { sourceAuth.isLoggedIn(key.source) },
             idOf = { it.id },
             prefetchEnabled = config.prefetchEnabled,
         )
         loader.refresh(countNotice = false)
         return loader
+    }
+
+    /**
+     * 该流此刻是不是"占位"：声明就占位的，或"登录后才接得上"且已经登录——
+     * 后者登录前是登录门，登录后没有数据可给，只能明说即将上线，而不是发一个注定失败的请求。
+     */
+    private fun isComingSoon(declaration: ContentSource, feedId: String): Boolean {
+        val feed = declaration.feed(feedId)
+        return feed.comingSoon || (feed.pendingAfterLogin && sourceAuth.isLoggedIn(declaration.id))
     }
 
     private fun currentLoader(): FeedLoader<SourceKey, Work>? {
@@ -249,7 +284,7 @@ class SourceFeedViewModel @Inject constructor(
                 feedId = key.feedId,
                 facetChoices = key.facets,
                 ranked = declaration.feed(key.feedId).ranked,
-                comingSoon = declaration.feed(key.feedId).comingSoon,
+                comingSoon = isComingSoon(declaration, key.feedId),
                 items = snap.items,
                 loading = snap.loading,
                 loadingMore = snap.loadingMore,
@@ -259,6 +294,7 @@ class SourceFeedViewModel @Inject constructor(
                 needLogin = snap.needLogin,
                 refreshNotice = snap.refreshNotice,
                 loginPromptRes = declaration.loginPromptRes,
+                loginRoute = sourceAuth.byId(key.source)?.loginRoute,
             )
         }
     }

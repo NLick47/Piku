@@ -692,4 +692,20 @@
     <string name="pixiv_meta_pages">%1$d pages</string>
     <string name="pixiv_related_works">Related works</string>
     <string name="common_retry">Retry</string>
+
+    <!-- pixiv login (WebView against the official page; credential is a token, unrelated to the poipiku session) -->
+    <string name="pixiv_login_title">Log in to pixiv</string>
+    <string name="pixiv_login_exchanging">Finishing sign-in…</string>
+    <string name="pixiv_login_page_failed">Login page won\'t open — it needs a network that can reach pixiv (e.g. a proxy)</string>
+    <string name="pixiv_login_error_network">Network unreachable — make sure pixiv is reachable (e.g. a proxy)</string>
+    <string name="pixiv_login_error_rejected">pixiv rejected this sign-in, please sign in again</string>
+    <string name="pixiv_login_error_unknown">Sign-in failed, please retry</string>
+    <string name="drawer_source_accounts">Other accounts</string>
+    <string name="account_title">Accounts</string>
+    <string name="account_hint">Each source signs in on its own; switching sources uses that source\'s account</string>
+    <string name="account_unauthorized">Not signed in</string>
+    <string name="account_logout_message">After logging out, %1$s content goes back behind the sign-in gate</string>
+    <string name="account_source_logged_out">%1$s not signed in</string>
+    <string name="pixiv_login_error_blocked">pixiv refused the request: this network may be blocked — try another one</string>
+    <string name="pixiv_login_error_ratelimited">Too many attempts — try again later</string>
 </resources>

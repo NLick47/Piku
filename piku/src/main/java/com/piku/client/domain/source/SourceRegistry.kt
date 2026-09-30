@@ -13,6 +13,9 @@ class SourceRegistry @Inject constructor(
     fun byId(id: WorkSource): ContentSource =
         byId[id] ?: error("未注册的内容源: $id")
 
+    /** 查不到给 null：外壳给"可能没有内容源"的地方用（如账号页按源渲染） */
+    fun byIdOrNull(id: WorkSource): ContentSource? = byId[id]
+
     /** 供换源控件列出可选源 */
     val all: List<ContentSource> get() = byId.values.toList()
 }

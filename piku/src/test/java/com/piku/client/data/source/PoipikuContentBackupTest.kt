@@ -3,8 +3,14 @@ package com.piku.client.data.source
 import com.piku.client.data.remote.AppendFileResponse
 import com.piku.client.data.remote.PoipikuApi
 import com.piku.client.data.remote.ShowIllustDetailResponse
+import com.piku.client.domain.model.AuthStatus
+import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.source.BackupWork
-import com.piku.client.domain.source.SourceLogin
+import com.piku.client.domain.source.SourceAuth
+import com.piku.client.domain.source.SourceAuthRegistry
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.lang.reflect.Proxy
 import kotlinx.coroutines.test.runTest
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -18,6 +24,20 @@ import org.junit.Test
 class PoipikuContentBackupTest {
 
     private val calls = mutableListOf<Pair<String, Int?>>()
+
+    /** 备份要先看\"这个源登录了没\"：这里给一个只有 poipiku 的注册表，登录态由参数决定 */
+    private fun authRegistry(loggedIn: Boolean): SourceAuthRegistry =
+        SourceAuthRegistry(setOf(FakeSourceAuth(loggedIn)))
+
+    private class FakeSourceAuth(private val loggedIn: Boolean) : SourceAuth {
+        override val source = WorkSource.POIPIKU
+        override val status: StateFlow<AuthStatus> = MutableStateFlow(
+            if (loggedIn) AuthStatus.LOGGED_IN else AuthStatus.LOGGED_OUT,
+        ).asStateFlow()
+        override val loginRoute: String? = null
+        override val logoutMessageRes = 0
+        override fun logout() = Unit
+    }
 
     private fun api(
         appendHtml: String = APPEND_HTML,
@@ -61,7 +81,7 @@ class PoipikuContentBackupTest {
 
     @Test
     fun multiImageWorkTakesFullImagesAndNovelText() = runTest {
-        val backup = PoipikuContentBackup(api(), SourceLogin { true })
+        val backup = PoipikuContentBackup(api(), authRegistry(loggedIn = true))
 
         val content = backup.content(BackupWork(workId = "123", authorId = 7L, imageCount = 3))
 
@@ -72,7 +92,7 @@ class PoipikuContentBackupTest {
 
     @Test
     fun singleImageWorkSkipsAppendAndCarriesNoNovelText() = runTest {
-        val backup = PoipikuContentBackup(api(), SourceLogin { true })
+        val backup = PoipikuContentBackup(api(), authRegistry(loggedIn = true))
 
         val content = backup.content(BackupWork(workId = "123", authorId = 7L, imageCount = 1))
 
@@ -83,7 +103,7 @@ class PoipikuContentBackupTest {
 
     @Test
     fun missingSessionFallsBackToDetailAndAppendImages() = runTest {
-        val backup = PoipikuContentBackup(api(), SourceLogin { false })
+        val backup = PoipikuContentBackup(api(), authRegistry(loggedIn = false))
 
         val content = backup.content(BackupWork(workId = "123", authorId = 7L, imageCount = 3))
 
@@ -96,7 +116,7 @@ class PoipikuContentBackupTest {
 
     @Test
     fun singleImageWorkFallsBackToDetailImageWhenOriginalIsMissing() = runTest {
-        val backup = PoipikuContentBackup(api(fullImages = emptyMap()), SourceLogin { true })
+        val backup = PoipikuContentBackup(api(fullImages = emptyMap()), authRegistry(loggedIn = true))
 
         val content = backup.content(BackupWork(workId = "123", authorId = 7L, imageCount = 1))
 
@@ -107,7 +127,7 @@ class PoipikuContentBackupTest {
     fun fetchGapIsCountedFromTheEndOfThePreviousFetch() = runTest {
         // 取一次要 100ms（真实耗时）：时钟要落在"取完"，落在"开始"就说明下一次的
         // 礼貌间隔会被这次的耗时吃掉，源站连着收请求
-        val backup = PoipikuContentBackup(api(fetchCostMs = 100), SourceLogin { true })
+        val backup = PoipikuContentBackup(api(fetchCostMs = 100), authRegistry(loggedIn = true))
 
         backup.content(BackupWork(workId = "123", authorId = 7L, imageCount = 1))
         val finishedAt = System.currentTimeMillis()
@@ -123,7 +143,7 @@ class PoipikuContentBackupTest {
         // 文字作品在列表里的 imageCount 也是 1（关注流解析是 append 数 + 1），详情页没有真图：
         // 正文只存在于 append 响应里，不能因为"单图"就跳过 append —— 否则正文永远备份不出去，
         // 每次同步还会白抓一遍
-        val backup = PoipikuContentBackup(api(detailHtml = TEXT_WORK_HTML), SourceLogin { true })
+        val backup = PoipikuContentBackup(api(detailHtml = TEXT_WORK_HTML), authRegistry(loggedIn = true))
 
         val content = backup.content(BackupWork(workId = "123", authorId = 7L, imageCount = 1))
 
@@ -133,7 +153,7 @@ class PoipikuContentBackupTest {
 
     @Test
     fun nonNumericWorkIdIsSkippedWithoutRequests() = runTest {
-        val backup = PoipikuContentBackup(api(), SourceLogin { true })
+        val backup = PoipikuContentBackup(api(), authRegistry(loggedIn = true))
 
         assertNull(backup.content(BackupWork(workId = "n123", authorId = 7L, imageCount = 1)))
         assertTrue("取不到的作品不该发请求", calls.isEmpty())

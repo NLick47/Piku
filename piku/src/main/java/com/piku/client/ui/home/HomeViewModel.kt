@@ -736,10 +736,6 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch { toggleFavoriteUseCase(work) }
     }
 
-    fun logout() {
-        authRepository.logout()
-    }
-
     suspend fun saveAvatar(url: String?): Boolean {
         if (url.isNullOrBlank()) return false
         return runCatching { imageSaver.save(url, "Piku_avatar") }.isSuccess

@@ -282,8 +282,12 @@ internal fun LanguageSheet(
     }
 }
 
+/** 破坏性动作前的确认：文案由调用方给（退出登录 / 解除授权共用同一副壳） */
 @Composable
-internal fun LogoutConfirmDialog(
+internal fun ConfirmDestructiveDialog(
+    title: String,
+    message: String,
+    confirmLabel: String,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
     dark: Boolean,
@@ -293,7 +297,7 @@ internal fun LogoutConfirmDialog(
         containerColor = PikuColors.surface,
         title = {
             Text(
-                text = stringResource(R.string.logout),
+                text = title,
                 color = PikuColors.textPrimary,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -301,17 +305,14 @@ internal fun LogoutConfirmDialog(
         },
         text = {
             Text(
-                text = stringResource(R.string.logout_confirm_message),
+                text = message,
                 color = PikuColors.textSecondary,
                 fontSize = 13.sp,
             )
         },
         confirmButton = {
             TextButton(onClick = onConfirm) {
-                Text(
-                    text = stringResource(R.string.logout_confirm),
-                    color = PikuColors.error,
-                )
+                Text(text = confirmLabel, color = PikuColors.error)
             }
         },
         dismissButton = {

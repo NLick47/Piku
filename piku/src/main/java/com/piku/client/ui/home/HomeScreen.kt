@@ -115,6 +115,7 @@ fun HomeScreen(
     onDrawerReopenConsumed: () -> Unit = {},
     onWorkClick: (Work) -> Unit,
     onLoginClick: () -> Unit,
+    onSourceLoginClick: (String) -> Unit = {},
     onHistoryClick: () -> Unit,
     onCollectionClick: () -> Unit,
     onTagsClick: () -> Unit,
@@ -125,6 +126,9 @@ fun HomeScreen(
 ) {
     val viewModel: HomeViewModel = hiltViewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    // 抽屉头部显示的是"当前首页源"的账号，所以这里跟的是账号源而不是 poipiku 的登录态
+    val accountsViewModel: AccountsViewModel = hiltViewModel()
+    val headerAccount by accountsViewModel.current.collectAsStateWithLifecycle()
     var isBackgroundEditMode by rememberSaveable { mutableStateOf(false) }
     var bgPreviewMode by rememberSaveable { mutableIntStateOf(BG_PREVIEW_REAL) }
     var bgEditTarget by rememberSaveable { mutableIntStateOf(BG_EDIT_TARGET_HERO) }
@@ -181,12 +185,12 @@ fun HomeScreen(
     var showTagsPage by rememberSaveable { mutableStateOf(false) }
     var showFollowUsersPage by rememberSaveable { mutableStateOf(false) }
     var showBlockUsersPage by rememberSaveable { mutableStateOf(false) }
-    var showLogoutConfirm by rememberSaveable { mutableStateOf(false) }
+    var showAccountsPage by rememberSaveable { mutableStateOf(false) }
     var showProfileEdit by rememberSaveable { mutableStateOf(false) }
     var publishDraftId by rememberSaveable { mutableStateOf<Long?>(null) }
     var showAvatarViewer by rememberSaveable { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
-    val anyOverlayActive = showHistoryPage ||
+    val anyOverlayActive = showHistoryPage || showAccountsPage ||
         showCollectionPage || showTagsPage || showFollowUsersPage || showBlockUsersPage || showWebDavSettings ||
         publishDraftId != null
     val isScrolling = remember { mutableStateOf(false) }
@@ -333,8 +337,6 @@ fun HomeScreen(
         }
     }
 
-    val onLogout = remember { { showLogoutConfirm = true } }
-
     val onOpenUpdate = remember(state.updateBanner, state.updateCheckState) {
         {
             val release = state.updateBanner
@@ -361,6 +363,7 @@ fun HomeScreen(
         onSettingsClick = {},
         onAboutClick = { showAboutSheet = true },
         onThemeClick = { showThemeSheet = true },
+        homeSourceLabelRes = state.homeSource.labelRes(),
         onHomeSourceClick = { showHomeSourceSheet = true },
         onImageRouteClick = { showImageRouteSheet = true },
         onBackgroundClick = {
@@ -398,18 +401,34 @@ fun HomeScreen(
             publishDraftId = -1L
         },
         onProfileClick = { showProfileEdit = true },
-        onProfileOpen = {
-            val profile = state.userProfile
-            val uid = profile?.uid?.toLongOrNull()
-            if (uid != null) {
-                onProfileOpen(uid, profile.name.orEmpty())
-            }
-        },
         onLoginClick = {
             onLoginClick()
         },
-        onLogout = onLogout,
-        onAvatarClick = { showAvatarViewer = true },
+        headerAccount = headerAccount,
+        // 头部点哪里全看这个源自己声明了什么能力，不看谁是"主源"：
+        // 未登录 → 它的登录页；有账号主页 → 主页；没有 → 账号页
+        onHeaderClick = {
+            val row = headerAccount
+            when {
+                row == null || !row.loggedIn -> row?.loginRoute?.let(onSourceLoginClick)
+                row.profileId != null -> row.profileId.toLongOrNull()?.let { uid ->
+                    onProfileOpen(uid, row.account?.displayName.orEmpty())
+                }
+                else -> showAccountsPage = true
+            }
+        },
+        onAccountsClick = { showAccountsPage = true },
+        // 底部那一行：未登录去登录、已登录去断开（断开文案与确认由该源自己声明）
+        onAccountAction = {
+            val row = headerAccount
+            when {
+                row == null -> onLoginClick()
+                row.loggedIn -> accountsViewModel.logout(row.source)
+                else -> row.loginRoute?.let(onSourceLoginClick)
+            }
+        },
+        // 头像的查看/保存走的是"账号资料"那一套，所以只有有主页的源才点得动
+        onAvatarClick = { if (headerAccount?.profileId != null) showAvatarViewer = true },
         gesturesEnabled = !anyOverlayActive,
         dark = dark,
         aiTranslateEnabled = state.aiTranslateEnabled,
@@ -475,7 +494,8 @@ fun HomeScreen(
                     SourceFeedContent(
                         dark = dark,
                         isScrolling = isScrolling,
-                        avatarUrl = state.userAvatarUrl,
+                        // 顶栏头像也要跟着当前源：放 poipiku 的头像，在看 pixiv 时永远是空的
+                        avatarUrl = headerAccount?.account?.avatarUrl,
                         menuEnabled = drawerButtonEnabled,
                         hasCustomBackground = state.customBackgroundPath != null,
                         drawerIsOpen = drawerState.isOpen,
@@ -488,6 +508,7 @@ fun HomeScreen(
                         onOpenUpdate = onOpenUpdate,
                         onDismissUpdateBanner = viewModel::dismissUpdateBanner,
                         onNativeDetail = onWorkClick,
+                        onLoginClick = onSourceLoginClick,
                     )
                 } else if (isTablet) {
                     Row(Modifier.fillMaxSize()) {
@@ -955,17 +976,6 @@ fun HomeScreen(
                 }
             }
 
-            if (showLogoutConfirm) {
-                LogoutConfirmDialog(
-                    onConfirm = {
-                        showLogoutConfirm = false
-                        viewModel.logout()
-                    },
-                    onDismiss = { showLogoutConfirm = false },
-                    dark = dark,
-                )
-            }
-
             if (showAvatarViewer) {
                 AvatarViewerDialog(
                     avatarUrl = state.userProfile?.avatarUrl,
@@ -1058,6 +1068,14 @@ fun HomeScreen(
             }
 
             HomeOverlays(
+                showAccountsPage = showAccountsPage,
+                onAccountsBack = { showAccountsPage = false; scope.launch { drawerState.open() } },
+                // 账号页里点「登录」：路由由该源自己声明。
+                // 必须先收起账号页——它是独立窗口，不关会盖在导航过去的登录页上面
+                onAccountsLogin = { row ->
+                    showAccountsPage = false
+                    row.loginRoute?.let(onSourceLoginClick)
+                },
                 showHistoryPage = showHistoryPage,
                 onHistoryBack = { showHistoryPage = false; scope.launch { drawerState.open() } },
                 showCollectionPage = showCollectionPage,
@@ -1132,6 +1150,9 @@ fun HomeScreen(
 
 @Composable
 private fun HomeOverlays(
+    showAccountsPage: Boolean,
+    onAccountsBack: () -> Unit,
+    onAccountsLogin: (SourceAccountRow) -> Unit,
     showHistoryPage: Boolean,
     onHistoryBack: () -> Unit,
     showCollectionPage: Boolean,
@@ -1154,6 +1175,11 @@ private fun HomeOverlays(
         dismissOnClickOutside = false,
     )
 
+    if (showAccountsPage) {
+        Dialog(onDismissRequest = onAccountsBack, properties = fullScreenProps) {
+            AccountsScreen(onBack = onAccountsBack, onLogin = onAccountsLogin, dark = dark)
+        }
+    }
     if (showHistoryPage) {
         Dialog(onDismissRequest = onHistoryBack, properties = fullScreenProps) {
             HistoryScreen(onBack = onHistoryBack, onWorkClick = { onWorkClick(it) })

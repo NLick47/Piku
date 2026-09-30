@@ -4,11 +4,14 @@ import com.piku.client.R
 import com.piku.client.data.local.InMemorySharedPreferences
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.domain.model.AppError
+import com.piku.client.domain.model.AuthStatus
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkKey
 import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.source.ContentSource
 import com.piku.client.domain.source.ShellFavorites
+import com.piku.client.domain.source.SourceAuth
+import com.piku.client.domain.source.SourceAuthRegistry
 import com.piku.client.domain.source.SourceFacet
 import com.piku.client.domain.source.SourceFacetGroup
 import com.piku.client.domain.source.SourceFacetStyle
@@ -20,12 +23,15 @@ import com.piku.client.domain.source.SourceWorkOpen
 import com.piku.client.domain.usecase.ObserveHomeSourceUseCase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -66,6 +72,25 @@ class SourceFeedViewModelTest {
             toggled += work
             return true
         }
+    }
+
+    /** 登录插件的假实现：测试里可以随时翻转登录态，验证门屏跟着变 */
+    private class FakeAuth(
+        override val source: WorkSource,
+        loggedIn: Boolean,
+    ) : SourceAuth {
+        private val _status = MutableStateFlow(
+            if (loggedIn) AuthStatus.LOGGED_IN else AuthStatus.LOGGED_OUT,
+        )
+        override val status: StateFlow<AuthStatus> = _status.asStateFlow()
+        override val loginRoute: String = "fake_login"
+        override val logoutMessageRes = 0
+
+        fun setLoggedIn(value: Boolean) {
+            _status.value = if (value) AuthStatus.LOGGED_IN else AuthStatus.LOGGED_OUT
+        }
+
+        override fun logout() = setLoggedIn(false)
     }
 
     /** 两个流（其一要登录）、两个维度；取页记录请求并返回可编排的结果 */
@@ -112,7 +137,7 @@ class SourceFeedViewModelTest {
 
     private fun build(
         fake: FakeSource,
-        loggedIn: Boolean = true,
+        auth: FakeAuth = FakeAuth(WorkSource.PIXIV, loggedIn = true),
         startSource: WorkSource = WorkSource.PIXIV,
     ): Pair<SourceFeedViewModel, SettingsRepository> {
         val settings = SettingsRepository(InMemorySharedPreferences())
@@ -122,7 +147,7 @@ class SourceFeedViewModelTest {
             observeHomeSourceUseCase = ObserveHomeSourceUseCase(settings),
             favorites = FakeFavorites(),
             settingsRepository = settings,
-            isLoggedIn = { _ -> loggedIn },
+            sourceAuth = SourceAuthRegistry(setOf(auth)),
             config = SourceFeedConfig(prefetchEnabled = false),
         )
         dispatcher.scheduler.advanceUntilIdle()
@@ -191,7 +216,7 @@ class SourceFeedViewModelTest {
     @Test
     fun loginGatedFeedSendsNoRequestWhenLoggedOut() {
         val fake = FakeSource().apply { items = listOf(work(1)) }
-        val (vm, _) = build(fake, loggedIn = false)
+        val (vm, _) = build(fake, FakeAuth(WorkSource.PIXIV, loggedIn = false))
 
         vm.selectFeed("secret")
         dispatcher.scheduler.advanceUntilIdle()
@@ -205,7 +230,7 @@ class SourceFeedViewModelTest {
     @Test
     fun loginGatedFeedLoadsWhenLoggedIn() {
         val fake = FakeSource().apply { items = listOf(work(9)) }
-        val (vm, _) = build(fake, loggedIn = true)
+        val (vm, _) = build(fake, FakeAuth(WorkSource.PIXIV, loggedIn = true))
 
         vm.selectFeed("secret")
         dispatcher.scheduler.advanceUntilIdle()
@@ -311,7 +336,7 @@ class SourceFeedViewModelTest {
             observeHomeSourceUseCase = ObserveHomeSourceUseCase(settings),
             favorites = FakeFavorites(),
             settingsRepository = settings,
-            isLoggedIn = { _ -> true },
+            sourceAuth = SourceAuthRegistry(setOf(FakeAuth(WorkSource.PIXIV, loggedIn = true))),
             config = SourceFeedConfig(prefetchEnabled = false),
         )
         dispatcher.scheduler.advanceUntilIdle()
@@ -343,7 +368,7 @@ class SourceFeedViewModelTest {
                 SourceFeed(id = "ranking", labelRes = R.string.pixiv_tab_ranking, ranked = true),
             )
         }
-        val (vm, _) = build(fake, loggedIn = false)
+        val (vm, _) = build(fake, FakeAuth(WorkSource.PIXIV, loggedIn = false))
 
         assertEquals("ranking", vm.ui.value.feedId)
         assertTrue("榜单流要给壳带名次标记", vm.ui.value.ranked)
@@ -426,7 +451,7 @@ class SourceFeedViewModelTest {
             observeHomeSourceUseCase = ObserveHomeSourceUseCase(settings),
             favorites = favorites,
             settingsRepository = settings,
-            isLoggedIn = { _ -> true },
+            sourceAuth = SourceAuthRegistry(setOf(FakeAuth(WorkSource.PIXIV, loggedIn = true))),
             config = SourceFeedConfig(prefetchEnabled = false),
         )
         dispatcher.scheduler.advanceUntilIdle()
@@ -438,5 +463,124 @@ class SourceFeedViewModelTest {
         vm.toggleFavorite(work(1))
         dispatcher.scheduler.advanceUntilIdle()
         assertEquals(listOf(1L), favorites.toggled.map { it.id })
+    }
+
+    /** 门屏的点「去登录」要知道跳哪：路由由源的登录插件声明，壳只透传 */
+    @Test
+    fun loginGateCarriesSourceLoginRoute() {
+        val fake = FakeSource().apply { items = listOf(work(1)) }
+        val (vm, _) = build(fake, FakeAuth(WorkSource.PIXIV, loggedIn = false))
+
+        vm.selectFeed("secret")
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(vm.ui.value.needLogin)
+        assertEquals("fake_login", vm.ui.value.loginRoute)
+    }
+
+    /** 在那个页面登录成功后回到本页：门必须自己打开并取数，不该等用户手动刷新 */
+    @Test
+    fun loginUnlocksGatedFeedAndLoadsIt() {
+        val fake = FakeSource().apply {
+            items = listOf(work(7))
+            feedsOverride = listOf(
+                SourceFeed(id = "popular", labelRes = R.string.pixiv_tab_ranking),
+                SourceFeed(id = "secret", labelRes = R.string.pixiv_tab_weekly, requiresLogin = true),
+            )
+        }
+        val auth = FakeAuth(WorkSource.PIXIV, loggedIn = false)
+        val (vm, _) = build(fake, auth)
+
+        vm.selectFeed("secret")
+        dispatcher.scheduler.advanceUntilIdle()
+        assertTrue(vm.ui.value.needLogin)
+        assertEquals(1, fake.pages.size)
+
+        auth.setLoggedIn(true)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertFalse(vm.ui.value.needLogin)
+        assertEquals("secret", vm.ui.value.feedId)
+        assertEquals(listOf(7L), vm.ui.value.items.map { it.id })
+        assertEquals(2, fake.pages.size)
+    }
+
+    /** 登出也要立刻反映：内容清掉、门重新挂上 */
+    @Test
+    fun logoutClosesGatedFeedAgain() {
+        val fake = FakeSource().apply {
+            items = listOf(work(7))
+            feedsOverride = listOf(
+                SourceFeed(id = "popular", labelRes = R.string.pixiv_tab_ranking),
+                SourceFeed(id = "secret", labelRes = R.string.pixiv_tab_weekly, requiresLogin = true),
+            )
+        }
+        val auth = FakeAuth(WorkSource.PIXIV, loggedIn = true)
+        val (vm, _) = build(fake, auth)
+
+        vm.selectFeed("secret")
+        dispatcher.scheduler.advanceUntilIdle()
+        assertEquals(listOf(7L), vm.ui.value.items.map { it.id })
+
+        auth.setLoggedIn(false)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(vm.ui.value.needLogin)
+        assertTrue(vm.ui.value.items.isEmpty())
+    }
+
+    @Test
+    fun pendingAfterLoginFeedShowsComingSoonAfterLogin() {
+        val fake = FakeSource().apply {
+            items = listOf(work(1))
+            feedsOverride = listOf(
+                SourceFeed(id = "popular", labelRes = R.string.pixiv_tab_ranking),
+                SourceFeed(
+                    id = "follow",
+                    labelRes = R.string.pixiv_tab_follow_new,
+                    requiresLogin = true,
+                    pendingAfterLogin = true,
+                ),
+            )
+        }
+        val auth = FakeAuth(WorkSource.PIXIV, loggedIn = false)
+        val (vm, _) = build(fake, auth)
+
+        vm.selectFeed("follow")
+        dispatcher.scheduler.advanceUntilIdle()
+        assertTrue(vm.ui.value.needLogin)
+        assertFalse(vm.ui.value.comingSoon)
+        assertEquals(1, fake.pages.size)
+
+        auth.setLoggedIn(true)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(vm.ui.value.comingSoon)
+        assertFalse(vm.ui.value.needLogin)
+        assertTrue(vm.ui.value.items.isEmpty())
+        assertEquals("登录后也不该为占位流发请求", 1, fake.pages.size)
+    }
+
+    /** 没注册登录插件的源：门照挂，但没有可跳的路由（外壳据此不显示按钮） */
+    @Test
+    fun unregisteredSourceHasNoLoginRoute() {
+        val fake = FakeSource().apply { items = listOf(work(1)) }
+        val settings = SettingsRepository(InMemorySharedPreferences())
+        settings.setHomeSource(WorkSource.PIXIV)
+        val vm = SourceFeedViewModel(
+            sourceRegistry = SourceRegistry(setOf(fake)),
+            observeHomeSourceUseCase = ObserveHomeSourceUseCase(settings),
+            favorites = FakeFavorites(),
+            settingsRepository = settings,
+            sourceAuth = SourceAuthRegistry(emptySet()),
+            config = SourceFeedConfig(prefetchEnabled = false),
+        )
+        dispatcher.scheduler.advanceUntilIdle()
+
+        vm.selectFeed("secret")
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(vm.ui.value.needLogin)
+        assertNull(vm.ui.value.loginRoute)
     }
 }

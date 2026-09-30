@@ -102,6 +102,7 @@ data class SourceFeed(
     val ranked: Boolean = false,
     /** 占位流：能力未到（如 pixiv 登录后的推荐），壳显示"即将上线"且不发请求 */
     val comingSoon: Boolean = false,
+    val pendingAfterLogin: Boolean = false,
 )
 
 data class SourceFacet(

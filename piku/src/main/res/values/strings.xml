@@ -702,4 +702,20 @@
     <string name="pixiv_meta_pages">%1$d 张</string>
     <string name="pixiv_related_works">相关作品</string>
     <string name="common_retry">重试</string>
+
+    <!-- pixiv 登录（走官方登录页的 WebView 授权，凭据是令牌，与 poipiku 会话互不相干） -->
+    <string name="pixiv_login_title">登录 pixiv</string>
+    <string name="pixiv_login_exchanging">正在完成登录…</string>
+    <string name="pixiv_login_page_failed">登录页打不开，需要能连上 pixiv 的网络（如代理）</string>
+    <string name="pixiv_login_error_network">网络不可达，请确认能连上 pixiv（如代理）</string>
+    <string name="pixiv_login_error_rejected">pixiv 拒绝了这次登录，请重新登录</string>
+    <string name="pixiv_login_error_unknown">登录失败，请重试</string>
+    <string name="drawer_source_accounts">其它源账号</string>
+    <string name="account_title">账号</string>
+    <string name="account_hint">每个源各自登录；换源时用的是对应那个源的账号</string>
+    <string name="account_unauthorized">未登录</string>
+    <string name="account_logout_message">退出后，%1$s 的内容会重新挡在登录门后</string>
+    <string name="account_source_logged_out">%1$s 未登录</string>
+    <string name="pixiv_login_error_blocked">请求被 pixiv 拒绝：当前网络出口可能被限制，换个网络再试</string>
+    <string name="pixiv_login_error_ratelimited">操作太频繁，稍后再试</string>
 </resources>
