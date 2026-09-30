@@ -219,21 +219,44 @@ private fun AiTranslateMainPage(
             )
         }
 
-        // 子选项：总开关关掉时自动失效（随后整块收起），缩进以示从属
-        AnimatedVisibility(visible = state.aiTranslateEnabled) {
+        AnimatedVisibility(
+            visible = state.aiTranslateEnabled,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically(),
+        ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 20.dp, top = 8.dp)
+                    .padding(start = 14.dp, top = 8.dp)
                     .clip(RoundedCornerShape(12.dp))
+                    .border(
+                        BorderStroke(0.5.dp, PikuColors.border),
+                        RoundedCornerShape(12.dp),
+                    )
                     .clickable { onToggleTagsAuto(!state.autoTranslateTags) }
-                    .padding(horizontal = 12.dp, vertical = 9.dp),
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                Box(
+                    modifier = Modifier
+                        .size(30.dp)
+                        .clip(RoundedCornerShape(9.dp))
+                        .background(PikuColors.surfaceMuted),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Tag,
+                        contentDescription = null,
+                        tint = secondary,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+                Spacer(Modifier.width(11.dp))
                 Text(
                     text = stringResource(R.string.ai_translate_tags_auto),
-                    color = secondary,
+                    color = primary,
                     fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
                     modifier = Modifier.weight(1f),
                 )
                 Spacer(Modifier.width(8.dp))
