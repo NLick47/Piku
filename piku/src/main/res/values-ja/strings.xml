@@ -412,7 +412,7 @@
     <string name="ai_translate_catalog_url_label">リスト URL</string>
     <string name="ai_translate_catalog_key_label">復号鍵</string>
     <string name="ai_translate_catalog_saved">保存済みソース</string>
-    <string name="ai_translate_catalog_official_caption">内蔵の暗号化リスト（公式メンテ）</string>
+    <string name="ai_translate_catalog_official_caption">内蔵の暗号化リスト · jsDelivr / GitHub へ自動フォールバック</string>
     <string name="ai_translate_catalog_save_as_new">新規ソースとして保存</string>
     <string name="ai_translate_catalog_manage_title">ソースを管理</string>
     <string name="ai_translate_catalog_name_hint">ソース名（空欄で自動生成）</string>
@@ -425,6 +425,7 @@
     <string name="ai_translate_catalog_loading">更新中…</string>
     <string name="ai_translate_catalog_success">%1$d 個のモデルを読み込みました</string>
     <string name="ai_translate_catalog_failed">取得に失敗しました。現在のリストを維持します</string>
+    <string name="ai_translate_catalog_uptodate">リストはすでに最新です</string>
     <string name="ai_translate_novel_follow">テキスト翻訳と同じ</string>
     <string name="ai_translate_not_selected">未選択</string>
     <string name="ai_translate_image_count">%1$d 個のモデル</string>

@@ -542,7 +542,8 @@ class SettingsRepository @Inject constructor(
     val llmImageModel: StateFlow<String> = _llmImageModel.asStateFlow()
 
     /**
-     * 远程模型目录地址：默认即内置加密目录（jsDelivr 分发，见 [CATALOG_URL_DEFAULT]），
+     * 远程模型目录地址：默认即官方加密目录（自家中继，见 [CATALOG_URL_DEFAULT]，
+     * 拉不到时按 [CATALOG_URL_MIRRORS] 依次回退），
      * 启动时自动拉取以获得内置免费模型的共享 key 与模型修正；
      * 用户清空则不发任何请求、只用编译期内置列表。
      */
@@ -876,11 +877,19 @@ class SettingsRepository @Inject constructor(
         const val LLM_MODEL_DEFAULT = ""
 
         /**
-         * 内置远程模型目录：AES-256-GCM 密文由 piku-models 仓库的 CI 发布到
-         * catalog 分支，jsDelivr 主用（国内可达），GitHub raw 作为被墙时的直连回退。
+         * 内置远程模型目录：AES-256-GCM 密文由 piku-models 仓库的 CI 发布到 catalog 分支。
+         * [CATALOG_URL_MIRRORS] 按序回退——自家中继国内最快（海外被 geo 规则挡下后自动落到
+         * jsDelivr），GitHub raw 留给海外直连兜底。
          */
-        const val CATALOG_URL_DEFAULT = "https://cdn.jsdelivr.net/gh/NLick47/piku-models@catalog/models.enc.json"
-        const val CATALOG_URL_FALLBACK = "https://raw.githubusercontent.com/NLick47/piku-models/catalog/models.enc.json"
+        const val CATALOG_URL_DEFAULT = "https://pic-relay.cyou/catalog/models.enc.json"
+        const val CATALOG_URL_JSDELIVR = "https://cdn.jsdelivr.net/gh/NLick47/piku-models@catalog/models.enc.json"
+        const val CATALOG_URL_GITHUB_RAW = "https://raw.githubusercontent.com/NLick47/piku-models/catalog/models.enc.json"
+
+        /**
+         * 官方目录的候选源（含 [CATALOG_URL_DEFAULT] 本身，按序尝试）。
+         * 旧版主地址 jsDelivr 也在内：用户此前「恢复默认」写进 prefs 的地址因此仍认作官方源。
+         */
+        val CATALOG_URL_MIRRORS = listOf(CATALOG_URL_DEFAULT, CATALOG_URL_JSDELIVR, CATALOG_URL_GITHUB_RAW)
 
         /** 远程目录的磁盘缓存 key：保存上次成功拉取的原始密文，启动时先加载再后台刷新 */
         private const val KEY_CATALOG_CACHE_BODY = "catalog_cache_body"

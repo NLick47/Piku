@@ -32,4 +32,7 @@ object CatalogSourceCodec {
         if (segments.lastOrNull()?.contains('.') == true) segments.removeAt(segments.lastIndex)
         return segments.takeLast(2).joinToString("/").ifBlank { host }.take(48)
     }
+
+    fun declaredName(name: String, url: String, declaredId: String): String? =
+        declaredId.trim().takeIf { it.isNotEmpty() && name == autoName(url) }
 }

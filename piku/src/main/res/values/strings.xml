@@ -424,7 +424,7 @@
     <string name="ai_translate_catalog_url_label">列表地址</string>
     <string name="ai_translate_catalog_key_label">解密密钥</string>
     <string name="ai_translate_catalog_saved">已保存的源</string>
-    <string name="ai_translate_catalog_official_caption">内置加密列表 · 官方维护</string>
+    <string name="ai_translate_catalog_official_caption">内置加密列表 · 中继 / jsDelivr / GitHub 自动回退</string>
     <string name="ai_translate_catalog_save_as_new">存为新源</string>
     <string name="ai_translate_catalog_manage_title">管理源</string>
     <string name="ai_translate_catalog_name_hint">源名称（留空自动生成）</string>
@@ -437,6 +437,7 @@
     <string name="ai_translate_catalog_loading">刷新中…</string>
     <string name="ai_translate_catalog_success">已加载 %1$d 个模型</string>
     <string name="ai_translate_catalog_failed">拉取失败，沿用当前列表</string>
+    <string name="ai_translate_catalog_uptodate">已是最新列表</string>
     <string name="ai_translate_novel_follow">与文本翻译相同</string>
     <string name="ai_translate_not_selected">未选择</string>
     <string name="ai_translate_image_count">%1$d 个模型</string>

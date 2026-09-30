@@ -43,4 +43,16 @@ class CatalogSourceCodecTest {
         assertEquals("example.com", CatalogSourceCodec.autoName("https://example.com"))
         assertEquals("example.com", CatalogSourceCodec.autoName("example.com"))
     }
+
+    @Test
+    fun `declared source id replaces the url guessed name`() {
+        val url = "https://cdn.jsdelivr.net/gh/foo/piku-models@catalog/models.enc.json"
+        assertEquals(
+            "mom09-fork",
+            CatalogSourceCodec.declaredName(CatalogSourceCodec.autoName(url), url, "mom09-fork"),
+        )
+        // 目录没声明、或名称已经被人改过 → 都保持原样
+        assertEquals(null, CatalogSourceCodec.declaredName(CatalogSourceCodec.autoName(url), url, ""))
+        assertEquals(null, CatalogSourceCodec.declaredName("我的小模型源", url, "mom09-fork"))
+    }
 }

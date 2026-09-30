@@ -16,6 +16,7 @@ import com.piku.client.data.remote.GitHubRelease
 import com.piku.client.data.remote.NetworkDiagnosis
 import com.piku.client.data.remote.NetworkDiagnostics
 import com.piku.client.data.remote.NetworkEnvironmentReader
+import com.piku.client.data.remote.translation.CatalogRefreshResult
 import com.piku.client.data.remote.translation.ModelCatalog
 import com.piku.client.data.remote.translation.ModelCatalogRepository
 import com.piku.client.data.remote.translation.ModelEntry
@@ -96,6 +97,9 @@ sealed interface CatalogRefreshState {
     data object Idle : CatalogRefreshState
     data object Loading : CatalogRefreshState
     data class Success(val modelCount: Int) : CatalogRefreshState
+
+    /** 源可达但版本没变：沿用缓存，不是失败 */
+    data object UpToDate : CatalogRefreshState
     data object Failed : CatalogRefreshState
 }
 
@@ -176,6 +180,8 @@ data class HomeUiState(
     val catalogSources: List<CatalogSource> = emptyList(),
     /** 列表来源弹层的刷新结果状态 */
     val catalogRefreshState: CatalogRefreshState = CatalogRefreshState.Idle,
+    /** 当前生效目录声明的来源标识（目录里的 sourceId），标明"这是谁的列表"；空串=没声明 */
+    val catalogSourceId: String = "",
     // ---------------- WebDAV 同步 ----------------
     val webDavEnabled: Boolean = false,
     val webDavUrl: String = "",
@@ -460,6 +466,11 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             settingsRepository.catalogSources.collect { sources ->
                 _uiState.update { it.copy(catalogSources = sources) }
+            }
+        }
+        viewModelScope.launch {
+            modelCatalogRepository.sourceId.collect { id ->
+                _uiState.update { it.copy(catalogSourceId = id) }
             }
         }
         // 登录、登出、自动重登成功都算会话变化：统一在这里重载
@@ -927,13 +938,14 @@ class HomeViewModel @Inject constructor(
     private fun refreshCatalog() {
         _uiState.update { it.copy(catalogRefreshState = CatalogRefreshState.Loading) }
         viewModelScope.launch {
-            val ok = modelCatalogRepository.refresh()
+            val result = modelCatalogRepository.refresh()
             _uiState.update {
                 it.copy(
-                    catalogRefreshState = if (ok) {
-                        CatalogRefreshState.Success(modelCatalogRepository.models.value.size)
-                    } else {
-                        CatalogRefreshState.Failed
+                    catalogRefreshState = when (result) {
+                        CatalogRefreshResult.UPDATED ->
+                            CatalogRefreshState.Success(modelCatalogRepository.models.value.size)
+                        CatalogRefreshResult.UP_TO_DATE -> CatalogRefreshState.UpToDate
+                        CatalogRefreshResult.FAILED -> CatalogRefreshState.Failed
                     },
                 )
             }

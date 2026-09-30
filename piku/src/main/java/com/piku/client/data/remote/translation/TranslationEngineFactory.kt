@@ -79,6 +79,7 @@ class TranslationEngineFactory @Inject constructor(
                 params = params,
                 prompts = catalogEntry?.prompts,
                 defaultPrompts = defaults?.prompts,
+                baseUrls = catalogEntry?.baseUrls.orEmpty(),
             )
         }
     }

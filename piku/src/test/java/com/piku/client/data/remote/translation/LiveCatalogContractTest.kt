@@ -32,7 +32,9 @@ class LiveCatalogContractTest {
 
     @Test
     fun verifyLiveCatalog() {
-        val envelopeBody = java.net.URI.create(SettingsRepository.CATALOG_URL_DEFAULT).toURL().readText()
+        val conn = java.net.URI.create(SettingsRepository.CATALOG_URL_DEFAULT).toURL().openConnection()
+        conn.setRequestProperty("User-Agent", "Piku/0.1.0 (Android)")
+        val envelopeBody = conn.getInputStream().readBytes().decodeToString()
         val envelope = Json { ignoreUnknownKeys = true }
             .decodeFromString(CryptoHelper.Envelope.serializer(), envelopeBody)
         val plain = CryptoHelper.decrypt(envelope, resolveKey())

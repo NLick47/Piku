@@ -9,6 +9,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import retrofit2.HttpException
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.random.Random
 
 class LlmTranslateEngine(
@@ -28,7 +29,12 @@ class LlmTranslateEngine(
         val prompts: PromptSet? = null,
         /** 目录级提示词（defaults.prompts，富规则版），模型级未覆盖的组用它 */
         val defaultPrompts: PromptSet? = null,
-    )
+        /** 备用入口（同模型多地址），主地址 [baseUrl] 连不上时按序回退；主地址始终排第一 */
+        val baseUrls: List<String> = emptyList(),
+    ) {
+        /** 可试地址顺序：主地址在前，备用按序在后（"|" 分隔的写法也在这里拆开） */
+        fun candidates(): List<String> = ModelCatalog.baseUrlCandidates(baseUrl, baseUrls)
+    }
 
     /**
      * 缓存引擎标识：role + 模型 + 地址三元组。
@@ -157,24 +163,37 @@ class LlmTranslateEngine(
             put("stream", JsonPrimitive(false))
             cfg.params.forEach { (k, v) -> if (k !in RESERVED_PARAM_KEYS) put(k, v) }
         }
-        try {
-            val response = api.chat(
-                url = chatUrl(cfg.baseUrl),
-                authorization = "Bearer ${cfg.apiKey}",
-                body = body,
-            )
-            val content = response.content
-            if (content.isBlank()) {
-                throw TranslationApiException(0, "empty response")
+        // 同模型多入口：主地址失败就换下一个，全部失败才把错误抛给上层的重试/换模型
+        val candidates = LlmAddressPreference.ordered(engineId, cfg.candidates())
+        var lastError: TranslationApiException? = null
+        candidates.forEachIndexed { index, base ->
+            try {
+                val response = api.chat(
+                    url = chatUrl(base),
+                    authorization = "Bearer ${cfg.apiKey}",
+                    body = body,
+                )
+                val content = response.content
+                if (content.isBlank()) throw TranslationApiException(0, "empty response")
+                if (index > 0) Log.d(TAG, "translate served by backup address $base")
+                LlmAddressPreference.markWorking(engineId, base)
+                return content
+            } catch (e: Exception) {
+                lastError = e.asApiException()
+                if (index < candidates.lastIndex) {
+                    Log.d(TAG, "address $base failed, trying next: ${e.message}")
+                }
             }
-            return content
-        } catch (e: HttpException) {
-            throw TranslationApiException(e.code(), e.message())
-        } catch (e: TranslationApiException) {
-            throw e
-        } catch (e: Exception) {
-            Log.d(TAG, "translate request failed: ${e::class.simpleName}: ${e.message}")
-            throw TranslationApiException(0, e.message ?: "unknown error")
+        }
+        throw lastError ?: TranslationApiException(0, "no base url configured")
+    }
+
+    private fun Exception.asApiException(): TranslationApiException = when (this) {
+        is TranslationApiException -> this
+        is HttpException -> TranslationApiException(code(), message())
+        else -> {
+            Log.d(TAG, "translate request failed: ${this::class.simpleName}: ${message}")
+            TranslationApiException(0, message ?: "unknown error")
         }
     }
 
@@ -500,3 +519,26 @@ class LlmTranslateEngine(
 
 /** API 层面错误（429 限速 / 5xx 服务端 / 空响应），用于区分校验失败 */
 class TranslationApiException(val code: Int, message: String) : Exception(message)
+
+/**
+ * 同模型多入口的进程内偏好：某个地址成功过就记住它，后续请求先从它开始试。
+ * 不记的话，主地址长期不可用时每条请求都要先撞一次（连接超时最长 10 秒）。
+ * 只活在内存里——重启后按目录顺序重试一遍，代价是一次失败的连接。
+ */
+internal object LlmAddressPreference {
+    private val preferred = ConcurrentHashMap<String, String>()
+
+    /** 命中过的地址提到最前；不在本次候选里（目录换地址了）就忽略 */
+    fun ordered(key: String, candidates: List<String>): List<String> {
+        val hit = preferred[key] ?: return candidates
+        if (hit !in candidates) return candidates
+        return listOf(hit) + candidates.filterNot { it == hit }
+    }
+
+    fun markWorking(key: String, baseUrl: String) {
+        preferred[key] = baseUrl
+    }
+
+    /** 单测隔离用 */
+    fun clear() = preferred.clear()
+}

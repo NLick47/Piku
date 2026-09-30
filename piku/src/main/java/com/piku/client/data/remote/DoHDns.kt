@@ -545,15 +545,10 @@ class DoHDns internal constructor(
         /** pixiv 侧完全不走系统 DNS：污染答案是假地址，只会白花一次探测 */
         val PIXIV_DOMAINS = listOf("pixiv.net", "pximg.net")
 
-        /** 内置固定 IP：投毒或自家域名过期时仍有一条路。改动前先实测这几个地址可用 */
         val STATIC_ADDRESSES = mapOf(
-            // Cloudflare anycast，与 DoH 给的答案一致
             "www.pixiv.net" to listOf("172.64.145.17", "104.18.42.239"),
-            // pixiv 自有网段，图片走清 SNI 直连
             "i.pximg.net" to listOf("210.140.139.129", "210.140.139.133", "210.140.139.134"),
-            // 我们自己部署的中转（自建 DoH 与图片中转同一个域）
             "piku-img.pages.dev" to listOf("172.66.44.124", "172.66.47.132"),
-            "pic-relay.cyou" to listOf("104.21.73.233", "172.67.193.18"),
         )
 
         const val WORKER_DOH_URL = "https://piku-img.pages.dev/dns-query"

@@ -58,6 +58,11 @@ data class ModelEntry(
      * fork 换默认模型只需改目录开头一处，不必翻找模型条目。
      */
     val roles: List<String> = listOf(Role.TEXT),
+    /**
+     * 备用入口（同模型多地址）：主地址 [baseUrl] 连不上时按序回退。
+     * 单独一条地址里写多个可用 "|" 分隔（环境变量下发的多地址就这样写），两种写法等价。
+     */
+    val baseUrls: List<String> = emptyList(),
 )
 
 /** 提示词集：单条 / 批量 / 小说 / 图片 / 搜索，各目标语言一套。远程下发热更新。 */
@@ -86,6 +91,8 @@ data class CatalogDefaults(
 @Serializable
 data class ModelCatalogDto(
     val version: Int = 0,
+    /** 源的身份证：谁的列表（如 "piku-official" / "mom09-fork"），界面据此标明来源；缺省表示没声明 */
+    val sourceId: String? = null,
     val defaults: CatalogDefaults? = null,
     val models: List<ModelEntry> = emptyList(),
 )
@@ -158,6 +165,17 @@ object ModelCatalog {
             preferred != null && it.id == preferred && it.available && !it.apiKey.isNullOrBlank()
         } ?: models.firstOrNull { role in it.roles && it.available && !it.apiKey.isNullOrBlank() }
     }
+
+    /**
+     * 同模型多入口的可试顺序（主地址在前，备用按序在后）：
+     * 每个值都按 "|" 再拆一层，目录条目与设置里手填的地址共用同一套解析；去空去重。
+     */
+    fun baseUrlCandidates(baseUrl: String, baseUrls: List<String> = emptyList()): List<String> =
+        (listOf(baseUrl) + baseUrls)
+            .flatMap { it.split('|') }
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
 
     /**
      * 故障转移候选：同场景（[role]）、免费、可用、带内置共享 key 的其他模型里随机挑一个。

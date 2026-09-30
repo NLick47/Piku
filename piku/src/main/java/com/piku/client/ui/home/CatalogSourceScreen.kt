@@ -87,6 +87,7 @@ fun CatalogSourceScreen(
     var keyInput by rememberSaveable(state.catalogEncKey) { mutableStateOf(state.catalogEncKey) }
     var managedSource by remember { mutableStateOf<CatalogSource?>(null) }
     val refreshing = state.catalogRefreshState is CatalogRefreshState.Loading
+    val sourceSuffix = if (state.catalogSourceId.isBlank()) "" else " · ${state.catalogSourceId}"
     val trimmedKey = keyInput.trim()
     val keyValid = trimmedKey.isEmpty() || CATALOG_KEY_HEX.matches(trimmedKey)
     // 与当前持久化值都相同（地址空白=默认语义）时无需保存；刷新中或密钥格式非法时禁用
@@ -297,8 +298,14 @@ fun CatalogSourceScreen(
                 )
             }
             is CatalogRefreshState.Success -> Text(
-                text = stringResource(R.string.ai_translate_catalog_success, refresh.modelCount),
+                text = stringResource(R.string.ai_translate_catalog_success, refresh.modelCount) + sourceSuffix,
                 color = accent,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(start = 4.dp, top = 6.dp),
+            )
+            CatalogRefreshState.UpToDate -> Text(
+                text = stringResource(R.string.ai_translate_catalog_uptodate) + sourceSuffix,
+                color = secondary,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(start = 4.dp, top = 6.dp),
             )
@@ -349,7 +356,8 @@ private fun CatalogSourceListCard(
     val secondary = PikuColors.textSecondary
     val accent = PikuColors.controlAccent
     val borderColor = PikuColors.border
-    val officialActive = activeUrl == SettingsRepository.CATALOG_URL_DEFAULT && activeKey.isEmpty()
+    val officialActive =
+        activeUrl in SettingsRepository.CATALOG_URL_MIRRORS && activeKey.isEmpty()
 
     Column(
         Modifier

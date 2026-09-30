@@ -1,10 +1,11 @@
-// Piku 中转 · Cloudflare Worker（最小同构版：图片/DoH/px 三类回源）
+// Piku 中转 · Cloudflare Worker（最小同构版：图片/DoH/px/目录 四类回源）
 // 全功能版（/pxapi 路由、客户端头透传）在 piku-pages/functions/[[path]].js，改任一处记得对齐。
 //
-// 按路径分三类回源：
+// 按路径分四类回源：
 //   1. /dns-query      -> https://cloudflare-dns.com/dns-query（RFC8484 原样透传）
 //   2. /px/<原路径>     -> https://www.pixiv.net/<原路径>
-//   3. 其余 <原路径>    -> https://cdn.poipiku.com/<原路径>（原有图片中转）
+//   3. /catalog/models.enc.json -> 模型目录密文（GitHub raw 被墙的是国内直连，CF 出口可达）
+//   4. 其余 <原路径>    -> https://cdn.poipiku.com/<原路径>（原有图片中转）
 //
 // 为什么需要这两条新路由（2026-09 实测）：
 //   · www.pixiv.net 在 Cloudflare 上。GFW 按 SNI 字符串拦 pixiv/pximg：同一个
@@ -23,6 +24,7 @@
 //   pixiv 图 https://i.pximg.net/<path>   -> https://<你的域名>/pximg/<path>
 //   接口  https://www.pixiv.net/         -> https://<你的域名>/px/
 //   DoH   https://<你的域名>/dns-query
+//   目录  https://<你的域名>/catalog/models.enc.json
 
 const IMAGE_UPSTREAM = "https://cdn.poipiku.com";
 const IMAGE_REFERER = "https://poipiku.com/";
@@ -33,6 +35,16 @@ const PIXIV_IMG_UPSTREAM = "https://i.pximg.net";
 const PIXIV_IMG_PREFIX = "/pximg";
 const PIXIV_IMG_REFERER = "https://www.pixiv.net/";
 const DOH_UPSTREAM = "https://cloudflare-dns.com/dns-query";
+
+/** 模型目录密文（piku-models 的 catalog 分支）：国内直连 GitHub raw 被墙，这里由 CF 出口回源 */
+const CATALOG_PATH = "/catalog/models.enc.json";
+const CATALOG_UPSTREAMS = [
+  "https://raw.githubusercontent.com/NLick47/piku-models/catalog/models.enc.json",
+  "https://cdn.jsdelivr.net/gh/NLick47/piku-models@catalog/models.enc.json",
+];
+const CATALOG_TTL = 300; // 目录很少变，短缓存让新版本及时上边缘
+// 缓存键用内部主机名，跟图片缓存（键是回源 URL）互不相干
+const CATALOG_CACHE_KEY = "https://piku-catalog.internal/catalog/models.enc.json";
 
 const CACHE_TTL = 604800; // 图片：内容不可变，7 天
 const PIXIV_CACHE_TTL = 300; // 榜单等接口：短缓存，别把过期数据钉住
@@ -63,6 +75,8 @@ export default {
     if (url.pathname === PIXIV_IMG_PREFIX || url.pathname.startsWith(PIXIV_IMG_PREFIX + "/")) {
       return pixivImage(request, url, ctx);
     }
+    // 精确匹配：宽松匹配会跟图片回源路径打架（其余路径都是透传上游）
+    if (url.pathname === CATALOG_PATH) return catalog(request, (p) => ctx.waitUntil(p));
     return image(request, url, ctx);
   },
 };
@@ -227,6 +241,55 @@ async function image(request, url, ctx) {
 
   if (cacheable && origin.ok) ctx.waitUntil(caches.default.put(cacheKey, resp.clone()));
   return withCors(resp);
+}
+
+/**
+ * 模型目录：从 Cloudflare 出口回源（GitHub raw 只拦国内直连，CF 出口不受影响，
+ * jsDelivr 作备选），成功即缓存到边缘；失败不缓存，交给下次请求重试。
+ */
+async function catalog(request, waitUntil) {
+  if (request.method !== "GET") {
+    return new Response("method not allowed", { status: 405, headers: CORS });
+  }
+
+  const cacheKey = new Request(CATALOG_CACHE_KEY, { method: "GET" });
+  const hit = await caches.default.match(cacheKey);
+  if (hit) return withCors(hit);
+
+  let lastError = "no upstream tried";
+  for (const upstream of CATALOG_UPSTREAMS) {
+    try {
+      const origin = await fetch(upstream, {
+        headers: { "User-Agent": "Mozilla/5.0", "Accept": "application/json,text/plain,*/*" },
+      });
+      if (!origin.ok) {
+        lastError = `${upstream} -> HTTP ${origin.status}`;
+        continue;
+      }
+      const body = await origin.arrayBuffer();
+      if (body.byteLength === 0) {
+        lastError = `${upstream} -> empty body`;
+        continue;
+      }
+      const resp = new Response(body, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": `public, max-age=${CATALOG_TTL}`,
+        },
+      });
+      waitUntil(caches.default.put(cacheKey, resp.clone()));
+      return withCors(resp);
+    } catch (e) {
+      lastError = `${upstream} -> ${e.message}`;
+    }
+  }
+
+  // 一次上游抖动不该被边缘钉住：错误响应不缓存，下次请求重新回源
+  return new Response("catalog upstream error: " + lastError, {
+    status: 502,
+    headers: { ...CORS, "Cache-Control": "no-store" },
+  });
 }
 
 function withCors(resp) {

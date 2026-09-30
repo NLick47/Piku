@@ -1,9 +1,10 @@
 // Piku 中转 · Cloudflare Pages Functions
 //
-// 部署后按路径分三类回源：
+// 部署后按路径分四类回源：
 //   1. /dns-query      -> https://cloudflare-dns.com/dns-query（RFC8484 原样透传）
 //   2. /px/<原路径>     -> https://www.pixiv.net/<原路径>
-//   3. 其余 <原路径>    -> https://cdn.poipiku.com/<原路径>（原有图片中转）
+//   3. /catalog/models.enc.json -> 模型目录密文（GitHub raw 被墙的是国内直连，CF 出口可达）
+//   4. 其余 <原路径>    -> https://cdn.poipiku.com/<原路径>（原有图片中转）
 //
 // 为什么需要这两条新路由（2026-09 实测）：
 //   · www.pixiv.net 在 Cloudflare 上。GFW 按 SNI 字符串拦 pixiv/pximg：同一个
@@ -17,9 +18,14 @@
 //   图片  https://cdn.poipiku.com/<path> -> https://<项目名>.pages.dev/<path>
 //   接口  https://www.pixiv.net/         -> https://<项目名>.pages.dev/px/
 //   DoH   https://<项目名>.pages.dev/dns-query
+//   目录  https://<项目名>.pages.dev/catalog/models.enc.json
 //
 // 全功能版以本文件为准（/pxapi 路由、客户端头透传）；piku-image-worker.js 是最小同构版，
 // 两份实现改任一处记得对齐另一份。
+//
+// 部署：cd proxy/piku-pages && npx wrangler pages deploy . --project-name piku-img --branch main
+//   目录参数必须是 "."——wrangler 从 cwd 找 functions/，写 proxy/piku-pages 会只传静态资源、
+//   跳过函数包（部署成功但全站 404）。
 
 const IMAGE_UPSTREAM = "https://cdn.poipiku.com";
 const IMAGE_REFERER = "https://poipiku.com/";
@@ -33,6 +39,16 @@ const PIXIV_IMG_REFERER = "https://www.pixiv.net/";
 const PIXIV_APP_UPSTREAM = "https://app-api.pixiv.net";
 const PIXIV_APP_PREFIX = "/pxapi";
 const DOH_UPSTREAM = "https://cloudflare-dns.com/dns-query";
+
+/** 模型目录密文（piku-models 的 catalog 分支）：国内直连 GitHub raw 被墙，这里由 CF 出口回源 */
+const CATALOG_PATH = "/catalog/models.enc.json";
+const CATALOG_UPSTREAMS = [
+  "https://raw.githubusercontent.com/NLick47/piku-models/catalog/models.enc.json",
+  "https://cdn.jsdelivr.net/gh/NLick47/piku-models@catalog/models.enc.json",
+];
+const CATALOG_TTL = 300; // 目录很少变，短缓存让新版本及时上边缘
+// 缓存键用内部主机名，跟图片缓存（键是回源 URL）互不相干
+const CATALOG_CACHE_KEY = "https://piku-catalog.internal/catalog/models.enc.json";
 
 const CACHE_TTL = 604800; // 图片：内容不可变，7 天
 const PIXIV_CACHE_TTL = 300; // 榜单等接口：短缓存，别把过期数据钉住
@@ -90,6 +106,8 @@ export async function onRequest(context) {
   if (url.pathname === PIXIV_IMG_PREFIX || url.pathname.startsWith(PIXIV_IMG_PREFIX + "/")) {
     return pixivImage(request, url, waitUntil);
   }
+  // 精确匹配：宽松匹配会跟图片回源路径打架（其余路径都是透传上游）
+  if (url.pathname === CATALOG_PATH) return catalog(request, waitUntil);
   return image(request, url, waitUntil);
 }
 
@@ -263,6 +281,56 @@ async function image(request, url, waitUntil) {
 
   if (cacheable && origin.ok) waitUntil(cache.put(cacheKey, resp.clone()));
   return withCors(resp);
+}
+
+/**
+ * 模型目录：从 Cloudflare 出口回源（GitHub raw 只拦国内直连，CF 出口不受影响，
+ * jsDelivr 作备选），成功即缓存到边缘；失败不缓存，交给下次请求重试。
+ */
+async function catalog(request, waitUntil) {
+  if (request.method !== "GET") {
+    return new Response("method not allowed", { status: 405, headers: CORS });
+  }
+
+  const cache = caches.default;
+  const cacheKey = new Request(CATALOG_CACHE_KEY, { method: "GET" });
+  const hit = await cache.match(cacheKey);
+  if (hit) return withCors(hit);
+
+  let lastError = "no upstream tried";
+  for (const upstream of CATALOG_UPSTREAMS) {
+    try {
+      const origin = await fetch(upstream, {
+        headers: { "User-Agent": "Mozilla/5.0", "Accept": "application/json,text/plain,*/*" },
+      });
+      if (!origin.ok) {
+        lastError = `${upstream} -> HTTP ${origin.status}`;
+        continue;
+      }
+      const body = await origin.arrayBuffer();
+      if (body.byteLength === 0) {
+        lastError = `${upstream} -> empty body`;
+        continue;
+      }
+      const resp = new Response(body, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": `public, max-age=${CATALOG_TTL}`,
+        },
+      });
+      waitUntil(cache.put(cacheKey, resp.clone()));
+      return withCors(resp);
+    } catch (e) {
+      lastError = `${upstream} -> ${e.message}`;
+    }
+  }
+
+  // 一次上游抖动不该被边缘钉住：错误响应不缓存，下次请求重新回源
+  return new Response("catalog upstream error: " + lastError, {
+    status: 502,
+    headers: { ...CORS, "Cache-Control": "no-store" },
+  });
 }
 
 function withCors(resp) {

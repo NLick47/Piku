@@ -412,7 +412,7 @@
     <string name="ai_translate_catalog_url_label">List URL</string>
     <string name="ai_translate_catalog_key_label">Decryption key</string>
     <string name="ai_translate_catalog_saved">Saved sources</string>
-    <string name="ai_translate_catalog_official_caption">Built-in encrypted list, maintained officially</string>
+    <string name="ai_translate_catalog_official_caption">Built-in encrypted list · auto-fallback to jsDelivr / GitHub</string>
     <string name="ai_translate_catalog_save_as_new">Save as new source</string>
     <string name="ai_translate_catalog_manage_title">Manage source</string>
     <string name="ai_translate_catalog_name_hint">Source name (auto if empty)</string>
@@ -425,6 +425,7 @@
     <string name="ai_translate_catalog_loading">Refreshing…</string>
     <string name="ai_translate_catalog_success">Loaded %1$d models</string>
     <string name="ai_translate_catalog_failed">Fetch failed; keeping the current list</string>
+    <string name="ai_translate_catalog_uptodate">List is already up to date</string>
     <string name="ai_translate_novel_follow">Same as text</string>
     <string name="ai_translate_not_selected">Not selected</string>
     <string name="ai_translate_image_count">%1$d models</string>
