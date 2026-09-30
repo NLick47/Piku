@@ -392,6 +392,7 @@
     <string name="detail_follow_sent">已关注该用户</string>
     <string name="detail_unfollow_sent">已取消关注</string>
     <string name="detail_follow_failed">关注操作失败</string>
+    <string name="detail_cloud_bookmark_failed">同步到 pixiv 收藏失败</string>
     <string name="detail_block">屏蔽该用户</string>
     <string name="detail_unblock">解除屏蔽</string>
     <string name="detail_block_login_hint">登录后即可屏蔽</string>
@@ -697,7 +698,6 @@
     <string name="pixiv_stat_views">浏览</string>
     <string name="pixiv_stat_likes">点赞</string>
     <string name="pixiv_stat_bookmarks">收藏</string>
-    <string name="pixiv_stat_comments">评论</string>
     <string name="pixiv_meta_posted">投稿 %1$s</string>
     <string name="pixiv_meta_pages">%1$d 张</string>
     <string name="pixiv_related_works">相关作品</string>

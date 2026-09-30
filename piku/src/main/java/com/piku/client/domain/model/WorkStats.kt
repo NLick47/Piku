@@ -3,12 +3,10 @@ package com.piku.client.domain.model
 data class WorkStats(
     /** 浏览数 */
     val views: Int = 0,
-    /** 点赞数（pixiv 的「いいね」） */
+    /** 点赞数（pixiv 的「いいね」，仅展示、客户端不做点赞操作） */
     val likes: Int = 0,
     /** 收藏数 */
     val bookmarks: Int = 0,
-    /** 评论数 */
-    val comments: Int = 0,
     /** 投稿时间（接口原始 rfc3339 串，展示只取日期段） */
     val postedAt: String = "",
     val width: Int = 0,

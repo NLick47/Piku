@@ -14,13 +14,20 @@ import com.piku.client.data.remote.translation.ImageTranslationPrompts
 import com.piku.client.data.remote.translation.LlmTranslateEngine
 import com.piku.client.data.remote.translation.ModelCatalogRepository
 import com.piku.client.data.remote.translation.TranslationRepository
+import com.piku.client.data.repository.FavoriteRepository
+import com.piku.client.data.repository.PixivRepository
 import com.piku.client.data.repository.ThumbnailResolver
 import com.piku.client.domain.model.AppLanguage
+import com.piku.client.domain.model.AuthStatus
+import com.piku.client.domain.model.FavoriteFolder
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkDetail
+import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.model.WorkStats
+import com.piku.client.domain.model.key
 import com.piku.client.domain.translation.TagsTranslationController
 import com.piku.client.domain.model.mergeTranslatedFields
+import com.piku.client.domain.source.SourceAuthRegistry
 import com.piku.client.domain.source.SourceRegistry
 import com.piku.client.domain.source.SourceWorkPage
 import com.piku.client.domain.usecase.ObserveLanguageUseCase
@@ -38,6 +45,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -59,6 +68,9 @@ class SourceWorkDetailViewModel @Inject constructor(
     private val imageShareHelper: com.piku.client.data.local.ImageShareHelper,
     @Named("image") private val imageClient: OkHttpClient,
     private val imageRouteController: ImageRouteController,
+    private val pixivRepository: PixivRepository,
+    private val favoriteRepository: FavoriteRepository,
+    private val sourceAuthRegistry: SourceAuthRegistry,
 ) : ViewModel() {
 
     /** 保存/分享结果的就地提示，由宿主 SnackbarHost 呈现（与 poipiku 详情同款通道） */
@@ -93,6 +105,17 @@ class SourceWorkDetailViewModel @Inject constructor(
         val related: List<Work> = emptyList(),
         /** 计数缩写按语言分档（中日「万」/ 英文「K」） */
         val language: AppLanguage = AppLanguage.SYSTEM,
+        /** pixiv 源登录态：关注按钮的显隐与云端收藏镜像都看它 */
+        val loggedIn: Boolean = false,
+        /** 本地收藏（任一收藏夹）：星标回显 */
+        val isFavorite: Boolean = false,
+        /** 本地收藏夹与当前作品的归属：长按星标的选择面板用 */
+        val favoriteFolders: List<FavoriteFolder> = emptyList(),
+        val workFavoriteFolderIds: Set<Long> = emptySet(),
+        /** 已关注作者（pixiv 云端状态）；状态没回来前维持 false，add 幂等不产生误副作用 */
+        val followed: Boolean = false,
+        /** 关注请求在途：防连点，与 poipiku 详情同语义 */
+        val followSending: Boolean = false,
     ) {
         val hasTranslation: Boolean get() = detail?.translated?.hasAny == true
 
@@ -118,6 +141,12 @@ class SourceWorkDetailViewModel @Inject constructor(
     val ui: StateFlow<UiState> = _ui.asStateFlow()
 
     private var loadedWorkId: Long = -1
+    /** 收藏/关注操作的对象；VM 按作品驻留，进来就不变 */
+    private var currentWork: Work? = null
+    private var favoriteCollectorsWired = false
+    private var pixivStateLoadedForWork: Long = -1
+    /** 云端收藏镜像串行化：两次快速点击必须按先加后删落云端，乱序会让云端与本地相反 */
+    private val cloudMirrorMutex = Mutex()
     private val _shareRequest = MutableStateFlow<DetailViewModel.ImageShareRequest?>(null)
     val shareRequest: StateFlow<DetailViewModel.ImageShareRequest?> = _shareRequest.asStateFlow()
     /** 失败时收起面板的一次性事件。replay=0：依赖「面板打开期间 collector 必在」——失败只发生在点击后的下载流程里 */
@@ -173,14 +202,33 @@ class SourceWorkDetailViewModel @Inject constructor(
                 _ui.update { it.copy(autoTranslateTags = enabled) }
             }
         }
+        // pixiv 登录态：登录/登出实时改关注按钮显隐；刚登录时补拉一次关注状态回显
+        sourceAuthRegistry.byId(WorkSource.PIXIV)?.let { pixivAuth ->
+            viewModelScope.launch {
+                pixivAuth.status.collect { status ->
+                    val loggedIn = status == AuthStatus.LOGGED_IN
+                    _ui.update { it.copy(loggedIn = loggedIn) }
+                    if (loggedIn) refreshPixivSocialState()
+                }
+            }
+        }
+        // 收藏夹列表：长按星标的选择面板用，与 poipiku 详情同一份数据源
+        viewModelScope.launch {
+            favoriteRepository.observeFolders().collect { folders ->
+                _ui.update { it.copy(favoriteFolders = folders) }
+            }
+        }
     }
 
     /** 打开作品时加载一次；[force] 供失败重试强制重拉 */
     fun load(work: Work, force: Boolean = false) {
         if (!force && loadedWorkId == work.id && _ui.value.detail != null) return
         loadedWorkId = work.id
+        currentWork = work
         translatedImages.clear()
         imageTranslateJob?.cancel()
+        wireFavoriteCollectors(work)
+        refreshPixivSocialState()
         // 秒进：列表里自带的标题/作者/缩略图先上屏打底，接口回来再补全简介/统计/清晰图
         // 运行时开关由 init 期 collect 写入，整表重置必须带回，否则图片翻译入口永远不亮
         _ui.value = UiState(
@@ -188,6 +236,8 @@ class SourceWorkDetailViewModel @Inject constructor(
             hasTextModel = _ui.value.hasTextModel,
             hasImageModel = _ui.value.hasImageModel,
             autoTranslateTags = _ui.value.autoTranslateTags,
+            // 整表重建不能冲掉登录态：登录/登出才推一次，这里丢了下一次要等状态变化
+            loggedIn = _ui.value.loggedIn,
             detail = WorkDetail(
                 title = work.title,
                 authorName = work.authorName,
@@ -395,6 +445,131 @@ class SourceWorkDetailViewModel @Inject constructor(
 
     fun clearShareRequest() {
         _shareRequest.value = null
+    }
+
+    // ---------------- 收藏（本地为准，登录时镜像云端）与关注 ----------------
+
+    /** 星标回显接线：收藏键集合与当前作品的夹归属按 work 常驻订阅；VM 按作品驻留，接一次就够 */
+    private fun wireFavoriteCollectors(work: Work) {
+        if (favoriteCollectorsWired) return
+        favoriteCollectorsWired = true
+        viewModelScope.launch {
+            favoriteRepository.observeFavoriteIds().collect { ids ->
+                _ui.update { it.copy(isFavorite = work.key in ids) }
+            }
+        }
+        viewModelScope.launch {
+            favoriteRepository.observeWorkFolderIds(work.key).collect { folderIds ->
+                _ui.update { it.copy(workFavoriteFolderIds = folderIds) }
+            }
+        }
+    }
+
+    /**
+     * 关注状态回显：登录后从 app-api 拉一次「是否已关注」。失败静默（详情页主体不受影响），
+     * 状态维持未关注——关注操作幂等，即便状态错了点一下也能归位。
+     */
+    private fun refreshPixivSocialState() {
+        val work = currentWork ?: return
+        if (work.source != WorkSource.PIXIV || !_ui.value.loggedIn) return
+        if (pixivStateLoadedForWork == work.id) return
+        pixivStateLoadedForWork = work.id
+        viewModelScope.launch {
+            pixivRepository.illustState(work.id)
+                .onSuccess { state -> _ui.update { it.copy(followed = state.isFollowed) } }
+                .onFailure { error ->
+                    Log.d("PikuDiag", "pixiv illustState work=${work.id}: ${error::class.simpleName}")
+                    pixivStateLoadedForWork = -1
+                }
+        }
+    }
+
+    /** 星标单击：加入/移出默认收藏夹；pixiv 登录态下把结果镜像成云端收藏/取消收藏 */
+    fun toggleFavorite() {
+        val work = currentWork ?: return
+        viewModelScope.launch {
+            val added = favoriteRepository.toggleFavorite(work)
+            feedback.show(if (added) R.string.detail_favorite_added else R.string.detail_favorite_removed)
+            mirrorCloudBookmark(work, added)
+        }
+    }
+
+    /** 收藏夹面板：把作品加进/移出收藏夹。只管本地组织，云端收藏没有夹的概念 */
+    fun toggleFavoriteFolder(folderId: Long) {
+        val work = currentWork ?: return
+        viewModelScope.launch {
+            favoriteRepository.toggleFolder(work, folderId)
+        }
+    }
+
+    fun createFavoriteFolder(name: String) {
+        val work = currentWork ?: return
+        viewModelScope.launch {
+            // 重名会被数据层拒掉（同步按名字认收藏夹），要说清为什么没建成
+            if (favoriteRepository.createFolder(name, work) == null) {
+                feedback.show(R.string.collection_folder_name_taken)
+            }
+        }
+    }
+
+    /**
+     * 云端镜像：加收藏 → pixiv 收藏 add；取消 → delete。失败只提示不回滚——
+     * 本地收藏是主体，云端没同步上不该把用户刚点的星标弹回去。
+     */
+    private fun mirrorCloudBookmark(work: Work, add: Boolean) {
+        if (work.source != WorkSource.PIXIV || !_ui.value.loggedIn) return
+        viewModelScope.launch {
+            cloudMirrorMutex.withLock {
+                pixivRepository.bookmarkIllust(work.id, add = add)
+            }.fold(
+                onSuccess = {
+                    // 收藏数就地修正：云端操作成功才动计数
+                    _ui.update { s ->
+                        val stats = s.stats ?: return@update s
+                        if (!stats.hasCounts) return@update s
+                        val next = (stats.bookmarks + if (add) 1 else -1).coerceAtLeast(0)
+                        s.copy(stats = stats.copy(bookmarks = next))
+                    }
+                },
+                onFailure = { error ->
+                    Log.d(
+                        "PikuDiag",
+                        "pixiv bookmark mirror work=${work.id} add=$add: ${error::class.simpleName}",
+                    )
+                    feedback.show(R.string.detail_cloud_bookmark_failed)
+                },
+            )
+        }
+    }
+
+    /** 关注/取消关注。乐观翻转 + 失败回滚，与 poipiku 详情同语义 */
+    fun toggleFollow() {
+        val work = currentWork ?: return
+        val state = _ui.value
+        if (state.followSending) return
+        if (!state.loggedIn) {
+            feedback.show(R.string.detail_follow_login_hint)
+            return
+        }
+        if (work.authorId <= 0) return
+        val target = !state.followed
+        viewModelScope.launch {
+            _ui.update { it.copy(followSending = true, followed = target) }
+            pixivRepository.followUser(work.authorId, follow = target).fold(
+                onSuccess = {
+                    _ui.update { it.copy(followSending = false) }
+                    feedback.show(if (target) R.string.detail_follow_sent else R.string.detail_unfollow_sent)
+                },
+                onFailure = { error ->
+                    Log.d(
+                        "PikuDiag",
+                        "pixiv follow user=${work.authorId} follow=$target: ${error::class.simpleName}",
+                    )
+                    _ui.update { it.copy(followSending = false, followed = !target) }
+                    feedback.show(R.string.detail_follow_failed)
+                },
+            )
+        }
     }
 
     /**

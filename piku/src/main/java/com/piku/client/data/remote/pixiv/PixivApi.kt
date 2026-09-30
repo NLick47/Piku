@@ -82,7 +82,7 @@ data class PixivIllustResponse(
 )
 
 /**
- * 只取详情页用得到的字段。计数类（view/like/bookmark/comment）在匿名访问下也在，
+ * 只取详情页用得到的字段。计数类（view/like/bookmark）在匿名访问下也在，
  * 但个别作品（限制公开、接口降级）会缺，缺了按默认值 0 处理——UI 只展示有意义的项。
  */
 @Serializable
@@ -92,7 +92,6 @@ data class PixivIllustBody(
     @SerialName("viewCount") val viewCount: Int = 0,
     @SerialName("likeCount") val likeCount: Int = 0,
     @SerialName("bookmarkCount") val bookmarkCount: Int = 0,
-    @SerialName("commentCount") val commentCount: Int = 0,
     @SerialName("pageCount") val pageCount: Int = 0,
     val width: Int = 0,
     val height: Int = 0,

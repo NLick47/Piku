@@ -2,10 +2,12 @@ package com.piku.client.ui.source
 
 import android.graphics.Bitmap
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -26,9 +28,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.BookmarkBorder
-import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -66,6 +68,8 @@ import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.LoginTextSecondaryDark
 import com.piku.client.ui.theme.OverlayScrimHeavy
 import com.piku.client.ui.theme.PikuColors
+import com.piku.client.ui.theme.StarDark
+import com.piku.client.ui.theme.StarLight
 import java.util.Locale
 
 /** 信息区左右留白（与 poipiku 详情同一把尺子） */
@@ -109,6 +113,15 @@ internal fun PixivDetailContent(
     /** 底部相关作品；空列表时不渲染这一块 */
     related: List<Work> = emptyList(),
     onRelatedClick: (Work) -> Unit = {},
+    /** 收藏（本地）与关注：收纳进概览卡本体——关注在作者行，收藏在数据条的收藏格 */
+    isFavorite: Boolean = false,
+    followed: Boolean = false,
+    showFollow: Boolean = false,
+    followSending: Boolean = false,
+    onBookmarkToggle: () -> Unit = {},
+    /** 长按收藏格：打开收藏夹面板 */
+    onBookmarkLongPress: () -> Unit = {},
+    onFollowClick: () -> Unit = {},
 ) {
     Column(
         Modifier
@@ -161,6 +174,13 @@ internal fun PixivDetailContent(
                 showTranslatedTags = showTranslatedTags,
                 tagsTranslating = tagsTranslating,
                 onToggleTagsTranslation = onToggleTagsTranslation,
+                isFavorite = isFavorite,
+                followed = followed,
+                showFollow = showFollow,
+                followSending = followSending,
+                onBookmarkToggle = onBookmarkToggle,
+                onBookmarkLongPress = onBookmarkLongPress,
+                onFollowClick = onFollowClick,
             )
             RelatedRow(works = related, onClick = onRelatedClick)
         }
@@ -183,6 +203,13 @@ private fun OverviewCard(
     showTranslatedTags: Boolean,
     tagsTranslating: Boolean,
     onToggleTagsTranslation: () -> Unit,
+    isFavorite: Boolean,
+    followed: Boolean,
+    showFollow: Boolean,
+    followSending: Boolean,
+    onBookmarkToggle: () -> Unit,
+    onBookmarkLongPress: () -> Unit,
+    onFollowClick: () -> Unit,
 ) {
     val shape = RoundedCornerShape(16.dp)
     Column(
@@ -201,7 +228,19 @@ private fun OverviewCard(
             onRetranslate = onRetranslate,
         )
         Spacer(Modifier.height(10.dp))
-        AuthorLine(detail = detail, stats = stats, onAuthorClick = onAuthorClick)
+        AuthorLine(
+            detail = detail,
+            stats = stats,
+            onAuthorClick = onAuthorClick,
+            isFavorite = isFavorite,
+            dark = dark,
+            followed = followed,
+            showFollow = showFollow,
+            followSending = followSending,
+            onBookmarkToggle = onBookmarkToggle,
+            onBookmarkLongPress = onBookmarkLongPress,
+            onFollowClick = onFollowClick,
+        )
         DescriptionBlock(
             detail = detail,
             dark = dark,
@@ -216,7 +255,10 @@ private fun OverviewCard(
                     .background(PikuColors.border),
             )
             Spacer(Modifier.height(10.dp))
-            StatsRow(stats = stats, language = language)
+            StatsRow(
+                stats = stats,
+                language = language,
+            )
         }
         MetaLine(stats = stats)
         TagsBlock(
@@ -262,8 +304,46 @@ private fun TitleLine(
     }
 }
 
+/** 收藏星标：点亮=金色实心，长按进收藏夹面板；放作者行右侧、不遮图 */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun AuthorLine(detail: WorkDetail, stats: WorkStats?, onAuthorClick: () -> Unit) {
+private fun FavoriteStarButton(
+    favorited: Boolean,
+    dark: Boolean,
+    onToggle: () -> Unit,
+    onLongPress: () -> Unit,
+) {
+    val tint = if (favorited) {
+        if (dark) StarDark else StarLight
+    } else {
+        PikuColors.textSecondary
+    }
+    Icon(
+        imageVector = if (favorited) Icons.Filled.Star else Icons.Outlined.StarBorder,
+        contentDescription = stringResource(R.string.detail_favorite),
+        tint = tint,
+        modifier = Modifier
+            .clip(CircleShape)
+            .combinedClickable(onClick = onToggle, onLongClick = onLongPress)
+            .padding(8.dp)
+            .size(22.dp),
+    )
+}
+
+@Composable
+private fun AuthorLine(
+    detail: WorkDetail,
+    stats: WorkStats?,
+    onAuthorClick: () -> Unit,
+    isFavorite: Boolean,
+    dark: Boolean,
+    followed: Boolean,
+    showFollow: Boolean,
+    followSending: Boolean,
+    onBookmarkToggle: () -> Unit,
+    onBookmarkLongPress: () -> Unit,
+    onFollowClick: () -> Unit,
+) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -302,12 +382,57 @@ private fun AuthorLine(detail: WorkDetail, stats: WorkStats?, onAuthorClick: () 
                 )
             }
         }
+        // 收藏星标：对作品操作，点自己区域不触发整行跳作者页
+        FavoriteStarButton(
+            favorited = isFavorite,
+            dark = dark,
+            onToggle = onBookmarkToggle,
+            onLongPress = onBookmarkLongPress,
+        )
+        // 关注按钮：与 pixiv 本家同位（作者行右侧）；未登录时整颗不出现
+        if (showFollow) {
+            Spacer(Modifier.width(10.dp))
+            FollowPill(
+                followed = followed,
+                enabled = !followSending,
+                onClick = onFollowClick,
+            )
+        }
     }
 }
 
-/** 四格数据：浏览 / 点赞 / 收藏 / 评论 */
+/** 关注小胶囊：未关注实心、已关注描边弱化；点自己区域不触发整行跳作者页 */
 @Composable
-private fun StatsRow(stats: WorkStats, language: AppLanguage) {
+private fun FollowPill(followed: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(13.dp)
+    Text(
+        text = stringResource(if (followed) R.string.detail_followed else R.string.detail_follow),
+        color = if (followed) PikuColors.textSecondary else PikuColors.surface,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.Medium,
+        modifier = Modifier
+            .clip(shape)
+            .background(if (followed) Color.Transparent else PikuColors.controlAccent)
+            .then(
+                if (followed) {
+                    Modifier.border(BorderStroke(0.5.dp, PikuColors.border), shape)
+                } else {
+                    Modifier
+                },
+            )
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 5.dp),
+    )
+}
+
+/**
+ * 三格数据：浏览 / 点赞 / 收藏，纯展示。
+ */
+@Composable
+private fun StatsRow(
+    stats: WorkStats,
+    language: AppLanguage,
+) {
     Row(Modifier.fillMaxWidth()) {
         StatCell(
             icon = Icons.Outlined.Visibility,
@@ -322,22 +447,16 @@ private fun StatsRow(stats: WorkStats, language: AppLanguage) {
             modifier = Modifier.weight(1f),
         )
         StatCell(
-            icon = Icons.Outlined.BookmarkBorder,
+            icon = Icons.Outlined.StarBorder,
             value = compactCount(stats.bookmarks, language),
             label = stringResource(R.string.pixiv_stat_bookmarks),
-            modifier = Modifier.weight(1f),
-        )
-        StatCell(
-            icon = Icons.Outlined.ChatBubbleOutline,
-            value = compactCount(stats.comments, language),
-            label = stringResource(R.string.pixiv_stat_comments),
             modifier = Modifier.weight(1f),
         )
     }
 }
 
 /**
- * 一格计数：图标 + 数字，不写「浏览/点赞」这类小字——眼睛、心、书签、气泡已经自解释，
+ * 一格计数：图标 + 数字，不写「浏览/点赞/收藏」这类小字——眼睛、心、书签已经自解释，
  * 写出来只是把一行撑成两行。[label] 只留给无障碍朗读。
  */
 @Composable

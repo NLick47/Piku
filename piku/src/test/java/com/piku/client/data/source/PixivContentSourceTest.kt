@@ -6,9 +6,11 @@ import com.piku.client.data.auth.pixivClientHash
 import com.piku.client.data.local.InMemorySharedPreferences
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.data.remote.pixiv.PixivApi
+import com.piku.client.data.remote.pixiv.PixivAppActionResponse
 import com.piku.client.data.remote.pixiv.PixivAppApi
 import com.piku.client.data.remote.pixiv.PixivAppConfig
 import com.piku.client.data.remote.pixiv.PixivAppIllust
+import com.piku.client.data.remote.pixiv.PixivAppIllustDetailResponse
 import com.piku.client.data.remote.pixiv.PixivAppImageUrls
 import com.piku.client.data.remote.pixiv.PixivContentType
 import com.piku.client.data.remote.pixiv.PixivIllustsResponse
@@ -78,6 +80,38 @@ class PixivContentSourceTest {
             signatures.add(clientTime to clientHash)
             return PixivIllustsResponse(illusts = illusts)
         }
+
+        override suspend fun illustState(
+            clientTime: String,
+            clientHash: String,
+            illustId: Long,
+        ): PixivAppIllustDetailResponse = PixivAppIllustDetailResponse()
+
+        override suspend fun followAdd(
+            clientTime: String,
+            clientHash: String,
+            userId: Long,
+            restrict: String,
+        ): PixivAppActionResponse = PixivAppActionResponse()
+
+        override suspend fun followDelete(
+            clientTime: String,
+            clientHash: String,
+            userId: Long,
+        ): PixivAppActionResponse = PixivAppActionResponse()
+
+        override suspend fun bookmarkAdd(
+            clientTime: String,
+            clientHash: String,
+            illustId: Long,
+            restrict: String,
+        ): PixivAppActionResponse = PixivAppActionResponse()
+
+        override suspend fun bookmarkDelete(
+            clientTime: String,
+            clientHash: String,
+            illustId: Long,
+        ): PixivAppActionResponse = PixivAppActionResponse()
     }
 
     private fun http404() = HttpException(Response.error<Any>(404, "".toResponseBody()))

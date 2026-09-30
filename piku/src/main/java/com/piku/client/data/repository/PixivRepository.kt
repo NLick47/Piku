@@ -1,9 +1,11 @@
 package com.piku.client.data.repository
 
+import android.util.Log
 import com.piku.client.data.remote.apiCall
 import com.piku.client.data.auth.PixivAuthEndpoints
 import com.piku.client.data.auth.PixivAuthRuntime
 import com.piku.client.domain.model.AppError
+import com.piku.client.data.remote.pixiv.PixivAppActionResponse
 import com.piku.client.data.remote.pixiv.PixivApi
 import com.piku.client.data.remote.pixiv.PixivApiConfig
 import com.piku.client.data.remote.pixiv.PixivAppApi
@@ -86,7 +88,81 @@ class PixivRepository @Inject constructor(
         if (response.error) return@apiCall emptyList()
         response.body.illusts.mapNotNull { it.toWork() }
     }
+
+    // ---------------- 关注与云端收藏（app-api；Bearer 由传输层按主机补） ----------------
+
+    /** 登录用户视角的作品状态：是否已收藏（云端）、是否已关注作者。未登录时调用方不该发起 */
+    suspend fun illustState(illustId: Long): Result<PixivIllustState> = apiCall {
+        val signature = endpoints.clientSignature(runtime.now())
+        val response = appApi.illustState(
+            clientTime = signature.time,
+            clientHash = signature.hash,
+            illustId = illustId,
+        )
+        if (!response.illust.visible) throw AppError.NotFound
+        PixivIllustState(
+            isBookmarked = response.illust.isBookmarked,
+            isFollowed = response.illust.user.isFollowed,
+        )
+    }
+
+    /** 关注/取消关注作者。关注带可见性（默认公开），取关不需要 */
+    suspend fun followUser(userId: Long, follow: Boolean): Result<Unit> = apiCall {
+        val signature = endpoints.clientSignature(runtime.now())
+        val response = if (follow) {
+            appApi.followAdd(
+                clientTime = signature.time,
+                clientHash = signature.hash,
+                userId = userId,
+            )
+        } else {
+            appApi.followDelete(
+                clientTime = signature.time,
+                clientHash = signature.hash,
+                userId = userId,
+            )
+        }
+        requireNoActionError(response)
+    }
+
+    /** 加入/取消云端收藏。默认公开收藏；带标签、私密收藏的精细管理交给 P 站本家 */
+    suspend fun bookmarkIllust(illustId: Long, add: Boolean): Result<Unit> = apiCall {
+        val signature = endpoints.clientSignature(runtime.now())
+        val response = if (add) {
+            appApi.bookmarkAdd(
+                clientTime = signature.time,
+                clientHash = signature.hash,
+                illustId = illustId,
+            )
+        } else {
+            appApi.bookmarkDelete(
+                clientTime = signature.time,
+                clientHash = signature.hash,
+                illustId = illustId,
+            )
+        }
+        requireNoActionError(response)
+    }
+
+    /** 200 但带 error 块的拒绝（如校验不过）：不能当成成功吞掉 */
+    private fun requireNoActionError(response: PixivAppActionResponse) {
+        val error = response.error ?: return
+        Log.d(
+            TAG,
+            "pixiv action rejected: reason=${error.reason} message=${error.message} " +
+                "userMessage=${error.userMessage}",
+        )
+        throw AppError.Unknown
+    }
 }
+
+/** 作品的登录态快照，供详情页回显按钮状态 */
+data class PixivIllustState(
+    val isBookmarked: Boolean,
+    val isFollowed: Boolean,
+)
+
+private const val TAG = "PikuDiag"
 
 /** 相关作品卡片只需要 id/标题/缩略图/作者/页数；id 解析不出来的是占位条目，直接丢掉 */
 internal fun PixivWorkCard.toWork(): Work? {
@@ -133,7 +209,6 @@ internal fun PixivIllustBody.toWorkStats(): WorkStats = WorkStats(
     views = viewCount,
     likes = likeCount,
     bookmarks = bookmarkCount,
-    comments = commentCount,
     postedAt = uploadDate.ifBlank { createDate },
     width = width,
     height = height,

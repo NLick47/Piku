@@ -380,6 +380,7 @@
     <string name="detail_follow_sent">フォローしました</string>
     <string name="detail_unfollow_sent">フォローを解除しました</string>
     <string name="detail_follow_failed">フォローに失敗しました</string>
+    <string name="detail_cloud_bookmark_failed">pixivのブックマークへの同期に失敗しました</string>
     <string name="detail_block">このユーザーをブロック</string>
     <string name="detail_unblock">ブロック解除</string>
     <string name="detail_block_login_hint">ログインしてブロック</string>
@@ -687,7 +688,6 @@
     <string name="pixiv_stat_views">閲覧数</string>
     <string name="pixiv_stat_likes">いいね</string>
     <string name="pixiv_stat_bookmarks">ブックマーク</string>
-    <string name="pixiv_stat_comments">コメント</string>
     <string name="pixiv_meta_posted">投稿 %1$s</string>
     <string name="pixiv_meta_pages">%1$d枚</string>
     <string name="pixiv_related_works">関連作品</string>

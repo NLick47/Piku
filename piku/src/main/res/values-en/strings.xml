@@ -380,6 +380,7 @@
     <string name="detail_follow_sent">Now following</string>
     <string name="detail_unfollow_sent">Unfollowed</string>
     <string name="detail_follow_failed">Failed to update follow status</string>
+    <string name="detail_cloud_bookmark_failed">Couldn\'t sync to your pixiv bookmarks</string>
     <string name="detail_block">Block this user</string>
     <string name="detail_unblock">Unblock</string>
     <string name="detail_block_login_hint">Sign in to block this user</string>
@@ -687,7 +688,6 @@
     <string name="pixiv_stat_views">Views</string>
     <string name="pixiv_stat_likes">Likes</string>
     <string name="pixiv_stat_bookmarks">Bookmarks</string>
-    <string name="pixiv_stat_comments">Comments</string>
     <string name="pixiv_meta_posted">Posted %1$s</string>
     <string name="pixiv_meta_pages">%1$d pages</string>
     <string name="pixiv_related_works">Related works</string>

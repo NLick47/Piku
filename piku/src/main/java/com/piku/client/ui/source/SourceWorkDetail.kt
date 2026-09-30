@@ -50,10 +50,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.piku.client.R
 import com.piku.client.data.local.ShareTargets
 import com.piku.client.domain.model.Work
+import com.piku.client.domain.model.WorkSource
 import com.piku.client.ui.detail.DETAIL_TOP_BAR_HEIGHT
 import com.piku.client.ui.detail.DetailSkeleton
 import com.piku.client.ui.detail.DetailTopBar
 import com.piku.client.ui.common.FeedbackHost
+import com.piku.client.ui.detail.FavoriteSheet
 import com.piku.client.ui.detail.ViewerOverlay
 import com.piku.client.ui.detail.ImageActionSheet
 import com.piku.client.ui.theme.BlobPinkDark
@@ -95,6 +97,7 @@ internal fun SourceWorkDetailDialog(
         val state by viewModel.ui.collectAsState()
         var viewerPage by remember(work.id) { mutableStateOf(-1) }
         var imageActionPage by remember(work.id) { mutableStateOf(-1) }
+        var favoriteSheetVisible by remember(work.id) { mutableStateOf(false) }
         val context = LocalContext.current
         val scope = rememberCoroutineScope()
         val snackbarHostState = remember { SnackbarHostState() }
@@ -311,6 +314,14 @@ internal fun SourceWorkDetailDialog(
                         onToggleTagsTranslation = viewModel::onToggleTagsTranslation,
                         related = state.related,
                         onRelatedClick = { relatedWork = it },
+                        // 收藏与关注收进概览卡本体，不用悬浮条——相关作品网格完整可见
+                        isFavorite = state.isFavorite,
+                        followed = state.followed,
+                        showFollow = state.loggedIn && work.source == WorkSource.PIXIV && work.authorId > 0,
+                        followSending = state.followSending,
+                        onBookmarkToggle = viewModel::toggleFavorite,
+                        onBookmarkLongPress = { favoriteSheetVisible = true },
+                        onFollowClick = viewModel::toggleFollow,
                     )
                 }
             }
@@ -391,6 +402,16 @@ internal fun SourceWorkDetailDialog(
                 hostState = snackbarHostState,
                 modifier = Modifier.align(Alignment.BottomCenter),
             )
+            if (favoriteSheetVisible && state.detail != null) {
+                FavoriteSheet(
+                    folders = state.favoriteFolders,
+                    selectedFolderIds = state.workFavoriteFolderIds,
+                    dark = dark,
+                    onToggleFolder = viewModel::toggleFavoriteFolder,
+                    onCreateFolder = viewModel::createFavoriteFolder,
+                    onDismiss = { favoriteSheetVisible = false },
+                )
+            }
         }
     }
 }

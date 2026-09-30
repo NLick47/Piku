@@ -29,7 +29,6 @@ class PixivIllustResponseTest {
         assertEquals(217599, stats.views)
         assertEquals(21134, stats.likes)
         assertEquals(22079, stats.bookmarks)
-        assertEquals(691, stats.comments)
         assertEquals(29, stats.pageCount)
         assertEquals(2129, stats.width)
         assertEquals(3000, stats.height)
