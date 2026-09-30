@@ -398,7 +398,8 @@
     <string name="ai_translate_state_on">オン</string>
     <string name="ai_translate_state_off">オフ</string>
     <string name="ai_translate_enable">自動翻訳</string>
-    <string name="ai_translate_auto_subtitle">投稿を開いたときに自動翻訳します</string>
+    <string name="ai_translate_auto_subtitle">作品を開いたときに自動翻訳します</string>
+    <string name="ai_translate_tags_auto">タグを自動翻訳</string>
     <string name="ai_translate_model">短文テキストモデル</string>
     <string name="ai_translate_novel_model">小説本文モデル</string>
     <string name="ai_translate_novel_model_empty">このリストに小説本文モデルがなく、本文は原文のままになります</string>
@@ -658,4 +659,36 @@
     <string name="image_route_auto">自動（推奨）</string>
     <string name="image_route_direct">直結</string>
     <string name="image_route_relay">中継</string>
+
+    <string name="home_source_poipiku">Poipiku</string>
+    <string name="home_source">フィードのソース</string>
+    <string name="home_source_select_title">データソースを選択</string>
+    <string name="home_source_select_hint">発見フィードのみに適用。検索・お気に入り・履歴には影響しません。</string>
+    <string name="home_source_pixiv">Pixiv</string>
+    <string name="pixiv_hint_daily">毎日更新</string>
+    <string name="pixiv_hint_weekly">毎週月曜更新</string>
+    <string name="pixiv_hint_monthly">毎月1日更新</string>
+    <string name="pixiv_hint_rookie">毎日更新</string>
+    <string name="pixiv_tab_ranking">ランキング</string>
+    <string name="pixiv_tab_recommend">おすすめ</string>
+    <string name="pixiv_tab_follow_new">フォロー</string>
+    <string name="pixiv_tab_new">新着</string>
+    <string name="pixiv_tab_discover">発見</string>
+    <string name="pixiv_need_login">pixivアカウントでログインすると見られます</string>
+    <string name="home_coming_soon">近日公開</string>
+    <string name="pixiv_tab_daily">デイリー</string>
+    <string name="pixiv_tab_weekly">ウィークリー</string>
+    <string name="pixiv_tab_monthly">マンスリー</string>
+    <string name="pixiv_tab_rookie">ルーキー</string>
+    <string name="pixiv_filter_all">総合</string>
+    <string name="pixiv_filter_illust">イラスト</string>
+    <string name="pixiv_filter_manga">マンガ</string>
+    <string name="pixiv_stat_views">閲覧数</string>
+    <string name="pixiv_stat_likes">いいね</string>
+    <string name="pixiv_stat_bookmarks">ブックマーク</string>
+    <string name="pixiv_stat_comments">コメント</string>
+    <string name="pixiv_meta_posted">投稿 %1$s</string>
+    <string name="pixiv_meta_pages">%1$d枚</string>
+    <string name="pixiv_related_works">関連作品</string>
+    <string name="common_retry">再試行</string>
 </resources>

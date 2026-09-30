@@ -5,6 +5,9 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
+/** schema 版本：动它就必须补一段迁移，单测会盯着"1..这里 不能断档" */
+internal const val DATABASE_SCHEMA_VERSION = 13
+
 @Database(
     entities = [
         FavoriteEntity::class,
@@ -17,7 +20,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         DraftEntity::class,
         DraftImageEntity::class,
     ],
-    version = 12,
+    version = DATABASE_SCHEMA_VERSION,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -203,5 +206,95 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("DROP TABLE IF EXISTS draft_works")
             }
         }
+
+        val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // 收藏/历史/归属加 source 维度：(source, workId) 是跨源唯一键，各源 id 空间互不相通。
+                // SQLite 改不了主键，只能建新表→拷数据（存量全是 poipiku）→换名
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS favorites_new (" +
+                        "source TEXT NOT NULL, " +
+                        "workId TEXT NOT NULL, " +
+                        "authorId INTEGER NOT NULL DEFAULT 0, " +
+                        "title TEXT NOT NULL, " +
+                        "authorName TEXT NOT NULL, " +
+                        "thumbnailUrl TEXT NOT NULL DEFAULT '', " +
+                        "authorAvatarUrl TEXT, " +
+                        "imageCount INTEGER NOT NULL DEFAULT 0, " +
+                        "r18 INTEGER NOT NULL DEFAULT 0, " +
+                        "addedAt INTEGER NOT NULL, " +
+                        "contentBackedUp INTEGER NOT NULL DEFAULT 0, " +
+                        "PRIMARY KEY(source, workId))",
+                )
+                db.execSQL(
+                    "INSERT INTO favorites_new(source, workId, authorId, title, authorName, " +
+                        "thumbnailUrl, authorAvatarUrl, imageCount, r18, addedAt, contentBackedUp) " +
+                        "SELECT 'POIPIKU', workId, authorId, title, authorName, thumbnailUrl, " +
+                        "authorAvatarUrl, imageCount, r18, addedAt, contentBackedUp FROM favorites",
+                )
+                db.execSQL("DROP TABLE favorites")
+                db.execSQL("ALTER TABLE favorites_new RENAME TO favorites")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_favorites_addedAt ON favorites(addedAt)")
+
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS favorite_memberships_new (" +
+                        "folderId INTEGER NOT NULL, " +
+                        "source TEXT NOT NULL, " +
+                        "workId TEXT NOT NULL, " +
+                        "addedAt INTEGER NOT NULL, " +
+                        "PRIMARY KEY(folderId, source, workId), " +
+                        "FOREIGN KEY(folderId) REFERENCES favorite_folders(id) ON DELETE CASCADE, " +
+                        "FOREIGN KEY(source, workId) REFERENCES favorites(source, workId) ON DELETE CASCADE)",
+                )
+                db.execSQL(
+                    "INSERT INTO favorite_memberships_new(folderId, source, workId, addedAt) " +
+                        "SELECT folderId, 'POIPIKU', workId, addedAt FROM favorite_memberships",
+                )
+                db.execSQL("DROP TABLE favorite_memberships")
+                db.execSQL("ALTER TABLE favorite_memberships_new RENAME TO favorite_memberships")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_favorite_memberships_folderId ON favorite_memberships(folderId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_favorite_memberships_source_workId ON favorite_memberships(source, workId)")
+
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS history_new (" +
+                        "source TEXT NOT NULL, " +
+                        "workId TEXT NOT NULL, " +
+                        "authorId INTEGER NOT NULL, " +
+                        "title TEXT NOT NULL, " +
+                        "authorName TEXT NOT NULL, " +
+                        "authorAvatarUrl TEXT, " +
+                        "thumbnailUrl TEXT NOT NULL, " +
+                        "imageCount INTEGER NOT NULL, " +
+                        "r18 INTEGER NOT NULL, " +
+                        "visitedAt INTEGER NOT NULL, " +
+                        "PRIMARY KEY(source, workId))",
+                )
+                db.execSQL(
+                    "INSERT INTO history_new(source, workId, authorId, title, authorName, " +
+                        "authorAvatarUrl, thumbnailUrl, imageCount, r18, visitedAt) " +
+                        "SELECT 'POIPIKU', workId, authorId, title, authorName, authorAvatarUrl, " +
+                        "thumbnailUrl, imageCount, r18, visitedAt FROM history",
+                )
+                db.execSQL("DROP TABLE history")
+                db.execSQL("ALTER TABLE history_new RENAME TO history")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_history_visitedAt ON history(visitedAt)")
+            }
+        }
+
+        /** 全部迁移，必须覆盖 1..version 且不断档（有单测盯着） */
+        val ALL_MIGRATIONS: Array<Migration> = arrayOf(
+            MIGRATION_1_2,
+            MIGRATION_2_3,
+            MIGRATION_3_4,
+            MIGRATION_4_5,
+            MIGRATION_5_6,
+            MIGRATION_6_7,
+            MIGRATION_7_8,
+            MIGRATION_8_9,
+            MIGRATION_9_10,
+            MIGRATION_10_11,
+            MIGRATION_11_12,
+            MIGRATION_12_13,
+        )
     }
 }

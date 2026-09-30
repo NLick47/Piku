@@ -41,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.piku.client.R
+import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.model.AppLanguage
 import com.piku.client.domain.model.CATEGORY_GROUPS
 import com.piku.client.domain.model.PoipikuCategory
@@ -155,6 +156,36 @@ internal fun ThemeModeSheet(
                 onClick = { onSelect(ThemeMode.DARK) },
                 dark = dark,
             )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun HomeSourceSheet(
+    selected: WorkSource,
+    options: List<WorkSource>,
+    labelRes: (WorkSource) -> Int,
+    onSelect: (WorkSource) -> Unit,
+    onDismiss: () -> Unit,
+    dark: Boolean,
+) {
+    PikuBottomSheet(
+        onDismissRequest = onDismiss,
+        dark = dark,
+    ) {
+        PikuSheetTitle(text = stringResource(R.string.home_source_select_title))
+        Spacer(Modifier.height(4.dp))
+        PikuSheetSubtitle(text = stringResource(R.string.home_source_select_hint))
+        Spacer(Modifier.height(16.dp))
+        options.forEach { option ->
+            SettingsOptionRow(
+                text = stringResource(labelRes(option)),
+                selected = selected == option,
+                onClick = { onSelect(option) },
+                dark = dark,
+            )
+            Spacer(Modifier.height(8.dp))
+        }
     }
 }
 

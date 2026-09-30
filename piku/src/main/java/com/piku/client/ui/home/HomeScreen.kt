@@ -88,15 +88,18 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.piku.client.BuildConfig
 import com.piku.client.R
 import com.piku.client.data.local.SettingsRepository
+import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.model.Work
 import com.piku.client.ui.profile.ProfileEditSheet
 import com.piku.client.ui.publish.PublishScreen
 import com.piku.client.ui.common.AvatarViewerDialog
+import com.piku.client.ui.common.labelRes
 import com.piku.client.ui.collection.CollectionScreen
 import com.piku.client.ui.follow.BlockUsersScreen
 import com.piku.client.ui.follow.FollowUsersScreen
 import com.piku.client.ui.history.HistoryScreen
 import com.piku.client.ui.tags.TagScreen
+import com.piku.client.ui.source.SourceFeedContent
 import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.LocalDarkTheme
 import com.piku.client.ui.theme.PikuColors
@@ -155,6 +158,7 @@ fun HomeScreen(
     val context = LocalContext.current
     var showCategories by rememberSaveable { mutableStateOf(false) }
     var showThemeSheet by rememberSaveable { mutableStateOf(false) }
+    var showHomeSourceSheet by rememberSaveable { mutableStateOf(false) }
     var showImageRouteSheet by rememberSaveable { mutableStateOf(false) }
     var originalOffsetX by remember { mutableFloatStateOf(0f) }
     var originalOffsetY by remember { mutableFloatStateOf(0f) }
@@ -357,6 +361,7 @@ fun HomeScreen(
         onSettingsClick = {},
         onAboutClick = { showAboutSheet = true },
         onThemeClick = { showThemeSheet = true },
+        onHomeSourceClick = { showHomeSourceSheet = true },
         onImageRouteClick = { showImageRouteSheet = true },
         onBackgroundClick = {
             scope.launch { drawerState.close() }
@@ -465,7 +470,25 @@ fun HomeScreen(
                     .fillMaxSize()
                     .graphicsLayer { alpha = contentAlpha }
             ) {
-                if (isTablet) {
+                // 非 poipiku 源一律走声明驱动的通用壳；poipiku 保留专属壳（tab 图标/分类侧栏是它的语义）
+                if (state.homeSource != WorkSource.POIPIKU) {
+                    SourceFeedContent(
+                        dark = dark,
+                        isScrolling = isScrolling,
+                        avatarUrl = state.userAvatarUrl,
+                        menuEnabled = drawerButtonEnabled,
+                        hasCustomBackground = state.customBackgroundPath != null,
+                        drawerIsOpen = drawerState.isOpen,
+                        tabColors = tabColors,
+                        onTabBand = { tabBand = it },
+                        onOpenDrawer = openDrawer,
+                        onSearchClick = onSearchClick,
+                        onSourceClick = { showHomeSourceSheet = true },
+                        updateBanner = state.updateBanner,
+                        onOpenUpdate = onOpenUpdate,
+                        onDismissUpdateBanner = viewModel::dismissUpdateBanner,
+                    )
+                } else if (isTablet) {
                     Row(Modifier.fillMaxSize()) {
                         CategorySidebar(
                             selected = state.category,
@@ -492,6 +515,8 @@ fun HomeScreen(
                                         onMenuClick = openDrawer,
                                         menuEnabled = drawerButtonEnabled,
                                         onSearchClick = onSearchClick,
+                                        onSourceClick = { showHomeSourceSheet = true },
+                                        sourceLabelRes = state.homeSource.labelRes(),
                                         onDoubleTapTop = { gridState.scrollToTopSmart(scope) },
                                         dark = dark,
                                     )
@@ -533,6 +558,7 @@ fun HomeScreen(
                             onMenuClick = openDrawer,
                             menuEnabled = drawerButtonEnabled,
                             onSearchClick = onSearchClick,
+                            onSourceClick = { showHomeSourceSheet = true },
                             onSelectFeedTab = viewModel::selectFeedTab,
                             onCategoryClick = { showCategories = true },
                             onDoubleTapTop = { gridState.scrollToTopSmart(scope) },
@@ -821,6 +847,20 @@ fun HomeScreen(
                 )
             }
 
+            if (showHomeSourceSheet) {
+                HomeSourceSheet(
+                    selected = state.homeSource,
+                    options = viewModel.sourceOptions,
+                    labelRes = viewModel::homeSourceLabelRes,
+                    onSelect = { source ->
+                        viewModel.setHomeSource(source)
+                        showHomeSourceSheet = false
+                    },
+                    onDismiss = { showHomeSourceSheet = false },
+                    dark = dark,
+                )
+            }
+
             if (showThemeSheet) {
                 ThemeModeSheet(
                     selected = state.themeMode,
@@ -874,6 +914,7 @@ fun HomeScreen(
                 AiTranslateSheet(
                     state = state,
                     onToggleEnabled = viewModel::setAiTranslateEnabled,
+                    onToggleTagsAuto = viewModel::setAutoTranslateTags,
                     onSelectModel = viewModel::selectTranslateModel,
                     onSelectNovelModel = viewModel::selectTranslateNovelModel,
                     onSelectImageModel = viewModel::selectTranslateImageModel,

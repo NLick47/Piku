@@ -4,6 +4,7 @@ import android.content.SharedPreferences
 import com.piku.client.data.repository.SyncResult
 import com.piku.client.data.repository.SyncState
 import com.piku.client.domain.model.FolderSort
+import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.model.ImageRouteMode
 import com.piku.client.domain.model.ReadingProgress
 import com.piku.client.domain.model.ThemeMode
@@ -96,6 +97,14 @@ class SettingsRepository @Inject constructor(
         prefs.getString(KEY_CUSTOM_BACKGROUND_PATH, null)?.takeIf { File(it).exists() },
     )
     val customBackgroundPath: StateFlow<String?> = _customBackgroundPath.asStateFlow()
+
+    /** 首页发现页的数据源；只作用于首页，搜索/收藏/历史不跟着切 */
+    private val _homeSource = MutableStateFlow(
+        prefs.getString(KEY_HOME_SOURCE, null)
+            ?.let { name -> runCatching { WorkSource.valueOf(name) }.getOrNull() }
+            ?: WorkSource.POIPIKU,
+    )
+    val homeSource: StateFlow<WorkSource> = _homeSource.asStateFlow()
 
     /** 自定义背景压暗程度 0~1，0 表示不压暗 */
     private val _backgroundDim = MutableStateFlow(
@@ -203,6 +212,11 @@ class SettingsRepository @Inject constructor(
     fun setImageRouteMode(mode: ImageRouteMode) {
         prefs.edit().putString(KEY_IMAGE_ROUTE_MODE, mode.name).apply()
         _imageRouteMode.value = mode
+    }
+
+    fun setHomeSource(value: WorkSource) {
+        prefs.edit().putString(KEY_HOME_SOURCE, value.name).apply()
+        _homeSource.value = value
     }
 
     fun setFolderSort(sort: FolderSort) {
@@ -621,6 +635,20 @@ class SettingsRepository @Inject constructor(
         _aiTranslateEnabled.value = enabled
     }
 
+    /**
+     * 自动翻译标签：关 = 翻译请求不携带标签（标签又多又长，拖着正文一起翻纯属浪费），
+     * 标签区保留「译」chip，用户点它时才单独发标签翻译（逐条缓存，翻过的秒回）。
+     */
+    private val _autoTranslateTags = MutableStateFlow(
+        prefs.getBoolean(KEY_AUTO_TRANSLATE_TAGS, false),
+    )
+    val autoTranslateTags: StateFlow<Boolean> = _autoTranslateTags.asStateFlow()
+
+    fun setAutoTranslateTags(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_AUTO_TRANSLATE_TAGS, enabled).apply()
+        _autoTranslateTags.value = enabled
+    }
+
     /** 空值回退默认地址，避免用户清空后无法发请求 */
     fun setLlmBaseUrl(url: String) {
         val value = url.trim().ifBlank { LLM_BASE_URL_DEFAULT }
@@ -751,6 +779,7 @@ class SettingsRepository @Inject constructor(
         const val KEY_SHOW_ADULT_CONTENT = "show_adult_content"
         const val KEY_THEME_MODE = "theme_mode"
         const val KEY_IMAGE_ROUTE_MODE = "image_route_mode"
+        const val KEY_HOME_SOURCE = "home_source"
         const val KEY_FOLDER_SORT = "folder_sort"
         const val KEY_HISTORY_RETENTION_DAYS = "history_retention_days"
         const val KEY_AUTO_CHECK_ENABLED = "auto_check_update_enabled"
@@ -821,6 +850,7 @@ class SettingsRepository @Inject constructor(
 
         /** AI 翻译设置 */
         const val KEY_AI_TRANSLATE_ENABLED = "ai_translate_enabled"
+        const val KEY_AUTO_TRANSLATE_TAGS = "ai_translate_tags_auto"
         const val KEY_LLM_BASE_URL = "llm_base_url"
         const val KEY_LLM_MODEL = "llm_model"
         const val KEY_LLM_NOVEL_BASE_URL = "llm_novel_base_url"

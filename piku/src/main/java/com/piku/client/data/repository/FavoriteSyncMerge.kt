@@ -17,7 +17,14 @@ internal object FavoriteSyncMerge {
 
     const val TOMBSTONE_TTL_MS: Long = 90L * 24 * 60 * 60 * 1000
 
-    fun membershipKey(folderName: String, workId: String): String = "$folderName\u0000$workId"
+    /**
+     * 归属与作品的合并键都带 source：各源 id 空间互不相通。
+     * source 用协议里的原始字符串，未知源（更新版本写入的）也自成一片、不被并入 poipiku。
+     */
+    fun membershipKey(folderName: String, source: String, workId: String): String =
+        "$folderName\u0000$source\u0000$workId"
+
+    fun workKey(source: String, workId: String): String = "$source\u0000$workId"
 
     fun merge(
         localFolders: List<FavoriteFolderEntity>,
@@ -38,7 +45,7 @@ internal object FavoriteSyncMerge {
             .associate { it.folderName to it.deletedAt }
         val deadMemberships = mergedTombstones
             .filter { it.kind == SyncTombstone.KIND_MEMBERSHIP }
-            .associate { membershipKey(it.folderName, it.workId) to it.deletedAt }
+            .associate { membershipKey(it.folderName, it.source, it.workId) to it.deletedAt }
 
         val mergedFolders = mergeFolders(localFolders, remote?.folders.orEmpty(), deadFolders, now)
         val mergedMemberships = mergeMemberships(
@@ -52,7 +59,9 @@ internal object FavoriteSyncMerge {
             localFavorites = localFavorites,
             remote = remote?.works.orEmpty(),
             // 失去全部归属的作品不再上传（例如只属于被删掉的那个夹）
-            liveWorkIds = mergedMemberships.mapTo(mutableSetOf()) { it.workId },
+            liveWorkIds = mergedMemberships.mapTo(mutableSetOf()) {
+                workKey(it.source, it.workId)
+            },
         )
 
         return FavoriteSyncData(
@@ -78,7 +87,8 @@ internal object FavoriteSyncMerge {
         val localFolderNames = localFolders.mapTo(mutableSetOf()) { it.name }
         val localFolderNameById = localFolders.associate { it.id to it.name }
         val localMembershipKeys = localMemberships.mapNotNull { (folderId, membership) ->
-            localFolderNameById[folderId]?.let { membershipKey(it, membership.workId) }
+            localFolderNameById[folderId]
+                ?.let { membershipKey(it, membership.source.name, membership.workId) }
         }.toSet()
         val snapshotFolderNameById = snapshot.folders.associate { it.id to it.name }
 
@@ -87,10 +97,14 @@ internal object FavoriteSyncMerge {
             .map { SyncTombstone.folder(it.name, now) }
         val deadNames = folders.mapTo(mutableSetOf()) { it.folderName }
         val memberships = snapshot.memberships.mapNotNull { membership ->
+            // 未知源本地永远写不进去，按缺失推导成墓碑会把云端数据误删，跳过
+            val source = membership.workSource ?: return@mapNotNull null
             val folderName = snapshotFolderNameById[membership.folderId] ?: return@mapNotNull null
             if (folderName in deadNames) return@mapNotNull null
-            if (membershipKey(folderName, membership.workId) in localMembershipKeys) return@mapNotNull null
-            SyncTombstone.membership(folderName, membership.workId, now)
+            if (membershipKey(folderName, source.name, membership.workId) in localMembershipKeys) {
+                return@mapNotNull null
+            }
+            SyncTombstone.membership(folderName, source, membership.workId, now)
         }
         return folders + memberships
     }
@@ -141,21 +155,21 @@ internal object FavoriteSyncMerge {
         val localFolderNameById = localFolders.associate { it.id to it.name }
         localMemberships.forEach { (folderId, membership) ->
             val folderName = localFolderNameById[folderId] ?: return@forEach
-            val key = membershipKey(folderName, membership.workId)
+            val key = membershipKey(folderName, membership.source.name, membership.workId)
             val mergedFolderId = folderIdByName[folderName] ?: return@forEach
             if (!seen.add(key)) return@forEach
             if (deadMemberships[key]?.let { membership.addedAt <= it } == true) return@forEach
-            merged += SyncMembership(mergedFolderId, membership.workId, membership.addedAt)
+            merged += SyncMembership(mergedFolderId, membership.source.name, membership.workId, membership.addedAt)
         }
-        // 本地已有同 (夹名, workId) 时以本地为准
+        // 本地已有同 (夹名, 源, workId) 时以本地为准
         val remoteFolderNameById = remote?.folders.orEmpty().associate { it.id to it.name }
         remote?.memberships.orEmpty().forEach { membership ->
             val folderName = remoteFolderNameById[membership.folderId] ?: return@forEach
-            val key = membershipKey(folderName, membership.workId)
+            val key = membershipKey(folderName, membership.source, membership.workId)
             val mergedFolderId = folderIdByName[folderName] ?: return@forEach
             if (!seen.add(key)) return@forEach
             if (deadMemberships[key]?.let { membership.addedAt <= it } == true) return@forEach
-            merged += SyncMembership(mergedFolderId, membership.workId, membership.addedAt)
+            merged += membership.copy(folderId = mergedFolderId)
         }
         return merged
     }
@@ -165,12 +179,12 @@ internal object FavoriteSyncMerge {
         remote: List<SyncWork>,
         liveWorkIds: Set<String>,
     ): List<SyncWork> {
-        val remoteById = remote.associateBy { it.workId }
-        val localById = localFavorites.associateBy { it.workId }
-        return (localById.keys + remoteById.keys).mapNotNull { workId ->
-            if (workId !in liveWorkIds) return@mapNotNull null
-            val localWork = localById[workId]
-            val remoteWork = remoteById[workId]
+        val remoteById = remote.associateBy { workKey(it.source, it.workId) }
+        val localById = localFavorites.associateBy { workKey(it.source.name, it.workId) }
+        return (localById.keys + remoteById.keys).mapNotNull { key ->
+            if (key !in liveWorkIds) return@mapNotNull null
+            val localWork = localById[key]
+            val remoteWork = remoteById[key]
             if (localWork == null) {
                 remoteWork
             } else {

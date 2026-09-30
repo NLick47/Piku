@@ -6,6 +6,7 @@ import com.piku.client.data.local.SettingsRepository
 import com.piku.client.data.remote.ApiConfig
 import com.piku.client.data.remote.DoHDns
 import com.piku.client.data.remote.DoHEventListener
+import com.piku.client.data.remote.EchConfigStore
 import com.piku.client.data.remote.ImageDiagnostics
 import com.piku.client.data.remote.ImageNetworkInterceptor
 import com.piku.client.data.remote.ImageRelayInterceptor
@@ -17,24 +18,33 @@ import com.piku.client.data.remote.NetworkDiagnosis
 import com.piku.client.data.remote.NetworkDiagnostics
 import com.piku.client.data.remote.NetworkRuntime
 import com.piku.client.data.remote.NetworkTuning
+import com.piku.client.data.remote.PikuJson
 import com.piku.client.data.remote.PoipikuHostnameVerifier
 import com.piku.client.data.remote.PoipikuApi
 import com.piku.client.data.remote.RefererInterceptor
 import com.piku.client.data.remote.RetryInterceptor
 import com.piku.client.data.remote.SniStrippingSocketFactory
+import com.piku.client.data.remote.TlsAddressProbe
 import com.piku.client.data.remote.UpdateApi
 import com.piku.client.data.remote.UploadApi
+import com.piku.client.data.remote.ech.EchCallFactory
+import com.piku.client.data.remote.pixiv.PixivApi
+import com.piku.client.data.remote.pixiv.PixivApiConfig
 import com.piku.client.data.remote.translation.LlmChatApi
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import kotlinx.serialization.json.Json
+import okhttp3.Call
 import okhttp3.CookieJar
 import okhttp3.Dns
+import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
+import java.net.InetSocketAddress
+import java.net.Proxy
 import java.util.concurrent.TimeUnit
 import javax.inject.Named
 import javax.inject.Singleton
@@ -45,16 +55,27 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideJson(): Json = Json {
-        ignoreUnknownKeys = true
-        explicitNulls = false
-        isLenient = true
-    }
+    fun provideJson(): Json = PikuJson
+
+    /**
+     * Cloudflare 的共享 ECH 配置：pixiv 的接口直连全靠它（见 piku-ech）。
+     * 取配置的通道钉 AliDNS 的 IP，握手不带 SNI，没有可拦的东西。
+     */
+    @Provides
+    @Singleton
+    fun provideEchConfigStore(): EchConfigStore = EchConfigStore()
 
     @Provides
     @Singleton
-    fun provideDoHDns(prefs: SharedPreferences, diagnostics: NetworkDiagnostics): DoHDns =
-        DoHDns(prefs, diagnostics = diagnostics)
+    fun provideSniSocketFactory(): SniStrippingSocketFactory = SniStrippingSocketFactory()
+
+    @Provides
+    @Singleton
+    fun provideDoHDns(
+        prefs: SharedPreferences,
+        diagnostics: NetworkDiagnostics,
+        sniFactory: SniStrippingSocketFactory,
+    ): DoHDns = DoHDns(prefs, prober = TlsAddressProbe(sniFactory), diagnostics = diagnostics)
 
     @Provides
     @Singleton
@@ -68,8 +89,9 @@ object NetworkModule {
         imageProbe: ImageRouteProbe,
         routeController: ImageRouteController,
         imageDiagnostics: ImageDiagnostics,
+        sniFactory: SniStrippingSocketFactory,
     ): NetworkDiagnosis =
-        NetworkDiagnosis(doHDns, diagnostics, imageProbe, routeController, imageDiagnostics)
+        NetworkDiagnosis(doHDns, diagnostics, imageProbe, routeController, imageDiagnostics, sniFactory)
 
     @Provides
     @Singleton
@@ -89,7 +111,9 @@ object NetworkModule {
     fun provideImageRetryInterceptor(
         runtime: NetworkRuntime,
         diagnostics: NetworkDiagnostics,
-    ): ImageRetryInterceptor = ImageRetryInterceptor(runtime, diagnostics = diagnostics)
+        routeController: ImageRouteController,
+    ): ImageRetryInterceptor =
+        ImageRetryInterceptor(runtime, diagnostics = diagnostics, routeController = routeController)
 
     @Provides
     @Singleton
@@ -117,9 +141,9 @@ object NetworkModule {
         routeController: ImageRouteController,
         runtime: NetworkRuntime,
         diagnostics: NetworkDiagnostics,
+        sniFactory: SniStrippingSocketFactory,
     ): OkHttpClient {
         val doHDns = dns as DoHDns
-        val sniFactory = SniStrippingSocketFactory()
         val builder = OkHttpClient.Builder()
             .dns(dns)
             .sslSocketFactory(sniFactory, sniFactory.trustManager())
@@ -178,6 +202,82 @@ object NetworkModule {
     @Provides
     @Singleton
     fun providePoipikuApi(retrofit: Retrofit): PoipikuApi = retrofit.create(PoipikuApi::class.java)
+
+    /**
+     * pixiv 的传输：走原生 ECH 通道（TLS1.3 + ECH + HTTP/2），**刻意不带**
+     * cookieJar / RefererInterceptor / 图片中转 —— 主 client 会把 poipiku 的会话 cookie 一起发出去。
+     * 地址只用内置固定 IP：pixiv 不问系统 DNS，投毒答案没用。
+     */
+    @Provides
+    @Singleton
+    @Named("pixiv")
+    fun providePixivCallFactory(
+        echConfigStore: EchConfigStore,
+        doHDns: DoHDns,
+        diagnostics: NetworkDiagnostics,
+        sniFactory: SniStrippingSocketFactory,
+    ): Call.Factory {
+        // 开发期借本机代理出网（见 PixivApiConfig.DEBUG_PROXY）：原生通道走不了 HTTP 代理，
+        // 这一段保留旧的 OkHttp 路径，发布包里 DEBUG_PROXY 为 null，不生效
+        if (BuildConfig.DEBUG) {
+            val hostPort = PixivApiConfig.DEBUG_PROXY
+            val port = hostPort?.substringAfter(':')?.toIntOrNull()
+            if (hostPort != null && port != null) return debugProxyPixivClient(doHDns, diagnostics, sniFactory, hostPort, port)
+        }
+        return EchCallFactory(
+            echConfig = { echConfigStore.currentOrFetch(ECH_CONFIG_WAIT_MS) },
+            endpoints = { host ->
+                DoHDns.STATIC_ADDRESSES[host]
+                    ?: runCatching { doHDns.lookup(host).mapNotNull { it.hostAddress } }
+                        .getOrDefault(emptyList())
+            },
+            userAgent = PIXIV_USER_AGENT,
+        )
+    }
+
+    private fun debugProxyPixivClient(
+        doHDns: DoHDns,
+        diagnostics: NetworkDiagnostics,
+        sniFactory: SniStrippingSocketFactory,
+        host: String,
+        port: Int,
+    ): OkHttpClient = OkHttpClient.Builder()
+        .dns(doHDns)
+        .sslSocketFactory(sniFactory, sniFactory.trustManager())
+        .hostnameVerifier(PoipikuHostnameVerifier())
+        .eventListenerFactory { DoHEventListener(doHDns, diagnostics) }
+        .addInterceptor(pixivHeaderInterceptor)
+        .proxy(Proxy(Proxy.Type.HTTP, InetSocketAddress.createUnresolved(host, port)))
+        .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BASIC })
+        .connectTimeout(NetworkTuning.CONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .build()
+
+    private val pixivHeaderInterceptor = Interceptor { chain ->
+        chain.proceed(
+            chain.request().newBuilder()
+                .header("User-Agent", PIXIV_USER_AGENT)
+                .header("Referer", "https://www.pixiv.net/")
+                .header("Accept", "application/json")
+                .build(),
+        )
+    }
+
+    @Provides
+    @Singleton
+    @Named("pixiv")
+    fun providePixivRetrofit(@Named("pixiv") client: Call.Factory, json: Json): Retrofit =
+        Retrofit.Builder()
+            .baseUrl(PixivApiConfig.BASE_URL)
+            .callFactory(client)
+            .addConverterFactory(LenientJsonConverterFactory(json))
+            .build()
+
+    @Provides
+    @Singleton
+    fun providePixivApi(@Named("pixiv") retrofit: Retrofit): PixivApi =
+        retrofit.create(PixivApi::class.java)
 
     @Provides
     @Singleton
@@ -327,4 +427,12 @@ object NetworkModule {
     private const val GITHUB_API_BASE_URL = "https://api.github.com/"
     private const val TRANSLATE_PLACEHOLDER_BASE_URL = "https://localhost/"
     private const val USER_AGENT = "Piku/0.1.0 (Android)"
+
+    /** pixiv 的网页接口对 UA 敏感，用桌面 Chrome 的 UA */
+    /** 冷启动第一次请求最多等这么久取 ECH 配置 */
+    private const val ECH_CONFIG_WAIT_MS = 8_000L
+
+    private const val PIXIV_USER_AGENT =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+            "(KHTML, like Gecko) Chrome/126.0 Safari/537.36"
 }

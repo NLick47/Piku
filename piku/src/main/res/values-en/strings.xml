@@ -398,7 +398,8 @@
     <string name="ai_translate_state_on">On</string>
     <string name="ai_translate_state_off">Off</string>
     <string name="ai_translate_enable">Auto translate</string>
-    <string name="ai_translate_auto_subtitle">Translate posts automatically when opened</string>
+    <string name="ai_translate_auto_subtitle">Translate works automatically when opened</string>
+    <string name="ai_translate_tags_auto">Translate tags automatically</string>
     <string name="ai_translate_model">Short-text models</string>
     <string name="ai_translate_novel_model">Novel body model</string>
     <string name="ai_translate_novel_model_empty">No novel model in this list; novel text stays untranslated</string>
@@ -658,4 +659,36 @@
     <string name="image_route_auto">Automatic (recommended)</string>
     <string name="image_route_direct">Direct</string>
     <string name="image_route_relay">Relay</string>
+
+    <string name="home_source_poipiku">Poipiku</string>
+    <string name="home_source">Discover source</string>
+    <string name="home_source_select_title">Choose data source</string>
+    <string name="home_source_select_hint">Applies to the discover feed only. Search, favorites and history stay unchanged.</string>
+    <string name="home_source_pixiv">Pixiv</string>
+    <string name="pixiv_hint_daily">Updated daily</string>
+    <string name="pixiv_hint_weekly">Updated every Monday</string>
+    <string name="pixiv_hint_monthly">Updated on the 1st</string>
+    <string name="pixiv_hint_rookie">Updated daily</string>
+    <string name="pixiv_tab_ranking">Ranking</string>
+    <string name="pixiv_tab_recommend">For You</string>
+    <string name="pixiv_tab_follow_new">Following</string>
+    <string name="pixiv_tab_new">Latest</string>
+    <string name="pixiv_tab_discover">Discover</string>
+    <string name="pixiv_need_login">Log in with your pixiv account to see this</string>
+    <string name="home_coming_soon">Coming soon</string>
+    <string name="pixiv_tab_daily">Daily</string>
+    <string name="pixiv_tab_weekly">Weekly</string>
+    <string name="pixiv_tab_monthly">Monthly</string>
+    <string name="pixiv_tab_rookie">Rookie</string>
+    <string name="pixiv_filter_all">All</string>
+    <string name="pixiv_filter_illust">Illust</string>
+    <string name="pixiv_filter_manga">Manga</string>
+    <string name="pixiv_stat_views">Views</string>
+    <string name="pixiv_stat_likes">Likes</string>
+    <string name="pixiv_stat_bookmarks">Bookmarks</string>
+    <string name="pixiv_stat_comments">Comments</string>
+    <string name="pixiv_meta_posted">Posted %1$s</string>
+    <string name="pixiv_meta_pages">%1$d pages</string>
+    <string name="pixiv_related_works">Related works</string>
+    <string name="common_retry">Retry</string>
 </resources>

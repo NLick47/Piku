@@ -79,7 +79,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.piku.client.R
 import com.piku.client.domain.model.HistoryItem
 import com.piku.client.domain.model.HistoryTimeRange
+import com.piku.client.domain.model.key
 import com.piku.client.domain.model.Work
+import com.piku.client.ui.source.SourceWorkOpenHost
+import com.piku.client.domain.model.WorkSource
+import com.piku.client.domain.model.WorkKey
 import com.piku.client.ui.common.LoaderDots
 import com.piku.client.ui.common.PikuBackButton
 import com.piku.client.ui.common.PikuBottomSheet
@@ -124,7 +128,8 @@ fun HistoryScreen(
     val gridState = rememberLazyStaggeredGridState()
     var showFilterSheet by remember { mutableStateOf(false) }
     var showClearConfirm by remember { mutableStateOf(false) }
-    var armedWorkId by remember { mutableStateOf<Long?>(null) }
+    var openHostWork by remember { mutableStateOf<Work?>(null) }
+    var armedWorkId by remember { mutableStateOf<WorkKey?>(null) }
     val today = remember { LocalDate.now() }
     val filtered = state.selectedRange != HistoryTimeRange.ALL
     // 一滚动就收起待操作态，避免删除按钮赖在屏幕上
@@ -213,20 +218,24 @@ fun HistoryScreen(
                                         screenWidth = screenWidth,
                                     )
                                 }
-                                items(section.items, key = { it.work.id }) { entry ->
+                                items(section.items, key = { it.work.key.toString() }) { entry ->
                                     RemovableHistoryCard(
                                         entry = entry,
-                                        armed = entry.work.id == armedWorkId,
-                                        isFavorite = entry.work.id in state.favoriteIds,
+                                        armed = entry.work.key == armedWorkId,
+                                        isFavorite = entry.work.key in state.favoriteIds,
                                         dark = dark,
-                                        onArm = { armedWorkId = entry.work.id },
+                                        onArm = { armedWorkId = entry.work.key },
                                         onDisarm = { armedWorkId = null },
                                         onRemove = {
                                             armedWorkId = null
                                             viewModel.remove(entry)
                                         },
                                         onToggleFavorite = viewModel::toggleFavorite,
-                                        onClick = onWorkClick,
+                                        onClick = { work ->
+                                            // poipiku 作品走主壳详情路由，其余源交给通用打开入口
+                                            if (work.source == WorkSource.POIPIKU) onWorkClick(work)
+                                            else openHostWork = work
+                                        },
                                     )
                                 }
                             }
@@ -262,6 +271,10 @@ fun HistoryScreen(
                 .navigationBarsPadding()
                 .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
         )
+    }
+
+    openHostWork?.let { work ->
+        SourceWorkOpenHost(work = work, dark = dark, onDismiss = { openHostWork = null })
     }
 
     if (showFilterSheet) {
@@ -613,6 +626,7 @@ private fun RemovableHistoryCard(
             onToggleFavorite = onToggleFavorite,
             onClick = { if (armed) onDisarm() else onClick(it) },
             dark = dark,
+            showSourceLabel = true,
             onLongClick = {
                 hapticView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                 onArm()

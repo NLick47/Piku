@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.piku.client.domain.model.AppError
 import com.piku.client.domain.model.Work
+import com.piku.client.domain.model.WorkKey
 import com.piku.client.domain.usecase.AddCustomTagUseCase
 import com.piku.client.domain.usecase.LoadTagFeedUseCase
 import com.piku.client.domain.usecase.ObserveCustomTagsUseCase
@@ -24,7 +25,7 @@ data class TagsUiState(
     val loaded: Boolean = false,
     val selectedTag: String? = null,
     val works: List<Work> = emptyList(),
-    val favoriteIds: Set<Long> = emptySet(),
+    val favoriteIds: Set<WorkKey> = emptySet(),
     val loading: Boolean = false,
     val loadingMore: Boolean = false,
     val errorRes: Int? = null,

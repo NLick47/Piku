@@ -4,10 +4,13 @@ import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import com.piku.client.domain.model.WorkSource
 
-@Entity(tableName = "favorites", indices = [Index("addedAt")])
+/** source 与 workId 组成跨源唯一键；存量数据迁移时一律落 POIPIKU */
+@Entity(tableName = "favorites", primaryKeys = ["source", "workId"], indices = [Index("addedAt")])
 data class FavoriteEntity(
-    @PrimaryKey val workId: String,
+    val source: WorkSource = WorkSource.POIPIKU,
+    val workId: String,
     val authorId: Long,
     val title: String,
     val authorName: String,

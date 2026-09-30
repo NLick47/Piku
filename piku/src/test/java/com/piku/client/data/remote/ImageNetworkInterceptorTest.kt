@@ -18,7 +18,7 @@ class ImageNetworkInterceptorTest {
     private val interceptor = ImageNetworkInterceptor(diagnostics, runtime)
 
     private val cdnRequest = Request.Builder()
-        .url("https://${ImageRelayInterceptor.CDN_HOST}/img/1_360.jpg")
+        .url("https://${ImageUpstream.POIPIKU.host}/img/1_360.jpg")
         .build()
     private val relayRequest = Request.Builder()
         .url("https://pic-relay.cyou/img/1_360.jpg")
@@ -35,7 +35,7 @@ class ImageNetworkInterceptorTest {
 
         val line = diagnostics.summary().last()
         assertTrue(line.contains("握手/连接被重置（常见于 SNI 阻断）"))
-        assertTrue(line.contains("直连 ${ImageRelayInterceptor.CDN_HOST}"))
+        assertTrue(line.contains("直连 ${ImageUpstream.POIPIKU.host}"))
     }
 
     @Test

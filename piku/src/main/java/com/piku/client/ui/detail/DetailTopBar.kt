@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -63,15 +62,10 @@ internal fun DetailTopBar(
     title: String = "",
     titleVisible: Boolean = false,
     /** 有译文时按钮高亮，点击变为整页原/译切换 */
-    translationAvailable: Boolean = false,
     showTranslation: Boolean = false,
-    translating: Boolean = false,
     /** 文本通道可用就常驻显示：未翻译时点击即翻短字段 */
-    canTranslate: Boolean = false,
     /** 顶栏翻译按钮：切换原文/译文 */
-    onTranslateClick: () -> Unit = {},
     /** 顶栏翻译按钮：打开"换模型重翻"选择器 */
-    onOpenModelPicker: () -> Unit = {},
 ) {
     // 用透明度做淡入淡出而不是 AnimatedVisibility：
     // 后者在 Row 作用域内会和 RowScope 的同名扩展产生接收者歧义
@@ -126,58 +120,6 @@ internal fun DetailTopBar(
                 modifier = Modifier.graphicsLayer { alpha = titleAlpha },
             )
         }
-        if (canTranslate || translationAvailable || translating) {
-            // 纯图标按钮：翻译图标的表意已经足够清楚，不展开任何文字说明，
-            // 状态只靠图标颜色区分（译文态蓝色 / 翻译中弱化 / 原文态常规色）。
-            // 短按 = 原/译切换；长按 = 打开"换模型重翻"选择器（每次都可选，不记默认）。
-            // 用 combinedClickable 让长按与短按各自触发、互不串扰。
-            val interactionSource = remember { MutableInteractionSource() }
-            val pressed by interactionSource.collectIsPressedAsState()
-            // 按压反馈只作用在图标上（轻微缩放；暗色下额外提亮到纯白）。
-            // 默认的涟漪会把深色顶栏上的整块圆底刷亮一下，很显脏
-            val pressScale by animateFloatAsState(
-                targetValue = if (pressed) 0.88f else 1f,
-                label = "translateButtonPress",
-            )
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .combinedClickable(
-                        interactionSource = interactionSource,
-                        indication = null,
-                        enabled = !translating,
-                        onClick = onTranslateClick,
-                        onLongClick = onOpenModelPicker,
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Translate,
-                    contentDescription = stringResource(
-                        when {
-                            translating -> R.string.detail_translating
-                            showTranslation -> R.string.detail_show_original
-                            else -> R.string.detail_show_translation
-                        },
-                    ),
-                    tint = when {
-                        translating -> PikuColors.textFaint
-                        showTranslation -> TranslateActiveBlue
-                        // 暗色下按下去提亮到纯白（LoginTextPrimaryDark #E8E4DE 再往上只有白色了）。
-                        // 亮色主题下不改色：图标本来就是深色 #2C2C2C，往浅改反而像禁用态，
-                        // 按压反馈交给下面的缩放即可
-                        pressed && dark -> Color.White
-                        else -> PikuColors.textPrimary
-                    },
-                    modifier = Modifier
-                        .size(20.dp)
-                        .graphicsLayer {
-                            scaleX = pressScale
-                            scaleY = pressScale
-                        },
-                )
-            }
-        }
     }
 }
 
@@ -193,6 +135,8 @@ internal fun TranslateChip(
     showTranslation: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    /** 长按：换模型重翻（原顶栏图标的长按语义） */
+    onLongClick: (() -> Unit)? = null,
 ) {
     Text(
         text = stringResource(
@@ -203,7 +147,13 @@ internal fun TranslateChip(
         fontWeight = FontWeight.Medium,
         modifier = modifier
             .clip(RoundedCornerShape(999.dp))
-            .clickable(onClick = onClick)
+            .then(
+                if (onLongClick == null) {
+                    Modifier.clickable(onClick = onClick)
+                } else {
+                    Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
+                },
+            )
             .padding(horizontal = 7.dp, vertical = 2.dp),
     )
 }

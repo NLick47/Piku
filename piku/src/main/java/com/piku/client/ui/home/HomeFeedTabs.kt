@@ -114,7 +114,7 @@ internal fun FeedTabRow(
  * 不再用白底胶囊压在头图上；选中非「全部」时整段换强调色 + 横线，一眼看出正在筛选。
  */
 @Composable
-private fun CategoryEntry(
+internal fun CategoryEntry(
     label: String,
     active: Boolean,
     onClick: () -> Unit,
@@ -175,7 +175,7 @@ private fun CategoryEntry(
 
 /** 选中态 = 字重 + 颜色 + 一条与文字同宽的短横线；横线宽度按标签实测，换语言也不会长短不一 */
 @Composable
-private fun FeedTabItem(
+internal fun FeedTabItem(
     text: String,
     active: Boolean,
     onClick: () -> Unit,

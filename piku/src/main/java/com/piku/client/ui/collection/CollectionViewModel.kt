@@ -11,6 +11,8 @@ import com.piku.client.domain.model.FavoriteFolder
 import com.piku.client.domain.model.FolderSort
 import com.piku.client.domain.model.ReadingProgress
 import com.piku.client.domain.model.Work
+import com.piku.client.domain.model.key
+import com.piku.client.domain.model.WorkKey
 import com.piku.client.ui.common.FeedbackChannel
 import com.piku.client.ui.common.FeedbackText
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -82,7 +84,7 @@ data class CollectionUiState(
     val loaded: Boolean = false,
     /** 多选模式：仅在收藏夹详情内有效 */
     val selectionMode: Boolean = false,
-    val selectedIds: Set<Long> = emptySet(),
+    val selectedIds: Set<WorkKey> = emptySet(),
     /** 最近一次可撤销操作的说明，null 表示没有可撤销的操作 */
     val undoLabel: FeedbackText? = null,
     /** 尚未回退的操作数（撤销按操作倒序一条条生效） */
@@ -98,7 +100,7 @@ data class CollectionUiState(
     val searching: Boolean get() = query.isNotBlank()
 
     /** 只看当前显示的这批：全选只作用于筛选后的结果，隐藏的投稿不会被选中 */
-    val allSelected: Boolean get() = works.isNotEmpty() && works.all { it.id in selectedIds }
+    val allSelected: Boolean get() = works.isNotEmpty() && works.all { it.key in selectedIds }
 
     /** 当前所在收藏夹的 id；「全部收藏」与夹列表返回 null */
     val currentFolderId: Long? get() = (view as? CollectionView.InFolder)?.id
@@ -191,7 +193,7 @@ class CollectionViewModel @Inject constructor(
                     it.authorName.contains(keyword, ignoreCase = true)
             }
         }
-        val visibleIds = visible.mapTo(mutableSetOf()) { it.id }
+        val visibleIds = visible.mapTo(mutableSetOf()) { it.key }
         _uiState.update {
             it.copy(
                 works = visible,
@@ -355,11 +357,11 @@ class CollectionViewModel @Inject constructor(
      * 进入多选模式。[workId] 为长按发起时指到的那张卡：从卡片进多选说明用户想操作它，
      * 先带上；从顶栏进入则不带任何预选，避免"我还没选它就自己选中了"。
      */
-    fun enterSelection(workId: Long? = null) {
+    fun enterSelection(key: WorkKey? = null) {
         _uiState.update {
             it.copy(
                 selectionMode = true,
-                selectedIds = workId?.let { id -> setOf(id) } ?: emptySet(),
+                selectedIds = key?.let { setOf(it) } ?: emptySet(),
             )
         }
     }
@@ -368,12 +370,12 @@ class CollectionViewModel @Inject constructor(
         _uiState.update { it.copy(selectionMode = false, selectedIds = emptySet()) }
     }
 
-    fun toggleSelection(workId: Long) {
+    fun toggleSelection(key: WorkKey) {
         _uiState.update { state ->
-            val next = if (workId in state.selectedIds) {
-                state.selectedIds - workId
+            val next = if (key in state.selectedIds) {
+                state.selectedIds - key
             } else {
-                state.selectedIds + workId
+                state.selectedIds + key
             }
             state.copy(selectedIds = next)
         }
@@ -381,7 +383,7 @@ class CollectionViewModel @Inject constructor(
 
     fun toggleSelectAll() {
         _uiState.update { state ->
-            val all = state.works.mapTo(mutableSetOf()) { it.id }
+            val all = state.works.mapTo(mutableSetOf()) { it.key }
             state.copy(
                 selectedIds = if (state.allSelected) emptySet() else all,
                 selectionMode = true,
@@ -392,9 +394,9 @@ class CollectionViewModel @Inject constructor(
     /** 打开「添加到…」面板前，读一次选中作品的已有归属（只选了一件才标得出「已添加」） */
     fun loadSelectedFolderIds() {
         val state = _uiState.value
-        val work = state.works.singleOrNull { it.id in state.selectedIds } ?: return
+        val work = state.works.singleOrNull { it.key in state.selectedIds } ?: return
         viewModelScope.launch {
-            val ids = favoriteRepository.observeWorkFolderIds(work.id).first()
+            val ids = favoriteRepository.observeWorkFolderIds(work.key).first()
             _uiState.update { it.copy(actionWorkFolderIds = ids) }
         }
     }
@@ -404,7 +406,7 @@ class CollectionViewModel @Inject constructor(
     /** 移出收藏夹：多选批量 */
     fun removeSelected() {
         val state = _uiState.value
-        removeWorks(state.works.filter { it.id in state.selectedIds })
+        removeWorks(state.works.filter { it.key in state.selectedIds })
     }
 
     /**
@@ -413,18 +415,18 @@ class CollectionViewModel @Inject constructor(
      */
     private fun removeWorks(works: List<Work>) {
         if (works.isEmpty()) return
-        val ids = works.map { it.id.toString() }
+        val keys = works.map { it.key }
         when (val view = _uiState.value.view) {
             is CollectionView.InFolder -> applyEdit(
                 label = FeedbackText(R.string.collection_removed_multiple, listOf(works.size)),
-            ) { favoriteRepository.removeWorksFromFolder(ids, view.id) }
+            ) { favoriteRepository.removeWorksFromFolder(keys, view.id) }
 
             CollectionView.All -> applyEdit(
                 label = FeedbackText(
                     R.string.collection_unfavorited_multiple,
                     listOf(works.size),
                 ),
-            ) { favoriteRepository.unfavoriteWorks(ids) }
+            ) { favoriteRepository.unfavoriteWorks(keys) }
 
             CollectionView.Folders -> Unit
         }
@@ -433,7 +435,7 @@ class CollectionViewModel @Inject constructor(
     /** 添加到其他收藏夹：保留当前收藏夹的归属 */
     fun addSelectedTo(target: FavoriteFolder) {
         val state = _uiState.value
-        val works = state.works.filter { it.id in state.selectedIds }
+        val works = state.works.filter { it.key in state.selectedIds }
         if (works.isEmpty()) return
         applyEdit(
             label = FeedbackText(
@@ -447,7 +449,7 @@ class CollectionViewModel @Inject constructor(
     /** 移动到其他收藏夹：原收藏夹不再保留 */
     fun moveSelectedTo(target: FavoriteFolder) {
         val state = _uiState.value
-        moveWorks(state.works.filter { it.id in state.selectedIds }, target)
+        moveWorks(state.works.filter { it.key in state.selectedIds }, target)
     }
 
     /**

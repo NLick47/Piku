@@ -79,6 +79,8 @@ import coil3.size.Size as CoilSize
 import com.piku.client.R
 import com.piku.client.data.remote.GitHubRelease
 import com.piku.client.domain.model.Work
+import com.piku.client.domain.model.WorkKey
+import com.piku.client.domain.model.key
 import com.piku.client.ui.common.LoaderDots
 import com.piku.client.ui.common.WorkCard
 import com.piku.client.ui.common.feedThumbUrl
@@ -104,6 +106,9 @@ import kotlin.math.roundToInt
 
 /** 首屏可见 item 数超过该值（约 6 行）时显示"回到顶部"悬浮按钮 */
 internal const val FAB_SHOW_AFTER_ITEMS = 12
+
+/** 触底加载：距末尾不足该数量的 item 时拉下一页，两壳共用 */
+internal const val LOAD_MORE_NEAR_END = 6
 
 internal const val PREFETCH_IMAGE_COUNT = 12
 
@@ -203,7 +208,7 @@ internal fun HomeContent(
         }
         state.works.isEmpty() && !state.loading -> {
             val emptyRes = when {
-                state.feedTab == FeedTab.FOLLOW && state.followNeedLogin -> R.string.home_follow_login
+                state.feedTab == FeedTab.FOLLOW && state.needLogin -> R.string.home_follow_login
                 state.feedTab == FeedTab.FOLLOW -> R.string.home_follow_empty
                 else -> R.string.home_empty
             }
@@ -216,7 +221,7 @@ internal fun HomeContent(
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(horizontal = 32.dp),
                     )
-                    if (state.feedTab == FeedTab.FOLLOW && state.followNeedLogin) {
+                    if (state.feedTab == FeedTab.FOLLOW && state.needLogin) {
                         Spacer(Modifier.height(14.dp))
                         Box(
                             modifier = Modifier
@@ -291,7 +296,7 @@ internal fun HomeContent(
 }
 
 @Composable
-private fun UpdateBannerBar(
+internal fun UpdateBannerBar(
     release: GitHubRelease,
     onOpen: () -> Unit,
     onDismiss: () -> Unit,
@@ -360,7 +365,7 @@ private fun UpdateBannerBar(
 }
 
 @Composable
-private fun RefreshNoticeBar(
+internal fun RefreshNoticeBar(
     count: Int,
     onDismiss: () -> Unit,
     onGoTop: () -> Unit,
@@ -418,7 +423,7 @@ private fun RefreshNoticeBar(
 @Composable
 private fun WorkWaterfall(
     works: List<Work>,
-    favoriteIds: Set<Long>,
+    favoriteIds: Set<WorkKey>,
     loadingMore: Boolean,
     loadMoreErrorRes: Int?,
     endReached: Boolean,
@@ -435,7 +440,6 @@ private fun WorkWaterfall(
     gridState: LazyStaggeredGridState,
 ) {
     val isTablet = LocalConfiguration.current.screenWidthDp >= 600
-    val prefetchContext = LocalContext.current
     val showFab = remember {
         derivedStateOf { gridState.firstVisibleItemIndex > FAB_SHOW_AFTER_ITEMS }
     }
@@ -450,7 +454,7 @@ private fun WorkWaterfall(
         snapshotFlow {
             val info = gridState.layoutInfo
             val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: 0
-            lastVisible >= info.totalItemsCount - 6
+            lastVisible >= info.totalItemsCount - LOAD_MORE_NEAR_END
         }
             .distinctUntilChanged()
             .collect { nearEnd ->
@@ -460,35 +464,7 @@ private fun WorkWaterfall(
             }
     }
 
-    val density = LocalDensity.current
-    val screenWidthDp = LocalConfiguration.current.screenWidthDp
-    val fallbackSidePx = remember(isTablet, screenWidthDp, density) {
-        if (isTablet) {
-            512
-        } else {
-            feedCardWidthPx(screenWidthDp, density.density).roundToInt().coerceAtLeast(1)
-        }
-    }
-
-    LaunchedEffect(works.lastOrNull()?.id, gridState) {
-        val loader = SingletonImageLoader.get(prefetchContext)
-        val visible = gridState.layoutInfo.visibleItemsInfo
-        val lastVisible = visible.lastOrNull()?.index ?: -1
-        val side = visible.firstOrNull()?.size?.width?.takeIf { it > 0 } ?: fallbackSidePx
-        works
-            .drop(lastVisible + 1)
-            .take(PREFETCH_IMAGE_COUNT)
-            .forEach { work ->
-                val url = feedThumbUrl(work.thumbnailUrl)
-                if (url.isBlank()) return@forEach
-                loader.enqueue(
-                    ImageRequest.Builder(prefetchContext)
-                        .data(url)
-                        .size(CoilSize(side, side))
-                        .build(),
-                )
-            }
-    }
+    ThumbnailPrefetchEffect(works = works, gridState = gridState)
 
     Box(Modifier.fillMaxSize()) {
         LazyVerticalStaggeredGrid(
@@ -507,7 +483,7 @@ private fun WorkWaterfall(
             items(works, key = { it.id }) { work ->
                 WorkCard(
                     work = work,
-                    isFavorite = work.id in favoriteIds,
+                    isFavorite = work.key in favoriteIds,
                     onToggleFavorite = onToggleFavorite,
                     onClick = onWorkClick,
                     dark = dark,
@@ -550,8 +526,52 @@ private fun WorkWaterfall(
     }
 }
 
+/** 向后预取接下来几张缩略图；响应可见位置（滚动/翻页/重建都跟上），itemOffset 是网格头部占位数（榜单 hero） */
 @Composable
-private fun BoxScope.BackToTopFab(
+internal fun ThumbnailPrefetchEffect(
+    works: List<Work>,
+    gridState: LazyStaggeredGridState,
+    itemOffset: Int = 0,
+) {
+    val context = LocalContext.current
+    val density = LocalDensity.current
+    val configuration = LocalConfiguration.current
+    val fallbackSidePx = remember(configuration.screenWidthDp >= 600, configuration.screenWidthDp, density) {
+        if (configuration.screenWidthDp >= 600) {
+            512
+        } else {
+            feedCardWidthPx(configuration.screenWidthDp, density.density).roundToInt().coerceAtLeast(1)
+        }
+    }
+    LaunchedEffect(works, gridState, itemOffset) {
+        snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index }
+            .distinctUntilChanged()
+            .collect { lastGrid ->
+                // 布局未就绪或滚到 footer：夹回合法区间，drop 出不了负数也越不过头尾
+                val lastWork = ((lastGrid ?: -1) - itemOffset).coerceIn(-1, works.lastIndex)
+                val side = gridState.layoutInfo.visibleItemsInfo
+                    .firstOrNull { it.index >= itemOffset }?.size?.width?.takeIf { it > 0 }
+                    ?: fallbackSidePx
+                val loader = SingletonImageLoader.get(context)
+                works
+                    .drop(lastWork + 1)
+                    .take(PREFETCH_IMAGE_COUNT)
+                    .forEach { work ->
+                        val url = feedThumbUrl(work.thumbnailUrl)
+                        if (url.isBlank()) return@forEach
+                        loader.enqueue(
+                            ImageRequest.Builder(context)
+                                .data(url)
+                                .size(CoilSize(side, side))
+                                .build(),
+                        )
+                    }
+            }
+    }
+}
+
+@Composable
+internal fun BoxScope.BackToTopFab(
     showFab: State<Boolean>,
     isScrolling: State<Boolean>,
     onGoTop: () -> Unit,
@@ -673,7 +693,7 @@ private fun ShuffleItem(onShuffle: () -> Unit, dark: Boolean) {
 }
 
 @Composable
-private fun SkeletonGrid(dark: Boolean) {
+internal fun SkeletonGrid(dark: Boolean) {
     val isTablet = LocalConfiguration.current.screenWidthDp >= 600
     LazyVerticalStaggeredGrid(
         columns = if (isTablet) StaggeredGridCells.Adaptive(220.dp) else StaggeredGridCells.Fixed(2),
@@ -695,7 +715,7 @@ private fun SkeletonGrid(dark: Boolean) {
 }
 
 @Composable
-private fun SkeletonCard(dark: Boolean) {
+internal fun SkeletonCard(dark: Boolean) {
     val shape = RoundedCornerShape(PikuLayout.CardCorner)
     val placeholder = if (dark) WorkCardPlaceholderDark else Color(0xFFE8E4DE)
     Column(

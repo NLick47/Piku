@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -66,7 +67,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -78,6 +81,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil3.compose.AsyncImage
 import com.piku.client.R
 import com.piku.client.data.local.ShareTargets
 import com.piku.client.ui.theme.BlobPinkDark
@@ -126,9 +130,8 @@ fun DetailScreen(
     val scrolled by remember { derivedStateOf { scrollState.value > 0 } }
     // 标题跟随原/译状态，与正文里的标题保持同一份文案
     val detailTitle = state.detail?.let { detail ->
-        val showTranslated = state.showTranslation(TranslateField.TITLE)
         detail.translated?.title
-            ?.takeIf { showTranslated && it.isNotBlank() }
+            ?.takeIf { state.showTranslationAll && it.isNotBlank() }
             ?: detail.title
     }.orEmpty()
     var viewerPage by rememberSaveable { mutableIntStateOf(-1) }
@@ -348,9 +351,13 @@ fun DetailScreen(
                     translatedImages = state.translatedImages,
                     onImageTranslateClick = { page -> viewModel.onImageTranslateClick(page) },
                     onPageChanged = { page -> viewModel.onImagePageChanged(page) },
-                    translationAvailable = state.hasTranslation,
-                    showTranslation = { field -> state.showTranslation(field) },
-                    onToggleField = viewModel::toggleField,
+                    showTranslation = state.showTranslationAll,
+                    translating = state.translating,
+                    onToggleTranslation = viewModel::onTopBarTranslateClick,
+                    onRetranslate = viewModel::openModelPicker,
+                    showTranslatedTags = state.showTranslatedTags,
+                    tagsTranslating = state.tagsTranslating,
+                    onToggleTagsTranslation = viewModel::onToggleTagsTranslation,
                     autoExpandImageHint = state.imageHintVisible,
                     onImageHintShown = viewModel::consumeImageHint,
                     onGateAction = viewModel::onUnlockRestriction,
@@ -367,12 +374,6 @@ fun DetailScreen(
             scrolled = scrolled,
             title = detailTitle,
             titleVisible = titleVisible,
-            translationAvailable = state.hasTranslation,
-            showTranslation = state.showTranslationAll,
-            translating = state.translating,
-            canTranslate = state.canTranslate,
-            onTranslateClick = viewModel::onTopBarTranslateClick,
-            onOpenModelPicker = viewModel::openModelPicker,
         )
         DetailBottomBar(
             isFavorite = state.isFavorite,
@@ -622,15 +623,55 @@ fun DetailScreen(
 }
 
 @Composable
-private fun DetailSkeleton(topInset: Dp = 12.dp) {
+internal fun DetailSkeleton(
+    topInset: Dp = 12.dp,
+    imageUrl: String? = null,
+    layout: DetailLayout = DetailLayout.AuthorFirst,
+) {
     val pulse = rememberSkeletonPulse()
     val block = PikuColors.textFaint.copy(alpha = 0.22f + 0.34f * pulse.value)
-    Column(
-        Modifier
-            .fillMaxSize()
-            .padding(start = 20.dp, end = 20.dp, top = topInset),
-    ) {
-        // 作者行：头像 + 昵称 + 右侧分类位
+    val configuration = LocalConfiguration.current
+    val imageFirst = layout == DetailLayout.ImageFirst
+    var aspect by remember(imageUrl) { mutableStateOf(0f) }
+    val imageHeightDp = imageHeightForAspect(
+        aspect = aspect,
+        availableWidthDp = if (imageFirst) {
+            configuration.screenWidthDp
+        } else {
+            configuration.screenWidthDp - CONTENT_PADDING_DP * 2
+        },
+        maxHeightDp = if (imageFirst) {
+            fullBleedMaxHeightDp(configuration.screenHeightDp)
+        } else {
+            IMAGE_HEIGHT_MAX_DP
+        },
+    )
+    val seedThumbSize: (androidx.compose.ui.geometry.Size) -> Unit = { size ->
+        if (size.width > 0f && size.height > 0f) aspect = size.width / size.height
+    }
+    val imageBlock: @Composable () -> Unit = {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .animateContentSize()
+                .height(imageHeightDp.dp)
+                .then(if (imageFirst) Modifier else Modifier.clip(RoundedCornerShape(12.dp)))
+                .background(if (imageUrl != null) PikuColors.surfaceSoft else block),
+        ) {
+            if (imageUrl != null) {
+                AsyncImage(
+                    model = imageUrl,
+                    contentDescription = null,
+                    colorFilter = PikuColors.tameWhiteFilter,
+                    contentScale = ContentScale.Fit,
+                    onSuccess = { state -> seedThumbSize(state.painter.intrinsicSize) },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+    }
+    // 作者行：头像 + 昵称 + 右侧分类位
+    val authorBlock: @Composable () -> Unit = {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 Modifier
@@ -655,17 +696,8 @@ private fun DetailSkeleton(topInset: Dp = 12.dp) {
                     .background(block),
             )
         }
-        Spacer(Modifier.height(14.dp))
-        // 图区：与图片未量出时的默认占位高一致
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(320.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(block),
-        )
-        Spacer(Modifier.height(16.dp))
-        // 标题 + 描述三行
+    }
+    val titleBlock: @Composable () -> Unit = {
         Box(
             Modifier
                 .fillMaxWidth(0.62f)
@@ -673,23 +705,43 @@ private fun DetailSkeleton(topInset: Dp = 12.dp) {
                 .clip(RoundedCornerShape(8.dp))
                 .background(block),
         )
-        Spacer(Modifier.height(12.dp))
-        SkeletonLine(block, Modifier.fillMaxWidth())
-        Spacer(Modifier.height(6.dp))
-        SkeletonLine(block, Modifier.fillMaxWidth(0.94f))
-        Spacer(Modifier.height(6.dp))
-        SkeletonLine(block, Modifier.fillMaxWidth(0.52f))
-        Spacer(Modifier.height(16.dp))
-        // 标签两行
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SkeletonTag(block, 68.dp)
-            SkeletonTag(block, 96.dp)
-            SkeletonTag(block, 72.dp)
-        }
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SkeletonTag(block, 56.dp)
-            SkeletonTag(block, 84.dp)
+    }
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(top = topInset),
+    ) {
+        if (imageFirst) imageBlock()
+        Column(Modifier.padding(start = 20.dp, end = 20.dp, top = if (imageFirst) 14.dp else 0.dp)) {
+            if (!imageFirst) {
+                authorBlock()
+                Spacer(Modifier.height(14.dp))
+                imageBlock()
+                Spacer(Modifier.height(16.dp))
+            }
+            titleBlock()
+            if (imageFirst) {
+                Spacer(Modifier.height(12.dp))
+                authorBlock()
+            }
+            Spacer(Modifier.height(12.dp))
+            SkeletonLine(block, Modifier.fillMaxWidth())
+            Spacer(Modifier.height(6.dp))
+            SkeletonLine(block, Modifier.fillMaxWidth(0.94f))
+            Spacer(Modifier.height(6.dp))
+            SkeletonLine(block, Modifier.fillMaxWidth(0.52f))
+            Spacer(Modifier.height(16.dp))
+            // 标签两行
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SkeletonTag(block, 68.dp)
+                SkeletonTag(block, 96.dp)
+                SkeletonTag(block, 72.dp)
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SkeletonTag(block, 56.dp)
+                SkeletonTag(block, 84.dp)
+            }
         }
     }
 }

@@ -11,3 +11,7 @@ build/
 piku-keystore.jks
 
 piku/src/test/resources/*.html
+
+# piku-ech 交叉编译产物（由 :piku:buildNativeEch 生成）
+piku/src/main/jniLibs/
+piku-ech/target/

@@ -16,6 +16,7 @@ import com.piku.client.domain.model.AppError
 import com.piku.client.domain.model.AuthStatus
 import com.piku.client.domain.model.UserPageInfo
 import com.piku.client.domain.model.Work
+import com.piku.client.domain.model.WorkKey
 import com.piku.client.domain.usecase.LoadUserWorksUseCase
 import com.piku.client.domain.usecase.ObserveFavoriteIdsUseCase
 import com.piku.client.domain.usecase.ToggleFavoriteUseCase
@@ -35,7 +36,7 @@ data class UserWorksUiState(
     val userName: String = "",
     val pageInfo: UserPageInfo? = null,
     val works: List<Work> = emptyList(),
-    val favoriteIds: Set<Long> = emptySet(),
+    val favoriteIds: Set<WorkKey> = emptySet(),
     val loading: Boolean = false,
     val loadingMore: Boolean = false,
     val errorRes: Int? = null,

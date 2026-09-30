@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.io.File
 import java.util.Properties
 
 plugins {
@@ -202,6 +203,54 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
+}
+
+// pixiv 直连的原生传输（piku-ech）：cargo ndk 交叉编译到 jniLibs，随 APK 打包
+val nativeEchDir = rootProject.layout.projectDirectory.dir("piku-ech")
+val nativeEchJniLibs = layout.projectDirectory.dir("src/main/jniLibs")
+
+fun resolveAndroidSdk(): String? =
+    signingProps.getProperty("sdk.dir")
+        ?: System.getenv("ANDROID_HOME")
+        ?: System.getenv("ANDROID_SDK_ROOT")
+
+fun resolveNdkHome(): String? {
+    System.getenv("ANDROID_NDK_HOME")?.takeIf { it.isNotBlank() }?.let { return it }
+    val ndkRoot = resolveAndroidSdk()?.let { File(it, "ndk") } ?: return null
+    return ndkRoot.listFiles()?.sortedBy { it.name }?.lastOrNull()?.absolutePath
+}
+
+val buildNativeEch by tasks.registering(Exec::class) {
+    description = "编译 piku-ech（rustls + ECH + HTTP/2）到 jniLibs"
+    group = "build"
+    workingDir(nativeEchDir)
+    commandLine(
+        "cargo", "ndk",
+        "-t", "arm64-v8a", "-t", "armeabi-v7a",
+        "-o", nativeEchJniLibs.asFile.absolutePath,
+        "build", "--release",
+    )
+    resolveAndroidSdk()?.let { environment("ANDROID_HOME", it) }
+    resolveNdkHome()?.let { environment("ANDROID_NDK_HOME", it) }
+    inputs.dir(nativeEchDir.dir("src"))
+    inputs.file(nativeEchDir.file("Cargo.toml"))
+    inputs.file(nativeEchDir.file("Cargo.lock")).optional()
+    outputs.dir(nativeEchJniLibs)
+    doFirst {
+        val ready = runCatching {
+            ProcessBuilder("cargo", "--version").start().waitFor() == 0
+        }.getOrDefault(false)
+        if (!ready) {
+            throw GradleException(
+                "找不到 cargo：pixiv 直连依赖 piku-ech 里的原生库，需要 Rust 工具链，" +
+                    "见 piku-ech/README.md",
+            )
+        }
+    }
+}
+
+tasks.named("preBuild") {
+    dependsOn(buildNativeEch)
 }
 
 tasks.register("checkTranslations") {

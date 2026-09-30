@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.piku.client.BuildConfig
 import com.piku.client.R
+import com.piku.client.data.source.PoipikuContentSource
 import com.piku.client.data.local.BackgroundStore
 import com.piku.client.data.local.CatalogSource
 import com.piku.client.data.local.CatalogSourceCodec
@@ -33,15 +34,13 @@ import com.piku.client.data.repository.SyncState
 import com.piku.client.domain.model.AppLanguage
 import com.piku.client.domain.model.AuthStatus
 import com.piku.client.domain.model.PoipikuCategory
+import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.model.ImageRouteMode
 import com.piku.client.domain.model.ThemeMode
 import com.piku.client.domain.model.UserProfile
 import com.piku.client.domain.model.Work
+import com.piku.client.domain.model.WorkKey
 import com.piku.client.domain.usecase.CheckForUpdateUseCase
-import com.piku.client.domain.usecase.LoadFeedUseCase
-import com.piku.client.domain.usecase.LoadFollowFeedUseCase
-import com.piku.client.domain.usecase.LoadPopularFeedUseCase
-import com.piku.client.domain.usecase.LoadRandomFeedUseCase
 import com.piku.client.domain.usecase.ObserveAdultContentUseCase
 import com.piku.client.domain.usecase.ObserveAutoCheckEnabledUseCase
 import com.piku.client.domain.usecase.ObserveBackgroundDimUseCase
@@ -49,6 +48,8 @@ import com.piku.client.domain.usecase.ObserveCustomBackgroundUseCase
 import com.piku.client.domain.usecase.ObserveFavoriteIdsUseCase
 import com.piku.client.domain.usecase.ObserveHistoryRetentionUseCase
 import com.piku.client.domain.usecase.ObserveLanguageUseCase
+import com.piku.client.domain.source.SourceRegistry
+import com.piku.client.domain.usecase.ObserveHomeSourceUseCase
 import com.piku.client.domain.usecase.ObserveImageRouteModeUseCase
 import com.piku.client.domain.usecase.ObserveThemeModeUseCase
 import com.piku.client.domain.usecase.RestoreAdultContentUseCase
@@ -62,6 +63,7 @@ import com.piku.client.domain.usecase.SetBackgroundDimUseCase
 import com.piku.client.domain.usecase.SetCustomBackgroundUseCase
 import com.piku.client.domain.usecase.SetHistoryRetentionUseCase
 import com.piku.client.domain.usecase.SetLanguageUseCase
+import com.piku.client.domain.usecase.SetHomeSourceUseCase
 import com.piku.client.domain.usecase.SetImageRouteModeUseCase
 import com.piku.client.domain.usecase.SetThemeModeUseCase
 import com.piku.client.domain.usecase.ToggleFavoriteUseCase
@@ -106,10 +108,11 @@ data class HomeUiState(
     /** 内容换血计数：tab/分类切换、缓存恢复、重载、洗牌时 +1，UI 据此回顶 */
     val feedEpoch: Int = 0,
     val works: List<Work> = emptyList(),
-    val favoriteIds: Set<Long> = emptySet(),
+    val favoriteIds: Set<WorkKey> = emptySet(),
     val adultEnabled: Boolean = false,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val imageRouteMode: ImageRouteMode = ImageRouteMode.AUTO,
+    val homeSource: WorkSource = WorkSource.POIPIKU,
     val historyRetentionDays: Int = 0,
     val language: AppLanguage = AppLanguage.SYSTEM,
     val userProfile: UserProfile? = null,
@@ -122,7 +125,7 @@ data class HomeUiState(
     val endReached: Boolean = false,
     val refreshNotice: Int? = null,
     /** 关注页未登录：不发请求，直接展示登录引导 */
-    val followNeedLogin: Boolean = false,
+    val needLogin: Boolean = false,
     val autoCheckEnabled: Boolean = true,
     /** 发现的新版本（首页横幅展示），null 表示无 */
     val updateBanner: GitHubRelease? = null,
@@ -151,6 +154,8 @@ data class HomeUiState(
     val backdropImgHeight: Int? = null,
     // ---------------- AI 翻译 ----------------
     val aiTranslateEnabled: Boolean = false,
+    /** 标签是否随正文一起自动翻；关 = 正文翻得快，标签在详情页用「译」按需翻 */
+    val autoTranslateTags: Boolean = false,
     val llmBaseUrl: String = SettingsRepository.LLM_BASE_URL_DEFAULT,
     val llmModel: String = SettingsRepository.LLM_MODEL_DEFAULT,
     /** 小说正文专用模型（空串表示跟随文本翻译模型） */
@@ -188,10 +193,8 @@ data class HomeUiState(
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
-    private val loadFeedUseCase: LoadFeedUseCase,
-    private val loadPopularFeedUseCase: LoadPopularFeedUseCase,
-    private val loadFollowFeedUseCase: LoadFollowFeedUseCase,
-    private val loadRandomFeedUseCase: LoadRandomFeedUseCase,
+    /** 内容源注册表：取页与流声明都经它，首页外壳不认识具体源 */
+    private val sourceRegistry: SourceRegistry,
     private val observeFavoriteIdsUseCase: ObserveFavoriteIdsUseCase,
     private val toggleFavoriteUseCase: ToggleFavoriteUseCase,
     private val observeAdultContentUseCase: ObserveAdultContentUseCase,
@@ -201,6 +204,8 @@ class HomeViewModel @Inject constructor(
     private val setThemeModeUseCase: SetThemeModeUseCase,
     private val observeImageRouteModeUseCase: ObserveImageRouteModeUseCase,
     private val setImageRouteModeUseCase: SetImageRouteModeUseCase,
+    private val observeHomeSourceUseCase: ObserveHomeSourceUseCase,
+    private val setHomeSourceUseCase: SetHomeSourceUseCase,
     private val observeHistoryRetentionUseCase: ObserveHistoryRetentionUseCase,
     private val setHistoryRetentionUseCase: SetHistoryRetentionUseCase,
     private val observeLanguageUseCase: ObserveLanguageUseCase,
@@ -241,8 +246,10 @@ class HomeViewModel @Inject constructor(
      * 各 tab/分类的自治加载器（兼内存缓存）：LRU 限容，逐出非当前项并停其后台任务。
      * 切换 tab 只换渲染的 loader，不取消在途请求——刷新后台飞完自动落位。
      */
-    private val loaders = object : LinkedHashMap<FeedKey, FeedLoader>(16, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<FeedKey, FeedLoader>): Boolean {
+    private val loaders = object : LinkedHashMap<FeedKey, FeedLoader<FeedKey, Work>>(16, 0.75f, true) {
+        override fun removeEldestEntry(
+            eldest: MutableMap.MutableEntry<FeedKey, FeedLoader<FeedKey, Work>>,
+        ): Boolean {
             if (size <= MAX_LOADERS || eldest.key == currentKey) return false
             eldest.value.dispose()
             return true
@@ -271,6 +278,11 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             observeImageRouteModeUseCase().collect { mode ->
                 _uiState.update { it.copy(imageRouteMode = mode) }
+            }
+        }
+        viewModelScope.launch {
+            observeHomeSourceUseCase().collect { source ->
+                _uiState.update { it.copy(homeSource = source) }
             }
         }
         viewModelScope.launch {
@@ -381,6 +393,11 @@ class HomeViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
+            settingsRepository.autoTranslateTags.collect { enabled ->
+                _uiState.update { it.copy(autoTranslateTags = enabled) }
+            }
+        }
+        viewModelScope.launch {
             settingsRepository.llmBaseUrl.collect { url ->
                 _uiState.update { it.copy(llmBaseUrl = url) }
             }
@@ -484,7 +501,7 @@ class HomeViewModel @Inject constructor(
                 }
                 // 所有 loader 的快照同步替换缩略图（loader 即缓存，无需另套同步逻辑）
                 for (loader in loaders.values.toList()) {
-                    loader.updateThumbnail(updated.id, updated.thumbnailUrl)
+                    loader.backfillThumbnail(updated.id, updated.thumbnailUrl)
                 }
             }
         }
@@ -595,7 +612,7 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    private fun obtainLoader(key: FeedKey): FeedLoader =
+    private fun obtainLoader(key: FeedKey): FeedLoader<FeedKey, Work> =
         loaders.getOrPut(key) { createLoader(key) }
 
     private val _networkReport = MutableStateFlow(NetworkReportState())
@@ -629,24 +646,28 @@ class HomeViewModel @Inject constructor(
         refreshNetworkReport(live = false)
     }
 
-    private fun createLoader(key: FeedKey): FeedLoader {
+    private fun createLoader(key: FeedKey): FeedLoader<FeedKey, Work> {
         val loader = FeedLoader(
             key = key,
+            feed = sourceRegistry.byId(WorkSource.POIPIKU).feed(key.tab.sourceId),
             scope = viewModelScope,
             fetchPage = { page -> fetchPageFor(key, page) },
             isLoggedIn = authRepository::isLoggedIn,
+            idOf = { it.id },
         )
         // 新建即加载首屏（等价旧版“缓存未命中走网络”路径）
         loader.refresh(countNotice = false)
         return loader
     }
 
-    private suspend fun fetchPageFor(key: FeedKey, page: Int): Result<List<Work>> = when (key.tab) {
-        FeedTab.HOT -> loadPopularFeedUseCase(page)
-        FeedTab.FOLLOW -> loadFollowFeedUseCase(page)
-        FeedTab.RANDOM -> loadRandomFeedUseCase()
-        else -> loadFeedUseCase(page, key.category.cd)
-    }
+    private suspend fun fetchPageFor(key: FeedKey, page: Int): Result<List<Work>> =
+        sourceRegistry.byId(WorkSource.POIPIKU)
+            .page(
+                feedId = key.tab.sourceId,
+                facets = mapOf(PoipikuContentSource.FACET_CATEGORY to key.category.cd.toString()),
+                page = page,
+            )
+            .map { result -> result.items }
 
     /**
      * 把当前 loader 的快照合并进对外 UI 状态（错误在此处映射成文案资源）。
@@ -654,20 +675,20 @@ class HomeViewModel @Inject constructor(
      * 已屏蔽作者在此处过滤而非 fetch 处：loader 快照是内存缓存，从详情页屏蔽后返回时
      * 不会重新请求，只有渲染这一层能保证被屏蔽作品立即消失（同时覆盖所有分页与来源）。
      */
-    private fun applySnapshot(snap: FeedSnapshot) {
+    private fun applySnapshot(snap: FeedSnapshot<Work>) {
         val key = currentKey ?: return
         val blocked = blockListRepository.blockedIds.value
         _uiState.update {
             it.copy(
                 feedTab = key.tab,
                 category = key.category,
-                works = if (blocked.isEmpty()) snap.works else snap.works.filterNot { w -> w.authorId in blocked },
+                works = if (blocked.isEmpty()) snap.items else snap.items.filterNot { w -> w.authorId in blocked },
                 loading = snap.loading,
                 loadingMore = snap.loadingMore,
                 endReached = snap.endReached,
                 errorRes = snap.error?.toFeedErrorRes(),
                 loadMoreErrorRes = snap.loadMoreError?.toFeedErrorRes(),
-                followNeedLogin = snap.followNeedLogin,
+                needLogin = snap.needLogin,
                 refreshNotice = snap.refreshNotice,
             )
         }
@@ -736,6 +757,15 @@ class HomeViewModel @Inject constructor(
     fun setImageRouteMode(mode: ImageRouteMode) {
         viewModelScope.launch { setImageRouteModeUseCase(mode) }
     }
+
+    fun setHomeSource(value: WorkSource) {
+        viewModelScope.launch { setHomeSourceUseCase(value) }
+    }
+
+    /** 换源控件的可选项，按 WorkSource 声明序稳定输出 */
+    val sourceOptions: List<WorkSource> get() = sourceRegistry.all.sortedBy { it.id.ordinal }.map { it.id }
+
+    fun homeSourceLabelRes(id: WorkSource): Int = sourceRegistry.byId(id).labelRes
 
     fun setCustomBackground(uri: android.net.Uri) {
         viewModelScope.launch {
@@ -822,6 +852,11 @@ class HomeViewModel @Inject constructor(
 
     fun setAiTranslateEnabled(enabled: Boolean) {
         setAiTranslateEnabledUseCase(enabled)
+    }
+
+    /** 标签是否随正文一起自动翻；关 = 正文翻得快，标签在详情页用「译」按需翻 */
+    fun setAutoTranslateTags(enabled: Boolean) {
+        settingsRepository.setAutoTranslateTags(enabled)
     }
 
     fun selectTranslateModel(entry: ModelEntry) {
@@ -984,7 +1019,7 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    private fun currentLoader(): FeedLoader? = currentKey?.let { loaders[it] }
+    private fun currentLoader(): FeedLoader<FeedKey, Work>? = currentKey?.let { loaders[it] }
 
     /**
      * 全量失效：登录态变化 / adult 开关 / session 刷新都会改变所有 feed 的过滤条件。

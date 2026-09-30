@@ -2,11 +2,13 @@ package com.piku.client.data.local
 
 import androidx.room.Entity
 import androidx.room.Index
-import androidx.room.PrimaryKey
+import com.piku.client.domain.model.WorkSource
 
-@Entity(tableName = "history", indices = [Index("visitedAt")])
+/** source 与 workId 组成跨源唯一键；存量数据迁移时一律落 POIPIKU */
+@Entity(tableName = "history", primaryKeys = ["source", "workId"], indices = [Index("visitedAt")])
 data class HistoryEntity(
-    @PrimaryKey val workId: String,
+    val source: WorkSource = WorkSource.POIPIKU,
+    val workId: String,
     val authorId: Long,
     val title: String,
     val authorName: String,

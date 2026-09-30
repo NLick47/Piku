@@ -8,6 +8,7 @@ import com.piku.client.domain.model.AppLanguage
 import com.piku.client.domain.model.TranslatedFields
 import com.piku.client.domain.model.WorkDetail
 import com.piku.client.domain.translation.ChunkContext
+import com.piku.client.domain.translation.TagsTranslator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -101,7 +102,7 @@ class TranslationRepository @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val modelCatalogRepository: ModelCatalogRepository,
     private val engineFactory: TranslationEngineFactory,
-) {
+) : TagsTranslator {
 
     private val mutex = Mutex()
 
@@ -180,6 +181,8 @@ class TranslationRepository @Inject constructor(
      *
      * [includeLongNovel] = false 时（自动/顶栏路径）只翻短正文，
      * 长篇正文留给阅读器内的显式触发（见 [AUTO_NOVEL_MAX_CHARS]）。
+     * 标签是否随行由「自动翻译标签」设置决定（关 = 标签留空，
+     * 由 [translateTags] 在用户点「译」时单独补翻）。
      */
     suspend fun translate(
         detail: WorkDetail,
@@ -198,7 +201,13 @@ class TranslationRepository @Inject constructor(
             add(detail.title)
             add(detail.description)
             add(detail.authorProfile)
-            addAll(detail.tags)
+            // 标签是否随行：它是「自动翻译」的子选项，总开关或子开关任一关闭都不带标签。
+            // 缓存按条(原文哈希)存且跨作品共享,补翻标签时翻过的条目零成本。
+            if (settingsRepository.aiTranslateEnabled.value &&
+                settingsRepository.autoTranslateTags.value
+            ) {
+                addAll(detail.tags)
+            }
         }
         val shortTranslated = translateAll(shortSources, targetLang, forcedEntry)
         // 小说正文单独走小说专用通道；解析不出可用小说模型时正文保留原文（宁缺毋滥），
@@ -240,6 +249,17 @@ class TranslationRepository @Inject constructor(
             novelOut = novelTranslated,
         ) ?: return TranslationOutcome(fields = null, failed = false)
         return TranslationOutcome(fields = fields, failed = false)
+    }
+
+    /**
+     * 只翻标签（自动翻译标签关闭时，标签区「译」chip 的显式触发）。
+     * 逐条缓存且跨作品共享：翻过的标签（含其他作品见过的同款）直接命中，零网络成本。
+     * 返回与 [WorkDetail.tags] 一一对应的译文；全组透传（标签本就是目标语言）时视为无译文。
+     */
+    override suspend fun translateTags(detail: WorkDetail, language: AppLanguage): List<String>? {
+        if (detail.tags.isEmpty() || !hasTextModel()) return null
+        val translated = translateAll(detail.tags, targetLangName(language)) ?: return null
+        return translated.takeIf { list -> list.withIndex().any { (i, v) -> v != detail.tags[i] } }
     }
 
     /**

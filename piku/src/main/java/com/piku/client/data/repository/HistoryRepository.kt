@@ -2,10 +2,12 @@ package com.piku.client.data.repository
 
 import com.piku.client.data.local.HistoryDao
 import com.piku.client.data.local.HistoryEntity
+import com.piku.client.data.local.toHistoryEntity
 import com.piku.client.data.local.toWork
 import com.piku.client.domain.model.HistoryItem
 import com.piku.client.domain.model.HistoryTimeRange
 import com.piku.client.domain.model.Work
+import com.piku.client.domain.model.WorkKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
@@ -24,23 +26,15 @@ class HistoryRepository @Inject constructor(
     suspend fun record(work: Work) = record(work, System.currentTimeMillis())
 
     suspend fun record(work: Work, visitedAt: Long) {
-        historyDao.upsert(
-            HistoryEntity(
-                workId = work.id.toString(),
-                authorId = work.authorId,
-                title = work.title,
-                authorName = work.authorName,
-                authorAvatarUrl = work.authorAvatarUrl,
-                thumbnailUrl = work.thumbnailUrl,
-                imageCount = work.imageCount,
-                r18 = work.r18,
-                visitedAt = visitedAt,
-            ),
-        )
+        historyDao.upsert(work.toHistoryEntity(visitedAt))
     }
 
-    suspend fun remove(workId: Long) {
-        historyDao.deleteByWorkId(workId.toString())
+    suspend fun remove(work: Work) {
+        historyDao.deleteByWorkId(work.source, work.id.toString())
+    }
+
+    suspend fun remove(key: WorkKey) {
+        historyDao.deleteByWorkId(key.source, key.workId)
     }
 
     suspend fun clear() {

@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.piku.client.R
+import com.piku.client.domain.model.key
 import com.piku.client.domain.model.Work
 import com.piku.client.ui.common.GlassCard
 import com.piku.client.ui.common.LoaderDots
@@ -291,7 +292,7 @@ private fun TagWorkGrid(
         items(state.works, key = { it.id }) { work ->
             WorkCard(
                 work = work,
-                isFavorite = work.id in state.favoriteIds,
+                isFavorite = work.key in state.favoriteIds,
                 onToggleFavorite = onToggleFavorite,
                 onClick = onWorkClick,
                 dark = dark,

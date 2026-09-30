@@ -16,17 +16,18 @@ class NetworkDiagnosis internal constructor(
     private val imageDiagnostics: ImageDiagnostics,
 ) {
 
-    /** 生产构造：真实 TLS 与图片线路探测 + 墙钟时间 */
+    /** 生产构造：真实 TLS 与图片线路探测 + 墙钟时间；传入工厂让探测也带上 ECH */
     constructor(
         dns: DoHDns,
         diagnostics: NetworkDiagnostics,
         imageProbe: ImageRouteProbe,
         routeController: ImageRouteController,
         imageDiagnostics: ImageDiagnostics,
+        sniFactory: SniStrippingSocketFactory = SniStrippingSocketFactory(),
     ) : this(
         dns,
         diagnostics,
-        TlsAddressProbe(),
+        TlsAddressProbe(sniFactory),
         NetworkRuntime(),
         imageProbe,
         routeController,
@@ -118,22 +119,28 @@ class NetworkDiagnosis internal constructor(
             ImageRouteMode.DIRECT -> "强制直连"
             ImageRouteMode.RELAY -> "强制中转"
         }
-        lines += "模式 $mode   当前 ${if (routeController.useRelay) "走中转" else "走直连"}"
-        routeController.lastDecision?.let { decision ->
-            val target = if (decision.relay) "中转" else "直连"
-            val state = if (decision.applied) "已生效" else "被冷却拦下（20s 内不重复翻转）"
-            lines += "  最近判定 切到$target｜${decision.reason}｜${stamp(decision.atMillis)}｜$state"
-        }
+        lines += "模式 $mode"
         routeController.lastProbe?.let { probe ->
             val detail = probeDetail(probe)
             val verdict = if (probe.ok) "直连可用" else "直连不可用"
-            lines += "  启动探测 $verdict｜${probe.elapsedMs}ms$detail｜${stamp(probe.atMillis)}"
+            lines += "  启动探测（poipiku 直连）$verdict｜${probe.elapsedMs}ms$detail｜${stamp(probe.atMillis)}"
         }
-        lines += "  中转线路"
-        routeController.relayHealth.states().forEachIndexed { index, state ->
-            val health = if (state.failures > 0) "健康（累计失败 ${state.failures} 次）" else "健康"
-            val lastSuccess = state.lastSuccessAt?.let { "，最近成功 ${stamp(it)}" }.orEmpty()
-            lines += "    ${state.host}  第 ${index + 1} 位  $health$lastSuccess"
+        ImageUpstream.entries.forEach { upstream ->
+            val route = if (routeController.useRelay(upstream)) "走中转" else "走直连"
+            lines += "  ${upstream.host}  $route"
+            routeController.lastDecision(upstream)?.let { decision ->
+                val target = if (decision.relay) "中转" else "直连"
+                val state = if (decision.applied) "已生效" else "被冷却拦下（20s 内不重复翻转）"
+                lines += "    最近判定 切到$target｜${decision.reason}｜${stamp(decision.atMillis)}｜$state"
+            }
+            val speed = routeController.speed(upstream)
+            lines += "    实测 ${rateLine("直连", speed.rate(relay = false))}｜${rateLine("中继", speed.rate(relay = true))}" +
+                "（只统计 ≥150KB 的取图，30 分钟内有效）"
+            routeController.relayHealth(upstream).states().forEachIndexed { index, hostState ->
+                val health = if (hostState.failures > 0) "健康（累计失败 ${hostState.failures} 次）" else "健康"
+                val lastSuccess = hostState.lastSuccessAt?.let { "，最近成功 ${stamp(it)}" }.orEmpty()
+                lines += "    中转 ${hostState.host}  第 ${index + 1} 位  $health$lastSuccess"
+            }
         }
         if (routeController.mode != ImageRouteMode.AUTO) {
             lines += "  手动模式下探测与失败信号都不改变线路选择"
@@ -141,27 +148,35 @@ class NetworkDiagnosis internal constructor(
         return lines
     }
 
-    /** 直连与每条中转各探一次：直连的结论会像启动探测一样参与自动判定，中转只作展示 */
+    /** 每条上游的直连与各条中转各探一次：直连结论参与自动判定，中转成功只作展示 */
     private fun liveImageProbe(deadline: Long): List<String> {
         val lines = mutableListOf<String>()
-        val direct = imageProbe.probe(host = null)
-        routeController.applyProbe(direct)
-        lines += "  直连 ${ImageRelayInterceptor.CDN_HOST}  ${probeLine(direct)}"
-        routeController.relayHealth.states().forEach { state ->
-            if (runtime.now() > deadline) {
-                lines += "  中转 ${state.host}  未探测（超出预算）"
-                return@forEach
+        ImageUpstream.entries.forEach { upstream ->
+            val direct = imageProbe.probe(upstream, relayHost = null)
+            imageProbe.verdict(upstream, direct)?.let { routeController.applyProbe(upstream, it) }
+            lines += "  直连 ${upstream.host}  ${probeLine(direct)}"
+            routeController.relayHealth(upstream).states().forEach { state ->
+                if (runtime.now() > deadline) {
+                    lines += "  中转 ${state.host}（${upstream.host}）  未探测（超出预算）"
+                    return@forEach
+                }
+                lines += "  中转 ${state.host}（${upstream.host}）  ${probeLine(imageProbe.probe(upstream, state.host))}"
             }
-            lines += "  中转 ${state.host}  ${probeLine(imageProbe.probe(state.host))}"
         }
         return lines
     }
 
+    private fun rateLine(label: String, bytesPerSec: Long?): String =
+        if (bytesPerSec == null) "$label 未测出" else "$label ${bytesPerSec / 1024} KB/s"
+
     /** 失败带异常摘要、成功带状态码与耗时 */
-    private fun probeDetail(probe: ImageProbeResult): String = when {
-        probe.error != null -> "（${probe.error}）"
-        probe.statusCode != null -> "（HTTP ${probe.statusCode}）"
-        else -> ""
+    private fun probeDetail(probe: ImageProbeResult): String {
+        val size = if (probe.bytes > 0) "，${probe.bytes / 1024}KB" else ""
+        return when {
+            probe.error != null -> "（${probe.error}）"
+            probe.statusCode != null -> "（HTTP ${probe.statusCode}$size）"
+            else -> ""
+        }
     }
 
     private fun probeLine(probe: ImageProbeResult): String =
