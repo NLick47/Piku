@@ -5,14 +5,16 @@ import com.piku.client.data.local.SettingsRepository
 import com.piku.client.domain.model.ImageRouteMode
 import okhttp3.Request
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.IOException
 
 class ImageRelayInterceptorTest {
 
     private var now = 0L
-    private val runtime = NetworkRuntime(now = { now }, sleeper = {})
+    private val runtime = NetworkRuntime(now = { now }, monotonicNow = { now }, sleeper = {})
     private val prefs = InMemorySharedPreferences()
     private val settings = SettingsRepository(InMemorySharedPreferences())
     private val controller = ImageRouteController(settings, prefs, runtime)
@@ -215,5 +217,57 @@ class ImageRelayInterceptorTest {
         val second = chain(request = pixiv, results = listOf(okResponse(pixiv)))
         interceptor.intercept(second)
         assertEquals(listOf("pic-relay.cyou"), second.hosts)
+    }
+
+    /** AUTO 模式 + 上会话粘在中继（持久化），directDown 已随重启归零；prefs 局部建，避免污染其他用例 */
+    private fun stickyRelayInterceptor(): Triple<ImageRelayInterceptor, ImageRouteController, InMemorySharedPreferences> {
+        now = 100_000L
+        val stickyPrefs = InMemorySharedPreferences().apply {
+            edit().putBoolean("image_route_auto_relay", true).apply()
+        }
+        val settings = SettingsRepository(InMemorySharedPreferences()).apply {
+            setImageRouteMode(ImageRouteMode.AUTO)
+        }
+        val controller = ImageRouteController(settings, stickyPrefs, runtime)
+        return Triple(ImageRelayInterceptor(controller), controller, stickyPrefs)
+    }
+
+    @Test
+    fun relay404DoesNotFlipTheStickyAutoRoute() {
+        val (interceptor, controller, stickyPrefs) = stickyRelayInterceptor()
+
+        // 中继正常应答 404（作品已删除），直连是好的：404 是"图没了"，不是"中继坏了"
+        val first = chain(results = listOf(okResponse(cdnRequest, 404), okResponse(cdnRequest)))
+        interceptor.intercept(first)
+
+        assertEquals(listOf("pic-relay.cyou", ImageUpstream.POIPIKU.host), first.hosts)
+        assertTrue("404 不该翻转粘住的线路", controller.useRelay(ImageUpstream.POIPIKU))
+        assertTrue("也不该持久化翻转", stickyPrefs.getBoolean("image_route_auto_relay", false))
+    }
+
+    @Test
+    fun cancelledRelayAttemptDoesNotFlipTheStickyAutoRoute() {
+        val (interceptor, controller, stickyPrefs) = stickyRelayInterceptor()
+
+        // 划走/整体超时导致的取消同样不是中继的错
+        val first = chain(results = listOf(IOException("timeout"), okResponse(cdnRequest)), canceled = true)
+        interceptor.intercept(first)
+
+        assertEquals(listOf("pic-relay.cyou", ImageUpstream.POIPIKU.host), first.hosts)
+        assertTrue("取消不该翻转粘住的线路", controller.useRelay(ImageUpstream.POIPIKU))
+        assertTrue(stickyPrefs.getBoolean("image_route_auto_relay", false))
+    }
+
+    @Test
+    fun allRelaysUnreachableStillFlipsTheStickyAutoRoute() {
+        val (interceptor, controller, stickyPrefs) = stickyRelayInterceptor()
+
+        // 中继真的连不上才该翻：翻完落直连把这张图接完
+        val first = chain(results = listOf(IOException("boom"), okResponse(cdnRequest)))
+        interceptor.intercept(first)
+
+        assertEquals(listOf("pic-relay.cyou", ImageUpstream.POIPIKU.host), first.hosts)
+        assertFalse("中继全断：该翻去直连", controller.useRelay(ImageUpstream.POIPIKU))
+        assertFalse("翻转要持久化，重启后别再撞一次", stickyPrefs.getBoolean("image_route_auto_relay", true))
     }
 }

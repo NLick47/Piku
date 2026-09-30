@@ -61,4 +61,50 @@ class RouteSpeedTest {
 
         assertEquals(RouteSpeed.MAX_SAMPLES, speed.recent().size)
     }
+
+    /** record 在图片完成线程、rate 在取图决策线程：并发打摆不能炸（无同步时这里会抛 CME/数组越界） */
+    @Test
+    fun concurrentRecordAndRateDoNotCorruptState() {
+        val clock = java.util.concurrent.atomic.AtomicLong(0)
+        val shared = RouteSpeed(now = { clock.get() }, minBytes = 1, windowMs = Long.MAX_VALUE, capacity = 64)
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(8)
+        val start = java.util.concurrent.CountDownLatch(1)
+        val done = java.util.concurrent.CountDownLatch(8)
+        val failures = java.util.concurrent.CopyOnWriteArrayList<Throwable>()
+        repeat(4) {
+            pool.submit {
+                try {
+                    start.await()
+                    repeat(20_000) { i ->
+                        clock.incrementAndGet()
+                        shared.record(relay = i % 2 == 0, bytes = 200_000, elapsedMs = 100)
+                    }
+                } catch (t: Throwable) {
+                    failures += t
+                } finally {
+                    done.countDown()
+                }
+            }
+        }
+        repeat(4) {
+            pool.submit {
+                try {
+                    start.await()
+                    repeat(20_000) {
+                        clock.incrementAndGet()
+                        shared.rate(relay = false)
+                        shared.rate(relay = true)
+                    }
+                } catch (t: Throwable) {
+                    failures += t
+                } finally {
+                    done.countDown()
+                }
+            }
+        }
+        start.countDown()
+        org.junit.Assert.assertTrue("测试本身超时", done.await(60, java.util.concurrent.TimeUnit.SECONDS))
+        pool.shutdown()
+        assertEquals("并发读写不该抛异常：$failures", emptyList<Throwable>(), failures.toList())
+    }
 }

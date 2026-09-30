@@ -11,7 +11,7 @@ import org.junit.Test
 class ImageRouteControllerTest {
 
     private var now = 1_000_000L
-    private val runtime = NetworkRuntime(now = { now }, sleeper = {})
+    private val runtime = NetworkRuntime(now = { now }, monotonicNow = { now }, sleeper = {})
     private val prefs = InMemorySharedPreferences()
     private val settings = SettingsRepository(InMemorySharedPreferences())
     private val controller = ImageRouteController(settings, prefs, runtime)

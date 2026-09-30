@@ -43,7 +43,8 @@ class ImageRouteController(
         Route(
             health = RelayHealth(relayHosts, runtime.now),
             relay = persistedRelay(upstream),
-            speed = RouteSpeed(runtime.now),
+            // 测速样本的时效窗口用单调钟：改时间不该把"刚测的"变成"过期"
+            speed = RouteSpeed(runtime.monotonicNow),
         )
     }
 
@@ -140,17 +141,17 @@ class ImageRouteController(
             )
             return
         }
-        val now = runtime.now()
+        val now = runtime.monotonicNow()
         // 直连与中转同时全挂时，每请求都来回翻转会反复打满两种链路的连接数，
         // 也给 DoHDns 制造无谓的失败记录。冷却期内不翻，让状态粘住、尽快失败。
         if (now - route.lastFlipAt < FLIP_COOLDOWN_MS) {
-            route.lastDecision = Decision(relay, "$reason（冷却中，未翻转）", now, applied = false)
+            route.lastDecision = Decision(relay, "$reason（冷却中，未翻转）", runtime.now(), applied = false)
             return
         }
         route.relay = relay
         route.lastFlipAt = now
         prefs.edit().putBoolean(keyOf(upstream), relay).apply()
-        route.lastDecision = Decision(relay, reason, now, applied = true)
+        route.lastDecision = Decision(relay, reason, runtime.now(), applied = true)
     }
 
     /**

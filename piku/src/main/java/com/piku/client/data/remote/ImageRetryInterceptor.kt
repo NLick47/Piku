@@ -4,6 +4,7 @@ import coil3.intercept.Interceptor
 import coil3.request.ErrorResult
 import coil3.request.ImageResult
 import java.io.InterruptedIOException
+import java.net.ProtocolException
 import java.net.SocketException
 import java.net.SocketTimeoutException
 import javax.net.ssl.SSLException
@@ -27,11 +28,12 @@ class ImageRetryInterceptor internal constructor(
             failureOf = { (it as? ErrorResult)?.throwable },
             onRetry = { cause, attempt, delayMs ->
                 // **大图直连失败发生在"读 body"那一刻**（callTimeout 掐的就是这一段），
-                // 异常出在 Coil 侧，OkHttp 拦截器链看不到 —— 所以"直连失败就切中继"
-                // 只能挂在这里：切完这次重试就会走中继（OkHttp 那层按状态改写）
+                // 异常出在 Coil 侧，OkHttp 拦截器链看不到 —— 所以换边必须挂在这里：
+                // 直连失败切中继，中继断流切直连，切完这次重试就走新线路
                 if (switchRouteOnTransferFailure(upstream, cause, routeController)) {
+                    val to = if (upstream != null && routeController?.useRelay(upstream) == true) "中继" else "直连"
                     diagnostics.warn(
-                        "image route ${upstream?.host} -> 中继｜直连取图失败：" +
+                        "image route ${upstream?.host} -> $to｜取图传输失败：" +
                             cause?.describeChain(levels = 1, maxChars = 60),
                     )
                 }
@@ -45,16 +47,20 @@ class ImageRetryInterceptor internal constructor(
     }
 }
 
-/** 传输类失败（超时 / 连接重置 / 握手）才算线路问题；HTTP 状态码与取消都不算 */
+/**
+ * 传输类失败（超时 / 连接重置 / 握手 / body 截断）才算线路问题；HTTP 状态码与取消都不算。
+ * okhttp 对"body 传到一半断了"抛的是 [ProtocolException]（unexpected end of stream），
+ * 大图恰好死成这样，不能漏。
+ */
 internal fun isTransferFailure(cause: Throwable?): Boolean =
     generateSequence(cause) { it.cause }.any {
         it is InterruptedIOException || it is SocketTimeoutException ||
-            it is SocketException || it is SSLException
+            it is SocketException || it is SSLException || it is ProtocolException
     }
 
 /**
- * 直连取图失败时把这条上游切到中继（AUTO 模式下才生效）。
- * @return 是否真的切了：已经在中继上、或不是传输类失败，都返回 false
+ * 取图传输失败时把这条上游换边（AUTO 模式下才生效）：直连失败切中继，中继失败切直连。
+ * @return 是否真的换了边：非传输类失败、手动模式、被冷却拦下都返回 false
  */
 internal fun switchRouteOnTransferFailure(
     upstream: ImageUpstream?,
@@ -62,10 +68,10 @@ internal fun switchRouteOnTransferFailure(
     controller: ImageRouteController?,
 ): Boolean {
     if (upstream == null || controller == null) return false
-    if (controller.useRelay(upstream)) return false
     if (!isTransferFailure(cause)) return false
-    controller.markDirectFailed(upstream)
-    return controller.useRelay(upstream)
+    val wasRelay = controller.useRelay(upstream)
+    if (wasRelay) controller.markRelayFailed(upstream) else controller.markDirectFailed(upstream)
+    return controller.useRelay(upstream) != wasRelay
 }
 
 /**

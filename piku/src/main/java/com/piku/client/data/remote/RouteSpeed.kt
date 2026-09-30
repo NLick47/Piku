@@ -20,6 +20,8 @@ internal class RouteSpeed(
 
     private val samples = ArrayDeque<Sample>()
 
+    /** 图片加载是并发的：record 在完成回调线程、rate 在取图决策线程，必须互斥 */
+    @Synchronized
     fun record(relay: Boolean, bytes: Long, elapsedMs: Long) {
         if (bytes < minBytes || elapsedMs <= 0) return
         samples.addLast(Sample(relay, bytes, elapsedMs, now()))
@@ -27,6 +29,7 @@ internal class RouteSpeed(
     }
 
     /** 该线路最近样本的加权速率（字节/秒）；没样本返回 null */
+    @Synchronized
     fun rate(relay: Boolean): Long? {
         val fresh = samples.filter { it.relay == relay && now() - it.at <= windowMs }
         if (fresh.isEmpty()) return null
@@ -42,6 +45,7 @@ internal class RouteSpeed(
     }
 
     /** 诊断用 */
+    @Synchronized
     fun recent(): List<Sample> = samples.toList()
 
     companion object {

@@ -61,31 +61,36 @@ class ImageRouteProbe(
                 if (relayHost == null) header(ImageRelayInterceptor.BYPASS_HEADER, "1")
             }
             .build()
-        val startedAt = runtime.now()
+        val startedAt = runtime.monotonicNow()
+        var bodyElapsedMs = 0L
         val result = runCatching {
             client.newCall(request).execute().use { response ->
+                val headersAt = runtime.monotonicNow()
                 val bytes = response.body?.bytes()?.size?.toLong() ?: 0L
+                bodyElapsedMs = runtime.monotonicNow() - headersAt
                 ImageProbeResult(
                     ok = true,
-                    elapsedMs = runtime.now() - startedAt,
+                    elapsedMs = runtime.monotonicNow() - startedAt,
                     statusCode = response.code,
                     error = null,
-                    atMillis = startedAt,
+                    atMillis = runtime.now(),
                     bytes = bytes,
                 )
             }
         }.getOrElse { error ->
             ImageProbeResult(
                 ok = false,
-                elapsedMs = runtime.now() - startedAt,
+                elapsedMs = runtime.monotonicNow() - startedAt,
                 statusCode = null,
                 error = describe(error),
-                atMillis = startedAt,
+                atMillis = runtime.now(),
             )
         }
-        // 探测本身就是一次测速：拿到的读数直接进线路状态（够快会自动切回直连）
-        if (result.ok && result.bytes > 0) {
-            controller.recordSpeed(upstream, relay = relayHost != null, result.bytes, result.elapsedMs)
+        // 探测本身就是一次测速。直连探测带 BYPASS 头走拦截器，那边已按 body 耗时记过一次，
+        // 再记就是同一次传输算两笔；只有中转探测（目标是中继域名，拦截器不碰它）要在这里补记。
+        // 速率按 body 阶段算：与拦截器的实测口径一致，建连开销不掺进来。
+        if (relayHost != null && result.ok && result.bytes > 0 && bodyElapsedMs > 0) {
+            controller.recordSpeed(upstream, relay = true, result.bytes, bodyElapsedMs)
         }
         return result
     }

@@ -7,6 +7,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.IOException
 import java.io.InterruptedIOException
+import java.net.ProtocolException
 import java.net.SocketTimeoutException
 import java.util.concurrent.CancellationException
 
@@ -86,7 +87,7 @@ class ImageRetryInterceptorTest {
     private fun controller() = ImageRouteController(
         settings,
         prefs,
-        NetworkRuntime(now = { 1_000_000L }, sleeper = {}),
+        NetworkRuntime(now = { 1_000_000L }, monotonicNow = { 1_000_000L }, sleeper = {}),
     )
 
     @Test
@@ -127,17 +128,48 @@ class ImageRetryInterceptorTest {
         )
     }
 
-    @Test
-    fun alreadyOnTheRelayIsNotASecondSwitch() {
-        val controller = controller()
-        switchRouteOnTransferFailure(ImageUpstream.PIXIV, InterruptedIOException("timeout"), controller)
+    /** 独立 prefs：这两个用例要写持久化的粘住状态，不能污染同文件其他用例 */
+    private fun stickyRelayController(): Pair<ImageRouteController, com.piku.client.data.local.InMemorySharedPreferences> {
+        val prefs = com.piku.client.data.local.InMemorySharedPreferences()
+        prefs.edit().putBoolean("image_route_auto_relay_pixiv", true).apply()
+        return ImageRouteController(
+            settings,
+            prefs,
+            NetworkRuntime(now = { 1_000_000L }, monotonicNow = { 1_000_000L }, sleeper = {}),
+        ) to prefs
+    }
 
-        assertFalse(
-            switchRouteOnTransferFailure(
-                ImageUpstream.PIXIV,
-                InterruptedIOException("timeout"),
-                controller,
-            ),
+    @Test
+    fun relayBodyFailureFlipsBackToDirect() {
+        // 上会话粘在中继（持久化），directDown 未置位：中继传一半断流时允许翻回直连
+        val (controller, prefs) = stickyRelayController()
+        assertTrue(controller.useRelay(ImageUpstream.PIXIV))
+
+        val flipped = switchRouteOnTransferFailure(
+            ImageUpstream.PIXIV,
+            ProtocolException("unexpected end of stream"),
+            controller,
         )
+
+        assertTrue(flipped)
+        assertFalse(controller.useRelay(ImageUpstream.PIXIV))
+        assertFalse("翻回直连也要持久化", prefs.getBoolean("image_route_auto_relay_pixiv", true))
+    }
+
+    @Test
+    fun doubleFailureWithinTheFlipCooldownDoesNotThrash() {
+        val (controller, _) = stickyRelayController()
+
+        // 中继断流 → 翻直连；直连随即也超时：冷却期内不许翻回中继打摆
+        assertTrue(switchRouteOnTransferFailure(ImageUpstream.PIXIV, ProtocolException("boom"), controller))
+        assertFalse(switchRouteOnTransferFailure(ImageUpstream.PIXIV, InterruptedIOException("timeout"), controller))
+        assertFalse(controller.useRelay(ImageUpstream.PIXIV))
+    }
+
+    @Test
+    fun truncatedBodyCountsAsATransferFailure() {
+        // okhttp 对 body 中途截断抛的是 ProtocolException：这是传输问题，不能漏判
+        assertTrue(isTransferFailure(ProtocolException("unexpected end of stream")))
+        assertTrue(isTransferFailure(IOException(ProtocolException("unexpected end of stream"))))
     }
 }
