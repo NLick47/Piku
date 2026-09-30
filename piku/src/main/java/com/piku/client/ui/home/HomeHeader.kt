@@ -21,11 +21,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -39,12 +36,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
-import androidx.compose.ui.text.font.FontWeight
-import androidx.annotation.StringRes
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.piku.client.R
 import com.piku.client.domain.model.PoipikuCategory
 import com.piku.client.ui.common.UserAvatar
@@ -61,7 +55,6 @@ internal fun GlassHeader(
     onMenuClick: () -> Unit,
     menuEnabled: Boolean,
     onSearchClick: () -> Unit,
-    onSourceClick: () -> Unit,
     onSelectFeedTab: (FeedTab) -> Unit,
     onCategoryClick: () -> Unit,
     onDoubleTapTop: () -> Unit,
@@ -105,10 +98,6 @@ internal fun GlassHeader(
                     enabled = menuEnabled,
                     dark = dark,
                 )
-                SourceChip(
-                    labelRes = state.homeSource.labelRes(),
-                    onClick = onSourceClick,
-                )
                 Spacer(Modifier.weight(1f))
                 SearchMenuButton(
                     onClick = onSearchClick,
@@ -148,8 +137,6 @@ internal fun TabletTopBar(
     onMenuClick: () -> Unit,
     menuEnabled: Boolean,
     onSearchClick: () -> Unit,
-    onSourceClick: () -> Unit,
-    sourceLabelRes: Int,
     onDoubleTapTop: () -> Unit,
     dark: Boolean,
 ) {
@@ -168,7 +155,6 @@ internal fun TabletTopBar(
             enabled = menuEnabled,
             dark = dark,
         )
-        SourceChip(labelRes = sourceLabelRes, onClick = onSourceClick)
         Spacer(Modifier.weight(1f))
         SearchMenuButton(
             onClick = onSearchClick,
@@ -254,37 +240,6 @@ internal fun UserMenuButton(
             size = PikuLayout.NavControl,
             enabled = enabled,
             showIndication = false,
-        )
-    }
-}
-
-@Composable
-internal fun SourceChip(
-    @StringRes labelRes: Int,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier
-            .padding(start = 4.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        Text(
-            text = stringResource(labelRes),
-            color = PikuColors.textSecondary,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-        )
-        Icon(
-            imageVector = Icons.Filled.KeyboardArrowDown,
-            contentDescription = null,
-            tint = PikuColors.textFaint,
-            modifier = Modifier.size(14.dp),
         )
     }
 }

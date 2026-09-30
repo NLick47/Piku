@@ -99,7 +99,7 @@ class SettingsRepository @Inject constructor(
     )
     val customBackgroundPath: StateFlow<String?> = _customBackgroundPath.asStateFlow()
 
-    /** 首页发现页的数据源；只作用于首页，搜索/收藏/历史不跟着切 */
+    /** 首页源；只作用于首页，搜索/收藏/历史不跟着切 */
     private val _homeSource = MutableStateFlow(
         prefs.getString(KEY_HOME_SOURCE, null)
             ?.let { name -> runCatching { WorkSource.valueOf(name) }.getOrNull() }

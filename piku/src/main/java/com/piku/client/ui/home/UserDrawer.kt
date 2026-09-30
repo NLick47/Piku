@@ -31,6 +31,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.Logout
+import androidx.compose.material.icons.outlined.AltRoute
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.CloudSync
@@ -46,7 +47,6 @@ import androidx.compose.material.icons.outlined.ManageAccounts
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PostAdd
-import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.Tag
@@ -132,7 +132,7 @@ fun UserDrawer(
     onLanguageClick: () -> Unit = {},
     onRetentionClick: () -> Unit = {},
     onWebDavClick: () -> Unit = {},
-    /** 发现页数据源（只作用于首页）：当前源的文案资源与换源入口 */
+    /** 首页源：当前源的文案资源与换源入口 */
     homeSourceLabelRes: Int = R.string.home_source_poipiku,
     onHomeSourceClick: () -> Unit = {},
     content: @Composable () -> Unit,
@@ -369,7 +369,7 @@ private fun DrawerPanel(
                 color = faint,
             )
             DrawerMenuRow(
-                icon = Icons.Outlined.Public,
+                icon = Icons.Outlined.SwapHoriz,
                 label = stringResource(R.string.home_source),
                 trailing = stringResource(homeSourceLabelRes),
                 onClick = onHomeSourceClick,
@@ -485,7 +485,7 @@ private fun DrawerPanel(
                         accent = iconAccent,
                     )
                     DrawerMenuRow(
-                        icon = Icons.Outlined.SwapHoriz,
+                        icon = Icons.Outlined.AltRoute,
                         label = stringResource(R.string.menu_image_route),
                         trailing = stringResource(imageRouteMode.labelRes()),
                         onClick = onImageRouteClick,

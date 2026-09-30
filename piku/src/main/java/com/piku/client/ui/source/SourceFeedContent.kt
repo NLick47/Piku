@@ -76,7 +76,6 @@ import coil3.compose.AsyncImage
 import com.piku.client.ui.common.LoaderDots
 import com.piku.client.ui.common.RankBadge
 import com.piku.client.ui.common.feedThumbUrl
-import com.piku.client.ui.common.labelRes
 import com.piku.client.ui.common.WorkCard
 import com.piku.client.ui.home.BackToTopFab
 import com.piku.client.ui.home.CategoryEntry
@@ -88,7 +87,6 @@ import com.piku.client.ui.home.LOAD_MORE_NEAR_END
 import com.piku.client.ui.home.LiquidGlassBackdrop
 import com.piku.client.ui.home.RefreshNoticeBar
 import com.piku.client.ui.home.SearchMenuButton
-import com.piku.client.ui.home.SourceChip
 import com.piku.client.ui.home.SkeletonGrid
 import com.piku.client.ui.home.TabBand
 import com.piku.client.ui.home.ThumbnailPrefetchEffect
@@ -115,7 +113,6 @@ internal fun SourceFeedContent(
     onTabBand: (TabBand) -> Unit,
     onOpenDrawer: () -> Unit,
     onSearchClick: () -> Unit,
-    onSourceClick: () -> Unit,
     updateBanner: GitHubRelease?,
     onOpenUpdate: () -> Unit,
     onDismissUpdateBanner: () -> Unit,
@@ -200,10 +197,6 @@ internal fun SourceFeedContent(
                         onMenuClick = onOpenDrawer,
                         enabled = menuEnabled,
                         dark = dark,
-                    )
-                    SourceChip(
-                        labelRes = state.source.labelRes(),
-                        onClick = onSourceClick,
                     )
                     Spacer(Modifier.weight(1f))
                     SearchMenuButton(onClick = onSearchClick, dark = dark)

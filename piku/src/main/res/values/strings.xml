@@ -672,9 +672,9 @@
     <string name="image_route_relay">中转</string>
 
     <string name="home_source_poipiku">Poipiku</string>
-    <string name="home_source">发现页数据源</string>
-    <string name="home_source_select_title">选择数据源</string>
-    <string name="home_source_select_hint">只作用于发现页，搜索、收藏、历史不跟着切</string>
+    <string name="home_source">首页源</string>
+    <string name="home_source_select_title">选择首页源</string>
+    <string name="home_source_select_hint">只作用于首页，搜索、收藏、历史不跟着切</string>
     <string name="home_source_pixiv">Pixiv</string>
     <string name="pixiv_hint_daily">每日更新</string>
     <string name="pixiv_hint_weekly">每周一更新</string>
