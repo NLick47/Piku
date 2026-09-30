@@ -299,7 +299,7 @@ class DoHDnsRoutingTest {
 
     @Test
     fun builtInAddressesCoverOurOwnHostsSoPoisonedOrExpiredDnsCannotStrandUs() {
-        val hosts = listOf("www.pixiv.net", "i.pximg.net", "piku-img.pages.dev")
+        val hosts = listOf("www.pixiv.net", "i.pximg.net")
 
         hosts.forEach { host ->
             val ips = DoHDns.STATIC_ADDRESSES[host]

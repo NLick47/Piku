@@ -11,6 +11,7 @@ import retrofit2.http.Query
 
 object ApiConfig {
     const val BASE_URL = "https://poipiku.com/"
+    const val PIKU_USER_AGENT = "Piku/0.1.0 (Android)"
 }
 
 @Serializable

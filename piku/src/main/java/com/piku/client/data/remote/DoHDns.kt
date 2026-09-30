@@ -18,16 +18,6 @@ import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 
-/**
- * 仅向 OkHttp 返回完成真实 TLS 握手和证书校验的业务域名地址。
- *
- * 最近成功地址会写入 SharedPreferences。进程重启后的首次请求先验证这些地址；
- * 300ms 内没有成功地址时，系统 DNS 与 DoH 才会并行解析并参与 TLS 竞速。
- *
- * 选谁、给几条、失败的地址多久能再试，交给 [AddressHealth] 与 [AddressSelector]；
- * 这里只负责编排（竞速、去重、持久化）。一次 lookup 返回的是**有序候选**，
- * 赢家在最先，其余已知地址作备选，OkHttp 在同一次请求内就能换 IP。
- */
 class DoHDns internal constructor(
     private val prefs: SharedPreferences,
     private val clock: () -> Long = System::currentTimeMillis,
@@ -46,6 +36,13 @@ class DoHDns internal constructor(
                 OkHttpClient.Builder()
                     .connectTimeout(DOH_TIMEOUT_MS, TimeUnit.MILLISECONDS)
                     .readTimeout(DOH_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                    .addInterceptor { chain ->
+                        chain.proceed(
+                            chain.request().newBuilder()
+                                .header("User-Agent", ApiConfig.PIKU_USER_AGENT)
+                                .build(),
+                        )
+                    }
                     .build(),
             )
             .url(url.toHttpUrl())
@@ -72,7 +69,12 @@ class DoHDns internal constructor(
 
     /** 自建 DoH（CF→CF 的 cloudflare-dns.com）：名单末尾，也是竞速全灭后的最后一问 */
     private val workerSource by lazy {
-        dohSource(WORKER_SOURCE_NAME, WORKER_DOH_URL, listOf("172.66.44.124", "172.66.47.132"))
+        dohSource(WORKER_SOURCE_NAME, WORKER_DOH_URL, PIKU_RELAY_ADDRESSES)
+    }
+
+
+    private val workerDoh by lazy {
+        DohSource(WORKER_DOH_URL, PIKU_RELAY_ADDRESSES.map { InetAddress.getByName(it) })
     }
 
     /**
@@ -93,6 +95,19 @@ class DoHDns internal constructor(
     }
 
     internal fun sourceNamesFor(hostname: String): List<String> = sourcesFor(hostname).map { sourceName(it) }
+
+    private val workerResolved = ConcurrentHashMap<String, Pair<Long, List<String>>>()
+
+    fun workerResolve(hostname: String): List<String> {
+        workerResolved[hostname]?.let { (at, ips) ->
+            if (clock() - at < WORKER_RESOLVE_TTL_MS && ips.isNotEmpty()) return ips
+        }
+        val ips = runCatching { workerDoh.client.lookup(hostname) }
+            .getOrDefault(emptyList())
+            .mapNotNull { it.hostAddress }
+        if (ips.isNotEmpty()) workerResolved[hostname] = clock() to ips
+        return ips
+    }
 
     private val winners = ConcurrentHashMap<String, WinnerEntry>()
     private val inflight = ConcurrentHashMap<String, CompletableFuture<List<InetAddress>>>()
@@ -387,6 +402,7 @@ class DoHDns internal constructor(
     ): InetAddress? {
         val candidates = addresses.distinct().filterNot { health.isOnProbation(hostname, it) }
         if (candidates.isEmpty()) return null
+        if (isPixivDomain(hostname)) return candidates.first()
 
         val verified = CompletableFuture<InetAddress?>()
         val remaining = AtomicInteger(candidates.size)
@@ -542,16 +558,19 @@ class DoHDns internal constructor(
             "pic-relay.cyou",
         )
 
-        /** pixiv 侧完全不走系统 DNS：污染答案是假地址，只会白花一次探测 */
         val PIXIV_DOMAINS = listOf("pixiv.net", "pximg.net")
-
         val STATIC_ADDRESSES = mapOf(
             "www.pixiv.net" to listOf("172.64.145.17", "104.18.42.239"),
+            "app-api.pixiv.net" to listOf("172.64.145.17", "104.18.42.239"),
             "i.pximg.net" to listOf("210.140.139.129", "210.140.139.133", "210.140.139.134"),
-            "piku-img.pages.dev" to listOf("172.66.44.124", "172.66.47.132"),
         )
 
-        const val WORKER_DOH_URL = "https://piku-img.pages.dev/dns-query"
+        const val WORKER_RESOLVE_TTL_MS = 10 * 60 * 1000L
+
+        const val WORKER_DOH_URL = "https://pic-relay.cyou/dns-query"
+
+        val PIKU_RELAY_ADDRESSES = listOf("172.67.193.18", "104.21.73.233")
+
         const val WORKER_SOURCE_NAME = "自建"
         const val STATIC_SOURCE_NAME = "内置固定 IP"
 

@@ -32,6 +32,8 @@ import com.piku.client.data.remote.UploadApi
 import com.piku.client.data.remote.ech.EchCallFactory
 import com.piku.client.data.remote.pixiv.PixivApi
 import com.piku.client.data.remote.pixiv.PixivApiConfig
+import com.piku.client.data.remote.pixiv.PixivAppApi
+import com.piku.client.data.remote.pixiv.PixivAppConfig
 import com.piku.client.data.remote.translation.LlmChatApi
 import dagger.Module
 import dagger.Provides
@@ -205,14 +207,8 @@ object NetworkModule {
     @Singleton
     fun providePoipikuApi(retrofit: Retrofit): PoipikuApi = retrofit.create(PoipikuApi::class.java)
 
-    /**
-     * pixiv 的传输：走原生 ECH 通道（TLS1.3 + ECH + HTTP/2），**刻意不带**
-     * cookieJar / RefererInterceptor / 图片中转 —— 主 client 会把 poipiku 的会话 cookie 一起发出去。
-     * 地址只用内置固定 IP：pixiv 不问系统 DNS，投毒答案没用。
-     *
-     * 鉴权头从 pixiv 登录插件自己的存储里取（[PixivAuthStore]），**只对 app-api 主机生效**：
-     * poipiku 的 cookie / 鉴权不经过这里，pixiv 的令牌也不会漏到网页接口上去。
-     */
+    // pixiv 走原生 ECH 通道 刻意不带 cookieJar/Referer/图片中转 免得 poipiku 会话漏过去
+    // 鉴权头只对该 app-api 主机生效 pixiv 令牌不漏到网页接口
     @Provides
     @Singleton
     @Named("pixiv")
@@ -233,7 +229,9 @@ object NetworkModule {
         return EchCallFactory(
             echConfig = { echConfigStore.currentOrFetch(ECH_CONFIG_WAIT_MS) },
             endpoints = { host ->
+                // 静态表优先 其次问自建 DoH 拿到就信 最后才做明文探测兜底
                 DoHDns.STATIC_ADDRESSES[host]
+                    ?: doHDns.workerResolve(host).takeIf { it.isNotEmpty() }
                     ?: runCatching { doHDns.lookup(host).mapNotNull { it.hostAddress } }
                         .getOrDefault(emptyList())
             },
@@ -285,6 +283,21 @@ object NetworkModule {
     @Singleton
     fun providePixivApi(@Named("pixiv") retrofit: Retrofit): PixivApi =
         retrofit.create(PixivApi::class.java)
+
+    @Provides
+    @Singleton
+    @Named("pixivApp")
+    fun providePixivAppRetrofit(@Named("pixiv") client: Call.Factory, json: Json): Retrofit =
+        Retrofit.Builder()
+            .baseUrl(PixivAppConfig.BASE_URL)
+            .callFactory(client)
+            .addConverterFactory(LenientJsonConverterFactory(json))
+            .build()
+
+    @Provides
+    @Singleton
+    fun providePixivAppApi(@Named("pixivApp") retrofit: Retrofit): PixivAppApi =
+        retrofit.create(PixivAppApi::class.java)
 
     @Provides
     @Singleton
@@ -433,7 +446,7 @@ object NetworkModule {
 
     private const val GITHUB_API_BASE_URL = "https://api.github.com/"
     private const val TRANSLATE_PLACEHOLDER_BASE_URL = "https://localhost/"
-    private const val USER_AGENT = "Piku/0.1.0 (Android)"
+    private val USER_AGENT = ApiConfig.PIKU_USER_AGENT
 
     /** pixiv 的网页接口对 UA 敏感，用桌面 Chrome 的 UA */
     /** 冷启动第一次请求最多等这么久取 ECH 配置 */
