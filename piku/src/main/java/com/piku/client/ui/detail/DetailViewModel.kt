@@ -38,8 +38,7 @@ import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkDetail
 import com.piku.client.ui.common.FeedbackChannel
 import com.piku.client.domain.model.mergeTranslatedFields
-import com.piku.client.domain.model.WorkKey
-import com.piku.client.domain.model.WorkSource
+import com.piku.client.domain.model.key
 import com.piku.client.domain.usecase.LoadWorkDetailUseCase
 import com.piku.client.domain.usecase.LoadWorkFullImagesUseCase
 import com.piku.client.domain.usecase.ObserveAuthStatusUseCase
@@ -307,7 +306,7 @@ class DetailViewModel @Inject constructor(
             shareUrl = "https://poipiku.com/$authorId/$workId.html",
             guideVisible = showBottomGuide,
             imageHintVisible = showImageHint,
-            novelProgressPercent = settingsRepository.getNovelProgress(workId),
+            novelProgressPercent = settingsRepository.getNovelProgress(work.key),
             canTranslate = translationRepository.hasTextModel(),
         ),
     )
@@ -370,12 +369,12 @@ class DetailViewModel @Inject constructor(
 
     /** 保存该作品的阅读进度（百分比 0~100） */
     fun saveNovelProgress(percent: Int) {
-        settingsRepository.setNovelProgress(workId, percent)
+        settingsRepository.setNovelProgress(work.key, percent)
     }
 
     /** 保存图集的阅读进度（页码 1 起）：收藏夹据此在卡片上画进度条 */
     fun saveImageProgress(page: Int) {
-        settingsRepository.setImageProgress(workId, page)
+        settingsRepository.setImageProgress(work.key, page)
     }
 
     /** 调整阅读器字号（持久化） */
@@ -429,7 +428,7 @@ class DetailViewModel @Inject constructor(
         // 注意：图区「翻译图片」提示的标记不在这里写，见 [consumeImageHint]
         viewModelScope.launch {
             observeFavoriteIdsUseCase().collect { ids ->
-                _uiState.update { it.copy(isFavorite = WorkKey(WorkSource.POIPIKU, workId.toString()) in ids) }
+                _uiState.update { it.copy(isFavorite = work.key in ids) }
             }
         }
         viewModelScope.launch {
@@ -444,7 +443,7 @@ class DetailViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            favoriteRepository.observeWorkFolderIds(WorkKey(WorkSource.POIPIKU, workId.toString())).collect { folderIds ->
+            favoriteRepository.observeWorkFolderIds(work.key).collect { folderIds ->
                 _uiState.update { it.copy(workFavoriteFolderIds = folderIds) }
             }
         }

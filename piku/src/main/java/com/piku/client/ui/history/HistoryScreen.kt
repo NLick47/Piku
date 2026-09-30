@@ -81,8 +81,8 @@ import com.piku.client.domain.model.HistoryItem
 import com.piku.client.domain.model.HistoryTimeRange
 import com.piku.client.domain.model.key
 import com.piku.client.domain.model.Work
+import com.piku.client.ui.source.SourceOpenViewModel
 import com.piku.client.ui.source.SourceWorkOpenHost
-import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.model.WorkKey
 import com.piku.client.ui.common.LoaderDots
 import com.piku.client.ui.common.PikuBackButton
@@ -121,6 +121,7 @@ fun HistoryScreen(
     onWorkClick: (Work) -> Unit,
 ) {
     val viewModel: HistoryViewModel = hiltViewModel()
+    val sourceOpen: SourceOpenViewModel = hiltViewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val dark = LocalDarkTheme.current
     val isTablet = LocalConfiguration.current.screenWidthDp >= 600
@@ -232,8 +233,8 @@ fun HistoryScreen(
                                         },
                                         onToggleFavorite = viewModel::toggleFavorite,
                                         onClick = { work ->
-                                            // poipiku 作品走主壳详情路由，其余源交给通用打开入口
-                                            if (work.source == WorkSource.POIPIKU) onWorkClick(work)
+                                            // 去向由源自己声明：主壳详情页承载的直接进，其余交给通用打开入口
+                                            if (sourceOpen.opensInNativeShell(work)) onWorkClick(work)
                                             else openHostWork = work
                                         },
                                     )

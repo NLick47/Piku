@@ -17,6 +17,7 @@ import com.piku.client.data.repository.PixivRepository
 import com.piku.client.data.repository.pixivTotalPages
 import com.piku.client.data.repository.toWork
 import com.piku.client.domain.source.SourceFacetStyle
+import com.piku.client.domain.source.SourceAuthorOpen
 import kotlinx.coroutines.test.runTest
 import okhttp3.ResponseBody.Companion.toResponseBody
 import retrofit2.HttpException
@@ -236,6 +237,14 @@ class PixivContentSourceTest {
         )
 
         assertEquals(listOf(Triple("weekly", "manga", 1)), api.calls)
+    }
+
+    /** 作者区出站到 pixiv 用户页：与详情页作者行的去向一致 */
+    @Test
+    fun authorPageOpensPixivUserInBrowser() {
+        val open = source(FakeApi()).authorPage(work(7))
+
+        assertEquals(SourceAuthorOpen.External("https://www.pixiv.net/users/7"), open)
     }
 
     /** 声明形态：五条流 = 四个登录门 + 榜单名次流；周期/内容两组维度只属于榜单 */

@@ -22,6 +22,7 @@ import com.piku.client.R
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.key
+import com.piku.client.domain.source.SourceAuthorOpen
 import com.piku.client.domain.source.SourceRegistry
 import com.piku.client.domain.source.SourceWorkOpen
 import com.piku.client.ui.theme.PikuColors
@@ -39,12 +40,19 @@ class SourceOpenViewModel @Inject constructor(
     val adultEnabled: StateFlow<Boolean> = settingsRepository.showAdultContent
 
     fun open(work: Work): SourceWorkOpen = sourceRegistry.byId(work.source).open(work)
+
+    /** 这一源的作品是否由主壳详情页承载；是的话调用方直接走自家详情路由 */
+    fun opensInNativeShell(work: Work): Boolean = open(work) is SourceWorkOpen.NativeDetail
+
+    /** 点作者的去向；null = 本源没有作者页，作者区不可点 */
+    fun authorPage(work: Work): SourceAuthorOpen? = sourceRegistry.byId(work.source).authorPage(work)
 }
 
 /**
- * 「按作品所属源打开」的统一入口：非 poipiku 作品在收藏/历史等跨源列表里点击时用它。
+ * 「按作品所属源打开」的统一入口：非主壳详情的作品在收藏/历史等跨源列表里点击时用它。
  * 打开方式由源自己的 [SourceWorkOpen] 声明决定——应用内看图器或跳外部浏览器；
- * poipiku 作品不进这里，它继续走主壳的专属详情路由（登录门/R-18 门/密码门都在那条链路里）。
+ * 声明 [SourceWorkOpen.NativeDetail] 的作品该走主壳详情路由，调用方先用
+ * [SourceOpenViewModel.opensInNativeShell] 问过，真到了这里只把浮层收掉。
  */
 @Composable
 internal fun SourceWorkOpenHost(
@@ -56,6 +64,8 @@ internal fun SourceWorkOpenHost(
     val context = LocalContext.current
     val adultEnabled by viewModel.adultEnabled.collectAsState()
     when (val open = viewModel.open(work)) {
+        SourceWorkOpen.NativeDetail -> LaunchedEffect(work.key) { onDismiss() }
+
         is SourceWorkOpen.External -> LaunchedEffect(work.key) {
             runCatching {
                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(open.url)))

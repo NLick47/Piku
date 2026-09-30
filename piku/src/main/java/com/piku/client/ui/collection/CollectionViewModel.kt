@@ -91,7 +91,7 @@ data class CollectionUiState(
     val undoCount: Int = 0,
     val deleteRequest: FolderDeleteRequest? = null,
     /** 全量阅读进度快照：给收藏夹卡片画进度条 */
-    val progress: Map<Long, ReadingProgress> = emptyMap(),
+    val progress: Map<WorkKey, ReadingProgress> = emptyMap(),
     /** 当前操作作品的已有归属：打开「添加到…」面板时用它标出已添加的收藏夹 */
     val actionWorkFolderIds: Set<Long> = emptySet(),
     /** 从放大镜进入「全部收藏」时置位，工具栏聚焦一次检索框后立刻消费掉 */

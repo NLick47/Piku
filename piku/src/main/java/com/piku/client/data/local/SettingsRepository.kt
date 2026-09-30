@@ -4,6 +4,7 @@ import android.content.SharedPreferences
 import com.piku.client.data.repository.SyncResult
 import com.piku.client.data.repository.SyncState
 import com.piku.client.domain.model.FolderSort
+import com.piku.client.domain.model.WorkKey
 import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.model.ImageRouteMode
 import com.piku.client.domain.model.ReadingProgress
@@ -419,54 +420,59 @@ class SettingsRepository @Inject constructor(
      * 读取某作品的阅读进度（百分比 0~100，0 表示无进度）。
      * 用百分比而非像素偏移存储，避免字号调整后滚动位置错位。
      */
-    fun getNovelProgress(workId: Long): Int =
-        prefs.getInt(novelProgressKey(workId), 0).coerceIn(0, 100)
+    fun getNovelProgress(key: WorkKey): Int =
+        prefs.getInt(novelProgressKey(key), 0).coerceIn(0, 100)
 
     /** 保存某作品的阅读进度（百分比 0~100） */
-    fun setNovelProgress(workId: Long, percent: Int) {
+    fun setNovelProgress(key: WorkKey, percent: Int) {
         val clamped = percent.coerceIn(0, 100)
-        prefs.edit().putInt(novelProgressKey(workId), clamped).apply()
-        publishProgress(workId) { it.copy(novelPercent = clamped) }
+        prefs.edit().putInt(novelProgressKey(key), clamped).apply()
+        publishProgress(key) { it.copy(novelPercent = clamped) }
     }
 
     /** 图集读到第几页（1 起，0 表示无进度） */
-    fun getImageProgress(workId: Long): Int =
-        prefs.getInt(imageProgressKey(workId), 0).coerceAtLeast(0)
+    fun getImageProgress(key: WorkKey): Int =
+        prefs.getInt(imageProgressKey(key), 0).coerceAtLeast(0)
 
     /**
      * 保存图集页码（"上次看到第几页"，往回翻也会更新）。
      * 页码没变时直接返回，避免同一页反复触发写入与状态更新。
      */
-    fun setImageProgress(workId: Long, page: Int) {
+    fun setImageProgress(key: WorkKey, page: Int) {
         if (page <= 0) return
-        if (prefs.getInt(imageProgressKey(workId), 0) == page) return
-        prefs.edit().putInt(imageProgressKey(workId), page).apply()
-        publishProgress(workId) { it.copy(imagePage = page) }
+        if (prefs.getInt(imageProgressKey(key), 0) == page) return
+        prefs.edit().putInt(imageProgressKey(key), page).apply()
+        publishProgress(key) { it.copy(imagePage = page) }
     }
 
-    private fun novelProgressKey(workId: Long): String = "$KEY_NOVEL_PROGRESS_PREFIX$workId"
+    /** 键里的作品身份带源：两源同号的作品各有各的进度 */
+    private fun novelProgressKey(key: WorkKey): String =
+        "$KEY_NOVEL_PROGRESS_PREFIX${key.source.name}_${key.workId}"
 
-    private fun imageProgressKey(workId: Long): String = "$KEY_IMAGE_PROGRESS_PREFIX$workId"
+    private fun imageProgressKey(key: WorkKey): String =
+        "$KEY_IMAGE_PROGRESS_PREFIX${key.source.name}_${key.workId}"
 
     /**
-     * 全量阅读进度快照（workId → 进度）。收藏夹要靠它给卡片画进度条，
+     * 全量阅读进度快照（作品 → 进度）。收藏夹要靠它给卡片画进度条，
      * 逐个作品去读 SharedPreferences 太散，启动时扫一遍、之后按需更新。
      */
     private val _readingProgress = MutableStateFlow(loadReadingProgress())
-    val readingProgress: StateFlow<Map<Long, ReadingProgress>> = _readingProgress.asStateFlow()
+    val readingProgress: StateFlow<Map<WorkKey, ReadingProgress>> = _readingProgress.asStateFlow()
 
-    private fun loadReadingProgress(): Map<Long, ReadingProgress> {
-        val result = mutableMapOf<Long, ReadingProgress>()
-        prefs.all.forEach { (key, value) ->
-            val isNovel = key.startsWith(KEY_NOVEL_PROGRESS_PREFIX)
-            val isImage = key.startsWith(KEY_IMAGE_PROGRESS_PREFIX)
+    private fun loadReadingProgress(): Map<WorkKey, ReadingProgress> {
+        migrateLegacyProgressKeys()
+        val result = mutableMapOf<WorkKey, ReadingProgress>()
+        prefs.all.forEach { (prefKey, value) ->
+            val isNovel = prefKey.startsWith(KEY_NOVEL_PROGRESS_PREFIX)
+            val isImage = prefKey.startsWith(KEY_IMAGE_PROGRESS_PREFIX)
             if (!isNovel && !isImage) return@forEach
-            val workId = key
-                .removePrefix(if (isNovel) KEY_NOVEL_PROGRESS_PREFIX else KEY_IMAGE_PROGRESS_PREFIX)
-                .toLongOrNull() ?: return@forEach
+            val suffix = prefKey.removePrefix(
+                if (isNovel) KEY_NOVEL_PROGRESS_PREFIX else KEY_IMAGE_PROGRESS_PREFIX,
+            )
+            val key = parseProgressKey(suffix) ?: return@forEach
             val amount = (value as? Int)?.takeIf { it > 0 } ?: return@forEach
-            val current = result[workId] ?: ReadingProgress()
-            result[workId] = if (isNovel) {
+            val current = result[key] ?: ReadingProgress()
+            result[key] = if (isNovel) {
                 current.copy(novelPercent = amount)
             } else {
                 current.copy(imagePage = amount)
@@ -475,11 +481,49 @@ class SettingsRepository @Inject constructor(
         return result
     }
 
-    private fun publishProgress(workId: Long, transform: (ReadingProgress) -> ReadingProgress) {
-        val current = _readingProgress.value[workId] ?: ReadingProgress()
+    /**
+     * 只有 poipiku 的年代进度键不带源段（novel_progress_123）。
+     * 搬成带源的新键再读：留着老键会让一部作品有两把键，而阅读器/看图器只读新键
+     * （升级后接着读会从头开始），两把并存时快照取值还得看遍历顺序。
+     */
+    private fun migrateLegacyProgressKeys() {
+        val rewrites = mutableMapOf<String, String>()
+        prefs.all.forEach { (prefKey, _) ->
+            val isNovel = prefKey.startsWith(KEY_NOVEL_PROGRESS_PREFIX)
+            val isImage = prefKey.startsWith(KEY_IMAGE_PROGRESS_PREFIX)
+            if (!isNovel && !isImage) return@forEach
+            val suffix = prefKey.removePrefix(
+                if (isNovel) KEY_NOVEL_PROGRESS_PREFIX else KEY_IMAGE_PROGRESS_PREFIX,
+            )
+            // 有源段的是新键；裸数字才是老键（旧版只可能写数字 id）
+            if (suffix.indexOf('_') >= 0 || suffix.toLongOrNull() == null) return@forEach
+            val key = WorkKey(WorkSource.POIPIKU, suffix)
+            rewrites[prefKey] = if (isNovel) novelProgressKey(key) else imageProgressKey(key)
+        }
+        if (rewrites.isEmpty()) return
+        val edit = prefs.edit()
+        rewrites.forEach { (legacyKey, newKey) ->
+            // 升级后已经写过新键就以新键为准，只把老键清掉
+            if (!prefs.contains(newKey)) edit.putInt(newKey, prefs.getInt(legacyKey, 0))
+            edit.remove(legacyKey)
+        }
+        edit.apply()
+    }
+
+    /** 「源_workId」 */
+    private fun parseProgressKey(suffix: String): WorkKey? {
+        val separator = suffix.indexOf('_')
+        if (separator < 0) return null
+        val source = WorkSource.entries.firstOrNull { it.name == suffix.substring(0, separator) }
+            ?: return null
+        return WorkKey(source, suffix.substring(separator + 1))
+    }
+
+    private fun publishProgress(key: WorkKey, transform: (ReadingProgress) -> ReadingProgress) {
+        val current = _readingProgress.value[key] ?: ReadingProgress()
         val next = transform(current)
         if (next == current) return
-        _readingProgress.value = _readingProgress.value + (workId to next)
+        _readingProgress.value = _readingProgress.value + (key to next)
     }
 
     fun recordUpdateCheck() {

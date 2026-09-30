@@ -43,9 +43,17 @@ internal object FavoriteSyncMerge {
         val deadFolders = mergedTombstones
             .filter { it.kind == SyncTombstone.KIND_FOLDER }
             .associate { it.folderName to it.deletedAt }
+        // 缺源的墓碑（更新版客户端写入的未知源）本地无从删，不进表
         val deadMemberships = mergedTombstones
-            .filter { it.kind == SyncTombstone.KIND_MEMBERSHIP }
-            .associate { membershipKey(it.folderName, it.source, it.workId) to it.deletedAt }
+            .mapNotNull { tombstone ->
+                val source = tombstone.source
+                if (tombstone.kind != SyncTombstone.KIND_MEMBERSHIP || source == null) {
+                    null
+                } else {
+                    membershipKey(tombstone.folderName, source, tombstone.workId) to tombstone.deletedAt
+                }
+            }
+            .toMap()
 
         val mergedFolders = mergeFolders(localFolders, remote?.folders.orEmpty(), deadFolders, now)
         val mergedMemberships = mergeMemberships(
@@ -65,6 +73,7 @@ internal object FavoriteSyncMerge {
         )
 
         return FavoriteSyncData(
+            version = FavoriteSyncData.CURRENT_VERSION,
             syncedAt = now,
             folders = mergedFolders,
             works = mergedWorks,
@@ -125,6 +134,10 @@ internal object FavoriteSyncMerge {
     ): List<SyncFolder> {
         val localByName = local.associateBy { it.name }
         val remoteByName = remote.associateBy { it.name }
+        // 夹 id 是各设备自己的自增值，两台设备各自建夹就会重号；merged 结果里必须去重，
+        // 否则接收方按 id 插夹撞主键，id→名字 的映射（备份路径）也会认错夹
+        val usedIds = mutableSetOf<Long>()
+        var freshId = now
         return (localByName.keys + remoteByName.keys).mapNotNull { name ->
             val localFolder = localByName[name]
             val remoteFolder = remoteByName[name]
@@ -134,8 +147,10 @@ internal object FavoriteSyncMerge {
             ).let { if (it == Long.MAX_VALUE) now else it }
             // 删除优先；改名也走这里：旧名成墓碑，新名照常合并
             if (deadFolders[name]?.let { createdAt <= it } == true) return@mapNotNull null
+            var id = remoteFolder?.id ?: localFolder?.id ?: now
+            while (!usedIds.add(id)) id = freshId++
             SyncFolder(
-                id = remoteFolder?.id ?: localFolder?.id ?: now,
+                id = id,
                 name = name,
                 isDefault = localFolder?.isDefault == true || remoteFolder?.isDefault == true,
                 createdAt = createdAt,

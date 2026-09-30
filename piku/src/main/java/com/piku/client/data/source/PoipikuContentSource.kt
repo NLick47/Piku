@@ -5,6 +5,7 @@ import com.piku.client.domain.model.PoipikuCategory
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.source.ContentSource
+import com.piku.client.domain.source.SourceAuthorOpen
 import com.piku.client.domain.source.SourceFacet
 import com.piku.client.domain.source.SourceFacetGroup
 import com.piku.client.domain.source.SourceFacetStyle
@@ -57,9 +58,10 @@ class PoipikuContentSource @Inject constructor(
         return works.map { list -> SourcePage(items = list) }
     }
 
-    override fun open(work: Work): SourceWorkOpen =
-        // poipiku 作品的站内详情由主壳专属路径打开，不经此契约；这里给契约一个事实上的 web 兜底
-        SourceWorkOpen.External("https://poipiku.com/${work.authorId}/${work.id}.html")
+    override fun open(work: Work): SourceWorkOpen = SourceWorkOpen.NativeDetail
+
+    // 作者页是主壳的「用户作品」页（它按 poipiku 用户 id 取稿）
+    override fun authorPage(work: Work): SourceAuthorOpen = SourceAuthorOpen.NativeDetail
 
     override suspend fun workPages(work: Work): Result<List<SourceWorkPage>> =
         // poipiku 的看图走专属详情（登录门/R-18 门/密码门都在那套链路里），不经通用查看器

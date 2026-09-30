@@ -3,15 +3,18 @@ package com.piku.client.data.repository
 import com.piku.client.data.local.FavoriteEntity
 import com.piku.client.data.local.FavoriteFolderEntity
 import com.piku.client.data.local.FavoriteMembershipEntity
+import com.piku.client.data.remote.PikuJson
 import com.piku.client.domain.model.FavoriteSyncData
 import com.piku.client.domain.model.SyncFolder
 import com.piku.client.domain.model.SyncMembership
 import com.piku.client.domain.model.SyncTombstone
 import com.piku.client.domain.model.SyncWork
 import com.piku.client.domain.model.WorkSource
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -82,6 +85,7 @@ class FavoriteSyncMergeTest {
         memberships: List<SyncMembership> = emptyList(),
         tombstones: List<SyncTombstone> = emptyList(),
     ) = FavoriteSyncData(
+        version = FavoriteSyncData.CURRENT_VERSION,
         syncedAt = now - 60_000,
         folders = folders,
         works = works,
@@ -361,19 +365,46 @@ class FavoriteSyncMergeTest {
     }
 
     @Test
-    fun legacyPayloadWithoutSourceDecodesAsPoipiku() {
-        // 旧版本上传的 JSON 没有 source 字段：解出来必须落在 poipiku，老备份不受影响
-        val legacy = """
-            {"version":1,"syncedAt":7,"folders":[],"works":[{"workId":"123","authorId":1,
-            "title":"t","authorName":"a","thumbnailUrl":"","authorAvatarUrl":null,
-            "imageCount":1,"r18":false,"addedAt":5}],"memberships":[{"folderId":1,
-            "workId":"123","addedAt":5}],"tombstones":[]}
-        """.trimIndent()
-        val parsed = Json { ignoreUnknownKeys = true; explicitNulls = false; isLenient = true }
-            .decodeFromString<FavoriteSyncData>(legacy)
+    fun folderIdsStayUniqueWhenDevicesNumberThemIndependently() {
+        // 本机的「同人」是 2 号，另一台设备上新建的「漫画」也是 2 号：
+        // 合并结果里两个夹共用一个 id，接收方按 id 插夹就会撞主键（INSERT OR ABORT），
+        // 而且 id→名字 的映射（内容备份路径）会认错夹
+        val result = merge(
+            localFolders = listOf(folder(1L, "默认"), folder(2L, "同人")),
+            // 本机上次同步上传的没有「漫画」；云端这份是另一台设备的合并结果，两个夹都是 2 号
+            remote = payload(
+                folders = listOf(remoteFolder(1L, "默认"), remoteFolder(2L, "同人"), remoteFolder(2L, "漫画")),
+            ),
+            snapshot = payload(folders = listOf(remoteFolder(1L, "默认"), remoteFolder(2L, "同人"))),
+        )
 
-        assertEquals(WorkSource.POIPIKU.name, parsed.works.single().source)
-        assertEquals(WorkSource.POIPIKU.name, parsed.memberships.single().source)
+        assertEquals(listOf("默认", "同人", "漫画"), result.folders.map { it.name })
+        assertEquals("合并结果里的 id 不能重号", 3, result.folders.map { it.id }.distinct().size)
+    }
+
+    @Test
+    fun payloadWithoutSourceIsRejected() {
+        // source 是必填：缺字段的旧备份直接解析失败（按首次同步处理），
+        // 而不是静默落进 poipiku 的命名空间——那会把别的源的作品写到错的键上
+        val withoutSource = """
+            {"version":2,"syncedAt":7,"folders":[],"works":[{"workId":"123","authorId":1,
+            "title":"t","authorName":"a","thumbnailUrl":"","authorAvatarUrl":null,
+            "imageCount":1,"r18":false,"addedAt":5}],"memberships":[],"tombstones":[]}
+        """.trimIndent()
+
+        assertThrows(SerializationException::class.java) {
+            PikuJson.decodeFromString<FavoriteSyncData>(withoutSource)
+        }
+    }
+
+    @Test
+    fun wireFormatCarriesVersionAndSource() {
+        // 版本号必须真的写进云端文件：它一旦被当作"等于默认值"省略，
+        // 以后判别版本就只能靠猜，本机默认值会被当成文件里的值
+        val encoded = PikuJson.encodeToString(payload(works = listOf(remoteWork("123"))))
+
+        assertTrue("版本号要在文件里", "\"version\":${FavoriteSyncData.CURRENT_VERSION}" in encoded)
+        assertTrue("每条作品都要写源", "\"source\":\"POIPIKU\"" in encoded)
     }
 }
 
@@ -389,10 +420,18 @@ class FavoriteSyncSnapshotStoreTest {
         val file = tempFile()
         val store = FavoriteSyncSnapshotStore(file, json)
         val data = FavoriteSyncData(
+            version = FavoriteSyncData.CURRENT_VERSION,
             syncedAt = 42L,
             folders = listOf(SyncFolder(1L, "A", isDefault = true, createdAt = 7L)),
             works = emptyList(),
-            memberships = listOf(SyncMembership(folderId = 1L, workId = "w1", addedAt = 5L)),
+            memberships = listOf(
+                SyncMembership(
+                    folderId = 1L,
+                    source = WorkSource.POIPIKU.name,
+                    workId = "w1",
+                    addedAt = 5L,
+                ),
+            ),
             tombstones = listOf(SyncTombstone.folder("B", 9L)),
         )
 

@@ -487,6 +487,7 @@ fun HomeScreen(
                         updateBanner = state.updateBanner,
                         onOpenUpdate = onOpenUpdate,
                         onDismissUpdateBanner = viewModel::dismissUpdateBanner,
+                        onNativeDetail = onWorkClick,
                     )
                 } else if (isTablet) {
                     Row(Modifier.fillMaxSize()) {

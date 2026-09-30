@@ -1,4 +1,6 @@
 package com.piku.client.ui.collection
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -120,9 +122,10 @@ import com.piku.client.domain.model.FavoriteFolder
 import com.piku.client.domain.model.FolderSort
 import com.piku.client.domain.model.ReadingProgress
 import com.piku.client.domain.model.Work
+import com.piku.client.domain.source.SourceAuthorOpen
+import com.piku.client.ui.source.SourceOpenViewModel
 import com.piku.client.ui.source.SourceWorkOpenHost
 import com.piku.client.domain.model.key
-import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.model.WorkKey
 import com.piku.client.ui.common.LoaderDots
 import com.piku.client.ui.common.PikuBackButton
@@ -158,10 +161,23 @@ fun CollectionScreen(
     dark: Boolean = LocalDarkTheme.current,
 ) {
     val viewModel: CollectionViewModel = hiltViewModel()
+    val sourceOpen: SourceOpenViewModel = hiltViewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val isTablet = LocalConfiguration.current.screenWidthDp >= 600
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
+    // 作者区去向按源声明分流：主壳的「用户作品」页 / 出站到源的作者页 / 本源没有作者页则不可点
+    val authorClickFor: (Work) -> ((Work) -> Unit)? = { work ->
+        when (val open = sourceOpen.authorPage(work)) {
+            SourceAuthorOpen.NativeDetail -> onAuthorClick
+            is SourceAuthorOpen.External -> { _ ->
+                runCatching {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(open.url)))
+                }
+            }
+            null -> null
+        }
+    }
 
     FeedbackHost(channel = viewModel.feedback, snackbarHostState = snackbarHostState)
 
@@ -202,10 +218,10 @@ fun CollectionScreen(
                 isTablet = isTablet,
                 onBack = viewModel::backToFolders,
                 onWorkClick = { work ->
-                    // poipiku 作品走主壳详情路由，其余源交给通用打开入口
-                    if (work.source == WorkSource.POIPIKU) onWorkClick(work) else openHostWork = work
+                    // 去向由源自己声明：主壳详情页承载的直接进，其余交给通用打开入口
+                    if (sourceOpen.opensInNativeShell(work)) onWorkClick(work) else openHostWork = work
                 },
-                onAuthorClick = onAuthorClick,
+                authorClickFor = authorClickFor,
                 onEnterSelection = viewModel::enterSelection,
                 onExitSelection = viewModel::exitSelection,
                 onToggleSelect = viewModel::toggleSelection,
@@ -869,7 +885,8 @@ private fun FolderDetailContent(
     isTablet: Boolean,
     onBack: () -> Unit,
     onWorkClick: (Work) -> Unit,
-    onAuthorClick: (Work) -> Unit,
+    /** 一件作品的作者区回调；null = 本源没有作者页，作者区不可点 */
+    authorClickFor: (Work) -> ((Work) -> Unit)?,
     onEnterSelection: (WorkKey?) -> Unit,
     onExitSelection: () -> Unit,
     onToggleSelect: (WorkKey) -> Unit,
@@ -1108,7 +1125,8 @@ private fun FolderDetailContent(
                                         workCount = group.works.size,
                                         dark = dark,
                                         onClick = {
-                                            group.works.firstOrNull()?.let(onAuthorClick)
+                                            group.works.firstOrNull()
+                                                ?.let { work -> authorClickFor(work)?.invoke(work) }
                                         },
                                     )
                                     Spacer(Modifier.height(10.dp))
@@ -1120,14 +1138,14 @@ private fun FolderDetailContent(
                                 work = work,
                                 selected = work.key in state.selectedIds,
                                 selectionMode = state.selectionMode,
-                                progress = (if (work.source == WorkSource.POIPIKU) state.progress[work.id] else null).toCardProgress(work),
+                                progress = state.progress[work.key].toCardProgress(work),
                                 dark = dark,
                                 onOpen = { onWorkClick(work) },
                                 // 长按直接进多选并带上这张：单件操作走底部工具条，
                                 // 不再为一件作品弹一个四选项的面板
                                 onLongPress = { onEnterSelection(work.key) },
                                 onToggleSelect = { onToggleSelect(work.key) },
-                                onAuthorClick = onAuthorClick,
+                                onAuthorClick = authorClickFor(work),
                             )
                         }
                     }
@@ -1162,7 +1180,7 @@ private fun SelectableWorkCard(
     onOpen: () -> Unit,
     onLongPress: () -> Unit,
     onToggleSelect: () -> Unit,
-    onAuthorClick: (Work) -> Unit,
+    onAuthorClick: ((Work) -> Unit)?,
 ) {
     val shape = RoundedCornerShape(12.dp)
     val reduced = rememberReducedMotion()

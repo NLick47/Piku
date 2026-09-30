@@ -4,20 +4,29 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class FavoriteSyncData(
-    val version: Int = 1,
+    /** 协议版本，写在云端文件里；[CURRENT_VERSION] 之外的版本不合并 */
+    val version: Int,
     val syncedAt: Long,
     val folders: List<SyncFolder>,
     val works: List<SyncWork>,
     val memberships: List<SyncMembership>,
     val tombstones: List<SyncTombstone> = emptyList(),
-)
+) {
+    companion object {
+        /**
+         * 协议版本。2 起 source 是必填字段，1 及更早的云端文件不再兼容，
+         * 同步时按"首次同步"处理（云端那份会被本机覆盖）。
+         */
+        const val CURRENT_VERSION = 2
+    }
+}
 
 @Serializable
 data class SyncTombstone(
     val kind: String,
     val folderName: String,
-    /** 缺省按 poipiku 解：旧版本备份的 JSON 没有这个字段 */
-    val source: String = WorkSource.POIPIKU.name,
+    /** 只有 MEMBERSHIP 墓碑有源；FOLDER 墓碑不带 */
+    val source: String? = null,
     val workId: String = "",
     val deletedAt: Long,
 ) {
@@ -28,7 +37,7 @@ data class SyncTombstone(
             "$kind\u0000$folderName"
         }
 
-    /** 未知源（更新版本客户端写入的）给 null：本地无从删除 */
+    /** 未知源（更新版本客户端写入的）给 null：本地无从删除；FOLDER 墓碑也没有源 */
     val workSource: WorkSource?
         get() = WorkSource.entries.firstOrNull { it.name == source }
 
@@ -54,8 +63,7 @@ data class SyncFolder(
 
 @Serializable
 data class SyncWork(
-    /** 缺省按 poipiku 解：旧版本备份的 JSON 没有这个字段 */
-    val source: String = WorkSource.POIPIKU.name,
+    val source: String,
     val workId: String,
     val authorId: Long,
     val title: String,
@@ -76,8 +84,7 @@ data class SyncWork(
 @Serializable
 data class SyncMembership(
     val folderId: Long,
-    /** 缺省按 poipiku 解：旧版本备份的 JSON 没有这个字段 */
-    val source: String = WorkSource.POIPIKU.name,
+    val source: String,
     val workId: String,
     val addedAt: Long,
 ) {

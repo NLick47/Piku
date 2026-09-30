@@ -80,6 +80,10 @@ interface FavoriteFolderDao {
     @Query("SELECT folderId FROM favorite_memberships WHERE source = :source AND workId = :workId")
     suspend fun folderIdsForWork(source: WorkSource, workId: String): List<Long>
 
+    /** 全部收藏夹的"取一次"版本：同步写回时要把云端的夹名对到本机的 id 上 */
+    @Query("SELECT * FROM favorite_folders")
+    suspend fun allFoldersOnce(): List<FavoriteFolderEntity>
+
     @Query("SELECT DISTINCT source, workId FROM favorite_memberships")
     fun observeAllFavoriteIds(): Flow<List<FavoriteIdRow>>
 

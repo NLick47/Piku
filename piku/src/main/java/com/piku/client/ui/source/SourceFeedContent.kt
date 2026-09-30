@@ -119,6 +119,8 @@ internal fun SourceFeedContent(
     updateBanner: GitHubRelease?,
     onOpenUpdate: () -> Unit,
     onDismissUpdateBanner: () -> Unit,
+    /** 声明 [SourceWorkOpen.NativeDetail] 的源：壳里点开要交给主壳详情路由 */
+    onNativeDetail: (Work) -> Unit,
     viewModel: SourceFeedViewModel = hiltViewModel(),
 ) {
     val state by viewModel.ui.collectAsState()
@@ -257,6 +259,7 @@ internal fun SourceFeedContent(
                                         )
                                     }
                                     SourceWorkOpen.InAppViewer -> detailWork = work
+                                    SourceWorkOpen.NativeDetail -> onNativeDetail(work)
                                 }
                             },
                         )

@@ -32,6 +32,12 @@ interface ContentSource {
     /** 点开一个作品的去向，外壳只执行不解释 */
     fun open(work: Work): SourceWorkOpen
 
+    /**
+     * 点作者的去向；null = 本源在 App 里没有作者页，外壳把作者区做成不可点。
+     * 不声明就只能按别的源的作者页开：拿本源的作者 id 去查另一站，看到的是别人的作品。
+     */
+    fun authorPage(work: Work): SourceAuthorOpen? = null
+
     /** 应用内看图的作品页列表；只有声明 [SourceWorkOpen.InAppViewer] 的源会被调到 */
     suspend fun workPages(work: Work): Result<List<SourceWorkPage>>
 
@@ -68,8 +74,22 @@ data class SourceWorkPage(
 )
 
 sealed interface SourceWorkOpen {
+    /**
+     * 主壳的专属详情页承载这一源的作品（poipiku 的登录门/R-18 门/密码门/小说阅读器都在里面）。
+     * 外壳据此把点击交给自家详情路由，不去碰 [External] 那个兜底地址。
+     */
+    data object NativeDetail : SourceWorkOpen
+
     data object InAppViewer : SourceWorkOpen
     data class External(val url: String) : SourceWorkOpen
+}
+
+/** 作者的页面的去向：只有「主壳自己的作者页」和「出站到源的作者页」两种，点作者没有第三方可能 */
+sealed interface SourceAuthorOpen {
+    /** 主壳的「用户作品」页承载这一源的作者 */
+    data object NativeDetail : SourceAuthorOpen
+
+    data class External(val url: String) : SourceAuthorOpen
 }
 
 data class SourceFeed(

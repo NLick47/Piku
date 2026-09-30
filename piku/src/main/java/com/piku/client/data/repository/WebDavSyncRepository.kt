@@ -12,20 +12,19 @@ import com.piku.client.data.local.FavoriteMembershipEntity
 import com.piku.client.data.local.HistoryDao
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.data.local.toSyncWork
-import com.piku.client.data.remote.PoipikuApi
 import com.piku.client.data.remote.WebDavClient
 import com.piku.client.data.remote.WebDavException
-import com.piku.client.data.remote.WorkDetailParser
 import com.piku.client.domain.model.FavoriteSyncData
 import com.piku.client.domain.model.SyncFolder
 import com.piku.client.domain.model.SyncMembership
 import com.piku.client.domain.model.SyncTombstone
 import com.piku.client.domain.model.WorkKey
 import com.piku.client.domain.model.WorkSource
+import com.piku.client.domain.source.BackupWork
+import com.piku.client.domain.source.SourceContentBackup
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -34,7 +33,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.coroutineContext
-import kotlin.random.Random
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
@@ -67,15 +65,47 @@ private sealed interface SyncConfig {
 }
 
 /**
- * 解析远端文件扩展名：URL path 末段的扩展名，默认为 .jpg。
- * WebDAV 上同一作品多张图共享 workId，所以不再区分 1.jpg / 2.jpg，
- * 按 hash 后缀 / 顺序号写到 piku/{folder}/image/{workId}_{index}.{ext}。
+ * 内容备份在 WebDAV 上的路径。源进路径：各源 id 空间互不相通，
+ * 不同源的同一个 workId 必须落到不同文件，否则后写的那份会把前一份顶掉。
  */
-private fun imageExtension(url: String, index: Int): String {
+internal object WebDavBackupPath {
+    fun image(folderName: String, key: WorkKey, index: Int, ext: String): String =
+        "piku/${folderSegment(folderName)}/image/${stem(key)}_$index.$ext"
+
+    fun text(folderName: String, key: WorkKey): String =
+        "piku/${folderSegment(folderName)}/text/${stem(key)}.txt"
+
+    private fun stem(key: WorkKey): String = "${key.source.name}_${key.workId}"
+
+    private fun folderSegment(folderName: String): String {
+        val cleaned = folderName.map { if (it.isISOControl() || it in UNSAFE) '_' else it }
+            .joinToString("")
+        return if (cleaned == "." || cleaned == "..") "_" else cleaned
+    }
+
+    private val UNSAFE = charArrayOf('/', '\\', '?', '#', '%')
+}
+
+/** 从图片 URL 猜扩展名，认不出就按 jpg */
+private fun imageExtension(url: String): String {
     val ext = url.substringAfterLast('.', missingDelimiterValue = "")
         .substringBefore('?')
         .lowercase()
     return if (ext.length in 1..5 && ext.all { it.isLetterOrDigit() }) ext else "jpg"
+}
+
+internal enum class RemoteVerdict { USABLE, UNUSABLE, FROM_NEWER }
+
+internal fun remoteVerdict(remoteVersion: Int, currentVersion: Int): RemoteVerdict = when {
+    remoteVersion > currentVersion -> RemoteVerdict.FROM_NEWER
+    remoteVersion == currentVersion -> RemoteVerdict.USABLE
+    else -> RemoteVerdict.UNUSABLE
+}
+
+private sealed interface RemotePayload {
+    data class Usable(val data: FavoriteSyncData) : RemotePayload
+    data object Unusable : RemotePayload
+    data object FromNewerVersion : RemotePayload
 }
 
 @Singleton
@@ -85,13 +115,16 @@ class WebDavSyncRepository @Inject constructor(
     private val favoriteFolderDao: FavoriteFolderDao,
     private val historyDao: HistoryDao,
     private val settingsRepository: SettingsRepository,
-    private val poipikuApi: PoipikuApi,
-    private val authRepository: AuthRepository,
+    /** 各源的内容备份实现，按源查表；没实现的源只同步元数据 */
+    contentBackups: Set<@JvmSuppressWildcards SourceContentBackup>,
     @Named("main") private val mainClient: OkHttpClient,
     private val json: Json,
     @ApplicationContext private val appContext: Context,
     private val database: AppDatabase,
 ) {
+
+    private val contentBackupBySource: Map<WorkSource, SourceContentBackup> =
+        contentBackups.associateBy { it.source }
 
     private val _syncState = MutableStateFlow(SyncState.IDLE)
     val syncState: StateFlow<SyncState> = _syncState.asStateFlow()
@@ -179,7 +212,15 @@ class WebDavSyncRepository @Inject constructor(
         val merged = if (skipMerge) {
             buildLocalOnlySyncData(localFolders, localFavorites, allMemberships)
         } else {
-            val remoteData = downloadRemoteData(url, credentials)
+            val remote = downloadRemoteData(url, credentials)
+            if (remote is RemotePayload.FromNewerVersion) {
+                Log.w(TAG, "executeSync: remote payload from a newer client, skipping sync")
+                return SyncResult(
+                    state = SyncState.FAILED,
+                    error = "云端备份由更新版本的 Piku 写入，本次同步已跳过；升级后再试",
+                )
+            }
+            val remoteData = (remote as? RemotePayload.Usable)?.data
             val snapshot = snapshotStore.read()
             Log.d(TAG, "executeSync: remoteData=${if (remoteData == null) "null" else "folders=${remoteData.folders.size} works=${remoteData.works.size}"} snapshot=${snapshot != null}")
             FavoriteSyncMerge.merge(
@@ -278,22 +319,24 @@ class WebDavSyncRepository @Inject constructor(
     private suspend fun downloadRemoteData(
         url: String,
         credentials: String,
-    ): FavoriteSyncData? {
+    ): RemotePayload {
         return try {
             val bytes = webDavClient.downloadFile(url, "piku/favorites.json", credentials)
-                ?: return null
-            val text = String(bytes, Charsets.UTF_8)
-            val parsed = json.decodeFromString<FavoriteSyncData>(text)
-            if (parsed.version != CURRENT_VERSION) {
-                Log.w(TAG, "remote favorites.json version mismatch: ${parsed.version}, treating as first sync")
-                return null
+                ?: return RemotePayload.Unusable
+            val parsed = json.decodeFromString<FavoriteSyncData>(String(bytes, Charsets.UTF_8))
+            when (remoteVerdict(parsed.version, FavoriteSyncData.CURRENT_VERSION)) {
+                RemoteVerdict.USABLE -> RemotePayload.Usable(parsed)
+                RemoteVerdict.FROM_NEWER -> RemotePayload.FromNewerVersion
+                RemoteVerdict.UNUSABLE -> {
+                    Log.w(TAG, "remote favorites.json version ${parsed.version}, treating as first sync")
+                    RemotePayload.Unusable
+                }
             }
-            parsed
         } catch (e: WebDavException) {
             throw e
         } catch (e: Exception) {
             Log.w(TAG, "downloadRemoteData failed, treating as first sync", e)
-            null
+            RemotePayload.Unusable
         }
     }
 
@@ -303,6 +346,7 @@ class WebDavSyncRepository @Inject constructor(
         localFavorites: List<FavoriteEntity>,
         localMemberships: List<Pair<Long, FavoriteMembershipEntity>>,
     ): FavoriteSyncData = FavoriteSyncData(
+        version = FavoriteSyncData.CURRENT_VERSION,
         syncedAt = System.currentTimeMillis(),
         folders = localFolders.map { folder ->
             SyncFolder(
@@ -350,9 +394,9 @@ class WebDavSyncRepository @Inject constructor(
             for (folder in data.folders) {
                 val existing = favoriteFolderDao.folderByName(folder.name)
                 if (existing == null) {
+                    // id 交给本机分配：云端的 id 是别的设备上的自增值，照抄会撞本机同号的另一个夹
                     favoriteFolderDao.insertFolder(
                         FavoriteFolderEntity(
-                            id = folder.id,
                             name = folder.name,
                             createdAt = folder.createdAt,
                             isDefault = folder.isDefault,
@@ -391,14 +435,16 @@ class WebDavSyncRepository @Inject constructor(
                 )
             }
 
-            for (membership in data.memberships) {
-                val source = membership.workSource ?: continue
+            // 归属要落到本机自己的夹上：夹跨设备按名字对齐，云端的 folderId 会在外键上炸
+            val localFolderIdByName = favoriteFolderDao.allFoldersOnce().associate { it.name to it.id }
+            for (target in FavoriteSyncWritePlan.membershipTargets(data, localFolderIdByName)) {
+                val source = target.membership.workSource ?: continue
                 favoriteFolderDao.upsertMembership(
                     FavoriteMembershipEntity(
-                        folderId = membership.folderId,
+                        folderId = target.folderId,
                         source = source,
-                        workId = membership.workId,
-                        addedAt = membership.addedAt,
+                        workId = target.membership.workId,
+                        addedAt = target.membership.addedAt,
                     ),
                 )
             }
@@ -409,184 +455,94 @@ class WebDavSyncRepository @Inject constructor(
 
     /**
      * 备份已浏览作品的内容到 WebDAV。
-     * 扁平化路径：piku/{folder}/image/{workId}_{index}.{ext} + piku/{folder}/text/{workId}.txt
-     * 多文件夹作品按每个 (folder, work) 对都备份一份。
+     * 扁平化路径：piku/{夹}/image/{源}_{workId}_{序号}.{ext} + piku/{夹}/text/{源}_{workId}.txt
+     * 多收藏夹作品按每个 (夹, 作品) 对都备份一份。
+     *
+     * 内容怎么取由各源的 [SourceContentBackup] 负责，没实现的源整源跳过；
+     * 历史与归属都按 (source, workId) 配对，两源同号的作品不会互相顶掉。
      */
     private suspend fun backupViewedContent(
         url: String,
         credentials: String,
         data: FavoriteSyncData,
     ): Int {
-        // 内容备份走 poipiku 接口，只处理 poipiku 源的作品；
-        // 历史与收藏都按 (source, workId) 配对，避免两源数字 id 撞车误判「已浏览」
         val historyKeys = historyDao.observeSince(0).first()
             .mapTo(mutableSetOf()) { WorkKey(it.source, it.workId) }
-        // 本地 contentBackedUp = false 才需要尝试，避免对已经备份过的作品再发请求。
+        // 本地 contentBackedUp = false 才需要尝试，避免对已经备份过的作品再发请求
         val localBackedUp = favoriteDao.observeAll().first()
             .associate { WorkKey(it.source, it.workId) to it.contentBackedUp }
-        val worksToBackup = data.works.filter {
-            it.workSource == WorkSource.POIPIKU &&
-                WorkKey(WorkSource.POIPIKU, it.workId) in historyKeys &&
-                !(localBackedUp[WorkKey(WorkSource.POIPIKU, it.workId)] ?: it.contentBackedUp)
-        }
-        if (worksToBackup.isEmpty()) return 0
-
         val workFolders = buildWorkFolderIndex(data)
 
         var backedUpCount = 0
-
-        for ((index, work) in worksToBackup.withIndex()) {
-            if (index > 0) politeFetchGap()
+        for (work in data.works) {
+            val source = work.workSource ?: continue
+            val backup = contentBackupBySource[source] ?: continue
+            val key = WorkKey(source, work.workId)
+            if (key !in historyKeys) continue
+            if (localBackedUp[key] ?: work.contentBackedUp) continue
+            val folders = workFolders[key].orEmpty()
+            if (folders.isEmpty()) continue
             coroutineContext.ensureActive()
+
             try {
-                val workId = work.workId.toLongOrNull() ?: continue
-                val folders = workFolders[work.workId].orEmpty()
-                if (folders.isEmpty()) continue
+                val content = backup.content(
+                    BackupWork(
+                        workId = work.workId,
+                        authorId = work.authorId,
+                        imageCount = work.imageCount,
+                    ),
+                ) ?: continue
 
-                val workDetail = fetchWorkDetail(work.authorId, workId, work.imageCount) ?: continue
                 var anyUploaded = false
-
-                // 使用原图 URL，如果没有原图则降级使用缩略图
-                val imageUrls = workDetail.fullImageUrls.ifEmpty { workDetail.detail.imageUrls }
-                if (imageUrls.isNotEmpty()) {
-                    if (backupImages(url, credentials, folders, workId, imageUrls)) {
-                        anyUploaded = true
-                    }
+                if (content.images.isNotEmpty() && backupImages(url, credentials, folders, key, content.images)) {
+                    anyUploaded = true
                 }
-                if (workDetail.detail.novelText.isNotBlank()) {
-                    if (backupNovelText(url, credentials, folders, workId, workDetail.detail.novelText)) {
-                        anyUploaded = true
-                    }
+                if (content.novelText.isNotBlank() &&
+                    backupNovelText(url, credentials, folders, key, content.novelText)
+                ) {
+                    anyUploaded = true
                 }
 
                 if (anyUploaded) {
-                    favoriteDao.setContentBackedUp(WorkSource.POIPIKU, work.workId, true)
+                    favoriteDao.setContentBackedUp(source, work.workId, true)
                     backedUpCount++
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: WebDavException) {
-                Log.w(TAG, "backupViewedContent webdav error for work ${work.workId}", e)
+                Log.w(TAG, "backupViewedContent webdav error for work $key", e)
             } catch (e: Exception) {
-                Log.w(TAG, "backupViewedContent: failed for work ${work.workId}", e)
+                Log.w(TAG, "backupViewedContent: failed for work $key", e)
             }
         }
 
         return backedUpCount
     }
 
-    private fun buildWorkFolderIndex(data: FavoriteSyncData): Map<String, List<String>> {
+    /** (源, workId) → 该作品要写进哪些收藏夹目录 */
+    private fun buildWorkFolderIndex(data: FavoriteSyncData): Map<WorkKey, List<String>> {
         val folderNamesById = data.folders.associate { it.id to it.name }
         return data.memberships
-            .filter { it.workSource == WorkSource.POIPIKU }
-            .groupBy { it.workId }
-            .mapValues { (_, ms) ->
-                ms.mapNotNull { folderNamesById[it.folderId] }
+            .mapNotNull { membership ->
+                val source = membership.workSource ?: return@mapNotNull null
+                val folderName = folderNamesById[membership.folderId] ?: return@mapNotNull null
+                WorkKey(source, membership.workId) to folderName
             }
-    }
-
-    private suspend fun politeFetchGap() {
-        delay(FETCH_GAP_MIN_MS + fetchGapRandom.nextLong(FETCH_GAP_JITTER_MS))
-    }
-
-    private data class WorkDetailWithFullImages(
-        val detail: com.piku.client.domain.model.WorkDetail,
-        val fullImageUrls: List<String>,
-    )
-
-    private suspend fun fetchWorkDetail(
-        authorId: Long,
-        workId: Long,
-        imageCount: Int,
-    ): WorkDetailWithFullImages? {
-        return try {
-            val html = poipikuApi.getWorkDetail(authorId, workId).string()
-            val detail = WorkDetailParser.parse(html)
-            if (detail.passwordProtected && detail.imageUrls.isEmpty() && detail.novelText.isBlank()) {
-                return null
-            }
-
-            // 单图直接获取原图，跳过 showAppendFile
-            if (imageCount <= 1) {
-                val fullImageUrls = fetchMainFullImage(authorId, workId)
-                return WorkDetailWithFullImages(
-                    detail = detail.copy(novelText = ""),
-                    fullImageUrls = fullImageUrls,
-                )
-            }
-
-            // 多图作品：调用 append API 获取所有图片（主图 + 追加图）
-            delay(APPEND_FILE_GAP_MS)
-            val appendResp = poipikuApi.showAppendFile(authorId, workId, "", 0, -1)
-            val appendUrls = if (appendResp.result_num > 0) {
-                WorkDetailParser.extractImageUrls(appendResp.html)
-            } else emptyList()
-            val novelText = WorkDetailParser.extractNovelText(appendResp.html)
-            val mergedUrls = ThumbnailResolver.mergeWorkImages(detail.imageUrls, appendUrls)
-
-            // 获取原图 URL
-            val fullImageUrls = fetchFullImageUrls(authorId, workId, appendResp.html)
-
-            WorkDetailWithFullImages(
-                detail = detail.copy(imageUrls = mergedUrls, novelText = novelText),
-                fullImageUrls = fullImageUrls,
-            )
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.w(TAG, "fetchWorkDetail failed for $authorId/$workId", e)
-            null
-        }
-    }
-
-    private suspend fun fetchMainFullImage(authorId: Long, workId: Long): List<String> {
-        delay(ILLUST_DETAIL_GAP_MS)
-        val resp = runCatching { poipikuApi.showIllustDetail(authorId, workId, -1, "") }.getOrNull()
-        if (resp == null || resp.error_code != 0) {
-            Log.d(TAG, "fetchMainFullImage failed: error_code=${resp?.error_code} work=$authorId/$workId")
-            return emptyList()
-        }
-        return WorkDetailParser.extractFullImageUrls(resp.html)
-    }
-
-    private suspend fun fetchFullImageUrls(
-        authorId: Long,
-        workId: Long,
-        appendHtml: String,
-    ): List<String> {
-        if (!authRepository.isLoggedIn()) return emptyList()
-
-        val fullUrls = mutableListOf<String>()
-
-        // 获取主图原图
-        val mainUrls = fetchMainFullImage(authorId, workId)
-        fullUrls.addAll(mainUrls)
-
-        val ads = runCatching { WorkDetailParser.extractAppendAds(appendHtml) }.getOrDefault(emptyList())
-        for (ad in ads) {
-            delay(ILLUST_DETAIL_GAP_MS)
-            val resp = runCatching { poipikuApi.showIllustDetail(authorId, workId, ad, "") }.getOrNull()
-            if (resp != null && resp.error_code == 0) {
-                val urls = WorkDetailParser.extractFullImageUrls(resp.html)
-                urls.firstOrNull()?.let { fullUrls.add(it) }
-            }
-        }
-        return fullUrls
+            .groupBy({ it.first }, { it.second })
     }
 
     private suspend fun backupImages(
         baseUrl: String,
         credentials: String,
         folderNames: List<String>,
-        workId: Long,
+        key: WorkKey,
         imageUrls: List<String>,
     ): Boolean {
         var uploaded = false
         for ((index, imageUrl) in imageUrls.withIndex()) {
-            val ext = imageExtension(imageUrl, index)
-            val fileName = "${workId}_${index}.$ext"
+            val ext = imageExtension(imageUrl)
             for (folderName in folderNames) {
-                val path = "piku/$folderName/image/$fileName"
+                val path = WebDavBackupPath.image(folderName, key, index, ext)
                 if (webDavClient.exists(baseUrl, path, credentials)) continue
                 if (downloadAndUpload(baseUrl, credentials, imageUrl, path)) {
                     uploaded = true
@@ -600,12 +556,12 @@ class WebDavSyncRepository @Inject constructor(
         baseUrl: String,
         credentials: String,
         folderNames: List<String>,
-        workId: Long,
+        key: WorkKey,
         text: String,
     ): Boolean {
         var uploaded = false
         for (folderName in folderNames) {
-            val path = "piku/$folderName/text/$workId.txt"
+            val path = WebDavBackupPath.text(folderName, key)
             if (webDavClient.exists(baseUrl, path, credentials)) continue
             webDavClient.uploadFile(
                 baseUrl = baseUrl,
@@ -652,26 +608,10 @@ class WebDavSyncRepository @Inject constructor(
         }
     }
 
-    private val fetchGapRandom = Random(System.nanoTime())
-
     companion object {
         private const val TAG = "WebDavSyncRepo"
 
         /** 同步快照文件名 */
         private const val SNAPSHOT_FILE_NAME = "favorite_sync_snapshot.json"
-
-        /** 抓取 poipiku 详情页之间的固定间隔基数 */
-        private const val FETCH_GAP_MIN_MS = 1_200L
-
-        /** 叠加的随机抖动上限，与基数合计 1.2~3.0 秒 */
-        private const val FETCH_GAP_JITTER_MS = 1_800L
-
-        /** 同域连续请求（详情页 → showAppendFile）之间的最小间隔 */
-        private const val APPEND_FILE_GAP_MS = 800L
-
-        /** showIllustDetail 请求之间的最小间隔 */
-        private const val ILLUST_DETAIL_GAP_MS = 800L
-
-        const val CURRENT_VERSION = 1
     }
 }
