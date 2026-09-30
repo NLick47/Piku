@@ -30,6 +30,7 @@ import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.GTranslate
+import androidx.compose.material.icons.outlined.Tag
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -83,6 +84,7 @@ fun SheetSectionLabel(text: String, color: Color) {
 internal fun AiTranslateSheet(
     state: HomeUiState,
     onToggleEnabled: (Boolean) -> Unit,
+    onToggleTagsAuto: (Boolean) -> Unit,
     onSelectModel: (ModelEntry) -> Unit,
     onSelectNovelModel: (ModelEntry?) -> Unit,
     onSelectImageModel: (ModelEntry?) -> Unit,
@@ -111,6 +113,7 @@ internal fun AiTranslateSheet(
             AiTranslateMainPage(
                 state = state,
                 onToggleEnabled = onToggleEnabled,
+                onToggleTagsAuto = onToggleTagsAuto,
                 onSelectModel = onSelectModel,
                 onSelectNovelModel = onSelectNovelModel,
                 onSelectImageModel = onSelectImageModel,
@@ -124,6 +127,7 @@ internal fun AiTranslateSheet(
 private fun AiTranslateMainPage(
     state: HomeUiState,
     onToggleEnabled: (Boolean) -> Unit,
+    onToggleTagsAuto: (Boolean) -> Unit,
     onSelectModel: (ModelEntry) -> Unit,
     onSelectNovelModel: (ModelEntry?) -> Unit,
     onSelectImageModel: (ModelEntry?) -> Unit,
@@ -213,6 +217,32 @@ private fun AiTranslateMainPage(
                 onCheckedChange = onToggleEnabled,
                 colors = themedSwitchColors(dark),
             )
+        }
+
+        // 子选项：总开关关掉时自动失效（随后整块收起），缩进以示从属
+        AnimatedVisibility(visible = state.aiTranslateEnabled) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 20.dp, top = 8.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { onToggleTagsAuto(!state.autoTranslateTags) }
+                    .padding(horizontal = 12.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.ai_translate_tags_auto),
+                    color = secondary,
+                    fontSize = 13.sp,
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(8.dp))
+                Switch(
+                    checked = state.autoTranslateTags,
+                    onCheckedChange = onToggleTagsAuto,
+                    colors = themedSwitchColors(dark),
+                )
+            }
         }
 
         Spacer(Modifier.height(18.dp))

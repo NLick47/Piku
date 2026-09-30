@@ -30,6 +30,7 @@ import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -39,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -56,9 +58,10 @@ import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkDetail
 import com.piku.client.domain.model.WorkStats
 import com.piku.client.ui.detail.ImagePager
-import com.piku.client.ui.detail.TranslateChip
-import com.piku.client.ui.detail.TranslateField
+import com.piku.client.ui.detail.HeadlineTranslateChip
+import com.piku.client.ui.detail.TagsTranslateChip
 import com.piku.client.ui.detail.linkify
+import com.piku.client.ui.detail.tagsTranslationShown
 import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.LoginTextSecondaryDark
 import com.piku.client.ui.theme.OverlayScrimHeavy
@@ -94,9 +97,15 @@ internal fun PixivDetailContent(
     translatedImages: Map<Int, Bitmap> = emptyMap(),
     onImageTranslateClick: ((Int) -> Unit)? = null,
     onPageChanged: ((Int) -> Unit)? = null,
-    translationAvailable: Boolean = false,
-    showTranslation: (TranslateField) -> Boolean = { false },
-    onToggleField: (TranslateField) -> Unit = {},
+    showTranslation: Boolean = false,
+    translating: Boolean = false,
+    onToggleTranslation: () -> Unit = {},
+    /** 长按 chip：换模型重翻 */
+    onRetranslate: () -> Unit = {},
+    /** 标签独立态：默认显示/懒翻译都由它驱动，与正文统一切换隔离 */
+    showTranslatedTags: Boolean = false,
+    tagsTranslating: Boolean = false,
+    onToggleTagsTranslation: () -> Unit = {},
     /** 底部相关作品；空列表时不渲染这一块 */
     related: List<Work> = emptyList(),
     onRelatedClick: (Work) -> Unit = {},
@@ -145,9 +154,13 @@ internal fun PixivDetailContent(
                 language = language,
                 onAuthorClick = onAuthorClick,
                 onTagClick = onTagClick,
-                translationAvailable = translationAvailable,
                 showTranslation = showTranslation,
-                onToggleField = onToggleField,
+                translating = translating,
+                onToggleTranslation = onToggleTranslation,
+                onRetranslate = onRetranslate,
+                showTranslatedTags = showTranslatedTags,
+                tagsTranslating = tagsTranslating,
+                onToggleTagsTranslation = onToggleTagsTranslation,
             )
             RelatedRow(works = related, onClick = onRelatedClick)
         }
@@ -163,9 +176,13 @@ private fun OverviewCard(
     language: AppLanguage,
     onAuthorClick: () -> Unit,
     onTagClick: (String) -> Unit,
-    translationAvailable: Boolean,
-    showTranslation: (TranslateField) -> Boolean,
-    onToggleField: (TranslateField) -> Unit,
+    showTranslation: Boolean,
+    translating: Boolean,
+    onToggleTranslation: () -> Unit,
+    onRetranslate: () -> Unit,
+    showTranslatedTags: Boolean,
+    tagsTranslating: Boolean,
+    onToggleTagsTranslation: () -> Unit,
 ) {
     val shape = RoundedCornerShape(16.dp)
     Column(
@@ -178,18 +195,17 @@ private fun OverviewCard(
     ) {
         TitleLine(
             detail = detail,
-            translationAvailable = translationAvailable,
             showTranslation = showTranslation,
-            onToggleField = onToggleField,
+            translating = translating,
+            onToggleTranslation = onToggleTranslation,
+            onRetranslate = onRetranslate,
         )
         Spacer(Modifier.height(10.dp))
         AuthorLine(detail = detail, stats = stats, onAuthorClick = onAuthorClick)
         DescriptionBlock(
             detail = detail,
             dark = dark,
-            translationAvailable = translationAvailable,
             showTranslation = showTranslation,
-            onToggleField = onToggleField,
         )
         if (stats?.hasCounts == true) {
             Spacer(Modifier.height(12.dp))
@@ -206,8 +222,10 @@ private fun OverviewCard(
         TagsBlock(
             detail = detail,
             dark = dark,
-            showTranslation = showTranslation,
+            showTranslation = showTranslatedTags,
+            tagsTranslating = tagsTranslating,
             onTagClick = onTagClick,
+            onToggleTranslation = onToggleTagsTranslation,
         )
     }
 }
@@ -215,14 +233,14 @@ private fun OverviewCard(
 @Composable
 private fun TitleLine(
     detail: WorkDetail,
-    translationAvailable: Boolean,
-    showTranslation: (TranslateField) -> Boolean,
-    onToggleField: (TranslateField) -> Unit,
+    showTranslation: Boolean,
+    translating: Boolean,
+    onToggleTranslation: () -> Unit,
+    onRetranslate: () -> Unit,
 ) {
     if (detail.title.isBlank()) return
-    val titleTranslated = showTranslation(TranslateField.TITLE)
     val titleText = detail.translated?.title
-        ?.takeIf { titleTranslated && it.isNotBlank() }
+        ?.takeIf { showTranslation && it.isNotBlank() }
         ?: detail.title
     Row(verticalAlignment = Alignment.Top) {
         Text(
@@ -233,13 +251,14 @@ private fun TitleLine(
             lineHeight = 24.sp,
             modifier = Modifier.weight(1f),
         )
-        if (translationAvailable && !detail.translated?.title.isNullOrBlank()) {
-            TranslateChip(
-                showTranslation = titleTranslated,
-                onClick = { onToggleField(TranslateField.TITLE) },
-                modifier = Modifier.padding(start = 6.dp, top = 2.dp),
-            )
-        }
+        // 恒显：没有译文时它是「点了去翻」的入口，不能等译文出现才给
+        HeadlineTranslateChip(
+            shown = showTranslation,
+            translating = translating,
+            onClick = onToggleTranslation,
+            onLongClick = onRetranslate,
+            modifier = Modifier.padding(start = 6.dp, top = 2.dp),
+        )
     }
 }
 
@@ -366,112 +385,65 @@ private fun MetaLine(stats: WorkStats?) {
     )
 }
 
-/**
- * 简介：超过三行折叠，展开/收起与译文 chip 同一行。
- * 标签的「原/译」也挂在这一行——标签收进卡片后，再单独占一行会和标签区割开。
- * 没有简介但标签有译文时这一行照样要出，所以简介 blank 不能整块 return。
- */
+/** 简介：超过三行折叠出「展开/收起」；原/译由标题行那颗 chip 统一切 */
 @Composable
 private fun DescriptionBlock(
     detail: WorkDetail,
     dark: Boolean,
-    translationAvailable: Boolean,
-    showTranslation: (TranslateField) -> Boolean,
-    onToggleField: (TranslateField) -> Unit,
+    showTranslation: Boolean,
 ) {
-    val hasDescription = detail.description.isNotBlank()
-    val tagsChipVisible = translationAvailable && !detail.translated?.tags.isNullOrEmpty()
-    if (!hasDescription && !tagsChipVisible) return
-    val descTranslated = showTranslation(TranslateField.DESCRIPTION)
+    if (detail.description.isBlank()) return
     val text = detail.translated?.description
-        ?.takeIf { descTranslated && it.isNotBlank() }
+        ?.takeIf { showTranslation && it.isNotBlank() }
         ?: detail.description
     var expanded by remember { mutableStateOf(false) }
     // 折叠态才量溢出：展开后 hasVisualOverflow 恒为 false，会误判成"没有更多"
     var overflowing by remember { mutableStateOf(false) }
-    val showMore = hasDescription && (overflowing || expanded)
-    val chipVisible = translationAvailable && !detail.translated?.description.isNullOrBlank()
-    if (hasDescription) {
-        Spacer(Modifier.height(10.dp))
-        Text(
-            text = linkify(text, dark) { _, _, _ -> },
-            color = PikuColors.textSecondary,
-            fontSize = 13.sp,
-            lineHeight = 20.sp,
-            maxLines = if (expanded) Int.MAX_VALUE else 3,
-            overflow = TextOverflow.Ellipsis,
-            onTextLayout = { result -> if (!expanded) overflowing = result.hasVisualOverflow },
-        )
-    }
-    if (!chipVisible && !tagsChipVisible && !showMore) return
-    if (!hasDescription) Spacer(Modifier.height(10.dp))
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = if (showMore) Arrangement.SpaceBetween else Arrangement.End,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        if (showMore) {
-            Text(
-                text = stringResource(
-                    if (expanded) R.string.detail_show_less else R.string.detail_show_more,
-                ),
-                color = PikuColors.textPrimary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier
-                    .padding(top = 4.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable { expanded = !expanded }
-                    .padding(vertical = 2.dp),
-            )
-        }
-        if (chipVisible) {
-            TranslateChip(
-                showTranslation = descTranslated,
-                onClick = { onToggleField(TranslateField.DESCRIPTION) },
-                modifier = Modifier.padding(top = 4.dp),
-            )
-        }
-        // 标签的「原/译」也挂在这一行：标签收进卡片后，再单独占一行会和标签区割开。
-        // 两颗 chip 长得一样，前面加「标签」二字才分得清谁切谁。
-        if (tagsChipVisible) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(start = 6.dp, top = 4.dp),
-            ) {
-                Text(
-                    text = stringResource(R.string.pixiv_tags_label),
-                    color = PikuColors.textFaint,
-                    fontSize = 10.sp,
-                )
-                TranslateChip(
-                    showTranslation = showTranslation(TranslateField.TAGS),
-                    onClick = { onToggleField(TranslateField.TAGS) },
-                )
-            }
-        }
-    }
+    Spacer(Modifier.height(10.dp))
+    Text(
+        text = linkify(text, dark) { _, _, _ -> },
+        color = PikuColors.textSecondary,
+        fontSize = 13.sp,
+        lineHeight = 20.sp,
+        maxLines = if (expanded) Int.MAX_VALUE else 3,
+        overflow = TextOverflow.Ellipsis,
+        onTextLayout = { result -> if (!expanded) overflowing = result.hasVisualOverflow },
+    )
+    if (!overflowing && !expanded) return
+    Text(
+        text = stringResource(
+            if (expanded) R.string.detail_show_less else R.string.detail_show_more,
+        ),
+        color = PikuColors.textPrimary,
+        fontSize = 13.sp,
+        fontWeight = FontWeight.Medium,
+        modifier = Modifier
+            .padding(top = 4.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .clickable { expanded = !expanded }
+            .padding(vertical = 2.dp),
+    )
 }
 
 /**
  * 标签：只读 chip，点一个去搜这个标签。
  * 不用 poipiku 那套带「+」的 TagFlow——pixiv 作品加不进个人标签，挂个点了没反应的按钮是噪音。
+ * 「原/译」独立于正文统一切换：chip 常驻（有文本模型才出），默认态由「自动翻译标签」设置决定。
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TagsBlock(
     detail: WorkDetail,
     dark: Boolean,
-    showTranslation: (TranslateField) -> Boolean,
+    showTranslation: Boolean,
+    tagsTranslating: Boolean,
     onTagClick: (String) -> Unit,
+    onToggleTranslation: () -> Unit,
 ) {
     if (detail.tags.isEmpty()) return
     Spacer(Modifier.height(12.dp))
-    val tagsTranslated = showTranslation(TranslateField.TAGS)
-    // 译文标签与原文一一对应；点击始终用原文，否则搜不到
-    val displayTags = detail.translated?.tags
-        ?.takeIf { tagsTranslated && it.size == detail.tags.size }
-        ?: detail.tags
+    val shown = tagsTranslationShown(showTranslation, detail.tags, detail.translated?.tags)
+    val displayTags = detail.translated?.tags?.takeIf { shown } ?: detail.tags
     val shape = RoundedCornerShape(12.dp)
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -490,6 +462,13 @@ private fun TagsBlock(
                     .padding(horizontal = 10.dp, vertical = 6.dp),
             )
         }
+        // 标签区恒有这颗 chip（标签非空即出）：有译文切原/译，无译文点了去翻
+        TagsTranslateChip(
+            shown = shown,
+            translating = tagsTranslating,
+            onClick = onToggleTranslation,
+            modifier = Modifier.align(Alignment.CenterVertically),
+        )
     }
 }
 

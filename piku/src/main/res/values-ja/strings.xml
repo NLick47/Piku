@@ -398,7 +398,8 @@
     <string name="ai_translate_state_on">オン</string>
     <string name="ai_translate_state_off">オフ</string>
     <string name="ai_translate_enable">自動翻訳</string>
-    <string name="ai_translate_auto_subtitle">投稿を開いたときに自動翻訳します</string>
+    <string name="ai_translate_auto_subtitle">作品を開いたときに自動翻訳します</string>
+    <string name="ai_translate_tags_auto">タグを自動翻訳</string>
     <string name="ai_translate_model">短文テキストモデル</string>
     <string name="ai_translate_novel_model">小説本文モデル</string>
     <string name="ai_translate_novel_model_empty">このリストに小説本文モデルがなく、本文は原文のままになります</string>
@@ -685,6 +686,5 @@
     <string name="pixiv_meta_posted">投稿 %1$s</string>
     <string name="pixiv_meta_pages">%1$d枚</string>
     <string name="pixiv_related_works">関連作品</string>
-    <string name="pixiv_tags_label">タグ</string>
     <string name="common_retry">再試行</string>
 </resources>

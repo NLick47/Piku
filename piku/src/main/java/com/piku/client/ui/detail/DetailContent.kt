@@ -41,6 +41,7 @@ import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.OutlinedTextField
@@ -58,6 +59,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -198,9 +200,15 @@ internal fun DetailContent(
     translatedImages: Map<Int, android.graphics.Bitmap> = emptyMap(),
     onImageTranslateClick: ((Int) -> Unit)? = null,
     onPageChanged: ((Int) -> Unit)? = null,
-    translationAvailable: Boolean = false,
-    showTranslation: (TranslateField) -> Boolean = { false },
-    onToggleField: (TranslateField) -> Unit = {},
+    showTranslation: Boolean = false,
+    translating: Boolean = false,
+    onToggleTranslation: () -> Unit = {},
+    /** 长按 chip：换模型重翻 */
+    onRetranslate: () -> Unit = {},
+    /** 标签独立态：默认显示/懒翻译都由它驱动，与正文统一切换隔离 */
+    showTranslatedTags: Boolean = false,
+    tagsTranslating: Boolean = false,
+    onToggleTagsTranslation: () -> Unit = {},
     /** 首次进入时，图区的图片翻译按钮自动展开一次文字说明 */
     autoExpandImageHint: Boolean = false,
     /** 提示真的展开出来时回调，供外部消耗「已展示过」的一次性标记 */
@@ -274,9 +282,7 @@ internal fun DetailContent(
                     detail = detail,
                     dark = dark,
                     translated = translated,
-                    translationAvailable = translationAvailable,
                     showTranslation = showTranslation,
-                    onToggleField = onToggleField,
                     onAuthorClick = onAuthorClick,
                     onRelatedWorkClick = onRelatedWorkClick,
                 )
@@ -288,9 +294,10 @@ internal fun DetailContent(
                 detail = detail,
                 dark = dark,
                 translated = translated,
-                translationAvailable = translationAvailable,
                 showTranslation = showTranslation,
-                onToggleField = onToggleField,
+                translating = translating,
+                onToggleTranslation = onToggleTranslation,
+                onRetranslate = onRetranslate,
                 onRelatedWorkClick = onRelatedWorkClick,
             )
             if (imageFirst) {
@@ -299,9 +306,7 @@ internal fun DetailContent(
                     detail = detail,
                     dark = dark,
                     translated = translated,
-                    translationAvailable = translationAvailable,
                     showTranslation = showTranslation,
-                    onToggleField = onToggleField,
                     onAuthorClick = onAuthorClick,
                     onRelatedWorkClick = onRelatedWorkClick,
                 )
@@ -310,23 +315,20 @@ internal fun DetailContent(
                 detail = detail,
                 dark = dark,
                 translated = translated,
-                translationAvailable = translationAvailable,
                 showTranslation = showTranslation,
-                onToggleField = onToggleField,
                 onRelatedWorkClick = onRelatedWorkClick,
-                // 通栏版面：展开行左右分站，短简介下 chip 不再孤立成一行
-                chipTrailing = imageFirst,
             )
             TagsSection(
                 detail = detail,
                 dark = dark,
                 translated = translated,
                 customTags = customTags,
+                showTranslation = showTranslatedTags,
+                tagsTranslating = tagsTranslating,
                 onTagClick = onTagClick,
                 onToggleCustomTag = onToggleCustomTag,
-                translationAvailable = translationAvailable,
-                showTranslation = showTranslation,
-                onToggleField = onToggleField,
+                onToggleTranslation = onToggleTagsTranslation,
+                // 通栏版面：chip 从标签流里摘出来右对齐独占一行，免得读成"一个没有 # 的标签"
                 chipTrailing = imageFirst,
             )
             if (detail.relatedWorks.isNotEmpty()) {
@@ -341,73 +343,45 @@ internal fun DetailContent(
     }
 }
 
-/** 只有该字段真有译文时才显示 chip，避免出现点了没反应的按钮 */
-private fun detailChipVisible(
-    translated: TranslatedFields?,
-    translationAvailable: Boolean,
-    field: TranslateField,
-): Boolean = translationAvailable && when (field) {
-    TranslateField.TITLE -> !translated?.title.isNullOrBlank()
-    TranslateField.DESCRIPTION -> !translated?.description.isNullOrBlank()
-    TranslateField.AUTHOR_PROFILE -> !translated?.authorProfile.isNullOrBlank()
-    TranslateField.TAGS -> !translated?.tags.isNullOrEmpty()
-    TranslateField.NOVEL -> !translated?.novelText.isNullOrBlank()
-}
-
-/** 作者行 + 作者简介 */
+/** 作者行 + 作者简介（原/译由标题行那颗 chip 统一切） */
 @Composable
 private fun AuthorSection(
     detail: WorkDetail,
     dark: Boolean,
     translated: TranslatedFields?,
-    translationAvailable: Boolean,
-    showTranslation: (TranslateField) -> Boolean,
-    onToggleField: (TranslateField) -> Unit,
+    showTranslation: Boolean,
     onAuthorClick: () -> Unit,
     onRelatedWorkClick: (Long, Long, String) -> Unit,
 ) {
     AuthorRow(detail = detail, dark = dark, onAuthorClick = onAuthorClick)
     if (detail.authorProfile.isNotBlank()) {
-        val profileTranslated = showTranslation(TranslateField.AUTHOR_PROFILE)
         val profileText = translated?.authorProfile
-            ?.takeIf { profileTranslated && it.isNotBlank() }
+            ?.takeIf { showTranslation && it.isNotBlank() }
             ?: detail.authorProfile
-        Row(
-            verticalAlignment = Alignment.Top,
+        Text(
+            text = linkify(profileText, dark, onRelatedWorkClick),
+            color = PikuColors.textSecondary,
+            fontSize = 12.sp,
             modifier = Modifier.padding(top = 6.dp),
-        ) {
-            Text(
-                text = linkify(profileText, dark, onRelatedWorkClick),
-                color = PikuColors.textSecondary,
-                fontSize = 12.sp,
-                modifier = Modifier.weight(1f),
-            )
-            if (detailChipVisible(translated, translationAvailable, TranslateField.AUTHOR_PROFILE)) {
-                TranslateChip(
-                    showTranslation = profileTranslated,
-                    onClick = { onToggleField(TranslateField.AUTHOR_PROFILE) },
-                    modifier = Modifier.padding(start = 6.dp, top = 1.dp),
-                )
-            }
-        }
+        )
     }
 }
 
-/** 标题 */
+/** 标题（详情页唯一的「原/译」挂在标题行右上角） */
 @Composable
 private fun TitleSection(
     detail: WorkDetail,
     dark: Boolean,
     translated: TranslatedFields?,
-    translationAvailable: Boolean,
-    showTranslation: (TranslateField) -> Boolean,
-    onToggleField: (TranslateField) -> Unit,
+    showTranslation: Boolean,
+    translating: Boolean,
+    onToggleTranslation: () -> Unit,
+    onRetranslate: () -> Unit,
     onRelatedWorkClick: (Long, Long, String) -> Unit,
 ) {
     if (detail.title.isBlank()) return
-    val titleTranslated = showTranslation(TranslateField.TITLE)
     val titleText = translated?.title
-        ?.takeIf { titleTranslated && it.isNotBlank() }
+        ?.takeIf { showTranslation && it.isNotBlank() }
         ?: detail.title
     val titleSelection = remember { SelectionState() }
     Row(verticalAlignment = Alignment.Top) {
@@ -426,35 +400,31 @@ private fun TitleSection(
                 fontWeight = FontWeight.SemiBold,
             )
         }
-        if (detailChipVisible(translated, translationAvailable, TranslateField.TITLE)) {
-            TranslateChip(
-                showTranslation = titleTranslated,
-                onClick = { onToggleField(TranslateField.TITLE) },
-                modifier = Modifier.padding(start = 6.dp, top = 2.dp),
-            )
-        }
+        // 恒显：没有译文时它是「点了去翻」的入口，不能等译文出现才给
+        HeadlineTranslateChip(
+            shown = showTranslation,
+            translating = translating,
+            onClick = onToggleTranslation,
+            onLongClick = onRetranslate,
+            modifier = Modifier.padding(start = 6.dp, top = 2.dp),
+        )
     }
 }
 
-/** 简介：超过三行折叠，展开/收起与译文 chip 同一行 */
+/** 简介：超过三行折叠，展开/收起独占一行；原/译由标题行那颗 chip 统一切 */
 @Composable
 private fun DescriptionSection(
     detail: WorkDetail,
     dark: Boolean,
     translated: TranslatedFields?,
-    translationAvailable: Boolean,
-    showTranslation: (TranslateField) -> Boolean,
-    onToggleField: (TranslateField) -> Unit,
+    showTranslation: Boolean,
     onRelatedWorkClick: (Long, Long, String) -> Unit,
-    /** 展开行两端对齐：短简介没有「展开」时，chip 靠右站而不是孤零零留在行首 */
-    chipTrailing: Boolean = false,
 ) {
     if (detail.description.isBlank()) return
     var descriptionExpanded by remember { mutableStateOf(false) }
     Spacer(Modifier.height(8.dp))
-    val descriptionTranslated = showTranslation(TranslateField.DESCRIPTION)
     val descriptionText = translated?.description
-        ?.takeIf { descriptionTranslated && it.isNotBlank() }
+        ?.takeIf { showTranslation && it.isNotBlank() }
         ?: detail.description
     val descriptionSelection = remember { SelectionState() }
     val textMeasurer = rememberTextMeasurer()
@@ -496,62 +466,44 @@ private fun DescriptionSection(
             modifier = Modifier.onSizeChanged { containerWidthPx = it.width },
         )
     }
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = when {
-            !chipTrailing -> Arrangement.Start
-            collapsible -> Arrangement.SpaceBetween
-            else -> Arrangement.End
-        },
-        modifier = if (chipTrailing) Modifier.fillMaxWidth() else Modifier,
-    ) {
-        if (collapsible) {
-            Text(
-                text = stringResource(
-                    if (descriptionExpanded) R.string.detail_show_less else R.string.detail_show_more
-                ),
-                color = PikuColors.textPrimary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier
-                    .padding(top = 4.dp, bottom = 8.dp)
-                    .clickable { descriptionExpanded = !descriptionExpanded },
-            )
-        }
-        if (detailChipVisible(translated, translationAvailable, TranslateField.DESCRIPTION)) {
-            if (collapsible && !chipTrailing) Spacer(Modifier.width(8.dp))
-            TranslateChip(
-                showTranslation = descriptionTranslated,
-                onClick = { onToggleField(TranslateField.DESCRIPTION) },
-                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
-            )
-        }
-    }
+    if (!collapsible) return
+    Text(
+        text = stringResource(
+            if (descriptionExpanded) R.string.detail_show_less else R.string.detail_show_more
+        ),
+        color = PikuColors.textPrimary,
+        fontSize = 13.sp,
+        fontWeight = FontWeight.Medium,
+        modifier = Modifier
+            .padding(top = 4.dp, bottom = 8.dp)
+            .clickable { descriptionExpanded = !descriptionExpanded },
+    )
 }
 
-/** 标签流 */
+/**
+ * 标签流：「原/译」独立于正文统一切换——chip 常驻（有文本模型才出），默认态由「自动翻译标签」决定。
+ * 译文标签与原文标签一一对应；点击筛选始终用原文，否则搜不到结果。
+ */
 @Composable
 private fun TagsSection(
     detail: WorkDetail,
     dark: Boolean,
     translated: TranslatedFields?,
     customTags: Set<String>,
+    showTranslation: Boolean,
+    tagsTranslating: Boolean,
     onTagClick: (String) -> Unit,
     onToggleCustomTag: (String) -> Unit,
-    translationAvailable: Boolean,
-    showTranslation: (TranslateField) -> Boolean,
-    onToggleField: (TranslateField) -> Unit,
-    /** p站版面：chip 从标签流里摘出来，右对齐独占一行，免得读成"一个没有 # 的标签" */
+    onToggleTranslation: () -> Unit,
     chipTrailing: Boolean = false,
 ) {
     if (detail.tags.isEmpty()) return
     Spacer(Modifier.height(10.dp))
-    val tagsTranslated = showTranslation(TranslateField.TAGS)
-    val tagsChipVisible = detailChipVisible(translated, translationAvailable, TranslateField.TAGS)
-    // 译文标签与原文标签一一对应；点击筛选始终用原文，否则搜不到结果
-    val displayTags = translated?.tags
-        ?.takeIf { tagsTranslated && it.size == detail.tags.size }
-        ?: detail.tags
+    val shown = tagsTranslationShown(showTranslation, detail.tags, translated?.tags)
+    val displayTags = translated?.tags?.takeIf { shown } ?: detail.tags
+    val chip: @Composable () -> Unit = {
+        TagsTranslateChip(shown = shown, translating = tagsTranslating, onClick = onToggleTranslation)
+    }
     TagFlow(
         tags = detail.tags,
         displayTags = displayTags,
@@ -559,28 +511,16 @@ private fun TagsSection(
         dark = dark,
         onTagClick = onTagClick,
         onToggleCustomTag = onToggleCustomTag,
-        trailing = if (tagsChipVisible && !chipTrailing) {
-            {
-                TranslateChip(
-                    showTranslation = tagsTranslated,
-                    onClick = { onToggleField(TranslateField.TAGS) },
-                )
-            }
-        } else {
-            null
-        },
+        trailing = if (!chipTrailing) chip else null,
     )
-    if (tagsChipVisible && chipTrailing) {
+    if (chipTrailing) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 6.dp),
             horizontalArrangement = Arrangement.End,
         ) {
-            TranslateChip(
-                showTranslation = tagsTranslated,
-                onClick = { onToggleField(TranslateField.TAGS) },
-            )
+            chip()
         }
     }
 }

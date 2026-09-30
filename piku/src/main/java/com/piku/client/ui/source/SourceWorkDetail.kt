@@ -56,7 +56,6 @@ import com.piku.client.ui.detail.DetailTopBar
 import com.piku.client.ui.common.FeedbackHost
 import com.piku.client.ui.detail.FullScreenViewer
 import com.piku.client.ui.detail.ImageActionSheet
-import com.piku.client.ui.detail.TranslateField
 import com.piku.client.ui.theme.BlobPinkDark
 import com.piku.client.ui.theme.BlobPinkLight
 import com.piku.client.ui.theme.BlobPurpleDark
@@ -303,9 +302,13 @@ internal fun SourceWorkDetailDialog(
                         translatedImages = state.translatedImages,
                         onImageTranslateClick = viewModel::onImageTranslateClick,
                         onPageChanged = viewModel::onImagePageChanged,
-                        translationAvailable = state.hasTranslation,
-                        showTranslation = state::showTranslation,
-                        onToggleField = viewModel::onToggleField,
+                        showTranslation = state.showTranslationAll,
+                        translating = state.translating,
+                        onToggleTranslation = viewModel::onTopBarTranslateClick,
+                        onRetranslate = viewModel::onRetranslate,
+                        showTranslatedTags = state.showTranslatedTags,
+                        tagsTranslating = state.tagsTranslating,
+                        onToggleTagsTranslation = viewModel::onToggleTagsTranslation,
                         related = state.related,
                         onRelatedClick = { relatedWork = it },
                     )
@@ -383,14 +386,9 @@ internal fun SourceWorkDetailDialog(
                 modifier = Modifier.align(Alignment.TopCenter),
                 scrolled = scrolled,
                 title = detail?.translated?.title
-                    ?.takeIf { state.showTranslation(TranslateField.TITLE) }
+                    ?.takeIf { state.showTranslationAll }
                     ?: detail?.title.orEmpty(),
                 titleVisible = scrolled,
-                translationAvailable = state.hasTranslation,
-                showTranslation = state.showTranslationAll,
-                translating = state.translating,
-                canTranslate = state.hasTextModel,
-                onTranslateClick = viewModel::onTranslateClick,
             )
         }
     }

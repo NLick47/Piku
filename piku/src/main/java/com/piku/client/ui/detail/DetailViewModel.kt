@@ -28,6 +28,7 @@ import com.piku.client.data.remote.translation.ImageTranslationPrompts
 import com.piku.client.data.remote.translation.ImageTranslateError
 import com.piku.client.data.remote.translation.ImageTranslateResult
 import com.piku.client.data.remote.translation.LlmTranslateEngine
+import com.piku.client.domain.translation.TagsTranslationController
 import com.piku.client.domain.model.AppError
 import com.piku.client.domain.model.AuthStatus
 import com.piku.client.domain.model.FavoriteFolder
@@ -167,6 +168,12 @@ data class DetailUiState(
      * （见 [DetailViewModel.translate] 的 showAfter），之后完全由用户切换控制。
      */
     val showTranslationAll: Boolean = false,
+    /** 标签默认显示态：「自动翻译标签」设置，VM 内 collect 保持同步 */
+    val autoTranslateTags: Boolean = true,
+    /** 用户点过标签 chip 后的显式选择；null = 跟随设置，仅浏览内有效 */
+    val tagsOverride: Boolean? = null,
+    /** 标签懒翻译进行中：chip 半透明防连点 */
+    val tagsTranslating: Boolean = false,
     /**
      * 单字段覆盖（方案 C）：仅记录与 [showTranslationAll] 相反的字段。
      * 顶栏切换时清空，保证"全局切换"语义直观。
@@ -197,6 +204,10 @@ data class DetailUiState(
     /** 是否有任何译文可展示（决定顶栏按钮高亮与各字段 chip 是否出现） */
     val hasTranslation: Boolean
         get() = detail?.translated?.hasAny == true
+
+    /** 标签当前显示态：用户点过 chip 用覆盖值，否则跟随设置（与整页开关隔离） */
+    val showTranslatedTags: Boolean
+        get() = tagsOverride ?: autoTranslateTags
 
     /** 正文译文是否为历史缓存：有缓存但当前无正文模型，阅读器展示时须标注历史译文 */
     val novelTranslationStale: Boolean
@@ -377,6 +388,40 @@ class DetailViewModel @Inject constructor(
         settingsRepository.setNovelReaderLight(light)
     }
 
+    /** 标签翻译编排（与 pixiv 详情页共用） */
+    private val tagsTranslation = TagsTranslationController(
+        repository = translationRepository,
+        scope = viewModelScope,
+        read = {
+            val s = _uiState.value
+            TagsTranslationController.TagsTranslationState(
+                detail = s.detail,
+                showTranslated = s.showTranslatedTags,
+                translating = s.tagsTranslating,
+                override = s.tagsOverride,
+            )
+        },
+        write = { transform ->
+            _uiState.update { s ->
+                val next = transform(
+                    TagsTranslationController.TagsTranslationState(
+                        detail = s.detail,
+                        showTranslated = s.showTranslatedTags,
+                        translating = s.tagsTranslating,
+                        override = s.tagsOverride,
+                    )
+                )
+                s.copy(
+                    detail = next.detail,
+                    tagsTranslating = next.translating,
+                    tagsOverride = next.override,
+                )
+            }
+        },
+        language = { observeLanguageUseCase().value },
+        onFailed = { feedback.show(R.string.detail_translate_failed) },
+    )
+
     init {
         // “已显示”标记在展示前就写入：之前是自动隐藏完成才写，用户提前离开详情页
         // 或进程被杀（如卡死后强杀）会导致标记永远存不上，每篇详情页都重复弹（历史 bug）
@@ -385,6 +430,12 @@ class DetailViewModel @Inject constructor(
         viewModelScope.launch {
             observeFavoriteIdsUseCase().collect { ids ->
                 _uiState.update { it.copy(isFavorite = WorkKey(WorkSource.POIPIKU, workId.toString()) in ids) }
+            }
+        }
+        viewModelScope.launch {
+            // 标签默认显示态跟随「自动翻译标签」；用户点过 chip 后的覆盖值不受设置变化影响
+            settingsRepository.autoTranslateTags.collect { enabled ->
+                _uiState.update { it.copy(autoTranslateTags = enabled) }
             }
         }
         viewModelScope.launch {
@@ -499,6 +550,12 @@ class DetailViewModel @Inject constructor(
             state.copy(fieldOverrides = overrides)
         }
     }
+
+    /**
+     * 标签区「译」：显示态与正文分离（正文那颗统一切换不碰标签）。
+     * 编排在 [tagsTranslation]，与 pixiv 详情页共用同一份。
+     */
+    fun onToggleTagsTranslation() = tagsTranslation.toggle()
 
     /**
      * 顶栏手动入口（最短路径）：

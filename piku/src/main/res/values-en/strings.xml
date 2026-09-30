@@ -398,7 +398,8 @@
     <string name="ai_translate_state_on">On</string>
     <string name="ai_translate_state_off">Off</string>
     <string name="ai_translate_enable">Auto translate</string>
-    <string name="ai_translate_auto_subtitle">Translate posts automatically when opened</string>
+    <string name="ai_translate_auto_subtitle">Translate works automatically when opened</string>
+    <string name="ai_translate_tags_auto">Translate tags automatically</string>
     <string name="ai_translate_model">Short-text models</string>
     <string name="ai_translate_novel_model">Novel body model</string>
     <string name="ai_translate_novel_model_empty">No novel model in this list; novel text stays untranslated</string>
@@ -685,6 +686,5 @@
     <string name="pixiv_meta_posted">Posted %1$s</string>
     <string name="pixiv_meta_pages">%1$d pages</string>
     <string name="pixiv_related_works">Related works</string>
-    <string name="pixiv_tags_label">Tags</string>
     <string name="common_retry">Retry</string>
 </resources>

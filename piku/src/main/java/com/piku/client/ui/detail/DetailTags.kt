@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -38,6 +40,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.piku.client.R
+import com.piku.client.ui.detail.TranslateChip
 import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.LoginTextPrimaryDark
 import com.piku.client.ui.theme.LoginTextSecondaryDark
@@ -162,6 +165,83 @@ internal fun TagFlow(
             ) {
                 trailing()
             }
+        }
+    }
+}
+
+/**
+ * 标签当前是否显示译文：译文标签与原文一一对应，数量对不上（旧译文/部分失败）就整体回原文。
+ * 两个源的详情页共用，避免各写一份判定。
+ */
+internal fun tagsTranslationShown(
+    showTranslation: Boolean,
+    tags: List<String>,
+    translatedTags: List<String>?,
+): Boolean = showTranslation && translatedTags?.size == tags.size
+
+/**
+ * 标签区那颗「原/译」（含翻译中转圈）：标签非空即出——
+ * 有译文切原/译，无译文点了去翻。
+ *
+ * 芯片表达的是「当前实际显示的是译文」，而不是「想要的显示态」：
+ * 跟随后者会让没翻出的作品挂一颗「原」，点了却无译文可回。
+ * 两个源共用同一份实现（poipiku 那版为准），容器各自选：poipiku 走 TagFlow 的
+ * trailing（支持加个人标签），pixiv 走 FlowRow 末项（pixiv 加不了个人标签）。
+ */
+@Composable
+internal fun TagsTranslateChip(
+    shown: Boolean,
+    translating: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = modifier) {
+        TranslateChip(
+            showTranslation = shown,
+            onClick = onClick,
+            modifier = Modifier.alpha(if (translating) 0.4f else 1f),
+        )
+        if (translating) {
+            Spacer(Modifier.width(4.dp))
+            CircularProgressIndicator(
+                modifier = Modifier.size(10.dp),
+                strokeWidth = 1.5.dp,
+                color = PikuColors.textSecondary,
+            )
+        }
+    }
+}
+
+/**
+ * 标题行那颗「原/译」——详情页正文（标题/简介/作者简介）的唯一翻译入口：
+ * 短按 = 有译文就切原/译，没译文就现翻；翻译中 chip 弱化并在右侧转圈；
+ * 长按 = 换模型重翻（原顶栏图标的长按功能，随图标一并挪到这里）。
+ *
+ * 与 [TagsTranslateChip] 共用 [TranslateChip] 的文案与配色，语义一致：
+ * 显示「译」= 点了去翻/切到译文，显示「原」= 当前是译文。
+ */
+@Composable
+internal fun HeadlineTranslateChip(
+    shown: Boolean,
+    translating: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = modifier) {
+        TranslateChip(
+            showTranslation = shown,
+            onClick = onClick,
+            onLongClick = onLongClick,
+            modifier = Modifier.alpha(if (translating) 0.4f else 1f),
+        )
+        if (translating) {
+            Spacer(Modifier.width(4.dp))
+            CircularProgressIndicator(
+                modifier = Modifier.size(10.dp),
+                strokeWidth = 1.5.dp,
+                color = PikuColors.textSecondary,
+            )
         }
     }
 }

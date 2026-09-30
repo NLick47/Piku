@@ -130,9 +130,8 @@ fun DetailScreen(
     val scrolled by remember { derivedStateOf { scrollState.value > 0 } }
     // 标题跟随原/译状态，与正文里的标题保持同一份文案
     val detailTitle = state.detail?.let { detail ->
-        val showTranslated = state.showTranslation(TranslateField.TITLE)
         detail.translated?.title
-            ?.takeIf { showTranslated && it.isNotBlank() }
+            ?.takeIf { state.showTranslationAll && it.isNotBlank() }
             ?: detail.title
     }.orEmpty()
     var viewerPage by rememberSaveable { mutableIntStateOf(-1) }
@@ -352,9 +351,13 @@ fun DetailScreen(
                     translatedImages = state.translatedImages,
                     onImageTranslateClick = { page -> viewModel.onImageTranslateClick(page) },
                     onPageChanged = { page -> viewModel.onImagePageChanged(page) },
-                    translationAvailable = state.hasTranslation,
-                    showTranslation = { field -> state.showTranslation(field) },
-                    onToggleField = viewModel::toggleField,
+                    showTranslation = state.showTranslationAll,
+                    translating = state.translating,
+                    onToggleTranslation = viewModel::onTopBarTranslateClick,
+                    onRetranslate = viewModel::openModelPicker,
+                    showTranslatedTags = state.showTranslatedTags,
+                    tagsTranslating = state.tagsTranslating,
+                    onToggleTagsTranslation = viewModel::onToggleTagsTranslation,
                     autoExpandImageHint = state.imageHintVisible,
                     onImageHintShown = viewModel::consumeImageHint,
                     onGateAction = viewModel::onUnlockRestriction,
@@ -371,12 +374,6 @@ fun DetailScreen(
             scrolled = scrolled,
             title = detailTitle,
             titleVisible = titleVisible,
-            translationAvailable = state.hasTranslation,
-            showTranslation = state.showTranslationAll,
-            translating = state.translating,
-            canTranslate = state.canTranslate,
-            onTranslateClick = viewModel::onTopBarTranslateClick,
-            onOpenModelPicker = viewModel::openModelPicker,
         )
         DetailBottomBar(
             isFavorite = state.isFavorite,

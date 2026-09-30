@@ -635,6 +635,20 @@ class SettingsRepository @Inject constructor(
         _aiTranslateEnabled.value = enabled
     }
 
+    /**
+     * 自动翻译标签：关 = 翻译请求不携带标签（标签又多又长，拖着正文一起翻纯属浪费），
+     * 标签区保留「译」chip，用户点它时才单独发标签翻译（逐条缓存，翻过的秒回）。
+     */
+    private val _autoTranslateTags = MutableStateFlow(
+        prefs.getBoolean(KEY_AUTO_TRANSLATE_TAGS, false),
+    )
+    val autoTranslateTags: StateFlow<Boolean> = _autoTranslateTags.asStateFlow()
+
+    fun setAutoTranslateTags(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_AUTO_TRANSLATE_TAGS, enabled).apply()
+        _autoTranslateTags.value = enabled
+    }
+
     /** 空值回退默认地址，避免用户清空后无法发请求 */
     fun setLlmBaseUrl(url: String) {
         val value = url.trim().ifBlank { LLM_BASE_URL_DEFAULT }
@@ -836,6 +850,7 @@ class SettingsRepository @Inject constructor(
 
         /** AI 翻译设置 */
         const val KEY_AI_TRANSLATE_ENABLED = "ai_translate_enabled"
+        const val KEY_AUTO_TRANSLATE_TAGS = "ai_translate_tags_auto"
         const val KEY_LLM_BASE_URL = "llm_base_url"
         const val KEY_LLM_MODEL = "llm_model"
         const val KEY_LLM_NOVEL_BASE_URL = "llm_novel_base_url"

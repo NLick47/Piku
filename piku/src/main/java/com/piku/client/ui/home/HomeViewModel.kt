@@ -154,6 +154,8 @@ data class HomeUiState(
     val backdropImgHeight: Int? = null,
     // ---------------- AI 翻译 ----------------
     val aiTranslateEnabled: Boolean = false,
+    /** 标签是否随正文一起自动翻；关 = 正文翻得快，标签在详情页用「译」按需翻 */
+    val autoTranslateTags: Boolean = false,
     val llmBaseUrl: String = SettingsRepository.LLM_BASE_URL_DEFAULT,
     val llmModel: String = SettingsRepository.LLM_MODEL_DEFAULT,
     /** 小说正文专用模型（空串表示跟随文本翻译模型） */
@@ -388,6 +390,11 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             settingsRepository.aiTranslateEnabled.collect { enabled ->
                 _uiState.update { it.copy(aiTranslateEnabled = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.autoTranslateTags.collect { enabled ->
+                _uiState.update { it.copy(autoTranslateTags = enabled) }
             }
         }
         viewModelScope.launch {
@@ -845,6 +852,11 @@ class HomeViewModel @Inject constructor(
 
     fun setAiTranslateEnabled(enabled: Boolean) {
         setAiTranslateEnabledUseCase(enabled)
+    }
+
+    /** 标签是否随正文一起自动翻；关 = 正文翻得快，标签在详情页用「译」按需翻 */
+    fun setAutoTranslateTags(enabled: Boolean) {
+        settingsRepository.setAutoTranslateTags(enabled)
     }
 
     fun selectTranslateModel(entry: ModelEntry) {

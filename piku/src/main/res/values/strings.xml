@@ -410,7 +410,8 @@
     <string name="ai_translate_state_on">已开启</string>
     <string name="ai_translate_state_off">已关闭</string>
     <string name="ai_translate_enable">自动翻译</string>
-    <string name="ai_translate_auto_subtitle">打开投稿时自动翻译</string>
+    <string name="ai_translate_auto_subtitle">打开作品时自动翻译</string>
+    <string name="ai_translate_tags_auto">自动翻译标签</string>
     <string name="ai_translate_model">短文本模型</string>
     <string name="ai_translate_novel_model">小说正文模型</string>
     <string name="ai_translate_novel_model_empty">当前列表没有小说正文模型，正文将保留原文</string>
@@ -695,6 +696,5 @@
     <string name="pixiv_meta_posted">投稿 %1$s</string>
     <string name="pixiv_meta_pages">%1$d 张</string>
     <string name="pixiv_related_works">相关作品</string>
-    <string name="pixiv_tags_label">标签</string>
     <string name="common_retry">重试</string>
 </resources>

@@ -18,6 +18,7 @@ import com.piku.client.domain.model.AppLanguage
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkDetail
 import com.piku.client.domain.model.WorkStats
+import com.piku.client.domain.translation.TagsTranslationController
 import com.piku.client.domain.model.mergeTranslatedFields
 import com.piku.client.domain.source.SourceRegistry
 import com.piku.client.domain.source.SourceWorkPage
@@ -25,7 +26,6 @@ import com.piku.client.domain.usecase.ObserveLanguageUseCase
 import com.piku.client.domain.usecase.RecordHistoryUseCase
 import com.piku.client.ui.detail.DetailViewModel
 import com.piku.client.ui.detail.ViewerImage
-import com.piku.client.ui.detail.TranslateField
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -69,8 +69,12 @@ class SourceWorkDetailViewModel @Inject constructor(
         val detail: WorkDetail? = null,
         val translating: Boolean = false,
         val showTranslationAll: Boolean = false,
-        /** 单字段原/译切换；语义与 poipiku 详情一致：在 showAll 基础上按字段取反 */
-        val toggledFields: Set<TranslateField> = emptySet(),
+        /** 标签默认显示态：「自动翻译标签」设置，VM 内 collect 保持同步 */
+        val autoTranslateTags: Boolean = true,
+        /** 用户点过标签 chip 后的显式选择；null = 跟随设置，仅浏览内有效 */
+        val tagsOverride: Boolean? = null,
+        /** 标签懒翻译进行中：chip 半透明防连点 */
+        val tagsTranslating: Boolean = false,
         val hasTextModel: Boolean = false,
         val hasImageModel: Boolean = false,
         val translatedImages: Map<Int, Bitmap> = emptyMap(),
@@ -90,6 +94,9 @@ class SourceWorkDetailViewModel @Inject constructor(
     ) {
         val hasTranslation: Boolean get() = detail?.translated?.hasAny == true
 
+        /** 标签当前显示态：用户点过 chip 用覆盖值，否则跟随设置 */
+        val showTranslatedTags: Boolean get() = tagsOverride ?: autoTranslateTags
+
         /** 与 poipiku 详情同构：轻量档打底 + 清晰档覆盖（pixiv 是 540 打底、1200 覆盖，原图只走保存） */
         val viewerImages: List<ViewerImage>
             get() = pages.map { page ->
@@ -99,7 +106,6 @@ class SourceWorkDetailViewModel @Inject constructor(
                 )
             }
 
-        fun showTranslation(field: TranslateField): Boolean = showTranslationAll != (field in toggledFields)
     }
 
     private val _ui = MutableStateFlow(UiState())
@@ -115,10 +121,50 @@ class SourceWorkDetailViewModel @Inject constructor(
     private val translatedImages = mutableMapOf<Int, Bitmap>()
     private var imageTranslateJob: Job? = null
 
+    /** 标签翻译编排（与 poipiku 详情页共用） */
+    private val tagsTranslation = TagsTranslationController(
+        repository = translationRepository,
+        scope = viewModelScope,
+        read = {
+            val s = _ui.value
+            TagsTranslationController.TagsTranslationState(
+                detail = s.detail,
+                showTranslated = s.showTranslatedTags,
+                translating = s.tagsTranslating,
+                override = s.tagsOverride,
+            )
+        },
+        write = { transform ->
+            _ui.update { s ->
+                val next = transform(
+                    TagsTranslationController.TagsTranslationState(
+                        detail = s.detail,
+                        showTranslated = s.showTranslatedTags,
+                        translating = s.tagsTranslating,
+                        override = s.tagsOverride,
+                    )
+                )
+                s.copy(
+                    detail = next.detail,
+                    tagsTranslating = next.translating,
+                    tagsOverride = next.override,
+                )
+            }
+        },
+        language = { observeLanguageUseCase().value },
+        onFailed = { feedback.show(R.string.detail_translate_failed) },
+    )
+
     init {
         viewModelScope.launch {
             translationRepository.roleModelAvailability.collect { avail ->
                 _ui.update { it.copy(hasTextModel = avail.text, hasImageModel = avail.image) }
+            }
+        }
+        viewModelScope.launch {
+            // 标签默认显示态跟随「自动翻译标签」；用户点过 chip 后的覆盖值不受设置变化影响
+            settingsRepository.autoTranslateTags.collect { enabled ->
+                _ui.update { it.copy(autoTranslateTags = enabled) }
             }
         }
     }
@@ -195,21 +241,29 @@ class SourceWorkDetailViewModel @Inject constructor(
         }
     }
 
-    /** 顶栏翻译按钮：翻短字段；已有译文时整页原/译切换（与 poipiku 同语义） */
-    fun onTranslateClick() {
+    /**
+     * 标题行 chip 短按：已有译文 = 整页原/译切换（不含标签）；没有 = 立即翻短字段。
+     * 原顶栏翻译图标的职责，图标去掉后由页内这颗 chip 承担。
+     */
+    fun onTopBarTranslateClick() {
         val state = _ui.value
         if (state.detail?.translated?.hasAny == true) {
-            _ui.update { it.copy(showTranslationAll = !it.showTranslationAll, toggledFields = emptySet()) }
+            _ui.update { it.copy(showTranslationAll = !it.showTranslationAll) }
             return
         }
         translate()
     }
 
-    fun onToggleField(field: TranslateField) {
-        _ui.update {
-            it.copy(toggledFields = if (field in it.toggledFields) it.toggledFields - field else it.toggledFields + field)
-        }
+    /** chip 长按：换模型重翻（pixiv 详情页没有模型选择器，直接按当前模型重翻一次） */
+    fun onRetranslate() {
+        translate()
     }
+
+    /**
+     * 标签区「译」：显示态与正文分离（正文那颗统一切换不碰标签）。
+     * 编排在 [tagsTranslation]，两个源的详情页共用同一份。
+     */
+    fun onToggleTagsTranslation() = tagsTranslation.toggle()
 
     private fun translate() {
         val detail = _ui.value.detail ?: return
@@ -233,7 +287,6 @@ class SourceWorkDetailViewModel @Inject constructor(
                     translating = false,
                     detail = current.copy(translated = merged),
                     showTranslationAll = show,
-                    toggledFields = if (show) state.toggledFields else emptySet(),
                 )
             }
         }

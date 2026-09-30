@@ -911,6 +911,7 @@ fun HomeScreen(
                 AiTranslateSheet(
                     state = state,
                     onToggleEnabled = viewModel::setAiTranslateEnabled,
+                    onToggleTagsAuto = viewModel::setAutoTranslateTags,
                     onSelectModel = viewModel::selectTranslateModel,
                     onSelectNovelModel = viewModel::selectTranslateNovelModel,
                     onSelectImageModel = viewModel::selectTranslateImageModel,
