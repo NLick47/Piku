@@ -81,6 +81,7 @@ class SourceWorkDetailViewModel @Inject constructor(
         val translatedImages: Map<Int, Bitmap> = emptyMap(),
         val imageTranslatingPage: Int? = null,
         val showTranslatedImage: Boolean = false,
+        val hdPages: Set<Int> = emptySet(),
         val savingImage: Boolean = false,
         val sharingImage: Boolean = false,
         val sharingTargetPackage: String? = null,
@@ -98,13 +99,17 @@ class SourceWorkDetailViewModel @Inject constructor(
         /** 标签当前显示态：用户点过 chip 用覆盖值，否则跟随设置 */
         val showTranslatedTags: Boolean get() = tagsOverride ?: autoTranslateTags
 
-        /** 与 poipiku 详情同构：轻量档打底 + 清晰档覆盖（pixiv 是 540 打底、1200 覆盖，原图只走保存） */
+        /** 打底用图区正在显示的那张：同文件已被图区下载过，开图器不黑屏；HD 档给原图 */
         val viewerImages: List<ViewerImage>
-            get() = pages.map { page ->
-                ViewerImage(
-                    thumbnailUrl = page.url,
-                    fullUrl = page.fullUrl.takeIf { it.isNotBlank() },
-                )
+            get() {
+                val displayed = detail?.imageUrls.orEmpty()
+                return pages.mapIndexed { index, page ->
+                    ViewerImage(
+                        thumbnailUrl = displayed.getOrNull(index) ?: page.url,
+                        fullUrl = page.fullUrl.takeIf { it.isNotBlank() },
+                        hdUrl = page.originalUrl.takeIf { it.isNotBlank() },
+                    )
+                }
             }
 
     }
@@ -177,8 +182,12 @@ class SourceWorkDetailViewModel @Inject constructor(
         translatedImages.clear()
         imageTranslateJob?.cancel()
         // 秒进：列表里自带的标题/作者/缩略图先上屏打底，接口回来再补全简介/统计/清晰图
+        // 运行时开关由 init 期 collect 写入，整表重置必须带回，否则图片翻译入口永远不亮
         _ui.value = UiState(
             language = observeLanguageUseCase().value,
+            hasTextModel = _ui.value.hasTextModel,
+            hasImageModel = _ui.value.hasImageModel,
+            autoTranslateTags = _ui.value.autoTranslateTags,
             detail = WorkDetail(
                 title = work.title,
                 authorName = work.authorName,
@@ -412,6 +421,13 @@ class SourceWorkDetailViewModel @Inject constructor(
 
     fun onImagePageChanged(page: Int) {
         _ui.update { it.copy(showTranslatedImage = translatedImages.containsKey(page)) }
+    }
+
+    /** HD 开关：当前页在原图档与清晰档间切换 */
+    fun onHdToggle(page: Int) {
+        _ui.update {
+            it.copy(hdPages = if (page in it.hdPages) it.hdPages - page else it.hdPages + page)
+        }
     }
 
     fun onImageTranslateClick(page: Int) {

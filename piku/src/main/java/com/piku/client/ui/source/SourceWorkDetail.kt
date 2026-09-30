@@ -54,7 +54,7 @@ import com.piku.client.ui.detail.DETAIL_TOP_BAR_HEIGHT
 import com.piku.client.ui.detail.DetailSkeleton
 import com.piku.client.ui.detail.DetailTopBar
 import com.piku.client.ui.common.FeedbackHost
-import com.piku.client.ui.detail.FullScreenViewer
+import com.piku.client.ui.detail.ViewerOverlay
 import com.piku.client.ui.detail.ImageActionSheet
 import com.piku.client.ui.theme.BlobPinkDark
 import com.piku.client.ui.theme.BlobPinkLight
@@ -312,21 +312,6 @@ internal fun SourceWorkDetailDialog(
                         related = state.related,
                         onRelatedClick = { relatedWork = it },
                     )
-                    if (viewerPage >= 0) {
-                        FullScreenViewer(
-                            images = state.viewerImages,
-                            startPage = viewerPage.coerceIn(0, state.viewerImages.lastIndex),
-                            dark = dark,
-                            onClose = { viewerPage = -1 },
-                            onLongPressImage = { page -> imageActionPage = page },
-                            hasImageModel = state.hasImageModel,
-                            imageTranslating = state.imageTranslatingPage != null,
-                            imageTranslated = state.showTranslatedImage,
-                            translatedImages = state.translatedImages,
-                            onImageTranslateClick = viewModel::onImageTranslateClick,
-                            onPageChanged = viewModel::onImagePageChanged,
-                        )
-                    }
                 }
             }
 
@@ -374,11 +359,7 @@ internal fun SourceWorkDetailDialog(
                 SourceWorkDetailDialog(work = nested, dark = dark, onDismiss = { relatedWork = null })
             }
 
-            FeedbackHost(channel = viewModel.feedback, snackbarHostState = snackbarHostState)
-            SnackbarHost(
-                hostState = snackbarHostState,
-                modifier = Modifier.align(Alignment.BottomCenter),
-            )
+            // 层级与 poipiku 详情一致：顶栏先渲染，看图器盖过它，Snackbar 盖过看图器
             DetailTopBar(
                 onBack = onDismiss,
                 onHomeClick = onDismiss,
@@ -389,6 +370,26 @@ internal fun SourceWorkDetailDialog(
                     ?.takeIf { state.showTranslationAll }
                     ?: detail?.title.orEmpty(),
                 titleVisible = scrolled,
+            )
+            ViewerOverlay(
+                page = viewerPage.takeIf { it >= 0 },
+                images = state.viewerImages,
+                dark = dark,
+                onClose = { viewerPage = -1 },
+                onLongPressImage = { page -> imageActionPage = page },
+                hasImageModel = state.hasImageModel,
+                imageTranslating = state.imageTranslatingPage != null,
+                imageTranslated = state.showTranslatedImage,
+                translatedImages = state.translatedImages,
+                onImageTranslateClick = viewModel::onImageTranslateClick,
+                onPageChanged = viewModel::onImagePageChanged,
+                hdPages = state.hdPages,
+                onHdToggle = viewModel::onHdToggle,
+            )
+            FeedbackHost(channel = viewModel.feedback, snackbarHostState = snackbarHostState)
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier.align(Alignment.BottomCenter),
             )
         }
     }

@@ -165,6 +165,10 @@ private fun ZoomableImage(
     image: ViewerImage,
     contentDescription: String?,
     dark: Boolean,
+    /** 原图档：非空时叠在最上层，就绪前下层图一直在，不黑屏不闪烁 */
+    hdUrl: String? = null,
+    /** 本页任一图首次画出来时回调；宿主据此把黑底换掉 */
+    onFirstPaint: () -> Unit = {},
     onTap: () -> Unit,
     onLongPress: () -> Unit,
 ) {
@@ -274,6 +278,7 @@ private fun ZoomableImage(
                 contentScale = ContentScale.Fit,
                 colorFilter = PikuColors.tameWhiteFilter,
                 modifier = Modifier.fillMaxSize(),
+                onSuccess = { onFirstPaint() },
             )
         }
         if (image.fullUrl != null && image.fullUrl != image.thumbnailUrl) {
@@ -283,13 +288,33 @@ private fun ZoomableImage(
                 contentScale = ContentScale.Fit,
                 colorFilter = PikuColors.tameWhiteFilter,
                 modifier = Modifier.fillMaxSize(),
-                onSuccess = { fullReady = true },
+                onSuccess = { fullReady = true; onFirstPaint() },
                 // 失败时把缩略图放回来：原图可能是在缩略图已经撤掉之后才失败的
                 onError = {
                     fullReady = false
                     thumbnailVisible = true
                 },
                 loading = {},
+                error = {},
+            )
+        }
+        if (hdUrl != null && hdUrl != image.fullUrl) {
+            SubcomposeAsyncImage(
+                model = rememberAnimatedImage(hdUrl),
+                contentDescription = contentDescription,
+                contentScale = ContentScale.Fit,
+                colorFilter = PikuColors.tameWhiteFilter,
+                modifier = Modifier.fillMaxSize(),
+                loading = {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(22.dp),
+                            strokeWidth = 2.dp,
+                            color = Color.White,
+                        )
+                    }
+                },
+                // 原图拉不动就停在清晰档：下层一直有图，失败无感
                 error = {},
             )
         }
@@ -409,12 +434,18 @@ fun FullScreenViewer(
     imageTranslated: Boolean = false,
     translatedImages: Map<Int, android.graphics.Bitmap> = emptyMap(),
     onImageTranslateClick: (Int) -> Unit = {},
+    /** 翻页回调：0 基页码，与图区、翻译回调同基准 */
     onPageChanged: (Int) -> Unit = {},
+    /** 开了原图档的页：对应页叠原图层，底栏出 HD 按钮；空集 = 源没有 HD 能力 */
+    hdPages: Set<Int> = emptySet(),
+    onHdToggle: (Int) -> Unit = {},
 ) {
     val pagerState = rememberPagerState(
         pageCount = { images.size },
         initialPage = startPage,
     )
+    // 首图就绪前背景透明，透出详情页上那张已显示的图当垫底：开图器不黑屏
+    var viewerReady by remember { mutableStateOf(false) }
     var controlsVisible by remember { mutableStateOf(true) }
     var autoHideJob by remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
@@ -432,7 +463,7 @@ fun FullScreenViewer(
     val currentOnPageChanged by rememberUpdatedState(onPageChanged)
     LaunchedEffect(pagerState.currentPage) {
         refreshAutoHide()
-        currentOnPageChanged(pagerState.currentPage + 1)
+        currentOnPageChanged(pagerState.currentPage)
     }
     LaunchedEffect(pagerState.isScrollInProgress) {
         if (!pagerState.isScrollInProgress) refreshAutoHide()
@@ -441,8 +472,14 @@ fun FullScreenViewer(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            // 暗色下用深灰而非纯黑，降低白底大图与背景的对比，减少刺眼感
-            .background(if (dark) ViewerBackgroundDark else Color.Black),
+            .background(
+                when {
+                    // 暗色下用深灰而非纯黑，降低白底大图与背景的对比，减少刺眼感
+                    !viewerReady -> Color.Transparent
+                    dark -> ViewerBackgroundDark
+                    else -> Color.Black
+                },
+            ),
     ) {
         BackHandler(onBack = onClose)
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
@@ -467,6 +504,8 @@ fun FullScreenViewer(
                     image = images[page],
                     contentDescription = null,
                     dark = dark,
+                    hdUrl = images[page].hdUrl?.takeIf { page in hdPages },
+                    onFirstPaint = { viewerReady = true },
                     onTap = {
                         if (controlsVisible) {
                             controlsVisible = false
@@ -516,8 +555,9 @@ fun FullScreenViewer(
                 )
             }
         }
-        // 底部浮动区域：翻译按钮 + 页码计数器（常驻可见，不跟顶栏一起隐藏）
-        if (hasImageModel || images.size > 1) {
+        // 底部浮动区域：HD 按钮 + 翻译按钮 + 页码计数器（常驻可见，不跟顶栏一起隐藏）
+        val hdAvailable = images.getOrNull(pagerState.currentPage)?.hdUrl != null
+        if (hasImageModel || images.size > 1 || hdAvailable) {
             Row(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
@@ -526,6 +566,25 @@ fun FullScreenViewer(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                if (hdAvailable) {
+                    val hdOn = pagerState.currentPage in hdPages
+                    Box(
+                        modifier = Modifier
+                            .height(40.dp)
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(if (hdOn) TranslateActiveBlueTint else OverlayScrim)
+                            .clickable { onHdToggle(pagerState.currentPage) }
+                            .padding(horizontal = 12.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = "HD",
+                            color = if (hdOn) TranslateActiveBlue else Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                }
                 if (hasImageModel) {
                     // 翻译按钮：loading时展开显示"翻译中..."文字，否则显示图标
                     Box(

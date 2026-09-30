@@ -464,25 +464,20 @@ fun DetailScreen(
         }
         // 全屏查看器放在 SnackbarHost 之前，保证保存结果的 snackbar 能盖在全屏黑底上
         state.detail?.let {
-            if (viewerPage >= 0) {
-                val images = state.viewerImages
-                if (images.isNotEmpty()) {
-                    FullScreenViewer(
-                        images = images,
-                        startPage = viewerPage.coerceAtMost(images.lastIndex),
-                        onClose = { viewerPage = -1 },
-                        onLongPressImage = { page -> imageActionPage = page },
-                        dark = dark,
-                        hasImageModel = state.hasImageModel,
-                        imageTranslating = state.imageTranslatingPage != null,
-                        imageTranslated = state.showTranslatedImage,
-                        translatedImages = state.translatedImages,
-                        onImageTranslateClick = { page -> viewModel.onImageTranslateClick(page) },
-                        onPageChanged = { page -> viewModel.saveImageProgress(page) },
-                    )
-
-                }
-            }
+            ViewerOverlay(
+                page = viewerPage.takeIf { it >= 0 },
+                images = state.viewerImages,
+                dark = dark,
+                onClose = { viewerPage = -1 },
+                onLongPressImage = { page -> imageActionPage = page },
+                hasImageModel = state.hasImageModel,
+                imageTranslating = state.imageTranslatingPage != null,
+                imageTranslated = state.showTranslatedImage,
+                translatedImages = state.translatedImages,
+                onImageTranslateClick = viewModel::onImageTranslateClick,
+                // 进度存储语义是页码 1 起，壳的回调是 0 基
+                onPageChanged = { page -> viewModel.saveImageProgress(page + 1) },
+            )
             if (state.novelReaderOpen && it.novelText.isNotBlank()) {
                 val novelTranslated = state.showTranslation(TranslateField.NOVEL)
                 val titleTranslated = state.showTranslation(TranslateField.TITLE)
