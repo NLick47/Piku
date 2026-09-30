@@ -113,4 +113,61 @@ class SourceWorkDetailInlineTierTest {
         assertFalse(worthUpgradingInline(listOf(page(fullUrl = "https://example.com/a_p0_master1200.jpg")), controller))
         assertFalse(worthUpgradingInline(emptyList(), controller))
     }
+
+
+    private val largeThumb =
+        "https://i.pximg.net/c/600x1200_90/img-master/img/2026/09/26/00/05/02/150105774_p0_master1200.jpg"
+    private val tinyThumb =
+        "https://i.pximg.net/c/240x480/img-master/img/2026/09/26/00/05/02/150105774_p0_master1200.jpg"
+
+    @Test
+    fun sameFileHigherTierThumbnailIsKept() {
+        assertEquals(
+            listOf(largeThumb, small),
+            inlineImageUrls(listOf(page(), page()), upgradeToFull = false, sourceThumbnailUrl = largeThumb),
+        )
+    }
+
+    /** 排行榜场景：打底 240x480 低于内联 small，照旧换，不能因为防闪白把图钉在低清档 */
+    @Test
+    fun sameFileLowerTierThumbnailStillSwaps() {
+        assertEquals(
+            listOf(small, small),
+            inlineImageUrls(listOf(page(), page()), upgradeToFull = false, sourceThumbnailUrl = tinyThumb),
+        )
+    }
+
+    /** 内联选了无档位的清晰档：同文件也升级，不拿 large 去顶 img-master */
+    @Test
+    fun sameFileNoBoxTierStillSwaps() {
+        assertEquals(
+            listOf(regular, regular),
+            inlineImageUrls(listOf(page(), page()), upgradeToFull = true, sourceThumbnailUrl = largeThumb),
+        )
+    }
+
+    /** 首图与缩略图不是同一文件：照常替换 */
+    @Test
+    fun differentFileStillSwaps() {
+        val other = "https://i.pximg.net/c/540x540_70/img-master/img/2026/09/26/00/05/02/150105775_p0_master1200.jpg"
+
+        assertEquals(
+            listOf(other),
+            inlineImageUrls(listOf(page(url = other)), upgradeToFull = false, sourceThumbnailUrl = largeThumb),
+        )
+    }
+
+    /** 缩略图空串：没有可沿用的来源档，原样选档 */
+    @Test
+    fun blankThumbnailKeepsInlineUrls() {
+        assertEquals(
+            listOf(small),
+            inlineImageUrls(listOf(page()), upgradeToFull = false, sourceThumbnailUrl = ""),
+        )
+    }
+
+    @Test
+    fun inlineImageUrlsHandlesEmptyPages() {
+        assertTrue(inlineImageUrls(emptyList(), upgradeToFull = false, sourceThumbnailUrl = largeThumb).isEmpty())
+    }
 }

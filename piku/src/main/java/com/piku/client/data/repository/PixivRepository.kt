@@ -1,9 +1,14 @@
 package com.piku.client.data.repository
 
 import com.piku.client.data.remote.apiCall
+import com.piku.client.data.auth.PixivAuthEndpoints
+import com.piku.client.data.auth.PixivAuthRuntime
 import com.piku.client.domain.model.AppError
 import com.piku.client.data.remote.pixiv.PixivApi
 import com.piku.client.data.remote.pixiv.PixivApiConfig
+import com.piku.client.data.remote.pixiv.PixivAppApi
+import com.piku.client.data.remote.pixiv.PixivAppConfig
+import com.piku.client.data.remote.pixiv.PixivAppIllust
 import com.piku.client.data.remote.pixiv.PixivIllustBody
 import com.piku.client.data.remote.pixiv.PixivWorkCard
 import com.piku.client.data.remote.pixiv.PixivPageUrls
@@ -20,6 +25,10 @@ import javax.inject.Singleton
 @Singleton
 class PixivRepository @Inject constructor(
     private val api: PixivApi,
+    // 登录后个性化数据在 app-api 域 令牌只对该域生效
+    private val appApi: PixivAppApi,
+    private val endpoints: PixivAuthEndpoints,
+    private val runtime: PixivAuthRuntime,
 ) {
 
     /**
@@ -45,6 +54,17 @@ class PixivRepository @Inject constructor(
                 totalPages = pixivTotalPages(response.rankTotal),
             )
         }
+
+    // 个性化推荐 按 offset 翻页 签名头须同一时间串算出 故在此算一对再传下
+    suspend fun recommendedFeed(offset: Int): Result<List<Work>> = apiCall {
+        val signature = endpoints.clientSignature(runtime.now())
+        val response = appApi.recommended(
+            clientTime = signature.time,
+            clientHash = signature.hash,
+            offset = offset,
+        )
+        response.illusts.mapNotNull { it.toWork() }
+    }
 
     /**
      * 详情补充文本与统计。简介是 HTML 片段：<br /> 换算行、其余标签剥掉（详情壳按纯文本展示）。
@@ -81,6 +101,28 @@ internal fun PixivWorkCard.toWork(): Work? {
         categoryName = "",
         title = title,
         thumbnailUrl = url,
+        imageCount = pageCount,
+        r18 = xRestrict > 0,
+        source = WorkSource.PIXIV,
+    )
+}
+
+// 缩略图取 large medium/square_medium 是居中方裁 按比例卡片须用未裁的那档
+internal fun PixivAppIllust.toWork(): Work? {
+    val illustId = illustId
+    val thumb = imageUrls.large.ifBlank { imageUrls.medium }.ifBlank { imageUrls.squareMedium }
+    if (illustId <= 0 || thumb.isBlank()) return null
+    return Work(
+        id = illustId,
+        authorId = user.userId,
+        authorName = user.name,
+        authorAvatarUrl = user.profileImageUrls.medium.ifBlank { null },
+        categoryCd = -1,
+        categoryName = "",
+        title = title,
+        thumbnailUrl = thumb,
+        thumbWidth = width,
+        thumbHeight = height,
         imageCount = pageCount,
         r18 = xRestrict > 0,
         source = WorkSource.PIXIV,

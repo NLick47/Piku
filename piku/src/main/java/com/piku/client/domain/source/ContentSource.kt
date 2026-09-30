@@ -100,6 +100,8 @@ data class SourceFeed(
     val chronological: Boolean = true,
     /** 条目按名次排列：外壳给前三名 hero 位，其余在卡片上挂名次角标 */
     val ranked: Boolean = false,
+    /** 条目带原作宽高：外壳按原图比例排版卡片，而不是裁成方图 */
+    val proportional: Boolean = false,
     /** 占位流：能力未到（如 pixiv 登录后的推荐），壳显示"即将上线"且不发请求 */
     val comingSoon: Boolean = false,
     val pendingAfterLogin: Boolean = false,

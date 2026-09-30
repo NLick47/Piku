@@ -65,6 +65,8 @@ class SourceFeedViewModel @Inject constructor(
         val facetChoices: Map<String, String> = emptyMap(),
         /** 当前流按名次排列（榜单）：外壳给前三名 hero 位、其余挂名次角标 */
         val ranked: Boolean = false,
+        /** 当前流带原作宽高：卡片按原图比例排版，不裁方 */
+        val proportional: Boolean = false,
         /** 当前流是占位流：能力未到，外壳展示"即将上线"而不是空态 */
         val comingSoon: Boolean = false,
         val items: List<Work> = emptyList(),
@@ -284,6 +286,7 @@ class SourceFeedViewModel @Inject constructor(
                 feedId = key.feedId,
                 facetChoices = key.facets,
                 ranked = declaration.feed(key.feedId).ranked,
+                proportional = declaration.feed(key.feedId).proportional,
                 comingSoon = isComingSoon(declaration, key.feedId),
                 items = snap.items,
                 loading = snap.loading,

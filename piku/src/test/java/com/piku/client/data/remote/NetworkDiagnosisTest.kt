@@ -44,7 +44,10 @@ class NetworkDiagnosisTest {
     )
 
     private val settings = SettingsRepository(InMemorySharedPreferences())
-    private val routeController = ImageRouteController(settings, prefs, runtime)
+    /** 两条候选写死在测试里：报告要展示"第 1 位 / 第 2 位"，不跟着生产清单走 */
+    private val relayA = "relay-a"
+    private val relayB = "relay-b"
+    private val routeController = ImageRouteController(settings, prefs, runtime, listOf(relayA, relayB))
     private val imageProbe = ImageRouteProbe(
         client = object : Call.Factory {
             override fun newCall(request: Request): Call =
@@ -170,8 +173,8 @@ class NetworkDiagnosisTest {
                 atMillis = now,
             ),
         )
-        routeController.relayHealth(ImageUpstream.POIPIKU).onFailure(ImageRelayInterceptor.RELAY_HOSTS[0])
-        routeController.relayHealth(ImageUpstream.POIPIKU).onSuccess(ImageRelayInterceptor.RELAY_HOSTS[1])
+        routeController.relayHealth(ImageUpstream.POIPIKU).onFailure(relayA)
+        routeController.relayHealth(ImageUpstream.POIPIKU).onSuccess(relayB)
         val dns = dns(AddressProbe { _, _ -> ProbeReport.ok() })
         runCatching { dns.lookup(HOST) }
 
@@ -183,8 +186,8 @@ class NetworkDiagnosisTest {
         assertTrue(report.contains("${ImageUpstream.POIPIKU.host}  走中转"))
         assertTrue(report.contains("最近判定 切到中转｜探测：直连不可用｜"))
         assertTrue(report.contains("启动探测（poipiku 直连）直连不可用｜312ms（SocketTimeoutException: connect timed out）"))
-        assertTrue(report.contains("中转 ${ImageRelayInterceptor.RELAY_HOSTS[1]}  第 1 位  健康"))
-        assertTrue(report.contains("中转 ${ImageRelayInterceptor.RELAY_HOSTS[0]}  第 2 位  健康（累计失败 1 次）"))
+        assertTrue(report.contains("中转 $relayB  第 1 位  健康"))
+        assertTrue(report.contains("中转 $relayA  第 2 位  健康（累计失败 1 次）"))
         // 两条上游各有一份独立状态
         assertTrue(report.contains("${ImageUpstream.PIXIV.host}  走直连"))
     }
@@ -198,8 +201,8 @@ class NetworkDiagnosisTest {
 
         assertTrue(report.contains("—— 图片线路（实时探测）——"))
         assertTrue(report.contains("直连 ${ImageUpstream.POIPIKU.host}  可用"))
-        assertTrue(report.contains("中转 ${ImageRelayInterceptor.RELAY_HOSTS[0]}（${ImageUpstream.POIPIKU.host}）  可用"))
-        assertTrue(report.contains("中转 ${ImageRelayInterceptor.RELAY_HOSTS[1]}（${ImageUpstream.POIPIKU.host}）  可用"))
+        assertTrue(report.contains("中转 $relayA（${ImageUpstream.POIPIKU.host}）  可用"))
+        assertTrue(report.contains("中转 $relayB（${ImageUpstream.POIPIKU.host}）  可用"))
         assertTrue("pixiv 那条也要探", report.contains("直连 ${ImageUpstream.PIXIV.host}  可用"))
     }
 

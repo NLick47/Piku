@@ -14,6 +14,7 @@ import com.piku.client.data.remote.translation.ImageTranslationPrompts
 import com.piku.client.data.remote.translation.LlmTranslateEngine
 import com.piku.client.data.remote.translation.ModelCatalogRepository
 import com.piku.client.data.remote.translation.TranslationRepository
+import com.piku.client.data.repository.ThumbnailResolver
 import com.piku.client.domain.model.AppLanguage
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkDetail
@@ -213,7 +214,11 @@ class SourceWorkDetailViewModel @Inject constructor(
                             authorAvatarUrl = work.authorAvatarUrl.orEmpty(),
                             categoryCd = -1,
                             categoryName = "",
-                            imageUrls = inlineImageUrls(list, upgradeToFull = worthUpgradingInline(list, imageRouteController)),
+                            imageUrls = inlineImageUrls(
+                                list,
+                                upgradeToFull = worthUpgradingInline(list, imageRouteController),
+                                sourceThumbnailUrl = work.thumbnailUrl,
+                            ),
                             tags = text?.tags.orEmpty(),
                             r18 = work.r18,
                         )
@@ -492,13 +497,32 @@ class SourceWorkDetailViewModel @Inject constructor(
     }
 }
 
-/** 内联图区按档取图：默认打底档，实测放行才升清晰档；档位缺失逐级退，原图只留给保存 */
-internal fun inlineImageUrls(pages: List<SourceWorkPage>, upgradeToFull: Boolean): List<String> =
-    pages.mapNotNull { page ->
+/**
+ * 内联图区按档取图：默认打底档，实测放行才升清晰档；档位缺失逐级退，原图只留给保存。
+ * 首图与列表缩略图同文件且列表档不低于所选档时沿用列表那张——本地图、更清晰、零额外流量，
+ * 降档替换只会让 Coil 重载、图区白一下；列表档更低如排行榜 240x480 照旧换
+ */
+internal fun inlineImageUrls(
+    pages: List<SourceWorkPage>,
+    upgradeToFull: Boolean,
+    sourceThumbnailUrl: String = "",
+): List<String> {
+    val urls = pages.mapNotNull { page ->
         val first = if (upgradeToFull) page.fullUrl else page.url
         val second = if (upgradeToFull) page.url else page.fullUrl
         first.ifBlank { second }.ifBlank { null }
     }
+    val first = urls.firstOrNull() ?: return urls
+    val kept = ThumbnailResolver.detailUnderlayUrl(sourceThumbnailUrl, first) ?: return urls
+    // 打底期显示的是缩略图原文：kept 必须是同一个串 Coil 模型才不变
+    if (kept != sourceThumbnailUrl) return urls
+    return if (imageBoxArea(kept) >= imageBoxArea(first)) listOf(kept) + urls.drop(1) else urls
+}
+
+private fun imageBoxArea(url: String): Long =
+    BOX_AREA.find(url)?.let { it.groupValues[1].toLong() * it.groupValues[2].toLong() } ?: Long.MAX_VALUE
+
+private val BOX_AREA = Regex("/c/(\\d+)x(\\d+)")
 
 /** 升不升清晰档由各图自己上游的实测说了算：认不出主机或没读数都停在打底档 */
 internal fun worthUpgradingInline(pages: List<SourceWorkPage>, controller: ImageRouteController): Boolean =

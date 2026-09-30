@@ -1,9 +1,17 @@
 package com.piku.client.data.source
 
+import com.piku.client.data.auth.PixivAuthEndpoints
+import com.piku.client.data.auth.PixivAuthRuntime
+import com.piku.client.data.auth.pixivClientHash
 import com.piku.client.data.local.InMemorySharedPreferences
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.data.remote.pixiv.PixivApi
+import com.piku.client.data.remote.pixiv.PixivAppApi
+import com.piku.client.data.remote.pixiv.PixivAppConfig
+import com.piku.client.data.remote.pixiv.PixivAppIllust
+import com.piku.client.data.remote.pixiv.PixivAppImageUrls
 import com.piku.client.data.remote.pixiv.PixivContentType
+import com.piku.client.data.remote.pixiv.PixivIllustsResponse
 import com.piku.client.data.remote.pixiv.PixivRankingItem
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkSource
@@ -18,6 +26,7 @@ import com.piku.client.data.repository.pixivTotalPages
 import com.piku.client.data.repository.toWork
 import com.piku.client.domain.source.SourceFacetStyle
 import com.piku.client.domain.source.SourceAuthorOpen
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
 import okhttp3.ResponseBody.Companion.toResponseBody
 import retrofit2.HttpException
@@ -52,6 +61,25 @@ class PixivContentSourceTest {
         override suspend fun recommend(illustId: Long, limit: Int): PixivRecommendResponse = recommendResponse
     }
 
+    private class FakeAppApi : PixivAppApi {
+        val calls = mutableListOf<Int?>()
+        val signatures = mutableListOf<Pair<String, String>>()
+        var illusts = emptyList<PixivAppIllust>()
+
+        override suspend fun recommended(
+            clientTime: String,
+            clientHash: String,
+            contentType: String,
+            filter: String,
+            includeRankingIllusts: Boolean,
+            offset: Int?,
+        ): PixivIllustsResponse {
+            calls.add(offset)
+            signatures.add(clientTime to clientHash)
+            return PixivIllustsResponse(illusts = illusts)
+        }
+    }
+
     private fun http404() = HttpException(Response.error<Any>(404, "".toResponseBody()))
 
     private fun item(id: Long, sexual: Int = 0) = PixivRankingItem(
@@ -78,8 +106,30 @@ class PixivContentSourceTest {
         source = WorkSource.PIXIV,
     )
 
-    private fun source(api: FakeApi): PixivContentSource =
-        PixivContentSource(PixivRepository(api), SettingsRepository(InMemorySharedPreferences()))
+    private fun repository(api: FakeApi, appApi: FakeAppApi = FakeAppApi()): PixivRepository =
+        PixivRepository(
+            api = api,
+            appApi = appApi,
+            endpoints = PixivAuthEndpoints(),
+            runtime = PixivAuthRuntime(dispatcher = Dispatchers.Unconfined, now = { FIXED_NOW }),
+        )
+
+    private fun source(api: FakeApi, appApi: FakeAppApi = FakeAppApi()): PixivContentSource =
+        PixivContentSource(repository(api, appApi), SettingsRepository(InMemorySharedPreferences()))
+
+    private fun appIllust(id: String, xRestrict: Int = 0) = PixivAppIllust(
+        id = id,
+        title = "title$id",
+        imageUrls = PixivAppImageUrls(large = "https://i.pximg.net/$id.jpg"),
+        pageCount = 2,
+        width = 1200,
+        height = 1800,
+        xRestrict = xRestrict,
+    )
+
+    private companion object {
+        const val FIXED_NOW = 1_700_000_000_000L
+    }
 
     /** 0 起页在取页时翻译成接口的 1 起页 */
     @Test
@@ -122,12 +172,12 @@ class PixivContentSourceTest {
             )
         }
 
-        val hidden = PixivContentSource(PixivRepository(api), settings)
+        val hidden = PixivContentSource(repository(api), settings)
             .page(PixivContentSource.FEED_RANKING, emptyMap(), 0).getOrThrow()
         assertEquals(listOf(1L), hidden.items.map { it.id })
 
         settings.setShowAdultContent(true)
-        val shown = PixivContentSource(PixivRepository(api), settings)
+        val shown = PixivContentSource(repository(api), settings)
             .page(PixivContentSource.FEED_RANKING, emptyMap(), 0).getOrThrow()
         assertEquals(listOf(1L, 2L, 3L), shown.items.map { it.id })
     }
@@ -239,6 +289,48 @@ class PixivContentSourceTest {
         assertEquals(listOf(Triple("weekly", "manga", 1)), api.calls)
     }
 
+    /** 推荐流走应用接口：0 起页换算成接口的 offset（单次上限 30） */
+    @Test
+    fun recommendedPageTranslatesToOffset() = runTest {
+        val app = FakeAppApi()
+        val src = source(FakeApi(), app)
+
+        src.page(PixivContentSource.FEED_RECOMMEND, emptyMap(), 0)
+        src.page(PixivContentSource.FEED_RECOMMEND, emptyMap(), 2)
+
+        assertEquals(listOf(0, 2 * PixivAppConfig.PAGE_SIZE), app.calls)
+    }
+
+    /**
+     * 客户端签名的两个头必须由同一个时间串算出。分成两次算（时钟各走一次）就对不上，
+     * pixiv 只会回一句「客户端凭据不合法」，看不出是这里错了。
+     */
+    @Test
+    fun recommendedSendsMatchedClientSignature() = runTest {
+        val app = FakeAppApi()
+
+        source(FakeApi(), app).page(PixivContentSource.FEED_RECOMMEND, emptyMap(), 0)
+
+        val (time, hash) = app.signatures.single()
+        assertEquals(pixivClientHash(time), hash)
+    }
+
+    /** 推荐卡带原作宽高（按比例排版用）；R-18 依旧跟随成人内容开关 */
+    @Test
+    fun recommendedCarriesSizeAndHidesR18WhenDisabled() = runTest {
+        val app = FakeAppApi().apply {
+            illusts = listOf(appIllust("1"), appIllust("2", xRestrict = 1))
+        }
+
+        val page = source(FakeApi(), app).page(PixivContentSource.FEED_RECOMMEND, emptyMap(), 0).getOrThrow()
+
+        assertEquals(listOf(1L), page.items.map { it.id })
+        val work = page.items.single()
+        assertEquals(1200, work.thumbWidth)
+        assertEquals(1800, work.thumbHeight)
+        assertEquals("https://i.pximg.net/1.jpg", work.thumbnailUrl)
+    }
+
     /** 作者区出站到 pixiv 用户页：与详情页作者行的去向一致 */
     @Test
     fun authorPageOpensPixivUserInBrowser() {
@@ -260,7 +352,11 @@ class PixivContentSourceTest {
             ),
             PixivContentSource.FEEDS.map { it.id },
         )
-        assertTrue(PixivContentSource.FEEDS.first { it.id == PixivContentSource.FEED_RECOMMEND }.requiresLogin)
+        val recommend = PixivContentSource.FEEDS.first { it.id == PixivContentSource.FEED_RECOMMEND }
+        assertTrue(recommend.requiresLogin)
+        // 已接通：登录后就该有内容，不再是「即将上线」
+        assertFalse(recommend.pendingAfterLogin)
+        assertTrue(recommend.proportional)
         val ranking = PixivContentSource.FEEDS.first { it.id == PixivContentSource.FEED_RANKING }
         assertTrue(ranking.ranked)
         assertFalse(ranking.requiresLogin)

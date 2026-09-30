@@ -123,7 +123,6 @@ class ImageRelayInterceptor(
 
         val RELAY_HOSTS = listOf(
             "pic-relay.cyou",
-            "piku-img.pages.dev",
         )
     }
 }

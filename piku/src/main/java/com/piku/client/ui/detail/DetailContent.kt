@@ -93,6 +93,7 @@ import com.piku.client.domain.model.WorkDetail
 import com.piku.client.domain.model.TranslatedFields
 import com.piku.client.domain.model.RestrictionReason
 import com.piku.client.ui.common.ExpandableIconAction
+import com.piku.client.ui.common.isAnimatedImage
 import com.piku.client.ui.common.localizedCategoryName
 import com.piku.client.ui.common.rememberAnimatedImage
 import com.piku.client.ui.theme.AccentSolid
@@ -620,6 +621,9 @@ internal fun ImagePager(
     val underlayUrl = remember(sourceThumbnailUrl, urls) {
         ThumbnailResolver.detailUnderlayUrl(sourceThumbnailUrl, urls.firstOrNull())
     }
+    // 每页自己记住已上屏的档位：同页换档时旧图垫在下面直到新档就绪，
+    // 图区不露底。首页优先用来源缩略图，其余页自持
+    val shownUrls = remember { mutableStateMapOf<Int, String>() }
 
     // 图区高度跟随真实宽高比：竖图不再被压成窄带，横图也不再上下留大片空白。
     // 量过的页码缓存下来，翻回看过的图能立刻恢复高度，不会先跳回默认值再跳回来。
@@ -732,10 +736,12 @@ internal fun ImagePager(
                     )
                 } else {
                     Box(Modifier.fillMaxSize()) {
-                        // 只有首页有已知的列表缩略图：追加图从没在列表里出现过，没有低清版本
-                        if (page == 0 && underlayUrl != null) {
+                        // 垫底：首页吃来源缩略图，其余页吃本页已上屏的档位
+                        // 换档期间旧图一直在，新档就绪后盖住它，图区全程不露底
+                        val underlay = (if (page == 0) underlayUrl else null) ?: shownUrls[page]
+                        if (underlay != null && !isAnimatedImage(underlay)) {
                             AsyncImage(
-                                model = underlayUrl,
+                                model = underlay,
                                 contentDescription = null,
                                 colorFilter = PikuColors.tameWhiteFilter,
                                 modifier = Modifier.fillMaxSize(),
@@ -767,6 +773,7 @@ internal fun ImagePager(
                                 if (size.width > 0f && size.height > 0f) {
                                     aspectCache[page] = size.width / size.height
                                 }
+                                shownUrls[page] = urls[page]
                                 // 首图已经在屏上了：此刻再解析原图 URL，不和它抢带宽
                                 if (page == 0) onFirstImageLoaded()
                             },

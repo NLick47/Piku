@@ -2,6 +2,7 @@ package com.piku.client.data.source
 
 import com.piku.client.R
 import com.piku.client.data.local.SettingsRepository
+import com.piku.client.data.remote.pixiv.PixivAppConfig
 import com.piku.client.data.repository.PixivRepository
 import com.piku.client.domain.model.AppError
 import com.piku.client.domain.model.Work
@@ -38,21 +39,24 @@ class PixivContentSource @Inject constructor(
 
     override suspend fun page(feedId: String, facets: Map<String, String>, page: Int): Result<SourcePage> {
         // 登录门未开前其余流不可达；真到达即实现缺口，给终态而非空页
-        if (feedId != FEED_RANKING) return Result.failure(AppError.NotFound)
+        if (feedId != FEED_RANKING && feedId != FEED_RECOMMEND) return Result.failure(AppError.NotFound)
         val adultEnabled = settingsRepository.showAdultContent.first()
-        return repository.ranking(
-            mode = facets[GROUP_PERIOD] ?: PERIOD_DAILY,
-            content = facets[GROUP_CONTENT] ?: FACET_ALL,
-            page = page + 1,
-        )
-            // 翻过末页接口回 404（2026-09 实测）而非空列表：翻页中的 NotFound 就地判到底，
-            // 首屏 404（模式/类型无效）照常失败
-            .recoverCatching { error ->
-                if (page > 0 && error == AppError.NotFound) SourcePage(items = emptyList()) else throw error
-            }
-            .map { result ->
-                result.copy(items = if (adultEnabled) result.items else result.items.filterNot { it.r18 })
-            }
+        val result = if (feedId == FEED_RECOMMEND) {
+            repository.recommendedFeed(offset = page * PixivAppConfig.PAGE_SIZE)
+                .map { items -> SourcePage(items = items) }
+        } else {
+            repository.ranking(
+                mode = facets[GROUP_PERIOD] ?: PERIOD_DAILY,
+                content = facets[GROUP_CONTENT] ?: FACET_ALL,
+                page = page + 1,
+            )
+                // 翻过末页接口回 404（2026-09 实测）而非空列表：翻页中的 NotFound 就地判到底，
+                // 首屏 404（模式/类型无效）照常失败
+                .recoverCatching { error ->
+                    if (page > 0 && error == AppError.NotFound) SourcePage(items = emptyList()) else throw error
+                }
+        }
+        return result.map { it.copy(items = if (adultEnabled) it.items else it.items.filterNot { work -> work.r18 }) }
     }
 
     override fun open(work: Work): SourceWorkOpen = SourceWorkOpen.InAppViewer
@@ -87,7 +91,9 @@ class PixivContentSource @Inject constructor(
                 id = FEED_RECOMMEND,
                 labelRes = R.string.pixiv_tab_recommend,
                 requiresLogin = true,
-                pendingAfterLogin = true,
+                proportional = true,
+                // 推荐结果基本稳定：刷新算「新增 N 条」会误报
+                chronological = false,
             ),
             SourceFeed(
                 id = FEED_FOLLOW,

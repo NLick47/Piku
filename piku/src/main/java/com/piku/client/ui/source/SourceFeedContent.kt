@@ -402,14 +402,24 @@ private fun SourceGrid(
             }
         }
         itemsIndexed(gridItems, key = { _, work -> work.key.toString() }) { index, work ->
-            WorkCard(
-                work = work,
-                isFavorite = work.key in state.favoriteIds,
-                onToggleFavorite = onToggleFavorite,
-                onClick = onWorkClick,
-                dark = dark,
-                rank = if (heroCount > 0) index + heroCount + 1 else null,
-            )
+            if (state.proportional) {
+                // 源给了原作宽高：按真实比例排版，竖图不再被裁成方图
+                ProportionalWorkCard(
+                    work = work,
+                    onToggleFavorite = onToggleFavorite,
+                    onClick = onWorkClick,
+                    dark = dark,
+                )
+            } else {
+                WorkCard(
+                    work = work,
+                    isFavorite = work.key in state.favoriteIds,
+                    onToggleFavorite = onToggleFavorite,
+                    onClick = onWorkClick,
+                    dark = dark,
+                    rank = if (heroCount > 0) index + heroCount + 1 else null,
+                )
+            }
         }
         item(span = StaggeredGridItemSpan.FullLine) {
             Box(

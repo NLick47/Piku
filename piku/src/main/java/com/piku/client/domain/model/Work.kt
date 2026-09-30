@@ -9,6 +9,9 @@ data class Work(
     val categoryName: String,
     val title: String,
     val thumbnailUrl: String,
+    /** 缩略图对应的原作宽高：非裁切卡片按它排版。0 = 该源没给，卡片退回方图 */
+    val thumbWidth: Int = 0,
+    val thumbHeight: Int = 0,
     val imageCount: Int,
     val r18: Boolean,
     val warning: Boolean = false,

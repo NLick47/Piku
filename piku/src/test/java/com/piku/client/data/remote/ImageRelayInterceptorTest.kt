@@ -82,15 +82,16 @@ class ImageRelayInterceptorTest {
     @Test
     fun successfulRelayIsPreferredForTheNextImage() {
         settings.setImageRouteMode(ImageRouteMode.RELAY)
-        val interceptor = interceptor()
+        // 候选写死在测试里：生产清单（自建域名）只剩一条，但"多条中继择优"的行为仍要守住
+        val interceptor = interceptor(hosts = listOf("relay-a", "relay-b"))
 
         val first = chain(results = listOf(IOException("boom"), okResponse(cdnRequest)))
         interceptor.intercept(first)
-        assertEquals(listOf("pic-relay.cyou", "piku-img.pages.dev"), first.hosts)
+        assertEquals(listOf("relay-a", "relay-b"), first.hosts)
 
         val second = chain(results = listOf(okResponse(cdnRequest)))
         interceptor.intercept(second)
-        assertEquals(listOf("piku-img.pages.dev"), second.hosts)
+        assertEquals(listOf("relay-b"), second.hosts)
     }
 
     @Test
@@ -111,7 +112,7 @@ class ImageRelayInterceptorTest {
     @Test
     fun nonSuccessResponseMovesOnWithoutCoolingDown() {
         settings.setImageRouteMode(ImageRouteMode.RELAY)
-        val interceptor = interceptor()
+        val interceptor = interceptor(hosts = listOf("relay-a", "relay-b"))
 
         // 第一条返回 404，第二条连接失败
         val first = chain(
@@ -123,7 +124,7 @@ class ImageRelayInterceptorTest {
         )
         interceptor.intercept(first)
         assertEquals(
-            listOf("pic-relay.cyou", "piku-img.pages.dev", ImageUpstream.POIPIKU.host),
+            listOf("relay-a", "relay-b", ImageUpstream.POIPIKU.host),
             first.hosts,
         )
 
@@ -131,7 +132,7 @@ class ImageRelayInterceptorTest {
         // 连接失败的那条也还在候选里，只是这一轮排在后面
         val second = chain(results = listOf(okResponse(cdnRequest)))
         interceptor.intercept(second)
-        assertEquals(listOf("pic-relay.cyou"), second.hosts)
+        assertEquals(listOf("relay-a"), second.hosts)
     }
 
     @Test
