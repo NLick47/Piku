@@ -122,7 +122,7 @@ class SourceFeedViewModelTest {
             observeHomeSourceUseCase = ObserveHomeSourceUseCase(settings),
             favorites = FakeFavorites(),
             settingsRepository = settings,
-            isLoggedIn = { loggedIn },
+            isLoggedIn = { _ -> loggedIn },
             config = SourceFeedConfig(prefetchEnabled = false),
         )
         dispatcher.scheduler.advanceUntilIdle()
@@ -311,7 +311,7 @@ class SourceFeedViewModelTest {
             observeHomeSourceUseCase = ObserveHomeSourceUseCase(settings),
             favorites = FakeFavorites(),
             settingsRepository = settings,
-            isLoggedIn = { true },
+            isLoggedIn = { _ -> true },
             config = SourceFeedConfig(prefetchEnabled = false),
         )
         dispatcher.scheduler.advanceUntilIdle()
@@ -426,7 +426,7 @@ class SourceFeedViewModelTest {
             observeHomeSourceUseCase = ObserveHomeSourceUseCase(settings),
             favorites = favorites,
             settingsRepository = settings,
-            isLoggedIn = { true },
+            isLoggedIn = { _ -> true },
             config = SourceFeedConfig(prefetchEnabled = false),
         )
         dispatcher.scheduler.advanceUntilIdle()

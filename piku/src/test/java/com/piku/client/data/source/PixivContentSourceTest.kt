@@ -238,24 +238,34 @@ class PixivContentSourceTest {
         assertEquals(listOf(Triple("weekly", "manga", 1)), api.calls)
     }
 
-    /** 声明形态：榜单一个 tab（带名次标记）+ 推荐占位；周期是片选组，类型是下拉组 */
+    /** 声明形态：五条流 = 四个登录门 + 榜单名次流；周期/内容两组维度只属于榜单 */
     @Test
     fun declarationsKeepOneRankingTabWithPeriodChips() {
         assertEquals(
-            listOf(PixivContentSource.FEED_RECOMMEND, PixivContentSource.FEED_RANKING),
+            listOf(
+                PixivContentSource.FEED_RECOMMEND,
+                PixivContentSource.FEED_FOLLOW,
+                PixivContentSource.FEED_RANKING,
+                PixivContentSource.FEED_LATEST,
+                PixivContentSource.FEED_DISCOVER,
+            ),
             PixivContentSource.FEEDS.map { it.id },
         )
-        assertTrue(PixivContentSource.FEEDS.first { it.id == PixivContentSource.FEED_RECOMMEND }.comingSoon)
-        assertTrue(PixivContentSource.FEEDS.first { it.id == PixivContentSource.FEED_RANKING }.ranked)
+        assertTrue(PixivContentSource.FEEDS.first { it.id == PixivContentSource.FEED_RECOMMEND }.requiresLogin)
+        val ranking = PixivContentSource.FEEDS.first { it.id == PixivContentSource.FEED_RANKING }
+        assertTrue(ranking.ranked)
+        assertFalse(ranking.requiresLogin)
 
         val period = PixivContentSource.FACETS.first { it.id == PixivContentSource.GROUP_PERIOD }
         assertEquals(SourceFacetStyle.Chips, period.style)
+        assertEquals(PixivContentSource.FEED_RANKING, period.feedId)
         assertEquals(listOf("daily", "weekly", "monthly", "rookie"), period.options.map { it.id })
         assertEquals("daily", period.options.first { it.selectedByDefault }.id)
         assertTrue("周期菜单项都要带更新节奏提示", period.options.all { it.hintRes != null })
 
         val content = PixivContentSource.FACETS.first { it.id == PixivContentSource.GROUP_CONTENT }
         assertEquals(SourceFacetStyle.Dropdown, content.style)
+        assertEquals(PixivContentSource.FEED_RANKING, content.feedId)
         assertEquals(listOf("all", "illust", "manga"), content.options.map { it.id })
     }
 

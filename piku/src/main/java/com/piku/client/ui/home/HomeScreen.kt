@@ -484,6 +484,9 @@ fun HomeScreen(
                         onOpenDrawer = openDrawer,
                         onSearchClick = onSearchClick,
                         onSourceClick = { showHomeSourceSheet = true },
+                        updateBanner = state.updateBanner,
+                        onOpenUpdate = onOpenUpdate,
+                        onDismissUpdateBanner = viewModel::dismissUpdateBanner,
                     )
                 } else if (isTablet) {
                     Row(Modifier.fillMaxSize()) {

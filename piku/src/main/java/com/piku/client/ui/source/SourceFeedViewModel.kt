@@ -2,6 +2,7 @@ package com.piku.client.ui.source
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.piku.client.R
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.domain.model.WorkKey
 import com.piku.client.domain.model.WorkSource
@@ -10,6 +11,7 @@ import com.piku.client.domain.source.SourceFacetGroup
 import com.piku.client.domain.source.SourceFeed
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.source.ShellFavorites
+import com.piku.client.domain.source.SourceLogin
 import com.piku.client.domain.source.SourceRegistry
 import com.piku.client.domain.source.SourceWorkOpen
 import com.piku.client.domain.usecase.ObserveHomeSourceUseCase
@@ -48,7 +50,8 @@ class SourceFeedViewModel @Inject constructor(
     /** 与 isLoggedIn 同一取舍：只依赖能力接口而非仓库，外壳保持无状态依赖，单测也好塞 */
     private val favorites: ShellFavorites,
     private val settingsRepository: SettingsRepository,
-    private val isLoggedIn: () -> Boolean,
+    /** 按源问登录态：poipiku 与 pixiv 是两套账号体系，互不放行 */
+    private val isLoggedIn: SourceLogin,
     private val config: SourceFeedConfig,
 ) : ViewModel() {
 
@@ -71,6 +74,10 @@ class SourceFeedViewModel @Inject constructor(
         val failed: Boolean = false,
         val loadMoreFailed: Boolean = false,
         val needLogin: Boolean = false,
+        /** 下拉刷新的「新增 N 条」提示：null 不显示；无时间序的流 loader 自行不算 */
+        val refreshNotice: Int? = null,
+        /** 登录门文案（声明带入），门屏点明是哪个源的账号 */
+        val loginPromptRes: Int = R.string.home_follow_login,
         /** 收藏状态（键带源）：卡片心形与详情都从这里取 */
         val favoriteIds: Set<WorkKey> = emptySet(),
         /** 看图器的 R-18 门：与 poipiku 详情的门同开关，但判定在查看器自己这里 */
@@ -140,6 +147,11 @@ class SourceFeedViewModel @Inject constructor(
 
     fun retry() = currentLoader()?.refresh(countNotice = false)
 
+    /** 下拉刷新：与重试不同，时间序流要计算「新增 N 条」提示 */
+    fun refresh() = currentLoader()?.refresh(countNotice = true)
+
+    fun dismissRefreshNotice() = currentLoader()?.clearNotice()
+
     fun retryLoadMore() = currentLoader()?.retryLoadMore()
 
     private fun onSourceChanged(source: WorkSource) {
@@ -183,7 +195,7 @@ class SourceFeedViewModel @Inject constructor(
      */
     private fun defaultSelection(declaration: ContentSource): Selection = Selection(
         feedId = declaration.feeds.firstOrNull {
-            !it.comingSoon && (!it.requiresLogin || isLoggedIn())
+            !it.comingSoon && (!it.requiresLogin || isLoggedIn(declaration.id))
         }?.id ?: declaration.feeds.first().id,
         facets = declaration.facets.associate { group ->
             group.id to (group.options.firstOrNull { it.selectedByDefault }?.id
@@ -210,7 +222,7 @@ class SourceFeedViewModel @Inject constructor(
                         .map { it.items }
                 }
             },
-            isLoggedIn = isLoggedIn,
+            isLoggedIn = { isLoggedIn(key.source) },
             idOf = { it.id },
             prefetchEnabled = config.prefetchEnabled,
         )
@@ -245,6 +257,8 @@ class SourceFeedViewModel @Inject constructor(
                 failed = snap.error != null,
                 loadMoreFailed = snap.loadMoreError != null,
                 needLogin = snap.needLogin,
+                refreshNotice = snap.refreshNotice,
+                loginPromptRes = declaration.loginPromptRes,
             )
         }
     }

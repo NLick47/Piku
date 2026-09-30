@@ -20,9 +20,9 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * pixiv 作为内容源。tab 只占两个：推荐（登录后的个性化，先占位）与榜单；
- * 日/周/月/新人是榜单的周期片选（高频，常显），综合/插画/漫画挂行尾下拉（低频）。
- * 榜单一天只更新一次，占四个 tab 会把 tab 行浪费掉。
+ * pixiv 作为内容源。五条流按设计稿排：推荐/关注新稿/榜单/最新/发现——四个登录门流未登录也挂在
+ * tab 行上（点开显示登录门，让登录的解锁价值可见），数据等 pixiv 登录工程接入；榜单是唯一实流。
+ * 日/周/月/新人是榜单的周期片选，综合/插画/漫画挂行尾下拉，两组维度只属于榜单。
  * novel 与 *_r18 匿名返回空，不声明。榜单接口 p 从 1 计，这里的 page 从 0 计，取页时翻译。
  */
 @Singleton
@@ -35,11 +35,15 @@ class PixivContentSource @Inject constructor(
 
     override val labelRes = R.string.home_source_pixiv
 
+    override val loginPromptRes = R.string.pixiv_need_login
+
     override val feeds = FEEDS
 
     override val facets = FACETS
 
     override suspend fun page(feedId: String, facets: Map<String, String>, page: Int): Result<SourcePage> {
+        // 登录门未开前其余流不可达；真到达即实现缺口，给终态而非空页
+        if (feedId != FEED_RANKING) return Result.failure(AppError.NotFound)
         val adultEnabled = settingsRepository.showAdultContent.first()
         return repository.ranking(
             mode = facets[GROUP_PERIOD] ?: PERIOD_DAILY,
@@ -70,6 +74,9 @@ class PixivContentSource @Inject constructor(
     companion object {
         const val FEED_RECOMMEND = "recommend"
         const val FEED_RANKING = "ranking"
+        const val FEED_FOLLOW = "follow"
+        const val FEED_LATEST = "latest"
+        const val FEED_DISCOVER = "discover"
         const val GROUP_PERIOD = "period"
         const val GROUP_CONTENT = "content"
         const val PERIOD_DAILY = "daily"
@@ -77,15 +84,18 @@ class PixivContentSource @Inject constructor(
 
         /** 声明是纯数据，单独暴露以便不构造本类（也就无需 DI）即可测试与断言 */
         val FEEDS = listOf(
-            // 登录后的个性化推荐：接口与登录都未就绪，先占位；未登录时壳自动跳过它选榜单
-            SourceFeed(id = FEED_RECOMMEND, labelRes = R.string.pixiv_tab_recommend, comingSoon = true),
+            SourceFeed(id = FEED_RECOMMEND, labelRes = R.string.pixiv_tab_recommend, requiresLogin = true),
+            SourceFeed(id = FEED_FOLLOW, labelRes = R.string.pixiv_tab_follow_new, requiresLogin = true),
             SourceFeed(id = FEED_RANKING, labelRes = R.string.pixiv_tab_ranking, ranked = true),
+            SourceFeed(id = FEED_LATEST, labelRes = R.string.pixiv_tab_new, requiresLogin = true),
+            SourceFeed(id = FEED_DISCOVER, labelRes = R.string.pixiv_tab_discover, requiresLogin = true),
         )
 
         val FACETS = listOf(
             SourceFacetGroup(
                 id = GROUP_PERIOD,
                 style = SourceFacetStyle.Chips,
+                feedId = FEED_RANKING,
                 options = listOf(
                     SourceFacet(
                         id = PERIOD_DAILY,
@@ -101,6 +111,7 @@ class PixivContentSource @Inject constructor(
             SourceFacetGroup(
                 id = GROUP_CONTENT,
                 style = SourceFacetStyle.Dropdown,
+                feedId = FEED_RANKING,
                 options = listOf(
                     SourceFacet(id = FACET_ALL, labelRes = R.string.pixiv_filter_all, selectedByDefault = true),
                     SourceFacet(id = "illust", labelRes = R.string.pixiv_filter_illust),

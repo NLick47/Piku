@@ -107,6 +107,9 @@ import kotlin.math.roundToInt
 /** 首屏可见 item 数超过该值（约 6 行）时显示"回到顶部"悬浮按钮 */
 internal const val FAB_SHOW_AFTER_ITEMS = 12
 
+/** 触底加载：距末尾不足该数量的 item 时拉下一页，两壳共用 */
+internal const val LOAD_MORE_NEAR_END = 6
+
 internal const val PREFETCH_IMAGE_COUNT = 12
 
 internal const val GO_TOP_ANIMATE_MAX_ITEMS = 50
@@ -293,7 +296,7 @@ internal fun HomeContent(
 }
 
 @Composable
-private fun UpdateBannerBar(
+internal fun UpdateBannerBar(
     release: GitHubRelease,
     onOpen: () -> Unit,
     onDismiss: () -> Unit,
@@ -362,7 +365,7 @@ private fun UpdateBannerBar(
 }
 
 @Composable
-private fun RefreshNoticeBar(
+internal fun RefreshNoticeBar(
     count: Int,
     onDismiss: () -> Unit,
     onGoTop: () -> Unit,
@@ -437,7 +440,6 @@ private fun WorkWaterfall(
     gridState: LazyStaggeredGridState,
 ) {
     val isTablet = LocalConfiguration.current.screenWidthDp >= 600
-    val prefetchContext = LocalContext.current
     val showFab = remember {
         derivedStateOf { gridState.firstVisibleItemIndex > FAB_SHOW_AFTER_ITEMS }
     }
@@ -452,7 +454,7 @@ private fun WorkWaterfall(
         snapshotFlow {
             val info = gridState.layoutInfo
             val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: 0
-            lastVisible >= info.totalItemsCount - 6
+            lastVisible >= info.totalItemsCount - LOAD_MORE_NEAR_END
         }
             .distinctUntilChanged()
             .collect { nearEnd ->
@@ -462,35 +464,7 @@ private fun WorkWaterfall(
             }
     }
 
-    val density = LocalDensity.current
-    val screenWidthDp = LocalConfiguration.current.screenWidthDp
-    val fallbackSidePx = remember(isTablet, screenWidthDp, density) {
-        if (isTablet) {
-            512
-        } else {
-            feedCardWidthPx(screenWidthDp, density.density).roundToInt().coerceAtLeast(1)
-        }
-    }
-
-    LaunchedEffect(works.lastOrNull()?.id, gridState) {
-        val loader = SingletonImageLoader.get(prefetchContext)
-        val visible = gridState.layoutInfo.visibleItemsInfo
-        val lastVisible = visible.lastOrNull()?.index ?: -1
-        val side = visible.firstOrNull()?.size?.width?.takeIf { it > 0 } ?: fallbackSidePx
-        works
-            .drop(lastVisible + 1)
-            .take(PREFETCH_IMAGE_COUNT)
-            .forEach { work ->
-                val url = feedThumbUrl(work.thumbnailUrl)
-                if (url.isBlank()) return@forEach
-                loader.enqueue(
-                    ImageRequest.Builder(prefetchContext)
-                        .data(url)
-                        .size(CoilSize(side, side))
-                        .build(),
-                )
-            }
-    }
+    ThumbnailPrefetchEffect(works = works, gridState = gridState)
 
     Box(Modifier.fillMaxSize()) {
         LazyVerticalStaggeredGrid(
@@ -552,8 +526,52 @@ private fun WorkWaterfall(
     }
 }
 
+/** 向后预取接下来几张缩略图；响应可见位置（滚动/翻页/重建都跟上），itemOffset 是网格头部占位数（榜单 hero） */
 @Composable
-private fun BoxScope.BackToTopFab(
+internal fun ThumbnailPrefetchEffect(
+    works: List<Work>,
+    gridState: LazyStaggeredGridState,
+    itemOffset: Int = 0,
+) {
+    val context = LocalContext.current
+    val density = LocalDensity.current
+    val configuration = LocalConfiguration.current
+    val fallbackSidePx = remember(configuration.screenWidthDp >= 600, configuration.screenWidthDp, density) {
+        if (configuration.screenWidthDp >= 600) {
+            512
+        } else {
+            feedCardWidthPx(configuration.screenWidthDp, density.density).roundToInt().coerceAtLeast(1)
+        }
+    }
+    LaunchedEffect(works, gridState, itemOffset) {
+        snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index }
+            .distinctUntilChanged()
+            .collect { lastGrid ->
+                // 布局未就绪或滚到 footer：夹回合法区间，drop 出不了负数也越不过头尾
+                val lastWork = ((lastGrid ?: -1) - itemOffset).coerceIn(-1, works.lastIndex)
+                val side = gridState.layoutInfo.visibleItemsInfo
+                    .firstOrNull { it.index >= itemOffset }?.size?.width?.takeIf { it > 0 }
+                    ?: fallbackSidePx
+                val loader = SingletonImageLoader.get(context)
+                works
+                    .drop(lastWork + 1)
+                    .take(PREFETCH_IMAGE_COUNT)
+                    .forEach { work ->
+                        val url = feedThumbUrl(work.thumbnailUrl)
+                        if (url.isBlank()) return@forEach
+                        loader.enqueue(
+                            ImageRequest.Builder(context)
+                                .data(url)
+                                .size(CoilSize(side, side))
+                                .build(),
+                        )
+                    }
+            }
+    }
+}
+
+@Composable
+internal fun BoxScope.BackToTopFab(
     showFab: State<Boolean>,
     isScrolling: State<Boolean>,
     onGoTop: () -> Unit,

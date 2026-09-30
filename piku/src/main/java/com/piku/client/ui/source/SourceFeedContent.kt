@@ -2,11 +2,17 @@ package com.piku.client.ui.source
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -16,7 +22,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
@@ -26,12 +31,11 @@ import androidx.compose.foundation.lazy.staggeredgrid.itemsIndexed
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Icon
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -41,6 +45,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -60,6 +65,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.flow.distinctUntilChanged
 import com.piku.client.R
+import com.piku.client.data.remote.GitHubRelease
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.key
 import com.piku.client.domain.source.SourceFacetGroup
@@ -72,15 +78,21 @@ import com.piku.client.ui.common.RankBadge
 import com.piku.client.ui.common.feedThumbUrl
 import com.piku.client.ui.common.labelRes
 import com.piku.client.ui.common.WorkCard
+import com.piku.client.ui.home.BackToTopFab
 import com.piku.client.ui.home.CategoryEntry
+import com.piku.client.ui.home.FAB_SHOW_AFTER_ITEMS
 import com.piku.client.ui.home.FeedTabColors
 import com.piku.client.ui.home.FeedTabItem
 import com.piku.client.ui.home.GlassHeaderTopPadding
+import com.piku.client.ui.home.LOAD_MORE_NEAR_END
 import com.piku.client.ui.home.LiquidGlassBackdrop
+import com.piku.client.ui.home.RefreshNoticeBar
 import com.piku.client.ui.home.SearchMenuButton
 import com.piku.client.ui.home.SourceChip
 import com.piku.client.ui.home.SkeletonGrid
 import com.piku.client.ui.home.TabBand
+import com.piku.client.ui.home.ThumbnailPrefetchEffect
+import com.piku.client.ui.home.UpdateBannerBar
 import com.piku.client.ui.home.UserMenuButton
 import com.piku.client.ui.home.feedScrollProgress
 import com.piku.client.ui.home.reportTabBand
@@ -90,6 +102,7 @@ import com.piku.client.ui.theme.PikuLayout
 import com.piku.client.ui.theme.WorkCardBgDark
 import com.piku.client.ui.theme.WorkCardPlaceholderDark
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun SourceFeedContent(
     dark: Boolean,
@@ -103,6 +116,9 @@ internal fun SourceFeedContent(
     onOpenDrawer: () -> Unit,
     onSearchClick: () -> Unit,
     onSourceClick: () -> Unit,
+    updateBanner: GitHubRelease?,
+    onOpenUpdate: () -> Unit,
+    onDismissUpdateBanner: () -> Unit,
     viewModel: SourceFeedViewModel = hiltViewModel(),
 ) {
     val state by viewModel.ui.collectAsState()
@@ -124,7 +140,7 @@ internal fun SourceFeedContent(
         }
             .distinctUntilChanged()
             .collect { (last, total) ->
-                if (total > 0 && last >= total - 3) viewModel.loadMore()
+                if (total > 0 && last >= total - LOAD_MORE_NEAR_END) viewModel.loadMore()
             }
     }
 
@@ -135,6 +151,20 @@ internal fun SourceFeedContent(
         }
     }
     val scrollProgress = remember(gridState) { { gridState.feedScrollProgress() } }
+
+    val showFab = remember {
+        derivedStateOf { gridState.firstVisibleItemIndex > FAB_SHOW_AFTER_ITEMS }
+    }
+    val currentState by rememberUpdatedState(state)
+    LaunchedEffect(Unit) {
+        snapshotFlow { isScrolling.value to currentState.refreshNotice }
+            .distinctUntilChanged()
+            .collect { (scrolling, notice) ->
+                if (scrolling && notice == 0) viewModel.dismissRefreshNotice()
+            }
+    }
+
+    val showFeedTabs = state.feeds.count { !it.comingSoon } > 1
 
     Column(Modifier.fillMaxSize()) {
         Box(
@@ -178,55 +208,82 @@ internal fun SourceFeedContent(
                 Box(Modifier.reportTabBand(onTabBand)) {
                     SourceTabBand(
                         feeds = state.feeds,
+                        showFeedTabs = showFeedTabs,
                         selectedFeedId = state.feedId,
-                        facetGroups = state.facets,
-                        facetChoices = state.facetChoices,
                         onSelectFeed = viewModel::selectFeed,
-                        onSelectFacet = viewModel::selectFacet,
                         tabColors = tabColors,
                     )
                 }
             }
         }
 
-        // 周期这类高频维度做成内容区标题（「日榜 ▾」）：一行文字 + 箭头，无下划线无玻璃底，
-        // 不是第二层 tab；点开菜单换周期，更新节奏写在菜单项里
-        state.facets.filter { it.style == SourceFacetStyle.Chips }.forEach { group ->
-            FacetTitleRow(
-                group = group,
-                selectedId = state.facetChoices[group.id],
-                onSelect = viewModel::selectFacet,
-            )
-        }
+        // 维度行：第二维不进 tab 行（tab 多了会挤掉它），只随所属流出现
+        FacetRow(
+            groups = state.facets.filter { it.feedId == null || it.feedId == state.feedId },
+            choices = state.facetChoices,
+            onSelect = viewModel::selectFacet,
+            colors = tabColors ?: FeedTabColors.default(),
+        )
 
-        when {
-            // 占位流（如登录后的推荐）：明说能力未到，而不是给个空态让人以为没内容
-            state.comingSoon -> CenteredMessage(text = stringResource(R.string.home_coming_soon))
-            state.needLogin -> CenteredMessage(text = stringResource(R.string.home_follow_login))
-            state.loading && state.items.isEmpty() -> SkeletonGrid(dark = dark)
-            state.failed && state.items.isEmpty() -> CenteredMessage(
-                text = stringResource(R.string.home_error_network),
-                action = stringResource(R.string.common_retry),
-                onAction = viewModel::retry,
-            )
-            state.items.isEmpty() -> CenteredMessage(stringResource(R.string.home_empty))
-            else -> SourceGrid(
-                state = state,
-                gridState = gridState,
-                dark = dark,
-                onRetryLoadMore = viewModel::retryLoadMore,
-                onToggleFavorite = viewModel::toggleFavorite,
-                onWorkClick = { work ->
-                    when (val open = viewModel.open(work)) {
-                        is SourceWorkOpen.External -> runCatching {
-                            context.startActivity(
-                                Intent(Intent.ACTION_VIEW, Uri.parse(open.url)),
-                            )
-                        }
-                        SourceWorkOpen.InAppViewer -> detailWork = work
+        Box(Modifier.fillMaxSize()) {
+            when {
+                // 占位流（如登录后的推荐）：明说能力未到，而不是给个空态让人以为没内容
+                state.comingSoon -> CenteredMessage(text = stringResource(R.string.home_coming_soon))
+                state.needLogin -> CenteredMessage(text = stringResource(state.loginPromptRes))
+                state.loading && state.items.isEmpty() -> SkeletonGrid(dark = dark)
+                state.failed && state.items.isEmpty() -> CenteredMessage(
+                    text = stringResource(R.string.home_error_network),
+                    action = stringResource(R.string.common_retry),
+                    onAction = viewModel::retry,
+                )
+                state.items.isEmpty() -> CenteredMessage(stringResource(R.string.home_empty))
+                else -> Box(Modifier.fillMaxSize()) {
+                    PullToRefreshBox(
+                        isRefreshing = state.loading,
+                        onRefresh = viewModel::refresh,
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        SourceGrid(
+                            state = state,
+                            gridState = gridState,
+                            dark = dark,
+                            onRetryLoadMore = viewModel::retryLoadMore,
+                            onToggleFavorite = viewModel::toggleFavorite,
+                            onWorkClick = { work ->
+                                when (val open = viewModel.open(work)) {
+                                    is SourceWorkOpen.External -> runCatching {
+                                        context.startActivity(
+                                            Intent(Intent.ACTION_VIEW, Uri.parse(open.url)),
+                                        )
+                                    }
+                                    SourceWorkOpen.InAppViewer -> detailWork = work
+                                }
+                            },
+                        )
                     }
-                },
-            )
+                    RefreshNoticeOverlay(
+                        notice = state.refreshNotice,
+                        dark = dark,
+                        onDismiss = viewModel::dismissRefreshNotice,
+                        onGoTop = { gridState.scrollToTopSmart(scope) },
+                    )
+                    BackToTopFab(
+                        showFab = showFab,
+                        isScrolling = isScrolling,
+                        onGoTop = { gridState.scrollToTopSmart(scope) },
+                        dark = dark,
+                    )
+                }
+            }
+            updateBanner?.let { release ->
+                UpdateBannerBar(
+                    release = release,
+                    onOpen = onOpenUpdate,
+                    onDismiss = onDismissUpdateBanner,
+                    dark = dark,
+                    modifier = Modifier.align(Alignment.TopCenter),
+                )
+            }
         }
     }
 
@@ -236,19 +293,19 @@ internal fun SourceFeedContent(
     }
 }
 
-/** tab 行 + 维度行，与 poipiku 的 FeedTabRow 同款：字号、选中下划线、间距、取色全一致 */
+/** tab 行：只放流。第二维（周期/内容）在下方维度行，tab 再多也不会挤掉它们 */
 @Composable
 private fun SourceTabBand(
     feeds: List<SourceFeed>,
+    showFeedTabs: Boolean,
     selectedFeedId: String,
-    facetGroups: List<SourceFacetGroup>,
-    facetChoices: Map<String, String>,
     onSelectFeed: (String) -> Unit,
-    onSelectFacet: (groupId: String, optionId: String) -> Unit,
     tabColors: FeedTabColors?,
 ) {
+    // 占位流（能力未到）不上 tab 行：首页不放假东西；只剩一条流时 tab 项整个收起
+    if (!showFeedTabs) return
     val colors = tabColors ?: FeedTabColors.default()
-    val dropdowns = facetGroups.filter { it.style == SourceFacetStyle.Dropdown }
+    val visibleFeeds = feeds.filterNot { it.comingSoon }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -261,7 +318,7 @@ private fun SourceTabBand(
         horizontalArrangement = Arrangement.spacedBy(18.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        feeds.forEach { feed ->
+        visibleFeeds.forEach { feed ->
             FeedTabItem(
                 text = stringResource(feed.labelRes),
                 active = feed.id == selectedFeedId,
@@ -269,19 +326,7 @@ private fun SourceTabBand(
                 colors = colors,
             )
         }
-        if (dropdowns.isNotEmpty()) {
-            Spacer(Modifier.weight(1f))
-            dropdowns.forEach { group ->
-                FacetEntry(
-                    group = group,
-                    selectedId = facetChoices[group.id],
-                    onSelect = onSelectFacet,
-                    colors = colors,
-                )
-            }
-        }
     }
-
 }
 
 /** 内容类型筛选：外观与 poipiku 的分类入口一致，点开是下拉 */
@@ -325,6 +370,10 @@ private fun SourceGrid(
     onToggleFavorite: (Work) -> Unit,
 ) {
     val isTablet = LocalConfiguration.current.screenWidthDp >= 600
+    // 榜单流：前三名给 hero 位；第 4 名起在卡片上挂名次角标
+    val heroCount = if (state.ranked) minOf(RANK_HERO_COUNT, state.items.size) else 0
+    val gridItems = if (heroCount > 0) state.items.drop(heroCount) else state.items
+    ThumbnailPrefetchEffect(works = gridItems, gridState = gridState, itemOffset = heroCount)
     LazyVerticalStaggeredGrid(
         columns = if (isTablet) StaggeredGridCells.Adaptive(220.dp) else StaggeredGridCells.Fixed(2),
         state = gridState,
@@ -338,14 +387,11 @@ private fun SourceGrid(
         horizontalArrangement = Arrangement.spacedBy(PikuLayout.GridGap),
         verticalItemSpacing = PikuLayout.GridGap,
     ) {
-        // 榜单流：前三名给 hero 位；第 4 名起在卡片上挂名次角标
-        val heroCount = if (state.ranked) minOf(RANK_HERO_COUNT, state.items.size) else 0
         if (heroCount > 0) {
             item(span = StaggeredGridItemSpan.FullLine, key = "ranking-hero") {
                 RankingHero(works = state.items.take(heroCount), dark = dark, onClick = onWorkClick)
             }
         }
-        val gridItems = if (heroCount > 0) state.items.drop(heroCount) else state.items
         itemsIndexed(gridItems, key = { _, work -> work.key.toString() }) { index, work ->
             WorkCard(
                 work = work,
@@ -487,6 +533,29 @@ private fun HeroCard(
 
 private const val RANK_HERO_COUNT = 3
 
+/** 刷新提示条：与 poipiku 壳同款，挂在内容区顶部；独立成函数避免外层 Column 的作用域劫持 AnimatedVisibility */
+@Composable
+private fun BoxScope.RefreshNoticeOverlay(
+    notice: Int?,
+    dark: Boolean,
+    onDismiss: () -> Unit,
+    onGoTop: () -> Unit,
+) {
+    AnimatedVisibility(
+        visible = notice != null,
+        modifier = Modifier.align(Alignment.TopCenter),
+        enter = slideInVertically(initialOffsetY = { -it / 2 }) + fadeIn(),
+        exit = slideOutVertically(targetOffsetY = { -it / 2 }) + fadeOut(),
+    ) {
+        RefreshNoticeBar(
+            count = notice ?: 0,
+            onDismiss = onDismiss,
+            onGoTop = onGoTop,
+            dark = dark,
+        )
+    }
+}
+
 @Composable
 private fun CenteredMessage(
     text: String,
@@ -512,62 +581,59 @@ private fun CenteredMessage(
     }
 }
 
-/** 高频维度的内容标题行：如「日榜 ▾」。样式是页面标题（无下划线、无玻璃底），不是第二层 tab */
+/** 维度行：片选 chips 一击直达，下拉挂行尾；只渲染当前流的维度 */
 @Composable
-private fun FacetTitleRow(
-    group: SourceFacetGroup,
-    selectedId: String?,
+private fun FacetRow(
+    groups: List<SourceFacetGroup>,
+    choices: Map<String, String>,
     onSelect: (groupId: String, optionId: String) -> Unit,
+    colors: FeedTabColors,
 ) {
-    var menuOpen by remember { mutableStateOf(false) }
-    val selected = group.options.firstOrNull { it.id == selectedId } ?: group.options.first()
-    Box(
+    val chips = groups.filter { it.style == SourceFacetStyle.Chips }
+    val dropdowns = groups.filter { it.style == SourceFacetStyle.Dropdown }
+    if (chips.isEmpty() && dropdowns.isEmpty()) return
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = PikuLayout.ScreenInset, end = PikuLayout.ScreenInset, top = 8.dp),
+            .padding(start = PikuLayout.ScreenInset, end = PikuLayout.ScreenInset, top = 6.dp, bottom = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(10.dp))
-                .clickable { menuOpen = true }
-                .padding(horizontal = 4.dp, vertical = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Text(
-                text = stringResource(selected.labelRes),
-                color = PikuColors.textPrimary,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Icon(
-                imageVector = Icons.Filled.KeyboardArrowDown,
-                contentDescription = null,
-                tint = PikuColors.textFaint,
-                modifier = Modifier.size(18.dp),
-            )
-        }
-        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+        chips.forEach { group ->
             group.options.forEach { option ->
-                DropdownMenuItem(
-                    text = {
-                        Column {
-                            Text(stringResource(option.labelRes))
-                            option.hintRes?.let { hint ->
-                                Text(
-                                    text = stringResource(hint),
-                                    color = PikuColors.textFaint,
-                                    fontSize = 11.sp,
-                                )
-                            }
-                        }
-                    },
-                    onClick = {
-                        menuOpen = false
-                        onSelect(group.id, option.id)
-                    },
+                FacetChip(
+                    label = stringResource(option.labelRes),
+                    selected = choices[group.id] == option.id,
+                    onClick = { onSelect(group.id, option.id) },
+                )
+            }
+        }
+        if (dropdowns.isNotEmpty()) {
+            Spacer(Modifier.weight(1f))
+            dropdowns.forEach { group ->
+                FacetEntry(
+                    group = group,
+                    selectedId = choices[group.id],
+                    onSelect = onSelect,
+                    colors = colors,
                 )
             }
         }
     }
+}
+
+/** 维度片选：药丸样式，与 tab 的下划线样式区分层级 */
+@Composable
+private fun FacetChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    Text(
+        text = label,
+        color = if (selected) PikuColors.accent else PikuColors.textFaint,
+        fontSize = 12.sp,
+        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (selected) PikuColors.accent.copy(alpha = 0.1f) else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+    )
 }

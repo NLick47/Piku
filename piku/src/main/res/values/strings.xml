@@ -681,6 +681,10 @@
     <string name="pixiv_hint_rookie">每日更新</string>
     <string name="pixiv_tab_ranking">榜单</string>
     <string name="pixiv_tab_recommend">推荐</string>
+    <string name="pixiv_tab_follow_new">关注</string>
+    <string name="pixiv_tab_new">最新</string>
+    <string name="pixiv_tab_discover">发现</string>
+    <string name="pixiv_need_login">登录 pixiv 账号后可见</string>
     <string name="home_coming_soon">即将上线</string>
     <string name="pixiv_tab_daily">今日榜</string>
     <string name="pixiv_tab_weekly">周榜</string>

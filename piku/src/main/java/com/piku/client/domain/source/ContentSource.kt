@@ -1,6 +1,7 @@
 package com.piku.client.domain.source
 
 import androidx.annotation.StringRes
+import com.piku.client.R
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.model.WorkStats
@@ -11,6 +12,10 @@ interface ContentSource {
 
     /** 源显示名，换源控件用 */
     @get:StringRes val labelRes: Int
+
+    /** 登录门文案：requiresLogin 流未登录时门屏显示。默认沿用 poipiku 关注门的老文案，pixiv 覆写点名自家账号 */
+    @get:StringRes val loginPromptRes: Int
+        get() = R.string.home_follow_login
 
     /** 第一维：流。外壳按声明顺序渲染成 tab 行 */
     val feeds: List<SourceFeed>
@@ -92,6 +97,8 @@ data class SourceFacetGroup(
     val id: String,
     val style: SourceFacetStyle,
     val options: List<SourceFacet>,
+    /** 只在指定流显示（pixiv 的周期/内容只属于榜单）；null = 该源所有流共用 */
+    val feedId: String? = null,
 )
 
 /** 组的展示形态：常显片选（高频切换）或 tab 行尾下拉（低频筛选） */
