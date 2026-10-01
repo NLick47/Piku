@@ -1,0 +1,180 @@
+package com.piku.client.ui.source
+
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import coil3.compose.AsyncImage
+import com.piku.client.R
+import com.piku.client.domain.model.Work
+import com.piku.client.ui.common.feedThumbUrl
+import com.piku.client.ui.theme.PikuColors
+import com.piku.client.ui.theme.PikuLayout
+import com.piku.client.ui.theme.SoftBorderLight
+import com.piku.client.ui.theme.WorkCardBgDark
+import com.piku.client.ui.theme.WorkCardBorderDark
+import com.piku.client.ui.theme.WorkCardPlaceholderDark
+import kotlinx.coroutines.delay
+
+// 小说封面是竖版 接口不给宽高 统一按这个比例排
+private const val NOVEL_COVER_ASPECT = 0.75f
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+internal fun NovelWorkCard(
+    work: Work,
+    onToggleFavorite: (Work) -> Unit,
+    onClick: (Work) -> Unit,
+    dark: Boolean,
+) {
+    val shape = RoundedCornerShape(PikuLayout.CardCorner)
+    var heartVisible by remember { mutableStateOf(false) }
+    val heartScale = remember { Animatable(0f) }
+
+    LaunchedEffect(heartVisible) {
+        if (heartVisible) {
+            heartScale.snapTo(0f)
+            heartScale.animateTo(1.3f, tween(120, easing = LinearOutSlowInEasing))
+            heartScale.animateTo(1f, tween(80, easing = LinearOutSlowInEasing))
+            delay(180)
+            heartVisible = false
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .shadow(
+                elevation = if (dark) 0.dp else 6.dp,
+                shape = shape,
+                ambientColor = Color(0x1F000000),
+                spotColor = Color(0x33000000),
+            )
+            .clip(shape)
+            .background(if (dark) WorkCardBgDark else Color(0xE6FFFFFF))
+            .border(
+                BorderStroke(0.5.dp, if (dark) WorkCardBorderDark else SoftBorderLight),
+                shape,
+            )
+            .combinedClickable(
+                onClick = { onClick(work) },
+                onDoubleClick = { onToggleFavorite(work) },
+            ),
+    ) {
+        Box(Modifier.fillMaxWidth()) {
+            AsyncImage(
+                model = feedThumbUrl(work.thumbnailUrl),
+                contentDescription = work.title,
+                colorFilter = PikuColors.tameWhiteFilter,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(NOVEL_COVER_ASPECT)
+                    .background(if (dark) WorkCardPlaceholderDark else Color(0xFFF1EFEA)),
+                contentScale = ContentScale.Crop,
+            )
+            if (work.textLength > 0) {
+                Text(
+                    text = stringResource(R.string.pixiv_novel_length, work.textLength),
+                    color = Color.White,
+                    fontSize = 10.sp,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(6.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0x99000000))
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                )
+            }
+            if (heartVisible) {
+                Icon(
+                    imageVector = Icons.Filled.Favorite,
+                    contentDescription = null,
+                    tint = PikuColors.accent,
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .size(40.dp)
+                        .graphicsLayer {
+                            scaleX = heartScale.value
+                            scaleY = heartScale.value
+                        },
+                )
+            }
+        }
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(
+                    start = PikuLayout.CardPadding,
+                    end = PikuLayout.CardPadding,
+                    top = 10.dp,
+                    bottom = 10.dp,
+                ),
+        ) {
+            Text(
+                text = work.title,
+                color = PikuColors.textPrimary,
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(6.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                AsyncImage(
+                    model = work.authorAvatarUrl,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(18.dp)
+                        .clip(CircleShape),
+                    contentScale = ContentScale.Crop,
+                )
+                Spacer(Modifier.width(5.dp))
+                Text(
+                    text = work.authorName,
+                    color = PikuColors.textPrimary,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}

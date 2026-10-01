@@ -288,6 +288,9 @@ internal fun DetailContent(
                     dark = dark,
                     translated = translated,
                     showTranslation = showTranslation,
+                    translating = translating,
+                    onToggleTranslation = onToggleTranslation,
+                    onRetranslate = onRetranslate,
                     onAuthorClick = onAuthorClick,
                     onRelatedWorkClick = onRelatedWorkClick,
                 )
@@ -312,6 +315,9 @@ internal fun DetailContent(
                     dark = dark,
                     translated = translated,
                     showTranslation = showTranslation,
+                    translating = translating,
+                    onToggleTranslation = onToggleTranslation,
+                    onRetranslate = onRetranslate,
                     onAuthorClick = onAuthorClick,
                     onRelatedWorkClick = onRelatedWorkClick,
                 )
@@ -321,6 +327,9 @@ internal fun DetailContent(
                 dark = dark,
                 translated = translated,
                 showTranslation = showTranslation,
+                translating = translating,
+                onToggleTranslation = onToggleTranslation,
+                onRetranslate = onRetranslate,
                 onRelatedWorkClick = onRelatedWorkClick,
             )
             TagsSection(
@@ -348,13 +357,16 @@ internal fun DetailContent(
     }
 }
 
-/** 作者行 + 作者简介（原/译由标题行那颗 chip 统一切） */
+/** 作者行 + 作者简介（原/译由标题行那颗 chip 统一切；无标题作品 chip 贴在简介右上） */
 @Composable
 private fun AuthorSection(
     detail: WorkDetail,
     dark: Boolean,
     translated: TranslatedFields?,
     showTranslation: Boolean,
+    translating: Boolean,
+    onToggleTranslation: () -> Unit,
+    onRetranslate: () -> Unit,
     onAuthorClick: () -> Unit,
     onRelatedWorkClick: (Long, Long, String) -> Unit,
 ) {
@@ -363,12 +375,25 @@ private fun AuthorSection(
         val profileText = translated?.authorProfile
             ?.takeIf { showTranslation && it.isNotBlank() }
             ?: detail.authorProfile
-        Text(
-            text = linkify(profileText, dark, onRelatedWorkClick),
-            color = PikuColors.textSecondary,
-            fontSize = 12.sp,
-            modifier = Modifier.padding(top = 6.dp),
-        )
+        Row(verticalAlignment = Alignment.Top) {
+            Text(
+                text = linkify(profileText, dark, onRelatedWorkClick),
+                color = PikuColors.textSecondary,
+                fontSize = 12.sp,
+                modifier = Modifier
+                    .padding(top = 6.dp)
+                    .weight(1f),
+            )
+            if (detail.title.isBlank()) {
+                HeadlineTranslateChip(
+                    shown = showTranslation,
+                    translating = translating,
+                    onClick = onToggleTranslation,
+                    onLongClick = onRetranslate,
+                    modifier = Modifier.padding(start = 6.dp, top = 6.dp),
+                )
+            }
+        }
     }
 }
 
@@ -423,6 +448,9 @@ private fun DescriptionSection(
     dark: Boolean,
     translated: TranslatedFields?,
     showTranslation: Boolean,
+    translating: Boolean,
+    onToggleTranslation: () -> Unit,
+    onRetranslate: () -> Unit,
     onRelatedWorkClick: (Long, Long, String) -> Unit,
 ) {
     if (detail.description.isBlank()) return
@@ -449,27 +477,44 @@ private fun DescriptionSection(
         0
     }
     val collapsible = fullLineCount > DESCRIPTION_COLLAPSE_THRESHOLD
-    SelectionContainer(
-        state = descriptionSelection,
-        modifier = Modifier
-            .animateContentSize()
-            .pointerInput(descriptionSelection) {
-                detectTapGestures(onTap = { descriptionSelection.clear() })
-            },
-    ) {
-        Text(
-            text = linkifiedDescription,
-            color = PikuColors.textSecondary,
-            fontSize = 13.sp,
-            lineHeight = 20.sp,
-            maxLines = if (collapsible && !descriptionExpanded) 3 else Int.MAX_VALUE,
-            overflow = if (collapsible && !descriptionExpanded) {
-                TextOverflow.Ellipsis
-            } else {
-                TextOverflow.Clip
-            },
-            modifier = Modifier.onSizeChanged { containerWidthPx = it.width },
-        )
+    val body: @Composable (Modifier) -> Unit = { mod ->
+        SelectionContainer(
+            state = descriptionSelection,
+            modifier = Modifier
+                .animateContentSize()
+                .pointerInput(descriptionSelection) {
+                    detectTapGestures(onTap = { descriptionSelection.clear() })
+                },
+        ) {
+            Text(
+                text = linkifiedDescription,
+                color = PikuColors.textSecondary,
+                fontSize = 13.sp,
+                lineHeight = 20.sp,
+                maxLines = if (collapsible && !descriptionExpanded) 3 else Int.MAX_VALUE,
+                overflow = if (collapsible && !descriptionExpanded) {
+                    TextOverflow.Ellipsis
+                } else {
+                    TextOverflow.Clip
+                },
+                modifier = mod.onSizeChanged { containerWidthPx = it.width },
+            )
+        }
+    }
+    // 无标题且无作者简介：chip 贴在简介右上；其余场景 chip 在标题行或作者简介
+    if (detail.title.isBlank() && detail.authorProfile.isBlank()) {
+        Row(verticalAlignment = Alignment.Top) {
+            body(Modifier.weight(1f))
+            HeadlineTranslateChip(
+                shown = showTranslation,
+                translating = translating,
+                onClick = onToggleTranslation,
+                onLongClick = onRetranslate,
+                modifier = Modifier.padding(start = 6.dp, top = 2.dp),
+            )
+        }
+    } else {
+        body(Modifier)
     }
     if (!collapsible) return
     Text(
