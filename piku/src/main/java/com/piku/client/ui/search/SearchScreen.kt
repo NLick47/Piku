@@ -1,18 +1,14 @@
 package com.piku.client.ui.search
 
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -21,29 +17,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
-import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
-import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
-import androidx.compose.foundation.lazy.staggeredgrid.items
-import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.outlined.DeleteSweep
-import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -57,20 +38,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
@@ -84,22 +62,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil3.compose.AsyncImage
 import com.piku.client.R
 import com.piku.client.domain.model.FollowUser
-import com.piku.client.domain.model.TagCard
-import com.piku.client.domain.model.WorkKey
-import com.piku.client.domain.model.key
 import com.piku.client.domain.model.Work
+import com.piku.client.domain.source.SourceAuthorOpen
 import com.piku.client.ui.common.FeedbackHost
-import com.piku.client.ui.common.FollowPillButton
-import com.piku.client.ui.common.GlassCard
-import com.piku.client.ui.common.LoaderDots
 import com.piku.client.ui.common.PikuBackButton
-import com.piku.client.ui.common.PikuSegmented
-import com.piku.client.ui.common.LoginPrompt
-import com.piku.client.ui.common.UserAvatar
-import com.piku.client.ui.common.WorkCard
 import com.piku.client.ui.theme.GlassHeaderTintDark
 import com.piku.client.ui.theme.GlassHeaderTintLight
 import com.piku.client.ui.theme.HomeBgBottomDark
@@ -107,18 +75,12 @@ import com.piku.client.ui.theme.HomeBgBottomLight
 import com.piku.client.ui.theme.HomeBgTopDark
 import com.piku.client.ui.theme.HomeBgTopLight
 import com.piku.client.ui.theme.LocalDarkTheme
-import com.piku.client.ui.theme.LoginBackgroundDark
 import com.piku.client.ui.theme.LoginTextFaintLight
 import com.piku.client.ui.theme.LoginTextSecondaryDark
 import com.piku.client.ui.theme.LoginTextSecondaryLight
 import com.piku.client.ui.theme.PikuColors
-import com.piku.client.ui.theme.WorkCardBgDark
-import com.piku.client.ui.theme.WorkCardBorderDark
-import com.piku.client.ui.theme.WorkCardInfoBgDark
-import com.piku.client.ui.theme.WorkCardPlaceholderDark
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 /** 与站点输入框一致的关键词长度上限（仅普通搜索；链接识别不受此限） */
@@ -135,6 +97,7 @@ fun SearchScreen(
     onWorkClick: (Work) -> Unit,
     onUserClick: (FollowUser) -> Unit,
     onOpenLink: (PoipikuLink) -> Unit,
+    onOpenExternal: (String) -> Unit,
     onLoginClick: () -> Unit,
     onManageTags: () -> Unit,
     dark: Boolean = LocalDarkTheme.current,
@@ -146,6 +109,8 @@ fun SearchScreen(
     val keyboardController = LocalSoftwareKeyboardController.current
     var query by rememberSaveable { mutableStateOf(state.keyword) }
     val focusRequester = remember { FocusRequester() }
+    var inputFocused by remember { mutableStateOf(false) }
+    var showFilterSheet by rememberSaveable { mutableStateOf(false) }
 
     // 去除 #/@ 前缀后的真实搜索词（# 可叠加，如站点分类标签 "##東方"）；空串表示待机态
     val searchTerm = state.keyword.trimStart('#').removePrefix("@").trim()
@@ -161,6 +126,18 @@ fun SearchScreen(
     var jaFailed by remember { mutableStateOf(false) }
     val jaDirection = remember(query) { translateDirection(query) }
 
+    // 联想层：聚焦 + 有输入 + 有联想结果时浮出；链接输入不联想
+    val showSuggestions = inputFocused && link == null &&
+        query.trim().isNotEmpty() && state.suggestions.isNotEmpty()
+
+    // 用户行去向按插件声明分流（pixiv 出站到 pixiv 用户页），未声明走默认用户页
+    val handleUserClick: (FollowUser) -> Unit = { user ->
+        when (val open = viewModel.userOpen(user)) {
+            is SourceAuthorOpen.External -> onOpenExternal(open.url)
+            SourceAuthorOpen.NativeDetail, null -> onUserClick(user)
+        }
+    }
+
     LaunchedEffect(Unit) {
         if (!hasQuery) {
             delay(FOCUS_DELAY_MS)
@@ -174,6 +151,7 @@ fun SearchScreen(
         val keyword = raw.trim()
         if (keyword.isEmpty()) return
         keyboardController?.hide()
+        viewModel.clearSuggestions()
         val target = parsePoipikuLink(keyword)
         if (target != null) {
             // 链接直达：导航到作品/作者页，不写入搜索历史
@@ -228,6 +206,7 @@ fun SearchScreen(
                     jaTranslating = false
                     jaFailed = false
                     query = value
+                    viewModel.onQueryInput(value)
                 },
                 onSubmit = { submit(query) },
                 isLink = link != null,
@@ -238,61 +217,111 @@ fun SearchScreen(
                 translateBusy = jaTranslating,
                 translateFailed = jaFailed,
                 onTranslateClick = { translateAndSearch() },
+                onFocusedChanged = { inputFocused = it },
             )
-            if (!hasQuery) {
-                IdleContent(
-                    history = state.history,
-                    popularTags = state.popularTagNames,
-                    customTags = state.customTags,
-                    onSelect = { submit(it) },
-                    onSelectCustomTag = { submit("#$it") },
-                    onManageTags = onManageTags,
-                    onRemoveHistory = viewModel::removeHistory,
-                    onClearHistory = viewModel::clearHistory,
-                    dark = dark,
-                )
-            } else {
-                SearchTabRow(
-                    selected = state.tab,
-                    onSelect = viewModel::selectTab,
-                )
-                when (state.tab) {
-                    SearchTab.WORKS -> WorksTabContent(
-                        state = state,
-                        isTablet = isTablet,
-                        onLoginClick = onLoginClick,
-                        onRetry = viewModel::retryWorks,
-                        onLoadMore = viewModel::loadMoreWorks,
-                        onRetryLoadMore = viewModel::retryLoadMoreWorks,
-                        onToggleFavorite = viewModel::toggleFavorite,
-                        onWorkClick = onWorkClick,
+            Box(Modifier.weight(1f)) {
+                if (!hasQuery) {
+                    IdleContent(
+                        history = state.history,
+                        popularTags = state.popularTagNames,
+                        customTags = state.customTags,
+                        trending = state.trending,
+                        pluginHint = state.pluginActive,
+                        onSelect = { submit(it) },
+                        onSelectCustomTag = { submit("#$it") },
+                        onManageTags = onManageTags,
+                        onRemoveHistory = viewModel::removeHistory,
+                        onClearHistory = viewModel::clearHistory,
                         dark = dark,
                     )
-                    SearchTab.USERS -> UsersTabContent(
-                        state = state,
-                        dark = dark,
-                        onLoginClick = onLoginClick,
-                        onRetry = viewModel::retryUsers,
-                        onLoadMore = viewModel::loadMoreUsers,
-                        onRetryLoadMore = viewModel::retryLoadMoreUsers,
-                        onUserClick = onUserClick,
-                        onToggleFollow = viewModel::toggleFollow,
-                    )
-                    SearchTab.TAGS -> TagsTabContent(
-                        state = state,
-                        isTablet = isTablet,
-                        onLoginClick = onLoginClick,
-                        onRetry = viewModel::retryTags,
-                        onLoadMore = viewModel::loadMoreTags,
-                        onRetryLoadMore = viewModel::retryLoadMoreTags,
-                        onToggleFavorite = viewModel::toggleFavorite,
-                        onTagClick = viewModel::selectTagCard,
-                        onBackToSuggestions = viewModel::backToTagSuggestions,
-                        onWorkClick = onWorkClick,
+                } else {
+                    Column(Modifier.fillMaxSize()) {
+                        SearchTabRow(
+                            selected = state.tab,
+                            onSelect = viewModel::selectTab,
+                        )
+                        val hasFilterSpec = state.filterGroups.isNotEmpty() || state.filterToggles.isNotEmpty()
+                        if (state.tab == SearchTab.WORKS && state.pluginActive && hasFilterSpec) {
+                            SearchFilterBar(
+                                groups = state.filterGroups,
+                                toggles = state.filterToggles,
+                                selected = state.selectedFilters,
+                                onResetGroup = { groupId ->
+                                    val defaultId = state.filterGroups
+                                        .firstOrNull { it.id == groupId }
+                                        ?.options?.firstOrNull { it.default }?.id
+                                    if (defaultId != null) {
+                                        viewModel.applyFilters(state.selectedFilters + (groupId to defaultId))
+                                    }
+                                },
+                                onResetToggle = { toggleId ->
+                                    viewModel.applyFilters(state.selectedFilters - toggleId)
+                                },
+                                onOpenSheet = { showFilterSheet = true },
+                            )
+                        }
+                        when (state.tab) {
+                            SearchTab.WORKS -> WorksTabContent(
+                                state = state,
+                                isTablet = isTablet,
+                                onLoginClick = onLoginClick,
+                                onRetry = viewModel::retryWorks,
+                                onLoadMore = viewModel::loadMoreWorks,
+                                onRetryLoadMore = viewModel::retryLoadMoreWorks,
+                                onToggleFavorite = viewModel::toggleFavorite,
+                                onWorkClick = onWorkClick,
+                                dark = dark,
+                            )
+                            SearchTab.USERS -> UsersTabContent(
+                                state = state,
+                                dark = dark,
+                                onLoginClick = onLoginClick,
+                                onRetry = viewModel::retryUsers,
+                                onLoadMore = viewModel::loadMoreUsers,
+                                onRetryLoadMore = viewModel::retryLoadMoreUsers,
+                                onUserClick = handleUserClick,
+                                onToggleFollow = viewModel::toggleFollow,
+                            )
+                            SearchTab.TAGS -> TagsTabContent(
+                                state = state,
+                                isTablet = isTablet,
+                                onLoginClick = onLoginClick,
+                                onRetry = viewModel::retryTags,
+                                onLoadMore = viewModel::loadMoreTags,
+                                onRetryLoadMore = viewModel::retryLoadMoreTags,
+                                onToggleFavorite = viewModel::toggleFavorite,
+                                onTagClick = viewModel::selectTagCard,
+                                onBackToSuggestions = viewModel::backToTagSuggestions,
+                                onWorkClick = onWorkClick,
+                                dark = dark,
+                            )
+                        }
+                    }
+                }
+                if (showSuggestions) {
+                    SuggestionScrim(onDismiss = { viewModel.clearSuggestions() })
+                    SuggestionPanel(
+                        query = query.trim(),
+                        suggestions = state.suggestions,
+                        onSelect = { submit(it) },
+                        onDirectSearch = { submit(query) },
                         dark = dark,
                     )
                 }
             }
+        }
+        if (showFilterSheet) {
+            SearchFilterSheet(
+                groups = state.filterGroups,
+                toggles = state.filterToggles,
+                selected = state.selectedFilters,
+                onApply = { selected ->
+                    viewModel.applyFilters(selected)
+                    showFilterSheet = false
+                },
+                onDismiss = { showFilterSheet = false },
+                dark = dark,
+            )
         }
         SnackbarHost(
             hostState = snackbarHostState,
@@ -317,6 +346,7 @@ private fun SearchTopBar(
     translateBusy: Boolean,
     translateFailed: Boolean,
     onTranslateClick: () -> Unit,
+    onFocusedChanged: (Boolean) -> Unit = {},
 ) {
     val primary = PikuColors.textPrimary
     val secondary = PikuColors.textSecondary
@@ -377,7 +407,8 @@ private fun SearchTopBar(
                     keyboardActions = KeyboardActions(onSearch = { onSubmit() }),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .focusRequester(focusRequester),
+                        .focusRequester(focusRequester)
+                        .onFocusChanged { onFocusedChanged(it.isFocused) },
                 )
             }
             if (translateDirection != null) {
@@ -463,1057 +494,5 @@ private fun translateDirection(text: String): TranslateDirection? {
         hasKana -> TranslateDirection.TO_ZH
         hasHan -> TranslateDirection.TO_JA
         else -> null
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun IdleContent(
-    history: List<String>,
-    popularTags: List<String>,
-    customTags: List<String>,
-    onSelect: (String) -> Unit,
-    onSelectCustomTag: (String) -> Unit,
-    onManageTags: () -> Unit,
-    onRemoveHistory: (String) -> Unit,
-    onClearHistory: () -> Unit,
-    dark: Boolean,
-) {
-    val title = PikuColors.textSecondary
-    val label = PikuColors.textFaint
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 32.dp),
-    ) {
-        MyTagsRow(
-            tags = customTags,
-            activeTag = null,
-            onSelect = onSelectCustomTag,
-            onManage = onManageTags,
-            dark = dark,
-        )
-        Spacer(Modifier.height(24.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.History,
-                contentDescription = null,
-                tint = title,
-                modifier = Modifier.size(14.dp),
-            )
-            Spacer(Modifier.width(6.dp))
-            Text(
-                text = stringResource(R.string.search_recent),
-                color = title,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.weight(1f),
-            )
-            if (history.isNotEmpty()) {
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable(onClick = onClearHistory)
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.DeleteSweep,
-                        contentDescription = null,
-                        tint = title,
-                        modifier = Modifier.size(16.dp),
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        text = stringResource(R.string.search_clear),
-                        color = title,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                    )
-                }
-            }
-        }
-        Spacer(Modifier.height(10.dp))
-        if (history.isEmpty()) {
-            Text(
-                text = stringResource(R.string.search_history_empty),
-                color = label,
-                fontSize = 12.sp,
-            )
-        } else {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                history.forEach { keyword ->
-                    SearchKeywordChip(
-                        keyword = keyword,
-                        onClick = { onSelect(keyword) },
-                        onDelete = { onRemoveHistory(keyword) },
-                        dark = dark,
-                    )
-                }
-            }
-        }
-        Spacer(Modifier.height(24.dp))
-        Text(
-            text = stringResource(R.string.search_hot_tags),
-            color = title,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium,
-        )
-        Spacer(Modifier.height(10.dp))
-        if (popularTags.isEmpty()) {
-            Text(
-                text = stringResource(R.string.search_hot_tags_empty),
-                color = label,
-                fontSize = 12.sp,
-            )
-        } else {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                popularTags.forEach { tag ->
-                    TagPill(
-                        text = "#$tag",
-                        active = false,
-                        onClick = { onSelect("#$tag") },
-                        dark = dark,
-                    )
-                }
-            }
-        }
-        Spacer(Modifier.height(24.dp))
-        Text(
-            text = stringResource(R.string.search_hint),
-            color = label,
-            fontSize = 11.sp,
-        )
-    }
-}
-
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun MyTagsRow(
-    tags: List<String>,
-    activeTag: String?,
-    onSelect: (String) -> Unit,
-    onManage: () -> Unit,
-    dark: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    val title = PikuColors.textSecondary
-    val label = PikuColors.textFaint
-    Column(modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Outlined.Label,
-                contentDescription = null,
-                tint = title,
-                modifier = Modifier.size(14.dp),
-            )
-            Spacer(Modifier.width(6.dp))
-            Text(
-                text = stringResource(R.string.menu_my_tags),
-                color = title,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.weight(1f),
-            )
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable(onClick = onManage)
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = stringResource(R.string.search_manage_tags),
-                    color = title,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                )
-            }
-        }
-        Spacer(Modifier.height(10.dp))
-        if (tags.isEmpty()) {
-            Text(
-                text = stringResource(R.string.my_tags_empty),
-                color = label,
-                fontSize = 12.sp,
-            )
-        } else {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                tags.forEach { tag ->
-                    TagPill(
-                        text = "#$tag",
-                        active = tag == activeTag,
-                        onClick = { onSelect(tag) },
-                        dark = dark,
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SearchTabRow(
-    selected: SearchTab,
-    onSelect: (SearchTab) -> Unit,
-) {
-    val tabs = SearchTab.entries
-    PikuSegmented(
-        labels = listOf(
-            stringResource(R.string.search_tab_works),
-            stringResource(R.string.search_tab_users),
-            stringResource(R.string.search_tab_tags),
-        ),
-        selectedIndex = tabs.indexOf(selected),
-        onSelect = { onSelect(tabs[it]) },
-        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 6.dp),
-    )
-}
-
-@Composable
-private fun TagPill(
-    text: String,
-    active: Boolean,
-    onClick: () -> Unit,
-    dark: Boolean,
-) {
-    val shape = RoundedCornerShape(16.dp)
-    Row(
-        modifier = Modifier
-            .clip(shape)
-            .background(
-                when {
-                    active -> PikuColors.accent
-                    else -> if (dark) Color(0x40FFFFFF) else Color(0xE6FFFFFF)
-                },
-            )
-            .border(
-                BorderStroke(
-                    0.5.dp,
-                    when {
-                        active -> PikuColors.accent
-                        else -> PikuColors.border
-                    },
-                ),
-                shape,
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = text,
-            color = when {
-                active -> if (dark) LoginBackgroundDark else Color.White
-                else -> if (dark) LoginTextSecondaryDark else Color(0xFF5A5A5A)
-            },
-            fontSize = 12.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.widthIn(max = 160.dp),
-        )
-    }
-}
-
-@Composable
-private fun SearchKeywordChip(
-    keyword: String,
-    onClick: () -> Unit,
-    onDelete: () -> Unit,
-    dark: Boolean,
-) {
-    val shape = RoundedCornerShape(16.dp)
-    Row(
-        modifier = Modifier
-            .clip(shape)
-            .background(if (dark) Color(0x40FFFFFF) else Color(0xE6FFFFFF))
-            .border(
-                BorderStroke(0.5.dp, if (dark) Color(0x47FFFFFF) else Color(0x66A09A92)),
-                shape,
-            )
-            .clickable(onClick = onClick)
-            .padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = keyword,
-            color = if (dark) LoginTextSecondaryDark else Color(0xFF5A5A5A),
-            fontSize = 12.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.widthIn(max = 150.dp),
-        )
-        Box(
-            modifier = Modifier
-                .padding(start = 8.dp)
-                .size(22.dp)
-                .clip(RoundedCornerShape(11.dp))
-                .clickable(onClick = onDelete),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Close,
-                contentDescription = stringResource(R.string.search_delete),
-                tint = if (dark) LoginTextSecondaryDark else LoginTextFaintLight,
-                modifier = Modifier.size(11.dp),
-            )
-        }
-    }
-}
-
-@Composable
-private fun WorksTabContent(
-    state: SearchUiState,
-    isTablet: Boolean,
-    onLoginClick: () -> Unit,
-    onRetry: () -> Unit,
-    onLoadMore: () -> Unit,
-    onRetryLoadMore: () -> Unit,
-    onToggleFavorite: (Work) -> Unit,
-    onWorkClick: (Work) -> Unit,
-    dark: Boolean,
-) {
-    Column(Modifier.fillMaxSize()) {
-        when {
-            state.worksNeedLogin -> {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    LoginPrompt(
-                        message = stringResource(R.string.search_works_login),
-                        onLogin = onLoginClick,
-                        dark = dark,
-                    )
-                }
-            }
-            state.worksLoading && state.works.isEmpty() -> {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    LoaderDots(dark = dark)
-                }
-            }
-            state.worksErrorRes != null && state.works.isEmpty() -> {
-                SearchErrorState(errorRes = state.worksErrorRes, onRetry = onRetry, dark = dark)
-            }
-            state.works.isEmpty() -> {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = Icons.Outlined.Search,
-                            contentDescription = null,
-                            tint = PikuColors.textFaint,
-                            modifier = Modifier.size(32.dp),
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        Text(
-                            text = stringResource(R.string.search_empty),
-                            color = PikuColors.textSecondary,
-                            fontSize = 14.sp,
-                        )
-                    }
-                }
-            }
-            else -> {
-                SearchWorkGrid(
-                    works = state.works,
-                    favoriteIds = state.favoriteIds,
-                    isTablet = isTablet,
-                    loadingMore = state.worksLoadingMore,
-                    loadMoreErrorRes = state.worksLoadMoreErrorRes,
-                    endReached = state.worksEndReached,
-                    onLoadMore = onLoadMore,
-                    onRetryLoadMore = onRetryLoadMore,
-                    onToggleFavorite = onToggleFavorite,
-                    onWorkClick = onWorkClick,
-                    dark = dark,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun TagsTabContent(
-    state: SearchUiState,
-    isTablet: Boolean,
-    onLoginClick: () -> Unit,
-    onRetry: () -> Unit,
-    onLoadMore: () -> Unit,
-    onRetryLoadMore: () -> Unit,
-    onToggleFavorite: (Work) -> Unit,
-    onTagClick: (String) -> Unit,
-    onBackToSuggestions: () -> Unit,
-    onWorkClick: (Work) -> Unit,
-    dark: Boolean,
-) {
-    val selectedTag = state.selectedTagName
-    // 匿名时"返回标签建议"没有去处（建议接口需登录），隐藏入口，保住手上的作品列表
-    val canBackToSuggestions = !state.tagNeedLogin
-    Column(Modifier.fillMaxSize()) {
-        if (selectedTag != null) {
-            TagWorksHeader(
-                tag = selectedTag,
-                onBack = onBackToSuggestions,
-                showBack = canBackToSuggestions,
-                dark = dark,
-            )
-        }
-        when {
-            // 登录引导只覆盖建议模式：作品模式匿名可看
-            state.tagNeedLogin && selectedTag == null -> {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    LoginPrompt(
-                        message = stringResource(R.string.search_tags_login),
-                        onLogin = onLoginClick,
-                        dark = dark,
-                    )
-                }
-            }
-            selectedTag == null -> {
-                // 建议模式：标签卡片（原站行为：始终先展示标签，点击后才出作品）
-                when {
-                    state.tagSuggestionsLoading && state.tagSuggestions.isEmpty() -> {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            LoaderDots(dark = dark)
-                        }
-                    }
-                    state.tagSuggestionsErrorRes != null && state.tagSuggestions.isEmpty() -> {
-                        SearchErrorState(errorRes = state.tagSuggestionsErrorRes, onRetry = onRetry, dark = dark)
-                    }
-                    state.tagSuggestions.isEmpty() -> {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Outlined.Label,
-                                    contentDescription = null,
-                                    tint = PikuColors.textFaint,
-                                    modifier = Modifier.size(32.dp),
-                                )
-                                Spacer(Modifier.height(12.dp))
-                                Text(
-                                    text = stringResource(R.string.search_tags_not_found),
-                                    color = PikuColors.textSecondary,
-                                    fontSize = 14.sp,
-                                )
-                            }
-                        }
-                    }
-                    else -> {
-                        TagCardGrid(
-                            cards = state.tagSuggestions,
-                            isTablet = isTablet,
-                            loadingMore = state.tagSuggestionsLoadingMore,
-                            loadMoreErrorRes = state.tagSuggestionsLoadMoreErrorRes,
-                            endReached = state.tagSuggestionsEndReached,
-                            onLoadMore = onLoadMore,
-                            onRetryLoadMore = onRetryLoadMore,
-                            onTagClick = onTagClick,
-                            dark = dark,
-                        )
-                    }
-                }
-            }
-            else -> {
-                // 作品模式：选中精确标签下的作品
-                when {
-                    state.tagWorksLoading && state.tagWorks.isEmpty() -> {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            LoaderDots(dark = dark)
-                        }
-                    }
-                    state.tagWorksErrorRes != null && state.tagWorks.isEmpty() -> {
-                        SearchErrorState(errorRes = state.tagWorksErrorRes, onRetry = onRetry, dark = dark)
-                    }
-                    state.tagWorks.isEmpty() -> {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Outlined.Label,
-                                    contentDescription = null,
-                                    tint = PikuColors.textFaint,
-                                    modifier = Modifier.size(32.dp),
-                                )
-                                Spacer(Modifier.height(12.dp))
-                                Text(
-                                    text = stringResource(R.string.search_tags_empty),
-                                    color = PikuColors.textSecondary,
-                                    fontSize = 14.sp,
-                                )
-                            }
-                        }
-                    }
-                    else -> {
-                        SearchWorkGrid(
-                            works = state.tagWorks,
-                            favoriteIds = state.favoriteIds,
-                            isTablet = isTablet,
-                            loadingMore = state.tagWorksLoadingMore,
-                            loadMoreErrorRes = state.tagWorksLoadMoreErrorRes,
-                            endReached = state.tagWorksEndReached,
-                            onLoadMore = onLoadMore,
-                            onRetryLoadMore = onRetryLoadMore,
-                            onToggleFavorite = onToggleFavorite,
-                            onWorkClick = onWorkClick,
-                            dark = dark,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-/** 作品模式顶栏：返回标签建议（不可用时只留标签名）+ 当前精确标签名 */
-@Composable
-private fun TagWorksHeader(
-    tag: String,
-    onBack: () -> Unit,
-    dark: Boolean,
-    showBack: Boolean = true,
-) {
-    val primary = PikuColors.textPrimary
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 4.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (showBack) {
-            PikuBackButton(
-                onClick = onBack,
-                dark = dark,
-                contentDescription = stringResource(R.string.back),
-            )
-        }
-        Text(
-            text = "#$tag",
-            color = primary,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-    }
-}
-
-@Composable
-private fun TagCardGrid(
-    cards: List<TagCard>,
-    isTablet: Boolean,
-    loadingMore: Boolean,
-    loadMoreErrorRes: Int?,
-    endReached: Boolean,
-    onLoadMore: () -> Unit,
-    onRetryLoadMore: () -> Unit,
-    onTagClick: (String) -> Unit,
-    dark: Boolean,
-) {
-    val gridState = rememberLazyStaggeredGridState()
-    val currentEndReached by rememberUpdatedState(endReached)
-    val currentLoadingMore by rememberUpdatedState(loadingMore)
-    val currentLoadMoreErrorRes by rememberUpdatedState(loadMoreErrorRes)
-
-    LaunchedEffect(gridState, cards.size) {
-        snapshotFlow {
-            val info = gridState.layoutInfo
-            val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: 0
-            lastVisible >= info.totalItemsCount - 6
-        }
-            .distinctUntilChanged()
-            .collect { nearEnd ->
-                if (nearEnd && !currentEndReached && !currentLoadingMore && currentLoadMoreErrorRes == null) {
-                    onLoadMore()
-                }
-            }
-    }
-
-    LazyVerticalStaggeredGrid(
-        columns = if (isTablet) StaggeredGridCells.Adaptive(220.dp) else StaggeredGridCells.Fixed(2),
-        state = gridState,
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalItemSpacing = 12.dp,
-    ) {
-        items(cards, key = { it.name }) { card ->
-            TagCardItem(
-                card = card,
-                onClick = { onTagClick(card.name) },
-                dark = dark,
-            )
-        }
-        when {
-            loadMoreErrorRes != null -> {
-                item(span = StaggeredGridItemSpan.FullLine) {
-                    SearchLoadMoreError(errorRes = loadMoreErrorRes, onRetry = onRetryLoadMore, dark = dark)
-                }
-            }
-            loadingMore -> {
-                item(span = StaggeredGridItemSpan.FullLine) {
-                    Box(
-                        Modifier.fillMaxWidth().padding(vertical = 12.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        LoaderDots(dark = dark)
-                    }
-                }
-            }
-            endReached -> {
-                item(span = StaggeredGridItemSpan.FullLine) {
-                    Box(
-                        Modifier.fillMaxWidth().padding(vertical = 12.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = stringResource(R.string.home_no_more),
-                            color = PikuColors.textFaint,
-                            fontSize = 12.sp,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun TagCardItem(
-    card: TagCard,
-    onClick: () -> Unit,
-    dark: Boolean,
-) {
-    val shape = RoundedCornerShape(12.dp)
-    Column(
-        modifier = Modifier
-            .shadow(
-                elevation = if (dark) 6.dp else 10.dp,
-                shape = shape,
-                ambientColor = Color(0x33000000),
-                spotColor = Color(0x40000000),
-            )
-            .clip(shape)
-            .background(if (dark) WorkCardBgDark else Color(0xCCFFFFFF))
-            .border(
-                BorderStroke(1.dp, if (dark) WorkCardBorderDark else Color(0x59C8C2B8)),
-                shape,
-            )
-            .clickable(onClick = onClick),
-    ) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .padding(6.dp)
-                .clip(RoundedCornerShape(10.dp)),
-        ) {
-            if (card.thumbnailUrl.isNullOrBlank()) {
-                // 无示例图（默认占位图）的标签：显示中性占位而非空白
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(1f)
-                        .background(if (dark) WorkCardPlaceholderDark else Color(0xFFF1EFEA)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Outlined.Label,
-                        contentDescription = "#${card.name}",
-                        tint = PikuColors.textFaint,
-                        modifier = Modifier.size(32.dp),
-                    )
-                }
-            } else {
-                AsyncImage(
-                    model = card.thumbnailUrl,
-                    contentDescription = "#${card.name}",
-                    colorFilter = PikuColors.tameWhiteFilter,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(1f)
-                        .background(if (dark) WorkCardPlaceholderDark else Color(0xFFF1EFEA)),
-                    contentScale = ContentScale.Crop,
-                )
-            }
-        }
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .background(if (dark) WorkCardInfoBgDark else Color(0xF2FFFFFF))
-                .padding(horizontal = 10.dp, vertical = 9.dp),
-        ) {
-            Text(
-                text = "#${card.name}",
-                color = PikuColors.textPrimary,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-}
-
-@Composable
-private fun SearchWorkGrid(
-    works: List<Work>,
-    favoriteIds: Set<WorkKey>,
-    isTablet: Boolean,
-    loadingMore: Boolean,
-    loadMoreErrorRes: Int?,
-    endReached: Boolean,
-    onLoadMore: () -> Unit,
-    onRetryLoadMore: () -> Unit,
-    onToggleFavorite: (Work) -> Unit,
-    onWorkClick: (Work) -> Unit,
-    dark: Boolean,
-) {
-    val gridState = rememberLazyStaggeredGridState()
-    val currentEndReached by rememberUpdatedState(endReached)
-    val currentLoadingMore by rememberUpdatedState(loadingMore)
-    val currentLoadMoreErrorRes by rememberUpdatedState(loadMoreErrorRes)
-
-    LaunchedEffect(gridState, works.size) {
-        snapshotFlow {
-            val info = gridState.layoutInfo
-            val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: 0
-            lastVisible >= info.totalItemsCount - 6
-        }
-            .distinctUntilChanged()
-            .collect { nearEnd ->
-                if (nearEnd && !currentEndReached && !currentLoadingMore && currentLoadMoreErrorRes == null) {
-                    onLoadMore()
-                }
-            }
-    }
-
-    LazyVerticalStaggeredGrid(
-        columns = if (isTablet) StaggeredGridCells.Adaptive(220.dp) else StaggeredGridCells.Fixed(2),
-        state = gridState,
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalItemSpacing = 12.dp,
-    ) {
-        items(works, key = { it.id }) { work ->
-            WorkCard(
-                work = work,
-                isFavorite = work.key in favoriteIds,
-                onToggleFavorite = onToggleFavorite,
-                onClick = onWorkClick,
-                dark = dark,
-            )
-        }
-        when {
-            loadMoreErrorRes != null -> {
-                item(span = StaggeredGridItemSpan.FullLine) {
-                    SearchLoadMoreError(errorRes = loadMoreErrorRes, onRetry = onRetryLoadMore, dark = dark)
-                }
-            }
-            loadingMore -> {
-                item(span = StaggeredGridItemSpan.FullLine) {
-                    Box(
-                        Modifier.fillMaxWidth().padding(vertical = 12.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        LoaderDots(dark = dark)
-                    }
-                }
-            }
-            endReached -> {
-                item(span = StaggeredGridItemSpan.FullLine) {
-                    Box(
-                        Modifier.fillMaxWidth().padding(vertical = 12.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = stringResource(R.string.home_no_more),
-                            color = PikuColors.textFaint,
-                            fontSize = 12.sp,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun UsersTabContent(
-    state: SearchUiState,
-    dark: Boolean,
-    onLoginClick: () -> Unit,
-    onRetry: () -> Unit,
-    onLoadMore: () -> Unit,
-    onRetryLoadMore: () -> Unit,
-    onUserClick: (FollowUser) -> Unit,
-    onToggleFollow: (Long) -> Unit,
-) {
-    when {
-        state.usersNeedLogin -> {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                LoginPrompt(
-                    message = stringResource(R.string.search_users_login),
-                    onLogin = onLoginClick,
-                    dark = dark,
-                )
-            }
-        }
-        state.usersLoading && state.users.isEmpty() -> {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                LoaderDots(dark = dark)
-            }
-        }
-        state.usersErrorRes != null && state.users.isEmpty() -> {
-            SearchErrorState(errorRes = state.usersErrorRes, onRetry = onRetry, dark = dark)
-        }
-        state.users.isEmpty() -> {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        imageVector = Icons.Outlined.People,
-                        contentDescription = null,
-                        tint = PikuColors.textFaint,
-                        modifier = Modifier.size(32.dp),
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        text = stringResource(R.string.search_users_empty),
-                        color = PikuColors.textSecondary,
-                        fontSize = 14.sp,
-                        lineHeight = 22.sp,
-                    )
-                }
-            }
-        }
-        else -> {
-            SearchUserList(
-                state = state,
-                dark = dark,
-                onUserClick = onUserClick,
-                onToggleFollow = onToggleFollow,
-                onLoadMore = onLoadMore,
-                onRetryLoadMore = onRetryLoadMore,
-            )
-        }
-    }
-}
-
-@Composable
-private fun SearchUserList(
-    state: SearchUiState,
-    dark: Boolean,
-    onUserClick: (FollowUser) -> Unit,
-    onToggleFollow: (Long) -> Unit,
-    onLoadMore: () -> Unit,
-    onRetryLoadMore: () -> Unit,
-) {
-    val listState = rememberLazyListState()
-    val currentUsersEndReached by rememberUpdatedState(state.usersEndReached)
-    val currentUsersLoadingMore by rememberUpdatedState(state.usersLoadingMore)
-    val currentUsersLoadMoreErrorRes by rememberUpdatedState(state.usersLoadMoreErrorRes)
-
-    LaunchedEffect(listState, state.users.size) {
-        snapshotFlow {
-            val info = listState.layoutInfo
-            val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: 0
-            lastVisible >= info.totalItemsCount - 6
-        }
-            .distinctUntilChanged()
-            .collect { nearEnd ->
-                if (nearEnd && !currentUsersEndReached && !currentUsersLoadingMore && currentUsersLoadMoreErrorRes == null) {
-                    onLoadMore()
-                }
-            }
-    }
-
-    LazyColumn(
-        state = listState,
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 96.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        items(state.users, key = { it.userId }) { user ->
-            val followed = state.followOverrides[user.userId] ?: user.followed
-            SearchUserRow(
-                user = user,
-                followed = followed,
-                followSending = user.userId in state.followPendingIds,
-                dark = dark,
-                onClick = { onUserClick(user) },
-                onToggleFollow = { onToggleFollow(user.userId) },
-                modifier = Modifier.animateItem(),
-            )
-        }
-        when {
-            state.usersLoadMoreErrorRes != null -> {
-                item {
-                    SearchLoadMoreError(errorRes = state.usersLoadMoreErrorRes, onRetry = onRetryLoadMore, dark = dark)
-                }
-            }
-            state.usersLoadingMore -> {
-                item {
-                    Box(Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
-                        LoaderDots(dark = dark)
-                    }
-                }
-            }
-            state.usersEndReached && state.users.size >= 30 -> {
-                item {
-                    Box(Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = stringResource(R.string.home_no_more),
-                            color = PikuColors.textFaint,
-                            fontSize = 12.sp,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SearchUserRow(
-    user: FollowUser,
-    followed: Boolean,
-    followSending: Boolean,
-    dark: Boolean,
-    onClick: () -> Unit,
-    onToggleFollow: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val shape = RoundedCornerShape(20.dp)
-    GlassCard(
-        dark = dark,
-        shape = shape,
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 13.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            UserAvatar(avatarUrl = user.avatarUrl, onClick = onClick, dark = dark, size = 48.dp)
-            Spacer(Modifier.width(13.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = user.name,
-                    color = PikuColors.textPrimary,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = "ID: ${user.userId}",
-                    color = PikuColors.textFaint,
-                    fontSize = 11.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            Spacer(Modifier.width(10.dp))
-            FollowPillButton(
-                followed = followed,
-                refollow = false,
-                sending = followSending,
-                dark = dark,
-                onClick = onToggleFollow,
-            )
-        }
-    }
-}
-
-@Composable
-private fun SearchErrorState(
-    errorRes: Int?,
-    onRetry: () -> Unit,
-    dark: Boolean,
-) {
-    val shape = RoundedCornerShape(14.dp)
-    Column(
-        Modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Text(
-            text = stringResource(errorRes ?: R.string.home_error_parse),
-            color = PikuColors.textSecondary,
-            fontSize = 14.sp,
-        )
-        Spacer(Modifier.height(14.dp))
-        Box(
-            modifier = Modifier
-                .clip(shape)
-                .background(PikuColors.surface)
-                .border(
-                    BorderStroke(0.5.dp, PikuColors.border),
-                    shape,
-                )
-                .clickable(onClick = onRetry)
-                .padding(horizontal = 24.dp, vertical = 10.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = stringResource(R.string.home_retry),
-                color = PikuColors.textPrimary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
-    }
-}
-
-@Composable
-private fun SearchLoadMoreError(
-    errorRes: Int?,
-    onRetry: () -> Unit,
-    dark: Boolean,
-) {
-    val shape = RoundedCornerShape(14.dp)
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 10.dp)
-            .clip(shape)
-            .background(PikuColors.surface)
-            .border(
-                BorderStroke(0.5.dp, PikuColors.border),
-                shape,
-            )
-            .clickable(onClick = onRetry)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = stringResource(errorRes ?: R.string.home_error_parse),
-            color = PikuColors.textFaint,
-            fontSize = 12.sp,
-        )
-        Spacer(Modifier.width(6.dp))
-        Text(
-            text = stringResource(R.string.home_retry),
-            color = PikuColors.textPrimary,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-        )
     }
 }

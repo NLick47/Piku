@@ -1,6 +1,7 @@
 package com.piku.client.ui.navigation
 
 import android.app.Activity
+import android.content.Intent
 import android.net.Uri
 import android.os.SystemClock
 import android.util.Log
@@ -331,6 +332,11 @@ fun AppNavHost(
                 },
                 onUserClick = { user: FollowUser ->
                     navController.navigate(Routes.userWorks(user.userId, user.name))
+                },
+                onOpenExternal = { url ->
+                    runCatching {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                    }
                 },
                 onOpenLink = { link ->
                     when (link) {

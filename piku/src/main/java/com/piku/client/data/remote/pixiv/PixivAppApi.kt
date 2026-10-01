@@ -64,6 +64,8 @@ data class PixivAppUser(
     val name: String = "",
     val account: String = "",
     @SerialName("profile_image_urls") val profileImageUrls: PixivAppProfileImages = PixivAppProfileImages(),
+    /** 仅用户搜索等登录态接口返回；作品内嵌的 user 无此字段，默认 false */
+    @SerialName("is_followed") val isFollowed: Boolean = false,
 ) {
     val userId: Long get() = id.toLongOrNull() ?: 0
 }
@@ -110,6 +112,50 @@ data class PixivAppErrorBody(
     val reason: String = "",
 )
 
+/** v2/search/autocomplete 的标签联想（字段经 PixEz 参考实现核对） */
+@Serializable
+data class PixivAutoWordsResponse(val tags: List<PixivAutoTag> = emptyList())
+
+@Serializable
+data class PixivAutoTag(
+    val name: String = "",
+    @SerialName("translated_name") val translatedName: String? = null,
+)
+
+/** v1/trending-tags/illust 的热门标签，附代表作 */
+@Serializable
+data class PixivTrendTagsResponse(
+    @SerialName("trend_tags") val trendTags: List<PixivTrendTag> = emptyList(),
+)
+
+@Serializable
+data class PixivTrendTag(
+    val tag: String = "",
+    @SerialName("translated_name") val translatedName: String? = null,
+    val illust: PixivTrendIllust = PixivTrendIllust(),
+)
+
+@Serializable
+data class PixivTrendIllust(
+    @Serializable(with = FlexibleStringSerializer::class) val id: String = "",
+    @SerialName("image_urls") val imageUrls: PixivAppImageUrls = PixivAppImageUrls(),
+    // trending-tags 里的 illust 是完整作品对象（实测样本带尺寸），瀑布流按原比例排
+    val width: Int = 0,
+    val height: Int = 0,
+)
+
+/** v1/search/user 的用户搜索，条目是用户+代表作组合（同关注列表的 user_previews） */
+@Serializable
+data class PixivUserPreviewsResponse(
+    @SerialName("user_previews") val userPreviews: List<PixivUserPreview> = emptyList(),
+)
+
+@Serializable
+data class PixivUserPreview(
+    val user: PixivAppUser = PixivAppUser(),
+    val illusts: List<PixivAppIllust> = emptyList(),
+)
+
 interface PixivAppApi {
 
     // 该域须带应用身份 浏览器 UA 会被拒 Bearer 由传输层按主机补
@@ -124,6 +170,50 @@ interface PixivAppApi {
         @Query("include_ranking_illusts") includeRankingIllusts: Boolean = false,
         @Query("offset") offset: Int? = null,
     ): PixivIllustsResponse
+
+    /** 关键词搜作品。search_target/sort/duration 枚举与筛选面板声明一一对应；searchAiType 0=隐藏 AI */
+    @GET("v1/search/illust")
+    @Headers(HEADER_USER_AGENT, HEADER_APP_OS, HEADER_APP_OS_VERSION, HEADER_APP_VERSION)
+    suspend fun searchIllust(
+        @Header("X-Client-Time") clientTime: String,
+        @Header("X-Client-Hash") clientHash: String,
+        @Query("word") word: String,
+        @Query("search_target") searchTarget: String? = null,
+        @Query("sort") sort: String? = null,
+        @Query("duration") duration: String? = null,
+        @Query("search_ai_type") searchAiType: Int? = null,
+        @Query("filter") filter: String = "for_android",
+        @Query("offset") offset: Int? = null,
+    ): PixivIllustsResponse
+
+    /** 关键词搜用户；登录态下 user.is_followed 有值 */
+    @GET("v1/search/user")
+    @Headers(HEADER_USER_AGENT, HEADER_APP_OS, HEADER_APP_OS_VERSION, HEADER_APP_VERSION)
+    suspend fun searchUser(
+        @Header("X-Client-Time") clientTime: String,
+        @Header("X-Client-Hash") clientHash: String,
+        @Query("word") word: String,
+        @Query("filter") filter: String = "for_android",
+        @Query("offset") offset: Int? = null,
+    ): PixivUserPreviewsResponse
+
+    /** 标签联想（v2）：返回标签 + 简中译名，供输入联想层 */
+    @GET("v2/search/autocomplete")
+    @Headers(HEADER_USER_AGENT, HEADER_APP_OS, HEADER_APP_OS_VERSION, HEADER_APP_VERSION)
+    suspend fun autocomplete(
+        @Header("X-Client-Time") clientTime: String,
+        @Header("X-Client-Hash") clientHash: String,
+        @Query("word") word: String,
+    ): PixivAutoWordsResponse
+
+    /** 24 小时热门标签，附代表作缩略图 */
+    @GET("v1/trending-tags/illust")
+    @Headers(HEADER_USER_AGENT, HEADER_APP_OS, HEADER_APP_OS_VERSION, HEADER_APP_VERSION)
+    suspend fun trendingTags(
+        @Header("X-Client-Time") clientTime: String,
+        @Header("X-Client-Hash") clientHash: String,
+        @Query("filter") filter: String = "for_android",
+    ): PixivTrendTagsResponse
 
     /** 登录用户视角的作品状态（是否已收藏、是否已关注作者）；仅登录态下有意义 */
     @GET("v1/illust/detail")
