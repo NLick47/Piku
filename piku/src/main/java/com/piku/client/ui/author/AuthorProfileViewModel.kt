@@ -218,7 +218,7 @@ class AuthorProfileViewModel @Inject constructor(
             _uiState.update { it.copy(translating = true) }
             val target = TranslationRepository.targetLangName(observeLanguageUseCase().value)
             val output = runCatching {
-                translationRepository.translateAll(listOf(source), target)
+                translationRepository.translateAll(listOf(source), target, skipPrecheck = true)
             }.getOrNull()
             // 译文与原文相同 = 本来就是目标语言，按「无译文」静默处理，不是失败
             val translated = output?.firstOrNull()

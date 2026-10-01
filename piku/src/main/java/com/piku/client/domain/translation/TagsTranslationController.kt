@@ -7,8 +7,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 interface TagsTranslator {
-    /** 只翻标签，返回与 [WorkDetail.tags] 一一对应的译文；全组透传（本就是目标语言）时返回 null */
-    suspend fun translateTags(detail: WorkDetail, language: AppLanguage): List<String>?
+
+    suspend fun translateTags(detail: WorkDetail, language: AppLanguage, force: Boolean): List<String>?
 }
 
 class TagsTranslationController(
@@ -36,7 +36,7 @@ class TagsTranslationController(
         if (!toTranslated || !detail.translated?.tags.isNullOrEmpty()) return
         scope.launch {
             write { it.copy(translating = true) }
-            val tags = runCatching { repository.translateTags(detail, language()) }.getOrNull()
+            val tags = runCatching { repository.translateTags(detail, language(), true) }.getOrNull()
             write { s ->
                 val current = s.detail ?: return@write s.copy(translating = false)
                 val merged = tags

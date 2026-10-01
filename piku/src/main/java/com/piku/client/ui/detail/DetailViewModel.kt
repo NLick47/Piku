@@ -624,6 +624,7 @@ class DetailViewModel @Inject constructor(
                 translationRepository.translateNovelStreaming(
                     detail,
                     observeLanguageUseCase().value,
+                    force = true,
                 ).collect { event ->
                     when (event) {
                         is NovelStreamEvent.Progress -> _uiState.update { state ->
@@ -708,6 +709,9 @@ class DetailViewModel @Inject constructor(
      * @param includeLongNovel 长正文是否随本次一起翻；仅阅读器入口传 true
      * @param requireAutoEnabled 自动路径要求总开关打开；顶栏/阅读器的显式点击不受限
      * @param forcedEntry 一次性重翻：指定则短字段强制用此模型，正文只走正文默认
+     *
+     * 手动路径（[manual]）一律强制送翻：跳过目标语言预检，用户点了「译」就得翻，
+     * 不能让省额度的启发式把夹在中文里的日文吞掉。自动路径保持预检行为。
      */
     private fun translate(
         includeLongNovel: Boolean = false,
@@ -736,7 +740,11 @@ class DetailViewModel @Inject constructor(
             _uiState.update { it.copy(translating = true, fetchingNovelText = includeLongNovel) }
             val outcome = runCatching {
                 translationRepository.translate(
-                    detail, observeLanguageUseCase().value, includeLongNovel, forcedEntry,
+                    detail,
+                    observeLanguageUseCase().value,
+                    includeLongNovel,
+                    forcedEntry,
+                    force = manual,
                 )
             }.onFailure { error ->
                 Log.d("PikuDiag", "translate fail work=$workId: ${error.message}")

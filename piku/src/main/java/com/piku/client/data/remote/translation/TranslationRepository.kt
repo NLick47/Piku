@@ -183,6 +183,9 @@ class TranslationRepository @Inject constructor(
      * 长篇正文留给阅读器内的显式触发（见 [AUTO_NOVEL_MAX_CHARS]）。
      * 标签是否随行由「自动翻译标签」设置决定（关 = 标签留空，
      * 由 [translateTags] 在用户点「译」时单独补翻）。
+     *
+     * [force] 为手动入口的强制翻译：跳过「已是目标语言」预检，一律送翻。
+     * 自动路径不传——预检帮它省额度，代价是夹在中文里的日文翻不出来，那是自动路径能接受的。
      */
     suspend fun translate(
         detail: WorkDetail,
@@ -190,6 +193,7 @@ class TranslationRepository @Inject constructor(
         includeLongNovel: Boolean = false,
         /** 一次性重翻覆盖：传入则短字段强制用此模型，正文仍走正文专用通道，不写入默认设置 */
         forcedEntry: ModelEntry? = null,
+        force: Boolean = false,
     ): TranslationOutcome {
         if (!hasKey()) return TranslationOutcome(fields = null, failed = false)
         val targetLang = targetLangName(language)
@@ -209,7 +213,7 @@ class TranslationRepository @Inject constructor(
                 addAll(detail.tags)
             }
         }
-        val shortTranslated = translateAll(shortSources, targetLang, forcedEntry)
+        val shortTranslated = translateAll(shortSources, targetLang, forcedEntry, skipPrecheck = force)
         // 小说正文单独走小说专用通道；解析不出可用小说模型时正文保留原文（宁缺毋滥），
         // 绝不静默借用文本模型——两条通道彻底隔离。正文整条单单元送翻，
         // 散文跨行句保持上下文，行内罕见链接走摘除+末尾拼回兜底。
@@ -224,6 +228,7 @@ class TranslationRepository @Inject constructor(
                     targetLang,
                     entryOverride = it,
                     role = Role.NOVEL,
+                    skipPrecheck = force,
                 )?.firstOrNull()
             }
         }
@@ -255,10 +260,20 @@ class TranslationRepository @Inject constructor(
      * 只翻标签（自动翻译标签关闭时，标签区「译」chip 的显式触发）。
      * 逐条缓存且跨作品共享：翻过的标签（含其他作品见过的同款）直接命中，零网络成本。
      * 返回与 [WorkDetail.tags] 一一对应的译文；全组透传（标签本就是目标语言）时视为无译文。
+     *
+     * [force] 由手动入口传 true，跳过目标语言预检（见 [translate]）。
      */
-    override suspend fun translateTags(detail: WorkDetail, language: AppLanguage): List<String>? {
+    override suspend fun translateTags(
+        detail: WorkDetail,
+        language: AppLanguage,
+        force: Boolean,
+    ): List<String>? {
         if (detail.tags.isEmpty() || !hasTextModel()) return null
-        val translated = translateAll(detail.tags, targetLangName(language)) ?: return null
+        val translated = translateAll(
+            detail.tags,
+            targetLangName(language),
+            skipPrecheck = force,
+        ) ?: return null
         return translated.takeIf { list -> list.withIndex().any { (i, v) -> v != detail.tags[i] } }
     }
 
@@ -273,10 +288,13 @@ class TranslationRepository @Inject constructor(
      *   （免费 key 的瞬时并发碰撞概率极低，v1 接受）；
      * - 解析不出可用小说模型时发空 [NovelStreamEvent.Completed]——宁缺毋滥，
      *   绝不向文本通道借模型。
+     *
+     * [force] 由阅读器「译」入口传 true：块级目标语言预检整体跳过，每块都送翻。
      */
     fun translateNovelStreaming(
         detail: WorkDetail,
         language: AppLanguage,
+        force: Boolean,
     ): Flow<NovelStreamEvent> = flow {
         val source = detail.novelText
         if (source.isBlank()) return@flow
@@ -325,7 +343,7 @@ class TranslationRepository @Inject constructor(
             // 中日混排块在 ja 目标下由 hanDominantOverKana 保证中文为主时仍送翻，
             // zh 目标下"汉字≥英文词×2"仅容忍点缀性英文词。逐条语义见 isAlreadyInTarget 测试矩阵。
             val value: String? = when {
-                LlmTranslateEngine.isAlreadyInTarget(chunk.text, targetLang) -> chunk.text
+                !force && LlmTranslateEngine.isAlreadyInTarget(chunk.text, targetLang) -> chunk.text
                 else -> {
                     // 缓存键与主通道一致：摘链接后的纯文字哈希；命中值含拼回的链接
                     val (stripped, links) = LlmTranslateEngine.extractLinks(chunk.text)
@@ -418,12 +436,16 @@ class TranslationRepository @Inject constructor(
      * 整批失败（网络错/限速/模型抽风导致全部空返回）时做一次故障转移：
      * 随机换一个同场景（[role]）带内置 key 的其他免费模型，加全抖动短延迟后重试——
      * 时间与模型两个维度同时打散，多用户不会同步挤兑同一把 key。
+     *
+     * [skipPrecheck] = true 时不做「已是目标语言」透传，每条都查缓存/送翻（手动入口）。
+     * 提示词已要求模型「原文已是目标语言就原样返回」，强制送翻不会把中文改写串味。
      */
     suspend fun translateAll(
         texts: List<String>,
         targetLang: String,
         entryOverride: ModelEntry? = null,
         role: String = Role.TEXT,
+        skipPrecheck: Boolean = false,
     ): List<String>? =
         mutex.withLock {
             val entry = entryOverride ?: effectiveTextEntry()
@@ -466,10 +488,12 @@ class TranslationRepository @Inject constructor(
 
             // —— 预检透传 + 缓存命中，得到真正要上网的 pending 单元 ——
             val pending = mutableListOf<Int>()
-            units.forEach { unit ->
-                if (LlmTranslateEngine.isAlreadyInTarget(unit.original, targetLang)) {
-                    // 已是目标语言：本地透传原文，不查缓存不发请求（共享免费 key 的关键省钱点）
-                    unit.value = unit.original
+            if (!skipPrecheck) {
+                units.forEach { unit ->
+                    if (LlmTranslateEngine.isAlreadyInTarget(unit.original, targetLang)) {
+                        // 已是目标语言：本地透传原文，不查缓存不发请求（共享免费 key 的关键省钱点）
+                        unit.value = unit.original
+                    }
                 }
             }
             withContext(Dispatchers.IO) {

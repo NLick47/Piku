@@ -339,12 +339,12 @@ class SourceWorkDetailViewModel @Inject constructor(
             _ui.update { it.copy(showTranslationAll = !it.showTranslationAll) }
             return
         }
-        translate()
+        translate(force = true)
     }
 
     /** chip 长按：换模型重翻（pixiv 详情页没有模型选择器，直接按当前模型重翻一次） */
     fun onRetranslate() {
-        translate()
+        translate(force = true)
     }
 
     /**
@@ -367,7 +367,8 @@ class SourceWorkDetailViewModel @Inject constructor(
         }
     }
 
-    private fun translate() {
+    /** [force] 手动入口（chip 点击/长按重翻）传 true，跳过目标语言预检强制送翻 */
+    private fun translate(force: Boolean = false) {
         val detail = _ui.value.detail ?: return
         if (_ui.value.translating) return
         if (!translationRepository.hasKey()) {
@@ -377,7 +378,11 @@ class SourceWorkDetailViewModel @Inject constructor(
         viewModelScope.launch {
             _ui.update { it.copy(translating = true) }
             val outcome = runCatching {
-                translationRepository.translate(detail, observeLanguageUseCase().value)
+                translationRepository.translate(
+                    detail,
+                    observeLanguageUseCase().value,
+                    force = force,
+                )
             }.getOrNull()
             _ui.update { state ->
                 val current = state.detail ?: return@update state.copy(translating = false)
