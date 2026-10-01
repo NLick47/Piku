@@ -88,4 +88,20 @@ class PixivRecommendedMappingTest {
 
         assertNull(work?.authorAvatarUrl)
     }
+
+    @Test
+    fun sanityGatedPlaceholderEntryIsDropped() {
+        // pixiv 对审查拦下的作品回匿名条目：缩略图是占位图 名字头像全空
+        val placeholder = "https://s.pximg.net/common/images/limit_sanity_level_360.png"
+        val gated = illust(
+            urls = PixivAppImageUrls(squareMedium = placeholder, medium = placeholder, large = placeholder),
+            user = PixivAppUser(
+                id = "99",
+                name = "",
+                profileImageUrls = PixivAppProfileImages("https://s.pximg.net/common/images/no_profile.png"),
+            ),
+        )
+
+        assertNull(gated.toWork())
+    }
 }

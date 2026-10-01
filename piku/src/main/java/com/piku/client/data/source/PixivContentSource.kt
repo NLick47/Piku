@@ -49,6 +49,8 @@ class PixivContentSource @Inject constructor(
             FEED_FOLLOW -> repository.followFeed(offset = offset)
                 .map { items -> SourcePage(items = items) }
 
+            FEED_LATEST -> latestPage(facets, page)
+
             else -> repository.ranking(
                 mode = facets[GROUP_PERIOD] ?: PERIOD_DAILY,
                 content = facets[GROUP_CONTENT] ?: FACET_ALL,
@@ -62,6 +64,19 @@ class PixivContentSource @Inject constructor(
         }
         return result.map { it.copy(items = if (adultEnabled) it.items else it.items.filterNot { work -> work.r18 }) }
     }
+
+    private suspend fun latestPage(facets: Map<String, String>, page: Int): Result<SourcePage> {
+        val contentType = facets[GROUP_LATEST_CONTENT] ?: FACET_ILLUST
+        val cursor = latestCursors["$contentType:$page"]
+        if (page > 0 && cursor == null) return Result.success(SourcePage(items = emptyList()))
+        return repository.newFeed(contentType, cursor?.toLongOrNull())
+            .onSuccess { next ->
+                next.nextCursor?.let { latestCursors["$contentType:${page + 1}"] = it }
+            }
+    }
+
+    /** 新着流各页的翻页游标，键 =「内容档:页码」 */
+    private val latestCursors = mutableMapOf<String, String>()
 
     override fun open(work: Work): SourceWorkOpen = SourceWorkOpen.InAppViewer
 
@@ -83,14 +98,16 @@ class PixivContentSource @Inject constructor(
         const val FEED_RANKING = "ranking"
         const val FEED_FOLLOW = "follow"
         const val FEED_LATEST = "latest"
-        const val FEED_DISCOVER = "discover"
         const val GROUP_PERIOD = "period"
         const val GROUP_CONTENT = "content"
+        const val GROUP_LATEST_CONTENT = "latest_content"
         const val PERIOD_DAILY = "daily"
         const val FACET_ALL = "all"
+        const val FACET_ILLUST = "illust"
+        const val FACET_MANGA = "manga"
 
-        /** 已接通的流；声明里其余流仍是占位（能力未到），取页给终态而不是空页 */
-        val IMPLEMENTED_FEEDS = setOf(FEED_RECOMMEND, FEED_FOLLOW, FEED_RANKING)
+        /** 已接通的流；未列进的声明流视为占位（能力未到），取页给终态而不是空页 */
+        val IMPLEMENTED_FEEDS = setOf(FEED_RECOMMEND, FEED_FOLLOW, FEED_RANKING, FEED_LATEST)
 
         /** 声明是纯数据，单独暴露以便不构造本类（也就无需 DI）即可测试与断言 */
         val FEEDS = listOf(
@@ -113,13 +130,7 @@ class PixivContentSource @Inject constructor(
                 id = FEED_LATEST,
                 labelRes = R.string.pixiv_tab_new,
                 requiresLogin = true,
-                pendingAfterLogin = true,
-            ),
-            SourceFeed(
-                id = FEED_DISCOVER,
-                labelRes = R.string.pixiv_tab_discover,
-                requiresLogin = true,
-                pendingAfterLogin = true,
+                proportional = true,
             ),
         )
 
@@ -146,8 +157,18 @@ class PixivContentSource @Inject constructor(
                 feedId = FEED_RANKING,
                 options = listOf(
                     SourceFacet(id = FACET_ALL, labelRes = R.string.pixiv_filter_all, selectedByDefault = true),
-                    SourceFacet(id = "illust", labelRes = R.string.pixiv_filter_illust),
-                    SourceFacet(id = "manga", labelRes = R.string.pixiv_filter_manga),
+                    SourceFacet(id = FACET_ILLUST, labelRes = R.string.pixiv_filter_illust),
+                    SourceFacet(id = FACET_MANGA, labelRes = R.string.pixiv_filter_manga),
+                ),
+            ),
+            // 新着的内容类型：插画/漫画两档。app-api 对空 content_type（全部混排）的行为未验证，先不提供「全部」
+            SourceFacetGroup(
+                id = GROUP_LATEST_CONTENT,
+                style = SourceFacetStyle.Dropdown,
+                feedId = FEED_LATEST,
+                options = listOf(
+                    SourceFacet(id = FACET_ILLUST, labelRes = R.string.pixiv_filter_illust, selectedByDefault = true),
+                    SourceFacet(id = FACET_MANGA, labelRes = R.string.pixiv_filter_manga),
                 ),
             ),
         )

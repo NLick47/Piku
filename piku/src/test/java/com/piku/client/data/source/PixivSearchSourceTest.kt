@@ -84,6 +84,14 @@ class PixivSearchSourceTest {
             offset: Int?,
         ): PixivIllustsResponse = PixivIllustsResponse()
 
+        override suspend fun illustNew(
+            clientTime: String,
+            clientHash: String,
+            contentType: String,
+            filter: String,
+            maxIllustId: Long?,
+        ): PixivIllustsResponse = PixivIllustsResponse()
+
         override suspend fun searchIllust(
             clientTime: String,
             clientHash: String,

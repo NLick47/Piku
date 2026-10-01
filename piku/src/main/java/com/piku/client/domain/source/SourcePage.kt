@@ -5,4 +5,5 @@ import com.piku.client.domain.model.Work
 data class SourcePage(
     val items: List<Work>,
     val totalPages: Int? = null,
+    val nextCursor: String? = null,
 )

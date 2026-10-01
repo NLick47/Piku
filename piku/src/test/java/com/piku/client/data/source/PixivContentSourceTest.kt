@@ -27,6 +27,7 @@ import com.piku.client.data.remote.pixiv.PixivPagesResponse
 import com.piku.client.data.remote.pixiv.PixivRankingResponse
 import com.piku.client.data.remote.pixiv.PixivRecommendResponse
 import com.piku.client.data.repository.PixivRepository
+import com.piku.client.data.repository.pixivNewFeedCursor
 import com.piku.client.data.repository.pixivTotalPages
 import com.piku.client.data.repository.toWork
 import com.piku.client.domain.source.SourceFacetStyle
@@ -70,8 +71,11 @@ class PixivContentSourceTest {
         val calls = mutableListOf<Int?>()
         /** 关注流调用：offset 与 restrict 成对记下，两者都是接口契约的一部分 */
         val followCalls = mutableListOf<Pair<Int?, String>>()
+        /** 新着流调用：内容类型与游标成对记下，两者都是接口契约的一部分 */
+        val newCalls = mutableListOf<Pair<String, Long?>>()
         val signatures = mutableListOf<Pair<String, String>>()
         var illusts = emptyList<PixivAppIllust>()
+        var newNextUrl: String? = null
 
         override suspend fun recommended(
             clientTime: String,
@@ -96,6 +100,18 @@ class PixivContentSourceTest {
             followCalls.add(offset to restrict)
             signatures.add(clientTime to clientHash)
             return PixivIllustsResponse(illusts = illusts)
+        }
+
+        override suspend fun illustNew(
+            clientTime: String,
+            clientHash: String,
+            contentType: String,
+            filter: String,
+            maxIllustId: Long?,
+        ): PixivIllustsResponse {
+            newCalls.add(contentType to maxIllustId)
+            signatures.add(clientTime to clientHash)
+            return PixivIllustsResponse(illusts = illusts, nextUrl = newNextUrl)
         }
 
         override suspend fun illustState(
@@ -444,13 +460,74 @@ class PixivContentSourceTest {
         assertEquals("https://i.pximg.net/1.jpg", work.thumbnailUrl)
     }
 
-    /** 未接通的流（最新/发现）取页给终态：引擎不该为占位流重试 */
+    /**
+     * 新着流按游标翻页：首页不带游标；上一页 next_url 里的 max_illust_id 供下一页用；
+     * 同页重取（预取被作废后的重拉）永远用同一游标，不漂移；刷新从页 0 推倒重来。
+     */
     @Test
-    fun pendingFeedsFailInsteadOfReturningEmptyPage() = runTest {
-        val src = source(FakeApi())
+    fun latestPageWalksCursorFromNextUrl() = runTest {
+        val app = FakeAppApi()
+        val src = source(FakeApi(), app)
 
-        assertTrue(src.page(PixivContentSource.FEED_LATEST, emptyMap(), 0).isFailure)
-        assertTrue(src.page(PixivContentSource.FEED_DISCOVER, emptyMap(), 0).isFailure)
+        // 首页响应就带 next_url：下一页游标随响应回来
+        app.newNextUrl = "https://app-api.pixiv.net/v1/illust/new?filter=for_android&content_type=illust&max_illust_id=12345"
+        src.page(PixivContentSource.FEED_LATEST, emptyMap(), 0)
+        // 页 1 的响应再带回更后一段游标，页 2 才会换用它
+        app.newNextUrl = "https://app-api.pixiv.net/v1/illust/new?filter=for_android&content_type=illust&max_illust_id=67890"
+        src.page(PixivContentSource.FEED_LATEST, emptyMap(), 1)
+        src.page(PixivContentSource.FEED_LATEST, emptyMap(), 2)
+        src.page(PixivContentSource.FEED_LATEST, emptyMap(), 2)
+
+        assertEquals(
+            listOf<Long?>(null, 12345L, 67890L, 67890L),
+            app.newCalls.map { it.second },
+        )
+
+        // 刷新：页 0 不带游标重来，链路覆盖旧游标
+        src.page(PixivContentSource.FEED_LATEST, emptyMap(), 0)
+        src.page(PixivContentSource.FEED_LATEST, emptyMap(), 1)
+        assertEquals(
+            listOf<Long?>(null, 67890L),
+            app.newCalls.takeLast(2).map { it.second },
+        )
+    }
+
+    /** 新着流内容档驱动 content_type，默认插画；换档即换流，各自从头翻 */
+    @Test
+    fun latestContentFacetDrivesContentType() = runTest {
+        val app = FakeAppApi()
+        val src = source(FakeApi(), app)
+
+        src.page(PixivContentSource.FEED_LATEST, emptyMap(), 0)
+        src.page(
+            PixivContentSource.FEED_LATEST,
+            mapOf(PixivContentSource.GROUP_LATEST_CONTENT to PixivContentSource.FACET_MANGA),
+            0,
+        )
+
+        assertEquals(
+            listOf(
+                PixivContentSource.FACET_ILLUST to null,
+                PixivContentSource.FACET_MANGA to null,
+            ),
+            app.newCalls,
+        )
+    }
+
+    /** 新着卡同样按比例排版；R-18 跟随成人内容开关 */
+    @Test
+    fun latestCarriesSizeAndHidesR18WhenDisabled() = runTest {
+        val app = FakeAppApi().apply {
+            illusts = listOf(appIllust("1"), appIllust("2", xRestrict = 1))
+        }
+
+        val page = source(FakeApi(), app).page(PixivContentSource.FEED_LATEST, emptyMap(), 0).getOrThrow()
+
+        assertEquals(listOf(1L), page.items.map { it.id })
+        val work = page.items.single()
+        assertEquals(1200, work.thumbWidth)
+        assertEquals(1800, work.thumbHeight)
+        assertEquals("https://i.pximg.net/1.jpg", work.thumbnailUrl)
     }
 
     /** 作者区出站到 pixiv 用户页：与详情页作者行的去向一致 */
@@ -461,7 +538,7 @@ class PixivContentSourceTest {
         assertEquals(SourceAuthorOpen.External("https://www.pixiv.net/users/7"), open)
     }
 
-    /** 声明形态：五条流 = 四个登录门 + 榜单名次流；周期/内容两组维度只属于榜单 */
+    /** 声明形态：四条流 = 三个登录门 + 榜单名次流；榜单带周期/内容两组维度，新着另有内容档 */
     @Test
     fun declarationsKeepOneRankingTabWithPeriodChips() {
         assertEquals(
@@ -470,10 +547,11 @@ class PixivContentSourceTest {
                 PixivContentSource.FEED_FOLLOW,
                 PixivContentSource.FEED_RANKING,
                 PixivContentSource.FEED_LATEST,
-                PixivContentSource.FEED_DISCOVER,
             ),
             PixivContentSource.FEEDS.map { it.id },
         )
+        // 声明里不再有占位流：每条都已接通
+        assertEquals(PixivContentSource.FEEDS.map { it.id }.toSet(), PixivContentSource.IMPLEMENTED_FEEDS)
         val recommend = PixivContentSource.FEEDS.first { it.id == PixivContentSource.FEED_RECOMMEND }
         assertTrue(recommend.requiresLogin)
         // 已接通：登录后就该有内容，不再是「即将上线」
@@ -488,6 +566,12 @@ class PixivContentSourceTest {
         val ranking = PixivContentSource.FEEDS.first { it.id == PixivContentSource.FEED_RANKING }
         assertTrue(ranking.ranked)
         assertFalse(ranking.requiresLogin)
+        val latest = PixivContentSource.FEEDS.first { it.id == PixivContentSource.FEED_LATEST }
+        assertTrue(latest.requiresLogin)
+        assertFalse(latest.pendingAfterLogin)
+        assertTrue(latest.proportional)
+        // 新着按投稿时间序：刷新要能算「新增 N 条」
+        assertTrue(latest.chronological)
 
         val period = PixivContentSource.FACETS.first { it.id == PixivContentSource.GROUP_PERIOD }
         assertEquals(SourceFacetStyle.Chips, period.style)
@@ -500,6 +584,12 @@ class PixivContentSourceTest {
         assertEquals(SourceFacetStyle.Dropdown, content.style)
         assertEquals(PixivContentSource.FEED_RANKING, content.feedId)
         assertEquals(listOf("all", "illust", "manga"), content.options.map { it.id })
+
+        val latestContent = PixivContentSource.FACETS.first { it.id == PixivContentSource.GROUP_LATEST_CONTENT }
+        assertEquals(SourceFacetStyle.Dropdown, latestContent.style)
+        assertEquals(PixivContentSource.FEED_LATEST, latestContent.feedId)
+        assertEquals(listOf("illust", "manga"), latestContent.options.map { it.id })
+        assertEquals("illust", latestContent.options.first { it.selectedByDefault }.id)
     }
 
     @Test
@@ -507,5 +597,20 @@ class PixivContentSourceTest {
         assertEquals(11, com.piku.client.data.repository.pixivTotalPages(502))
         assertEquals(1, com.piku.client.data.repository.pixivTotalPages(50))
         assertNull(com.piku.client.data.repository.pixivTotalPages(0))
+    }
+
+    /** next_url 只为取游标服务：末页无 next_url、无游标参数或解析不出都按 null（首页）处理 */
+    @Test
+    fun newFeedCursorParsesMaxIllustIdFromNextUrl() {
+        assertEquals(
+            12345L,
+            pixivNewFeedCursor(
+                "https://app-api.pixiv.net/v1/illust/new?filter=for_android&content_type=illust&max_illust_id=12345",
+            ),
+        )
+        assertNull(pixivNewFeedCursor("https://app-api.pixiv.net/v1/illust/new?filter=for_android&content_type=illust"))
+        assertNull(pixivNewFeedCursor("https://app-api.pixiv.net/v1/illust/new?max_illust_id=not-a-number"))
+        assertNull(pixivNewFeedCursor(null))
+        assertNull(pixivNewFeedCursor(""))
     }
 }

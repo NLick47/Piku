@@ -138,6 +138,20 @@ class PixivRepository @Inject constructor(
         response.illusts.mapNotNull { it.toWork() }
     }
 
+    suspend fun newFeed(contentType: String, cursor: Long?): Result<SourcePage> = apiCall {
+        val signature = endpoints.clientSignature(runtime.now())
+        val response = appApi.illustNew(
+            clientTime = signature.time,
+            clientHash = signature.hash,
+            contentType = contentType,
+            maxIllustId = cursor,
+        )
+        SourcePage(
+            items = response.illusts.mapNotNull { it.toWork() },
+            nextCursor = pixivNewFeedCursor(response.nextUrl)?.toString(),
+        )
+    }
+
     /**
      * 详情补充文本与统计。简介是 HTML 片段：<br /> 换算行、其余标签剥掉（详情壳按纯文本展示）。
      * 计数与元信息同一个接口就带出来了，不再多打一次请求。
@@ -258,6 +272,8 @@ internal fun PixivAppIllust.toWork(): Work? {
     val illustId = illustId
     val thumb = imageUrls.large.ifBlank { imageUrls.medium }.ifBlank { imageUrls.squareMedium }
     if (illustId <= 0 || thumb.isBlank()) return null
+    // 审查占位条目：pixiv 把标题作者全空、头像换 no_profile 没法看也没法查 直接丢
+    if ("/common/images/limit_" in thumb) return null
     return Work(
         id = illustId,
         authorId = user.userId,
@@ -328,6 +344,16 @@ private fun decodePixivEntities(text: String): String = text
 /** rank_total 换算总页数；0/负数表示未知（匿名接口偶尔返回 0），交由引擎翻到空页为止 */
 internal fun pixivTotalPages(rankTotal: Int): Int? =
     if (rankTotal <= 0) null else (rankTotal + PixivApiConfig.PAGE_SIZE - 1) / PixivApiConfig.PAGE_SIZE
+
+/** 从新着流的 next_url 里解析下一页游标 max_illust_id；末页无 next_url，解析不出也按 null（首页）处理 */
+internal fun pixivNewFeedCursor(nextUrl: String?): Long? {
+    if (nextUrl.isNullOrBlank()) return null
+    return nextUrl.substringAfter('?', "")
+        .split('&')
+        .firstOrNull { it.substringBefore('=') == "max_illust_id" }
+        ?.substringAfter('=')
+        ?.toLongOrNull()
+}
 
 internal fun PixivRankingItem.toWork(): Work = Work(
     id = illustId,

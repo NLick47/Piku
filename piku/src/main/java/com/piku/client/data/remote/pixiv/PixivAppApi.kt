@@ -232,6 +232,20 @@ interface PixivAppApi {
         @Query("filter") filter: String = "for_android",
     ): PixivTrendTagsResponse
 
+    /**
+     * 新着流：全站最新投稿，时间序。登录才可用。
+     * 翻页不是 offset 而是作品 id 游标：响应 next_url 带回下一页的 max_illust_id。
+     */
+    @GET("v1/illust/new")
+    @Headers(HEADER_USER_AGENT, HEADER_APP_OS, HEADER_APP_OS_VERSION, HEADER_APP_VERSION)
+    suspend fun illustNew(
+        @Header("X-Client-Time") clientTime: String,
+        @Header("X-Client-Hash") clientHash: String,
+        @Query("content_type") contentType: String,
+        @Query("filter") filter: String = PixivAppConfig.FILTER_ANDROID,
+        @Query("max_illust_id") maxIllustId: Long? = null,
+    ): PixivIllustsResponse
+
     /** 登录用户视角的作品状态（是否已收藏、是否已关注作者）；仅登录态下有意义 */
     @GET("v1/illust/detail")
     @Headers(HEADER_USER_AGENT, HEADER_APP_OS, HEADER_APP_OS_VERSION, HEADER_APP_VERSION)
