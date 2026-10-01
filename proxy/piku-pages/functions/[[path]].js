@@ -92,6 +92,10 @@ export async function onRequest(context) {
   const { request, waitUntil } = context;
   const url = new URL(request.url);
 
+  if (url.hostname.endsWith(".pages.dev")) {
+    return new Response("Access Denied", { status: 403 });
+  }
+
   if (request.method === "OPTIONS") return new Response(null, { headers: CORS });
   if (url.pathname === "/__health" || url.pathname === "/health") {
     return new Response("piku-relay ok", { status: 200, headers: CORS });
