@@ -46,6 +46,8 @@ import coil3.compose.AsyncImage
 import com.piku.client.R
 import com.piku.client.domain.model.Work
 import com.piku.client.ui.common.feedThumbUrl
+import com.piku.client.ui.navigation.sharedWorkBounds
+import com.piku.client.ui.navigation.workSharedKey
 import com.piku.client.ui.theme.PikuColors
 import com.piku.client.ui.theme.PikuLayout
 import com.piku.client.ui.theme.SoftBorderLight
@@ -104,6 +106,7 @@ internal fun NovelWorkCard(
                 contentDescription = work.title,
                 colorFilter = PikuColors.tameWhiteFilter,
                 modifier = Modifier
+                    .sharedWorkBounds(workSharedKey(work.authorId, work.id))
                     .fillMaxWidth()
                     .aspectRatio(NOVEL_COVER_ASPECT)
                     .background(if (dark) WorkCardPlaceholderDark else Color(0xFFF1EFEA)),

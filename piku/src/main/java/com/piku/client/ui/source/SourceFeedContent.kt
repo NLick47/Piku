@@ -1,7 +1,5 @@
 package com.piku.client.ui.source
 
-import android.content.Intent
-import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -55,7 +53,6 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -96,6 +93,8 @@ import com.piku.client.ui.home.UserMenuButton
 import com.piku.client.ui.home.feedScrollProgress
 import com.piku.client.ui.home.reportTabBand
 import com.piku.client.ui.home.scrollToTopSmart
+import com.piku.client.ui.navigation.sharedWorkBounds
+import com.piku.client.ui.navigation.workSharedKey
 import com.piku.client.ui.theme.PikuColors
 import com.piku.client.ui.theme.PikuLayout
 import com.piku.client.ui.theme.WorkCardBgDark
@@ -117,16 +116,13 @@ internal fun SourceFeedContent(
     updateBanner: GitHubRelease?,
     onOpenUpdate: () -> Unit,
     onDismissUpdateBanner: () -> Unit,
-    /** 声明 [SourceWorkOpen.NativeDetail] 的源：壳里点开要交给主壳详情路由 */
-    onNativeDetail: (Work) -> Unit,
-    /** 详情里点作者的去向；null = 详情自己退回出站 */
-    onOpenAuthor: ((Work) -> Unit)? = null,
+    /** 作品点击的通用分流去向：NativeDetail/External 直接交它，InAppViewer 过完 R-18 门也交它 */
+    onOpenWork: (Work) -> Unit,
     onLoginClick: (String) -> Unit = {},
     viewModel: SourceFeedViewModel = hiltViewModel(),
 ) {
     val state by viewModel.ui.collectAsState()
     val gridState = rememberLazyStaggeredGridState()
-    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var detailWork by remember { mutableStateOf<Work?>(null) }
 
@@ -259,14 +255,12 @@ internal fun SourceFeedContent(
                             onRetryLoadMore = viewModel::retryLoadMore,
                             onToggleFavorite = viewModel::toggleFavorite,
                             onWorkClick = { work ->
-                                when (val open = viewModel.open(work)) {
-                                    is SourceWorkOpen.External -> runCatching {
-                                        context.startActivity(
-                                            Intent(Intent.ACTION_VIEW, Uri.parse(open.url)),
-                                        )
-                                    }
-                                    SourceWorkOpen.InAppViewer -> detailWork = work
-                                    SourceWorkOpen.NativeDetail -> onNativeDetail(work)
+                                // InAppViewer 两段式：先过宿主的 R-18 门，过门后仍经 onOpenWork 进共用壳；
+                                // 其余去向（NativeDetail/External）直接交给通用分流
+                                if (viewModel.open(work) == SourceWorkOpen.InAppViewer) {
+                                    detailWork = work
+                                } else {
+                                    onOpenWork(work)
                                 }
                             },
                         )
@@ -297,13 +291,13 @@ internal fun SourceFeedContent(
         }
     }
 
-    // 进详情页前过 R-18 门：判定在 [SourceWorkOpenHost] 里，与 poipiku 详情的门互不相干
+    // InAppViewer 的第二段：R-18 门判定在 [SourceWorkOpenHost] 里，过门后导航进共用详情壳
     detailWork?.let { work ->
         SourceWorkOpenHost(
             work = work,
             dark = dark,
             onDismiss = { detailWork = null },
-            onOpenAuthor = onOpenAuthor,
+            onOpenInApp = onOpenWork,
         )
     }
 }
@@ -549,6 +543,7 @@ private fun HeroCard(
             contentDescription = work.title,
             colorFilter = PikuColors.tameWhiteFilter,
             modifier = Modifier
+                .sharedWorkBounds(workSharedKey(work.authorId, work.id))
                 .fillMaxSize()
                 .background(placeholder),
             contentScale = ContentScale.Crop,

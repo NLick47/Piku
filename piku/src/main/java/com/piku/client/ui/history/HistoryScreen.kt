@@ -119,7 +119,6 @@ private val ScrubberTrackInset = 14.dp
 fun HistoryScreen(
     onBack: () -> Unit,
     onWorkClick: (Work) -> Unit,
-    onOpenAuthor: ((Work) -> Unit)? = null,
 ) {
     val viewModel: HistoryViewModel = hiltViewModel()
     val sourceOpen: SourceOpenViewModel = hiltViewModel()
@@ -280,7 +279,7 @@ fun HistoryScreen(
             work = work,
             dark = dark,
             onDismiss = { openHostWork = null },
-            onOpenAuthor = onOpenAuthor,
+            onOpenInApp = onWorkClick,
         )
     }
 

@@ -27,10 +27,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.piku.client.R
 import com.piku.client.domain.model.FollowUser
 import com.piku.client.domain.model.Work
+import com.piku.client.domain.model.WorkKind
 import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.source.AuthorPageStyle
 import com.piku.client.domain.source.SourceAuthRoutes
 import com.piku.client.domain.source.SourceAuthorOpen
+import com.piku.client.domain.source.SourceWorkOpen
 import com.piku.client.ui.author.AuthorProfileScreen
 import com.piku.client.ui.collection.CollectionScreen
 import com.piku.client.ui.detail.DetailScreen
@@ -45,8 +47,8 @@ import com.piku.client.ui.login.PixivLoginScreen
 import com.piku.client.ui.publish.PublishScreen
 import com.piku.client.ui.search.PoipikuLink
 import com.piku.client.ui.search.SearchScreen
+import com.piku.client.ui.source.SourceWorkDetailScreen
 import com.piku.client.ui.source.SourceWorkOpenHost
-import com.piku.client.ui.theme.LocalDarkTheme
 import com.piku.client.ui.search.SearchScreen
 import com.piku.client.ui.search.parsePoipikuLink
 import com.piku.client.ui.source.SourceOpenViewModel
@@ -65,6 +67,8 @@ object Routes {
     const val HOME = "home"
     const val COLLECTION = "collection"
     const val DETAIL = "detail/{authorId}/{workId}?thumb={thumb}"
+    const val SOURCE_DETAIL =
+        "source_detail/{source}/{kind}/{authorId}/{workId}?thumb={thumb}&title={title}&authorName={authorName}&avatar={avatar}&r18={r18}&len={len}"
     const val HISTORY = "history"
     const val TAGS = "tags"
     const val USER_WORKS = "user_works/{userId}?userName={userName}"
@@ -107,6 +111,20 @@ object Routes {
      */
     fun detail(authorId: Long, workId: Long, thumbnailUrl: String = "") =
         "detail/$authorId/$workId?thumb=${Uri.encode(thumbnailUrl)}"
+
+    /**
+     * 应用内看图器源的共用详情壳。除了 ids，还携带卡片自带的展示字段：
+     * 详情 VM 加载前会拿它们同步造一份打底 detail 秒进首帧（标题/作者/缩略图），
+     * 也是共享元素转场首帧的形变落点——字段缺了首帧就退化成骨架屏。
+     */
+    fun sourceDetail(work: Work) =
+        "source_detail/${work.source.name}/${work.kind.name}/${work.authorId}/${work.id}" +
+            "?thumb=${Uri.encode(work.thumbnailUrl)}" +
+            "&title=${Uri.encode(work.title)}" +
+            "&authorName=${Uri.encode(work.authorName)}" +
+            "&avatar=${Uri.encode(work.authorAvatarUrl.orEmpty())}" +
+            "&r18=${work.r18}" +
+            "&len=${work.textLength}"
 }
 
 /**
@@ -116,9 +134,6 @@ object Routes {
 private const val BACK_POP_DEBOUNCE_MS = 400L
 
 private const val EXIT_CONFIRM_INTERVAL_MS = 2000L
-
-/** 路由转场时长，同时也是共享元素过渡的动画窗口 */
-private const val SHARED_TRANSITION_MS = 220
 
 private const val KEY_SHOULD_REOPEN_DRAWER = "should_reopen_drawer"
 
@@ -134,16 +149,47 @@ fun AppNavHost(
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
 
+    // 源声明注册表：作品点击按它分流（主壳详情 / 应用内共用壳 / 出站）
+    val sourceOpen: SourceOpenViewModel = hiltViewModel()
+    val context = LocalContext.current
+    val openExternal: (String) -> Unit = { url ->
+        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+    }
+
     // 点击卡片即预热详情页首图：详情页首图是同一张图的 _640，与卡片渲染的 _360
     // 缓存互不相通，预热与详情页 HTML/append 请求并行
     val prefetchDetailImage = rememberWorkDetailPrefetch()
-    var sourceDetailWork by remember { mutableStateOf<Work?>(null) }
     val openDetail: (Work) -> Unit = { work ->
-        if (work.source == WorkSource.PIXIV) {
-            sourceDetailWork = work
+        prefetchDetailImage(work.thumbnailUrl)
+        navController.navigate(Routes.detail(work.authorId, work.id, work.thumbnailUrl))
+    }
+
+    /**
+     * 按作品所属源分流打开——所有作品点击的统一出口（首页两壳/搜索/收藏/历史/标签/
+     * 用户作品/画师主页）。poipiku 走主壳详情路由；声明应用内看图器的源（pixiv）走
+     * 共用源详情壳路由；外链出站。pixiv 作品从此不再误入 poipiku 详情取数。
+     *
+     * R-18 门不在这里：它挂在 [SourceWorkOpenHost]（feed/收藏/历史的两段式路径），
+     * 而声明 InAppViewer 的源目前只有 pixiv，其 R-18 由服务端账号设置管控，直通无碍。
+     */
+    val openWork: (Work) -> Unit = { work ->
+        when (val open = sourceOpen.open(work)) {
+            SourceWorkOpen.NativeDetail -> openDetail(work)
+            SourceWorkOpen.InAppViewer -> navController.navigate(Routes.sourceDetail(work))
+            is SourceWorkOpen.External -> openExternal(open.url)
+        }
+    }
+
+    /** 源详情里点相关作品：压栈进新详情，栈深到上限就换掉栈顶（与 poipiku 详情同规） */
+    val openRelatedSourceWork: (Work) -> Unit = { work ->
+        val detailDepth = navController.currentBackStack.value
+            .count { it.destination.route == Routes.SOURCE_DETAIL }
+        if (detailDepth >= Routes.MAX_DETAIL_DEPTH) {
+            navController.navigate(Routes.sourceDetail(work)) {
+                popUpTo(Routes.SOURCE_DETAIL) { inclusive = true }
+            }
         } else {
-            prefetchDetailImage(work.thumbnailUrl)
-            navController.navigate(Routes.detail(work.authorId, work.id, work.thumbnailUrl))
+            navController.navigate(Routes.sourceDetail(work))
         }
     }
 
@@ -191,7 +237,6 @@ fun AppNavHost(
     // 拦截系统返回：
     // - 非首页：safePopBack 弹出上一层
     // - 首页（栈底）：第一次按返回弹"再按一次退出"提示，2 秒内再按一次才退出，防误触
-    val context = LocalContext.current
     var lastExitHintAt by remember { mutableLongStateOf(0L) }
     BackHandler(enabled = currentRoute != null) {
         if (currentRoute == Routes.HOME) {
@@ -209,11 +254,6 @@ fun AppNavHost(
 
     // 共享元素过渡：Home ↔ Detail 之间的作品图放大/缩回。
     // 注意这里必须给非零时长——全 None 时 AnimatedContent 瞬间完成，sharedBounds 会直接跳变。
-    val sourceOpen: SourceOpenViewModel = hiltViewModel()
-    val openExternal: (String) -> Unit = { url ->
-        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
-    }
-
     val openAuthor: (WorkSource, Long, String) -> Unit = { source, userId, userName ->
         when (sourceOpen.authorPageStyle(source)) {
             AuthorPageStyle.Works ->
@@ -300,7 +340,7 @@ fun AppNavHost(
                         backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = false
                     },
                     onWorkClick = { work: Work ->
-                        openDetail(work)
+                        openWork(work)
                     },
                     onLoginClick = {
                         Log.d(TAG, "navigate LOGIN " +
@@ -343,31 +383,33 @@ fun AppNavHost(
                 navArgument("tag") { type = NavType.StringType; defaultValue = "" },
             ),
         ) {
-            SearchScreen(
-                onBack = safePopBack,
-                onLoginClick = { navController.navigate(Routes.LOGIN) },
-                onManageTags = { navController.navigate(Routes.TAGS) },
-                onSearch = { keyword ->
-                    navController.navigate(Routes.search(keyword)) {
-                        popUpTo(Routes.SEARCH) { inclusive = true }
-                    }
-                },
-                onWorkClick = { work: Work ->
-                    openDetail(work)
-                },
-                onUserClick = { source, user: FollowUser ->
-                    openAuthor(source, user.userId, user.name)
-                },
-                onOpenExternal = openExternal,
-                onOpenLink = { link ->
-                    when (link) {
-                        is PoipikuLink.Work ->
-                            navController.navigate(Routes.detail(link.authorId, link.workId))
-                        is PoipikuLink.User ->
-                            navController.navigate(Routes.userWorks(link.userId))
-                    }
-                },
-            )
+            ProvideNavSharedScope(sharedScope, this) {
+                SearchScreen(
+                    onBack = safePopBack,
+                    onLoginClick = { navController.navigate(Routes.LOGIN) },
+                    onManageTags = { navController.navigate(Routes.TAGS) },
+                    onSearch = { keyword ->
+                        navController.navigate(Routes.search(keyword)) {
+                            popUpTo(Routes.SEARCH) { inclusive = true }
+                        }
+                    },
+                    onWorkClick = { work: Work ->
+                        openWork(work)
+                    },
+                    onUserClick = { source, user: FollowUser ->
+                        openAuthor(source, user.userId, user.name)
+                    },
+                    onOpenExternal = openExternal,
+                    onOpenLink = { link ->
+                        when (link) {
+                            is PoipikuLink.Work ->
+                                navController.navigate(Routes.detail(link.authorId, link.workId))
+                            is PoipikuLink.User ->
+                                navController.navigate(Routes.userWorks(link.userId))
+                        }
+                    },
+                )
+            }
         }
         composable(
             route = Routes.USER_WORKS,
@@ -376,15 +418,17 @@ fun AppNavHost(
                 navArgument("userName") { type = NavType.StringType; defaultValue = "" },
             ),
         ) {
-            UserWorksScreen(
-                onBack = safePopBack,
-                onWorkClick = { work: Work ->
-                    openDetail(work)
-                },
-                onManageClick = { uid, name ->
-                    navController.navigate(Routes.myPosts(uid, name))
-                },
-            )
+            ProvideNavSharedScope(sharedScope, this) {
+                UserWorksScreen(
+                    onBack = safePopBack,
+                    onWorkClick = { work: Work ->
+                        openWork(work)
+                    },
+                    onManageClick = { uid, name ->
+                        navController.navigate(Routes.myPosts(uid, name))
+                    },
+                )
+            }
         }
         composable(
             route = Routes.AUTHOR_PROFILE,
@@ -394,18 +438,20 @@ fun AppNavHost(
                 navArgument("userName") { type = NavType.StringType; defaultValue = "" },
             ),
         ) { entry ->
-            val source = entry.arguments?.getString("source")
-                ?.let { name -> WorkSource.entries.firstOrNull { it.name == name } }
-            AuthorProfileScreen(
-                onBack = safePopBack,
-                onWorkClick = { work: Work ->
-                    openDetail(work)
-                },
-                onLoginClick = {
-                    val route = source?.let(sourceOpen::loginRoute)
-                    if (route != null) navController.navigate(route) { launchSingleTop = true }
-                },
-            )
+            ProvideNavSharedScope(sharedScope, this) {
+                val source = entry.arguments?.getString("source")
+                    ?.let { name -> WorkSource.entries.firstOrNull { it.name == name } }
+                AuthorProfileScreen(
+                    onBack = safePopBack,
+                    onWorkClick = { work: Work ->
+                        openWork(work)
+                    },
+                    onLoginClick = {
+                        val route = source?.let(sourceOpen::loginRoute)
+                        if (route != null) navController.navigate(route) { launchSingleTop = true }
+                    },
+                )
+            }
         }
         composable(
             route = Routes.MY_POSTS,
@@ -414,20 +460,22 @@ fun AppNavHost(
                 navArgument("userName") { type = NavType.StringType; defaultValue = "" },
             ),
         ) {
-            MyPostsScreen(
-                onBack = safePopBack,
-                onWorkClick = { work: Work ->
-                    openDetail(work)
-                },
-                onEditClick = { work: Work ->
-                    navController.navigate(Routes.editPost(work.id))
-                },
-                onDeleted = {
-                    navController.previousBackStackEntry
-                        ?.savedStateHandle
-                        ?.set(Routes.KEY_POSTS_CHANGED, true)
-                },
-            )
+            ProvideNavSharedScope(sharedScope, this) {
+                MyPostsScreen(
+                    onBack = safePopBack,
+                    onWorkClick = { work: Work ->
+                        openWork(work)
+                    },
+                    onEditClick = { work: Work ->
+                        navController.navigate(Routes.editPost(work.id))
+                    },
+                    onDeleted = {
+                        navController.previousBackStackEntry
+                            ?.savedStateHandle
+                            ?.set(Routes.KEY_POSTS_CHANGED, true)
+                    },
+                )
+            }
         }
         composable(
             route = Routes.EDIT_POST,
@@ -448,32 +496,37 @@ fun AppNavHost(
             )
         }
         composable(Routes.TAGS) {
-            TagScreen(
-                onBack = safePopBack,
-                onWorkClick = { work: Work ->
-                    openDetail(work)
-                },
-            )
+            ProvideNavSharedScope(sharedScope, this) {
+                TagScreen(
+                    onBack = safePopBack,
+                    onWorkClick = { work: Work ->
+                        openWork(work)
+                    },
+                )
+            }
         }
         composable(Routes.COLLECTION) {
-            CollectionScreen(
-                onBack = safePopBack,
-                onWorkClick = { work: Work ->
-                    openDetail(work)
-                },
-                onAuthorClick = { work: Work ->
-                    openAuthorOfWork(work)
-                },
-            )
+            ProvideNavSharedScope(sharedScope, this) {
+                CollectionScreen(
+                    onBack = safePopBack,
+                    onWorkClick = { work: Work ->
+                        openWork(work)
+                    },
+                    onAuthorClick = { work: Work ->
+                        openAuthorOfWork(work)
+                    },
+                )
+            }
         }
         composable(Routes.HISTORY) {
-            HistoryScreen(
-                onBack = safePopBack,
-                onWorkClick = { work: Work ->
-                    openDetail(work)
-                },
-                onOpenAuthor = openAuthorOfWork,
-            )
+            ProvideNavSharedScope(sharedScope, this) {
+                HistoryScreen(
+                    onBack = safePopBack,
+                    onWorkClick = { work: Work ->
+                        openWork(work)
+                    },
+                )
+            }
         }
         composable(
             route = Routes.DETAIL,
@@ -518,15 +571,56 @@ fun AppNavHost(
                 )
             }
         }
+        composable(
+            route = Routes.SOURCE_DETAIL,
+            arguments = listOf(
+                navArgument("source") { type = NavType.StringType },
+                navArgument("kind") { type = NavType.StringType },
+                navArgument("authorId") { type = NavType.LongType },
+                navArgument("workId") { type = NavType.LongType },
+                navArgument("thumb") { type = NavType.StringType; defaultValue = "" },
+                navArgument("title") { type = NavType.StringType; defaultValue = "" },
+                navArgument("authorName") { type = NavType.StringType; defaultValue = "" },
+                navArgument("avatar") { type = NavType.StringType; defaultValue = "" },
+                navArgument("r18") { type = NavType.BoolType; defaultValue = false },
+                navArgument("len") { type = NavType.IntType; defaultValue = 0 },
+            ),
+        ) { entry ->
+            // 路由参数重建 Work：详情 VM 拿它同步造打底 detail 秒进首帧，
+            // 这些字段同时是共享元素转场首帧的形变落点
+            val work = remember(entry) {
+                val a = requireNotNull(entry.arguments) { "SOURCE_DETAIL arguments missing" }
+                Work(
+                    id = a.getLong("workId"),
+                    authorId = a.getLong("authorId"),
+                    authorName = a.getString("authorName").orEmpty(),
+                    authorAvatarUrl = a.getString("avatar")?.takeIf { it.isNotEmpty() },
+                    categoryCd = -1,
+                    categoryName = "",
+                    title = a.getString("title").orEmpty(),
+                    thumbnailUrl = a.getString("thumb").orEmpty(),
+                    imageCount = 0,
+                    textLength = a.getInt("len"),
+                    r18 = a.getBoolean("r18"),
+                    source = WorkSource.entries.firstOrNull { it.name == a.getString("source") }
+                        ?: WorkSource.PIXIV,
+                    kind = WorkKind.entries.firstOrNull { it.name == a.getString("kind") }
+                        ?: WorkKind.ILLUST,
+                )
+            }
+            ProvideNavSharedScope(sharedScope, this) {
+                SourceWorkDetailScreen(
+                    work = work,
+                    onBack = safePopBack,
+                    onHomeClick = safePopToHome,
+                    onOpenAuthor = openAuthorOfWork,
+                    onRelatedClick = openRelatedSourceWork,
+                )
+            }
+        }
         }
 
-        sourceDetailWork?.let { work ->
-            SourceWorkOpenHost(
-                work = work,
-                dark = LocalDarkTheme.current,
-                onDismiss = { sourceDetailWork = null },
-                onOpenAuthor = openAuthorOfWork,
-            )
-        }
+        // 应用内看图器作品不再有导航层浮层：pixiv 详情由 SOURCE_DETAIL 路由承载，
+        // R-18 门留在 SourceWorkOpenHost（feed/收藏/历史的两段式路径）
     }
 }

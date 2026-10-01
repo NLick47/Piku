@@ -49,7 +49,6 @@ internal fun HomeOverlays(
             HistoryScreen(
                 onBack = onHistoryBack,
                 onWorkClick = { onWorkClick(it) },
-                onOpenAuthor = onOpenAuthor,
             )
         }
     }

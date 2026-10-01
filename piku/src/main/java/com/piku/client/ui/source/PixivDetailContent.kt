@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -65,6 +66,7 @@ import com.piku.client.ui.detail.TagFlow
 import com.piku.client.ui.detail.TagsTranslateChip
 import com.piku.client.ui.detail.linkify
 import com.piku.client.ui.detail.tagsTranslationShown
+import com.piku.client.ui.navigation.sharedWorkBounds
 import com.piku.client.ui.theme.OverlayScrimHeavy
 import com.piku.client.ui.theme.PikuColors
 import com.piku.client.ui.theme.StarDark
@@ -88,6 +90,8 @@ internal fun PixivDetailContent(
     scrollState: ScrollState = rememberScrollState(),
     /** 顶部让位给浮起来的顶栏 */
     topInset: Dp = 12.dp,
+    /** 图区共享元素 key：与列表卡片配对做 hero 形变；空串 = 不参与过渡 */
+    sharedKey: String = "",
     /** 来源页缩略图：首图到位前的低清打底 */
     sourceThumbnailUrl: String = "",
     onImageClick: (Int) -> Unit,
@@ -132,30 +136,38 @@ internal fun PixivDetailContent(
             .fillMaxSize()
             .verticalScroll(scrollState),
     ) {
-        // 图通栏：左右到边、顶到顶栏下面，不钻到状态栏底下
+        // 图通栏：左右到边、顶到顶栏下面，不钻到状态栏底下。
+        // 共享元素 Box 只包图区本体：topInset 留在外面，hero 形变落点不含状态栏空档
         Column(Modifier.padding(top = topInset)) {
-            ImagePager(
-                detail = detail,
-                dark = dark,
-                sourceThumbnailUrl = sourceThumbnailUrl,
-                fullBleed = true,
-                onImageClick = onImageClick,
-                onImageLongPress = onImageLongPress,
-                onImageShown = onImageShown,
-                // pixiv 没有密码、小说与访问门，这几路回调留空
-                onWorkClick = { _, _, _ -> },
-                password = "",
-                onPasswordChange = {},
-                onPasswordSubmit = {},
-                passwordLoading = false,
-                onOpenNovelReader = {},
-                hasImageModel = hasImageModel,
-                imageTranslated = imageTranslated,
-                imageTranslatingPage = imageTranslatingPage,
-                translatedImages = translatedImages,
-                onImageTranslateClick = onImageTranslateClick,
-                onPageChanged = onPageChanged,
-            )
+            Box(
+                Modifier
+                    .sharedWorkBounds(sharedKey)
+                    .fillMaxWidth()
+                    .animateContentSize(),
+            ) {
+                ImagePager(
+                    detail = detail,
+                    dark = dark,
+                    sourceThumbnailUrl = sourceThumbnailUrl,
+                    fullBleed = true,
+                    onImageClick = onImageClick,
+                    onImageLongPress = onImageLongPress,
+                    onImageShown = onImageShown,
+                    // pixiv 没有密码、小说与访问门，这几路回调留空
+                    onWorkClick = { _, _, _ -> },
+                    password = "",
+                    onPasswordChange = {},
+                    onPasswordSubmit = {},
+                    passwordLoading = false,
+                    onOpenNovelReader = {},
+                    hasImageModel = hasImageModel,
+                    imageTranslated = imageTranslated,
+                    imageTranslatingPage = imageTranslatingPage,
+                    translatedImages = translatedImages,
+                    onImageTranslateClick = onImageTranslateClick,
+                    onPageChanged = onPageChanged,
+                )
+            }
         }
         Column(
             Modifier.padding(

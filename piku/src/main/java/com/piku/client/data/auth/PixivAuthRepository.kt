@@ -40,6 +40,9 @@ class PixivAuthRepository @Inject constructor(
 
     override val logoutMessageRes = R.string.account_logout_message
 
+    /** 账号主页：外壳拼「我的主页」路由要数字 uid（作者页按 user_id 查询），@账号名当不了 id */
+    override fun profileId(account: SourceAccount): String? = store.current()?.userId
+
     private val _status = MutableStateFlow(
         if (store.current() != null) AuthStatus.LOGGED_IN else AuthStatus.LOGGED_OUT,
     )

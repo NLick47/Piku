@@ -39,6 +39,7 @@ import com.piku.client.domain.model.WorkDetail
 import com.piku.client.domain.model.WorkStats
 import com.piku.client.ui.common.feedThumbUrl
 import com.piku.client.ui.detail.HeadlineTranslateChip
+import com.piku.client.ui.navigation.sharedWorkBounds
 import com.piku.client.ui.theme.PikuColors
 import com.piku.client.ui.theme.PikuLayout
 import com.piku.client.ui.theme.WorkCardPlaceholderDark
@@ -51,6 +52,8 @@ internal fun NovelDetailContent(
     dark: Boolean,
     language: AppLanguage,
     topInset: Dp,
+    /** 封面共享元素 key：与 NovelWorkCard 封面配对做 hero 形变；空串 = 不参与过渡 */
+    sharedKey: String = "",
     customTags: Set<String>,
     novelBodyLoading: Boolean,
     onReadClick: () -> Unit,
@@ -88,6 +91,7 @@ internal fun NovelDetailContent(
             contentDescription = detail.title,
             colorFilter = PikuColors.tameWhiteFilter,
             modifier = Modifier
+                .sharedWorkBounds(sharedKey)
                 .width(140.dp)
                 .aspectRatio(NOVEL_DETAIL_COVER_ASPECT)
                 .align(Alignment.CenterHorizontally)

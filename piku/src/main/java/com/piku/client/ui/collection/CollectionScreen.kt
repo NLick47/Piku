@@ -238,7 +238,7 @@ fun CollectionScreen(
                 work = work,
                 dark = dark,
                 onDismiss = { openHostWork = null },
-                onOpenAuthor = { w -> authorClickFor(w)?.invoke(w) },
+                onOpenInApp = onWorkClick,
             )
         }
 

@@ -322,8 +322,7 @@ fun HomeScreen(
                         updateBanner = state.updateBanner,
                         onOpenUpdate = onOpenUpdate,
                         onDismissUpdateBanner = viewModel::dismissUpdateBanner,
-                        onNativeDetail = onWorkClick,
-                        onOpenAuthor = onAuthorClick,
+                        onOpenWork = onWorkClick,
                         onLoginClick = onSourceLoginClick,
                     )
                 } else {
@@ -374,6 +373,7 @@ fun HomeScreen(
                 dialogs = dialogs,
                 viewModel = viewModel,
                 state = state,
+                headerAvatarUrl = headerAccount?.account?.avatarUrl,
                 dark = dark,
                 onOpenUpdate = onOpenUpdate,
                 onCloseAndReopenDrawer = { scope.launch { drawerState.open() } },
@@ -394,8 +394,20 @@ fun HomeScreen(
                 onCollectionBack = { showCollectionPage = false; scope.launch { drawerState.open() } },
                 showTagsPage = showTagsPage,
                 onTagsBack = { showTagsPage = false; scope.launch { drawerState.open() } },
-                onWorkClick = onWorkClick,
-                onOpenAuthor = onAuthorClick,
+                // 浮层页是独立窗口：不收起会盖在导航过去的详情/作者页上面（同账号页→登录的约定），
+                // 所以点作品/作者先收浮层再交给导航
+                onWorkClick = { work ->
+                    showHistoryPage = false
+                    showCollectionPage = false
+                    showTagsPage = false
+                    onWorkClick(work)
+                },
+                onOpenAuthor = { work ->
+                    showHistoryPage = false
+                    showCollectionPage = false
+                    showTagsPage = false
+                    onAuthorClick(work)
+                },
                 state = state,
                 dark = dark,
             )

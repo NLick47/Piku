@@ -167,6 +167,8 @@ internal fun DetailContent(
     dark: Boolean,
     /** 与列表卡片一致的共享元素 key；空串表示不参与过渡 */
     sharedKey: String = "",
+    /** 进场窗口内不注册共享元素（图区不在页首/要等加载的源）：true = 进场 fade、返回仍 morph */
+    skipEnterMorph: Boolean = false,
     /** 由页面持有的滚动状态：顶栏据此决定标题是否淡入，避免两处各建一份 */
     scrollState: ScrollState = rememberScrollState(),
     /** 顶部让位给浮起来的顶栏；写在滚动容器内部，滚上去时会跟着内容一起被顶栏盖住 */
@@ -241,6 +243,7 @@ internal fun DetailContent(
                 detail = detail,
                 dark = dark,
                 sharedKey = sharedKey,
+                skipEnterMorph = skipEnterMorph,
                 sourceThumbnailUrl = sourceThumbnailUrl,
                 displayImageUrls = displayImageUrls,
                 fullBleed = imageFirst,
@@ -620,6 +623,8 @@ internal fun ImagePager(
     dark: Boolean,
     /** 与列表卡片一致的共享元素 key；空串表示不参与过渡 */
     sharedKey: String = "",
+    /** 进场窗口内不注册共享元素（图区不在页首/要等加载的源）：true = 进场 fade、返回仍 morph */
+    skipEnterMorph: Boolean = false,
     /** 来源页缩略图（列表卡片的 _360）：首图到位前的低清打底 */
     sourceThumbnailUrl: String = "",
     /** 内联画哪一档（长度与 detail.imageUrls 一致）；null = 用 detail.imageUrls */
@@ -707,7 +712,9 @@ internal fun ImagePager(
     val passwordOnly = detail.imageUrls.isEmpty() && detail.passwordProtected && detail.novelText.isBlank()
     Box(
         modifier = Modifier
-            .sharedWorkBounds(sharedKey)
+            // poipiku 图区不在页首、要等加载：进场不 morph（退化 fade），返回时才缩回卡片。
+            // skipEnterMorph 由 DetailScreen 的进场窗口收口，窗口后恢复注册（常驻）
+            .sharedWorkBounds(sharedKey, skipEnterMorph = skipEnterMorph)
             .fillMaxWidth()
             .animateContentSize()
             .then(

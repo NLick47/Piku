@@ -16,6 +16,9 @@ val LocalNavAnimatedScope = compositionLocalOf<AnimatedVisibilityScope?> { null 
 
 private val LocalSharedTransitionHostView = compositionLocalOf<View?> { null }
 
+/** 路由转场时长，同时也是共享元素过渡的动画窗口 */
+const val SHARED_TRANSITION_MS = 220
+
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun ProvideNavSharedScope(
@@ -49,8 +52,12 @@ fun workSharedKey(authorId: Long, workId: Long) = "work-$authorId-$workId"
  */
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-fun Modifier.sharedWorkBounds(key: String): Modifier {
-    if (key.isBlank()) return this
+fun Modifier.sharedWorkBounds(key: String, skipEnterMorph: Boolean = false): Modifier {
+    // skipEnterMorph = 本次组合不注册共享元素（进场退化成普通 fade）。由调用方按源声明：
+    // 图区不在页首、要等加载的详情壳（poipiku）在进场窗口内置 true，窗口收口后恢复
+    // false——恢复后的注册是常驻的，返回缩回卡片不依赖转场中途的任何重组时机。
+    // 退出侧内容在转场中不会重组，「返回时再补注册」不可行，必须靠常驻注册。
+    if (key.isBlank() || skipEnterMorph) return this
     val sharedScope = LocalSharedTransitionScope.current ?: return this
     val animatedScope = LocalNavAnimatedScope.current ?: return this
     val hostView = LocalSharedTransitionHostView.current ?: return this

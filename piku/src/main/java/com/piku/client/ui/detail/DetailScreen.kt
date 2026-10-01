@@ -49,6 +49,7 @@ import androidx.compose.material3.TextButton
 import com.piku.client.ui.common.FeedbackHost
 import com.piku.client.ui.common.PikuBottomSheet
 import com.piku.client.ui.common.PikuSheetTitle
+import com.piku.client.ui.navigation.SHARED_TRANSITION_MS
 import com.piku.client.ui.navigation.workSharedKey
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -98,6 +99,7 @@ import com.piku.client.ui.theme.HomeBgTopDark
 import com.piku.client.ui.theme.HomeBgTopLight
 import com.piku.client.ui.theme.LocalDarkTheme
 import com.piku.client.ui.theme.PikuColors
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** 顶栏标题淡入所需的滚动距离：大致等于滚过图区上沿 */
@@ -124,6 +126,14 @@ fun DetailScreen(
     val shareRequest by viewModel.shareRequest.collectAsStateWithLifecycle()
     val dark = LocalDarkTheme.current
     val scrollState = rememberScrollState()
+    // poipiku 图区不在页首、要等详情返回：进场不参与共享元素（退化 fade），返回时才缩回卡片。
+    // 跳过窗口 = 转场时长 + 余量：图区若在转场内就上屏（缓存命中），窗口收口后才注册，
+    // 不会在进场中途凑出一对残缺的 morph；窗口一过即常驻注册，返回动画不受影响。
+    var skipEnterMorph by remember { mutableStateOf(true) }
+    LaunchedEffect(Unit) {
+        delay(SHARED_TRANSITION_MS + 50L)
+        skipEnterMorph = false
+    }
     val density = LocalDensity.current
     // 下滑越过图区上沿后，顶栏淡入作品标题，避免长内容页面滚着滚着失去上下文
     val titleVisible by remember(density) {
@@ -324,6 +334,7 @@ fun DetailScreen(
                     detail = state.detail!!,
                     dark = dark,
                     sharedKey = workSharedKey(viewModel.authorId, viewModel.workId),
+                    skipEnterMorph = skipEnterMorph,
                     scrollState = scrollState,
                     topInset = topInset,
                     sourceThumbnailUrl = viewModel.sourceThumbnailUrl,

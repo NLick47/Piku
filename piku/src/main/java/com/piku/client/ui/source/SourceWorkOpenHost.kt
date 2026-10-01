@@ -63,8 +63,9 @@ class SourceOpenViewModel @Inject constructor(
 
 /**
  * 「按作品所属源打开」的统一入口：非主壳详情的作品在收藏/历史等跨源列表里点击时用它。
- * 打开方式由源自己的 [SourceWorkOpen] 声明决定——应用内看图器或跳外部浏览器；
- * 声明 [SourceWorkOpen.NativeDetail] 的作品该走主壳详情路由，调用方先用
+ * 打开方式由源自己的 [SourceWorkOpen] 声明决定——外链跳浏览器；声明 InAppViewer 的作品
+ * 先过 R-18 门，过门后经 [onOpenInApp] 导航进共用源详情壳（SOURCE_DETAIL 路由，不再有
+ * 导航层浮层）。声明 [SourceWorkOpen.NativeDetail] 的作品该走主壳详情路由，调用方先用
  * [SourceOpenViewModel.opensInNativeShell] 问过，真到了这里只把浮层收掉。
  */
 @Composable
@@ -72,8 +73,8 @@ internal fun SourceWorkOpenHost(
     work: Work,
     dark: Boolean,
     onDismiss: () -> Unit,
-    /** 详情里点作者：宿主给应用内跳转；null = 退回出站到源的网页（宿主没能力导航时） */
-    onOpenAuthor: ((Work) -> Unit)? = null,
+    /** 过完 R-18 门后 InAppViewer 作品的去向：导航进共用源详情壳 */
+    onOpenInApp: (Work) -> Unit,
     viewModel: SourceOpenViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -106,12 +107,11 @@ internal fun SourceWorkOpenHost(
                 },
             )
         } else {
-            SourceWorkDetailDialog(
-                work = work,
-                dark = dark,
-                onDismiss = onDismiss,
-                onOpenAuthor = onOpenAuthor,
-            )
+            // 过门即导航：先收掉宿主状态再进详情页；返回时 work 已清，不会二次触发
+            LaunchedEffect(work.key) {
+                onDismiss()
+                onOpenInApp(work)
+            }
         }
     }
 }

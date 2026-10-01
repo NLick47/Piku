@@ -127,6 +127,8 @@ internal fun HomeDialogs(
     dialogs: HomeDialogsState,
     viewModel: HomeViewModel,
     state: HomeUiState,
+    /** 头像查看器看的图：当前首页源抽屉头部那个头像（userProfile 只是 poipiku 的） */
+    headerAvatarUrl: String?,
     dark: Boolean,
     onOpenUpdate: () -> Unit,
     /** 全屏二级页（WebDAV）返回时收起页面并重新拉出抽屉 */
@@ -258,7 +260,7 @@ internal fun HomeDialogs(
 
     if (dialogs.showAvatarViewer) {
         AvatarViewerDialog(
-            avatarUrl = state.userProfile?.avatarUrl,
+            avatarUrl = headerAvatarUrl,
             onDismiss = { dialogs.showAvatarViewer = false },
             onSave = { url -> viewModel.saveAvatar(url) },
         )
