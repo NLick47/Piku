@@ -73,7 +73,7 @@ fun HomeScreen(
     onTagsClick: () -> Unit,
     onSearchClick: () -> Unit,
     onAuthorClick: (Work) -> Unit,
-    onProfileOpen: (Long, String) -> Unit,
+    onProfileOpen: (WorkSource, Long, String) -> Unit,
 ) {
     val viewModel: HomeViewModel = hiltViewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -193,9 +193,10 @@ fun HomeScreen(
 
         override fun openWork(work: Work) = onWorkClick(work)
 
-        override fun openAuthorProfile(uid: Long, name: String) = onProfileOpen(uid, name)
+        override fun openAuthorProfile(source: WorkSource, uid: Long, name: String) =
+            onProfileOpen(source, uid, name)
 
-        // 应用内没有对应页时的去向（如 pixiv 用户主页）：交给系统浏览器
+        // 应用内没有对应页时的去向：交给系统浏览器
         override fun openExternal(url: String) {
             runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
         }
@@ -246,7 +247,7 @@ fun HomeScreen(
             when {
                 row == null || !row.loggedIn -> row?.loginRoute?.let(onSourceLoginClick)
                 row.profileId != null -> row.profileId.toLongOrNull()?.let { uid ->
-                    onProfileOpen(uid, row.account?.displayName.orEmpty())
+                    onProfileOpen(row.source, uid, row.account?.displayName.orEmpty())
                 }
                 else -> showAccountsPage = true
             }
@@ -322,6 +323,7 @@ fun HomeScreen(
                         onOpenUpdate = onOpenUpdate,
                         onDismissUpdateBanner = viewModel::dismissUpdateBanner,
                         onNativeDetail = onWorkClick,
+                        onOpenAuthor = onAuthorClick,
                         onLoginClick = onSourceLoginClick,
                     )
                 } else {
@@ -393,7 +395,7 @@ fun HomeScreen(
                 showTagsPage = showTagsPage,
                 onTagsBack = { showTagsPage = false; scope.launch { drawerState.open() } },
                 onWorkClick = onWorkClick,
-                onProfileOpen = onProfileOpen,
+                onOpenAuthor = onAuthorClick,
                 state = state,
                 dark = dark,
             )

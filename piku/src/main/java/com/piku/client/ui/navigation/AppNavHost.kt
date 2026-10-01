@@ -22,10 +22,15 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.piku.client.R
 import com.piku.client.domain.model.FollowUser
 import com.piku.client.domain.model.Work
+import com.piku.client.domain.model.WorkSource
+import com.piku.client.domain.source.AuthorPageStyle
 import com.piku.client.domain.source.SourceAuthRoutes
+import com.piku.client.domain.source.SourceAuthorOpen
+import com.piku.client.ui.author.AuthorProfileScreen
 import com.piku.client.ui.collection.CollectionScreen
 import com.piku.client.ui.detail.DetailScreen
 import com.piku.client.ui.detail.rememberWorkDetailPrefetch
@@ -40,6 +45,7 @@ import com.piku.client.ui.publish.PublishScreen
 import com.piku.client.ui.search.PoipikuLink
 import com.piku.client.ui.search.SearchScreen
 import com.piku.client.ui.search.parsePoipikuLink
+import com.piku.client.ui.source.SourceOpenViewModel
 import com.piku.client.ui.tags.TagScreen
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
@@ -59,6 +65,8 @@ object Routes {
     const val TAGS = "tags"
     const val USER_WORKS = "user_works/{userId}?userName={userName}"
     const val MY_POSTS = "my_posts/{userId}?userName={userName}"
+
+    const val AUTHOR_PROFILE = "author/{source}/{userId}?userName={userName}"
     const val EDIT_POST = "edit_post/{workId}"
     const val SEARCH = "search/{keyword}?tag={tag}"
     const val MAX_DETAIL_DEPTH = 3
@@ -76,6 +84,9 @@ object Routes {
 
     fun userWorks(userId: Long, userName: String = "") =
         "user_works/$userId?userName=${Uri.encode(userName)}"
+
+    fun authorProfile(source: WorkSource, userId: Long, userName: String = "") =
+        "author/${source.name}/$userId?userName=${Uri.encode(userName)}"
 
     fun myPosts(userId: Long, userName: String = "") =
         "my_posts/$userId?userName=${Uri.encode(userName)}"
@@ -189,6 +200,30 @@ fun AppNavHost(
 
     // 共享元素过渡：Home ↔ Detail 之间的作品图放大/缩回。
     // 注意这里必须给非零时长——全 None 时 AnimatedContent 瞬间完成，sharedBounds 会直接跳变。
+    val sourceOpen: SourceOpenViewModel = hiltViewModel()
+    val openExternal: (String) -> Unit = { url ->
+        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+    }
+
+    val openAuthor: (WorkSource, Long, String) -> Unit = { source, userId, userName ->
+        when (sourceOpen.authorPageStyle(source)) {
+            AuthorPageStyle.Works ->
+                navController.navigate(Routes.userWorks(userId, userName)) { launchSingleTop = true }
+            AuthorPageStyle.Profile ->
+                navController.navigate(Routes.authorProfile(source, userId, userName)) { launchSingleTop = true }
+        }
+    }
+
+    /** 从作品点作者：先问源的去向（出站 / 不可点 / 应用内），应用内再按形态分 */
+    val openAuthorOfWork: (Work) -> Unit = { work ->
+        when (val open = sourceOpen.authorPage(work)) {
+            SourceAuthorOpen.NativeDetail, SourceAuthorOpen.NativeProfile ->
+                openAuthor(work.source, work.authorId, work.authorName)
+            is SourceAuthorOpen.External -> openExternal(open.url)
+            null -> Unit
+        }
+    }
+
     SharedTransitionLayout {
         val sharedScope = this
         NavHost(
@@ -282,14 +317,12 @@ fun AppNavHost(
                     onSearchClick = { navController.navigate(Routes.search()) },
                     onAuthorClick = { work: Work ->
                         // 卡片作者区：不写 SHOULD_REOPEN_DRAWER，避免回到首页时抽屉被自动弹出
-                        navController.navigate(Routes.userWorks(work.authorId, work.authorName)) {
-                            launchSingleTop = true
-                        }
+                        openAuthorOfWork(work)
                     },
-                    onProfileOpen = { uid, name ->
+                    onProfileOpen = { source, uid, name ->
                         // 抽屉里"我的资料"点击：保留重开抽屉的语义，便于连续切换抽屉菜单项
                         backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = true
-                        navController.navigate(Routes.userWorks(uid, name))
+                        openAuthor(source, uid, name)
                     },
                 )
             }
@@ -313,14 +346,10 @@ fun AppNavHost(
                 onWorkClick = { work: Work ->
                     openDetail(work)
                 },
-                onUserClick = { user: FollowUser ->
-                    navController.navigate(Routes.userWorks(user.userId, user.name))
+                onUserClick = { source, user: FollowUser ->
+                    openAuthor(source, user.userId, user.name)
                 },
-                onOpenExternal = { url ->
-                    runCatching {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                    }
-                },
+                onOpenExternal = openExternal,
                 onOpenLink = { link ->
                     when (link) {
                         is PoipikuLink.Work ->
@@ -345,6 +374,27 @@ fun AppNavHost(
                 },
                 onManageClick = { uid, name ->
                     navController.navigate(Routes.myPosts(uid, name))
+                },
+            )
+        }
+        composable(
+            route = Routes.AUTHOR_PROFILE,
+            arguments = listOf(
+                navArgument("source") { type = NavType.StringType },
+                navArgument("userId") { type = NavType.LongType },
+                navArgument("userName") { type = NavType.StringType; defaultValue = "" },
+            ),
+        ) { entry ->
+            val source = entry.arguments?.getString("source")
+                ?.let { name -> WorkSource.entries.firstOrNull { it.name == name } }
+            AuthorProfileScreen(
+                onBack = safePopBack,
+                onWorkClick = { work: Work ->
+                    openDetail(work)
+                },
+                onLoginClick = {
+                    val route = source?.let(sourceOpen::loginRoute)
+                    if (route != null) navController.navigate(route) { launchSingleTop = true }
                 },
             )
         }
@@ -403,9 +453,7 @@ fun AppNavHost(
                     openDetail(work)
                 },
                 onAuthorClick = { work: Work ->
-                    navController.navigate(Routes.userWorks(work.authorId, work.authorName)) {
-                        launchSingleTop = true
-                    }
+                    openAuthorOfWork(work)
                 },
             )
         }
@@ -415,6 +463,7 @@ fun AppNavHost(
                 onWorkClick = { work: Work ->
                     openDetail(work)
                 },
+                onOpenAuthor = openAuthorOfWork,
             )
         }
         composable(
@@ -448,13 +497,8 @@ fun AppNavHost(
                         }
                     },
                     onAuthorClick = { authorId, authorName ->
-                        // 详情页 → 作者主页：作品页头部卡片展示作者主页信息，关注状态由页面自行解析
-                        navController.navigate(
-                            Routes.userWorks(
-                                userId = authorId,
-                                userName = authorName,
-                            ),
-                        )
+                        // 主详情页只承载 poipiku（取数只有 PoipikuApi），去向仍由源的声明挑页
+                        openAuthor(WorkSource.POIPIKU, authorId, authorName)
                     },
                     // 受限门卡「去登录」：详情页留在返回栈，登录成功 popBack 后自动重载
                     onNavigateToLogin = {

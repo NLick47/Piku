@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.StarBorder
@@ -386,6 +387,13 @@ private fun AuthorLine(
                 )
             }
         }
+        // 可进主页的提示：只有名字带箭头，右侧的收藏/关注仍是各自的按钮
+        Icon(
+            imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+            contentDescription = null,
+            tint = PikuColors.textFaint,
+            modifier = Modifier.size(16.dp),
+        )
         // 收藏星标：对作品操作，点自己区域不触发整行跳作者页
         FavoriteStarButton(
             favorited = isFavorite,

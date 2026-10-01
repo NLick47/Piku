@@ -166,10 +166,10 @@ fun CollectionScreen(
     val isTablet = LocalConfiguration.current.screenWidthDp >= 600
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
-    // 作者区去向按源声明分流：主壳的「用户作品」页 / 出站到源的作者页 / 本源没有作者页则不可点
+    // 作者区去向按源声明分流：主壳的作者页（两种形态路由不同，由宿主再分）/ 出站到源的作者页 / 本源没有作者页则不可点
     val authorClickFor: (Work) -> ((Work) -> Unit)? = { work ->
         when (val open = sourceOpen.authorPage(work)) {
-            SourceAuthorOpen.NativeDetail -> onAuthorClick
+            SourceAuthorOpen.NativeDetail, SourceAuthorOpen.NativeProfile -> onAuthorClick
             is SourceAuthorOpen.External -> { _ ->
                 runCatching {
                     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(open.url)))
@@ -234,7 +234,12 @@ fun CollectionScreen(
         }
 
         openHostWork?.let { work ->
-            SourceWorkOpenHost(work = work, dark = dark, onDismiss = { openHostWork = null })
+            SourceWorkOpenHost(
+                work = work,
+                dark = dark,
+                onDismiss = { openHostWork = null },
+                onOpenAuthor = { w -> authorClickFor(w)?.invoke(w) },
+            )
         }
 
         // 多选工具条与撤销条互斥：批量操作结束会退出多选，撤销条随即接管底部

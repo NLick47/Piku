@@ -15,6 +15,7 @@ import com.piku.client.data.remote.pixiv.PixivContentType
 import com.piku.client.data.remote.pixiv.PixivIllustsResponse
 import com.piku.client.data.remote.pixiv.PixivRankingItem
 import com.piku.client.data.remote.pixiv.PixivTrendTagsResponse
+import com.piku.client.data.remote.pixiv.PixivUserDetailResponse
 import com.piku.client.data.remote.pixiv.PixivUserPreviewsResponse
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkSource
@@ -29,6 +30,7 @@ import com.piku.client.data.repository.pixivNewFeedCursor
 import com.piku.client.data.repository.pixivTotalPages
 import com.piku.client.data.repository.toWork
 import com.piku.client.domain.source.SourceFacetStyle
+import com.piku.client.domain.source.AuthorPageStyle
 import com.piku.client.domain.source.SourceAuthorOpen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
@@ -183,6 +185,32 @@ class PixivContentSourceTest {
             clientHash: String,
             filter: String,
         ): PixivTrendTagsResponse = PixivTrendTagsResponse()
+
+        override suspend fun userDetail(
+            clientTime: String,
+            clientHash: String,
+            userId: Long,
+            filter: String,
+        ): PixivUserDetailResponse = PixivUserDetailResponse()
+
+        override suspend fun userIllusts(
+            clientTime: String,
+            clientHash: String,
+            userId: Long,
+            type: String,
+            filter: String,
+            offset: Int?,
+        ): PixivIllustsResponse = PixivIllustsResponse()
+
+        override suspend fun userBookmarks(
+            clientTime: String,
+            clientHash: String,
+            userId: Long,
+            restrict: String,
+            maxBookmarkId: Long?,
+            filter: String,
+        ): PixivIllustsResponse = PixivIllustsResponse()
+
     }
 
     private fun http404() = HttpException(Response.error<Any>(404, "".toResponseBody()))
@@ -529,12 +557,13 @@ class PixivContentSourceTest {
         assertEquals("https://i.pximg.net/1.jpg", work.thumbnailUrl)
     }
 
-    /** 作者区出站到 pixiv 用户页：与详情页作者行的去向一致 */
+    /** 作者区进应用内的画师主页，且声明的是资料页形态——外壳据此挑页面 */
     @Test
-    fun authorPageOpensPixivUserInBrowser() {
-        val open = source(FakeApi()).authorPage(work(7))
+    fun authorPageOpensInAppProfile() {
+        val source = source(FakeApi())
 
-        assertEquals(SourceAuthorOpen.External("https://www.pixiv.net/users/7"), open)
+        assertEquals(SourceAuthorOpen.NativeProfile, source.authorPage(work(7)))
+        assertEquals(AuthorPageStyle.Profile, source.authorPageStyle)
     }
 
     /** 声明形态：四条流 = 三个登录门 + 榜单名次流；榜单带周期/内容两组维度，新着另有内容档 */

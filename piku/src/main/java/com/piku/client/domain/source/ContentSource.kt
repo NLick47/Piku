@@ -38,6 +38,9 @@ interface ContentSource {
      */
     fun authorPage(work: Work): SourceAuthorOpen? = null
 
+    /** 声明 [SourceAuthorOpen.NativeDetail] / [SourceAuthorOpen.NativeProfile] 时，外壳按它挑作者页组件 */
+    val authorPageStyle: AuthorPageStyle get() = AuthorPageStyle.Works
+
     /** 应用内看图的作品页列表；只有声明 [SourceWorkOpen.InAppViewer] 的源会被调到 */
     suspend fun workPages(work: Work): Result<List<SourceWorkPage>>
 
@@ -89,7 +92,25 @@ sealed interface SourceAuthorOpen {
     /** 主壳的「用户作品」页承载这一源的作者 */
     data object NativeDetail : SourceAuthorOpen
 
+    /**
+     * 主壳的「画师主页」承载这一源的作者：资料区（简介/统计/外链）+ 分类 Tab + 作品墙。
+     * 接口给不出资料的源不该声明它——页面会因为没有任何资料可填而只剩作品墙。
+     */
+    data object NativeProfile : SourceAuthorOpen
+
     data class External(val url: String) : SourceAuthorOpen
+}
+
+/**
+ * 作者页形态：外壳据此挑作者页组件，不穷举站点名。与 [SourceFeed.ranked] 是同一套做法——
+ * 差异是声明出来的，新增一种形态 = 加一个枚举值 + 一个组件。
+ */
+enum class AuthorPageStyle {
+    /** 页头 + 作品墙（poipiku 的作者页，页头图片来自主页 HTML） */
+    Works,
+
+    /** 资料页：横幅 + 头像 + 简介 + 统计 + 外链 + 分类 Tab + 作品墙（pixiv） */
+    Profile,
 }
 
 data class SourceFeed(

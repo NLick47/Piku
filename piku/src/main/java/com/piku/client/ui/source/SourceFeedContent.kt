@@ -118,6 +118,8 @@ internal fun SourceFeedContent(
     onDismissUpdateBanner: () -> Unit,
     /** 声明 [SourceWorkOpen.NativeDetail] 的源：壳里点开要交给主壳详情路由 */
     onNativeDetail: (Work) -> Unit,
+    /** 详情里点作者的去向；null = 详情自己退回出站 */
+    onOpenAuthor: ((Work) -> Unit)? = null,
     onLoginClick: (String) -> Unit = {},
     viewModel: SourceFeedViewModel = hiltViewModel(),
 ) {
@@ -291,7 +293,12 @@ internal fun SourceFeedContent(
 
     // 进详情页前过 R-18 门：判定在 [SourceWorkOpenHost] 里，与 poipiku 详情的门互不相干
     detailWork?.let { work ->
-        SourceWorkOpenHost(work = work, dark = dark, onDismiss = { detailWork = null })
+        SourceWorkOpenHost(
+            work = work,
+            dark = dark,
+            onDismiss = { detailWork = null },
+            onOpenAuthor = onOpenAuthor,
+        )
     }
 }
 

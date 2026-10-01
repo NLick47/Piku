@@ -16,7 +16,9 @@ import com.piku.client.data.remote.pixiv.PixivWorkCard
 import com.piku.client.data.remote.pixiv.PixivPageUrls
 import com.piku.client.data.remote.pixiv.PixivRankingItem
 import com.piku.client.data.remote.pixiv.PixivUserPreview
+import com.piku.client.data.remote.pixiv.PixivUserDetailResponse
 import com.piku.client.data.remote.pixiv.PixivTrendTag
+import com.piku.client.domain.model.AuthorProfile
 import com.piku.client.domain.model.FollowUser
 import com.piku.client.domain.model.FollowUserPage
 import com.piku.client.domain.model.Work
@@ -257,6 +259,51 @@ class PixivRepository @Inject constructor(
         )
         throw AppError.Unknown
     }
+
+    // ---------------- 画师主页（app-api；都要登录） ----------------
+
+    suspend fun authorProfile(userId: Long): Result<AuthorProfile> = apiCall {
+        val signature = endpoints.clientSignature(runtime.now())
+        val response = appApi.userDetail(
+            clientTime = signature.time,
+            clientHash = signature.hash,
+            userId = userId,
+        )
+        response.toAuthorProfile(userId)
+    }
+
+    /** 画师作品：type 传 illust / manga，两池各自 offset 翻页 */
+    suspend fun authorIllusts(userId: Long, type: String, offset: Int): Result<SourcePage> = apiCall {
+        val signature = endpoints.clientSignature(runtime.now())
+        val response = appApi.userIllusts(
+            clientTime = signature.time,
+            clientHash = signature.hash,
+            userId = userId,
+            type = type,
+            offset = offset.takeIf { it > 0 },
+        )
+        SourcePage(
+            items = response.illusts.mapNotNull { it.toWork() },
+            // 令牌只表「还有下一页」；到底与否以接口的 next_url 为准——
+            // 条目会被 mapNotNull 丢掉（无图/无 id 的占位），按数量猜会提前判定到底
+            nextCursor = response.nextUrl?.takeIf { it.isNotBlank() },
+        )
+    }
+
+    /** 画师的公开收藏；翻页靠响应里的 max_bookmark_id 游标，不是 offset */
+    suspend fun authorBookmarks(userId: Long, cursor: Long?): Result<SourcePage> = apiCall {
+        val signature = endpoints.clientSignature(runtime.now())
+        val response = appApi.userBookmarks(
+            clientTime = signature.time,
+            clientHash = signature.hash,
+            userId = userId,
+            maxBookmarkId = cursor,
+        )
+        SourcePage(
+            items = response.illusts.mapNotNull { it.toWork() },
+            nextCursor = pixivBookmarkCursor(response.nextUrl)?.toString(),
+        )
+    }
 }
 
 /** 作品的登录态快照，供详情页回显按钮状态 */
@@ -397,6 +444,40 @@ internal fun PixivUserPreview.toFollowUser(): FollowUser? {
         avatarUrl = user.profileImageUrls.medium.ifBlank { null },
         followed = user.isFollowed,
     )
+}
+
+/**
+ * 画师主页资料。id 以接口回传的为准；回不来用请求参数兜底（名字/头像是页面必有项，
+ * 但两者都可能为空，界面自己决定退到什么）。
+ */
+internal fun PixivUserDetailResponse.toAuthorProfile(requestedId: Long): AuthorProfile = AuthorProfile(
+    userId = user.userId.takeIf { it > 0 } ?: requestedId,
+    name = user.name,
+    account = user.account,
+    // 没设头像时 pixiv 回 /common/images/no_profile.png 这张占位图（在 s.pximg.net，不受管上游）。
+    // 当成空，界面用自带的兜底图标，不替 pixiv 展示它的默认头像
+    avatarUrl = user.profileImageUrls.medium
+        .takeIf { it.isNotBlank() && !it.contains("/common/images/no_profile") },
+    bannerUrl = profile.backgroundImageUrl?.takeIf { it.isNotBlank() },
+    comment = cleanPixivDescription(user.comment),
+    illustCount = profile.totalIllusts,
+    mangaCount = profile.totalManga,
+    bookmarkCount = profile.totalIllustBookmarksPublic,
+    followCount = profile.totalFollowUsers,
+    twitterUrl = profile.twitterUrl?.takeIf { it.isNotBlank() },
+    webpage = profile.webpage?.takeIf { it.isNotBlank() },
+    premium = profile.isPremium,
+    followed = user.isFollowed,
+)
+
+/** 收藏列表的下一页游标：max_bookmark_id，与其它列表的 offset 不同型 */
+internal fun pixivBookmarkCursor(nextUrl: String?): Long? {
+    if (nextUrl.isNullOrBlank()) return null
+    return nextUrl.substringAfter('?', "")
+        .split('&')
+        .firstOrNull { it.substringBefore('=') == "max_bookmark_id" }
+        ?.substringAfter('=')
+        ?.toLongOrNull()
 }
 
 internal fun PixivTrendTag.toTrendingTag(): SourceTrendingTag? {

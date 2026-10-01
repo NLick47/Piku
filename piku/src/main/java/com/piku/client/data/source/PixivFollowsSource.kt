@@ -42,7 +42,6 @@ class PixivFollowsSource @Inject constructor(
     override suspend fun setFollowed(userId: Long, follow: Boolean): Result<Boolean> =
         repository.followUser(userId, follow).map { follow }
 
-    // 应用内还没有 pixiv 用户页，与检索/详情页一致出站到 pixiv
-    override fun userPage(user: FollowUser): SourceAuthorOpen =
-        SourceAuthorOpen.External("https://www.pixiv.net/users/${user.userId}")
+    // 画师主页由主壳承载，与检索/详情页一致
+    override fun userPage(user: FollowUser): SourceAuthorOpen = SourceAuthorOpen.NativeProfile
 }

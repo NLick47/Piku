@@ -42,6 +42,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import androidx.compose.ui.res.stringResource
+import com.piku.client.R
 import com.piku.client.domain.model.Work
 import com.piku.client.ui.common.feedThumbUrl
 import com.piku.client.ui.navigation.sharedWorkBounds
@@ -73,6 +75,8 @@ internal fun ProportionalWorkCard(
     onToggleFavorite: (Work) -> Unit,
     onClick: (Work) -> Unit,
     dark: Boolean,
+    /** 作者主页上每张卡片都挂着同一个作者，那一行是纯噪声；关掉换成页数 */
+    showAuthor: Boolean = true,
 ) {
     val shape = RoundedCornerShape(PikuLayout.CardCorner)
     var heartVisible by remember { mutableStateOf(false) }
@@ -153,23 +157,32 @@ internal fun ProportionalWorkCard(
                 overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.height(6.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                AsyncImage(
-                    model = work.authorAvatarUrl,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(18.dp)
-                        .clip(CircleShape),
-                    contentScale = ContentScale.Crop,
-                )
-                Spacer(Modifier.width(5.dp))
+            if (showAuthor) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    AsyncImage(
+                        model = work.authorAvatarUrl,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(18.dp)
+                            .clip(CircleShape),
+                        contentScale = ContentScale.Crop,
+                    )
+                    Spacer(Modifier.width(5.dp))
+                    Text(
+                        text = work.authorName,
+                        color = PikuColors.textPrimary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            } else {
                 Text(
-                    text = work.authorName,
-                    color = PikuColors.textPrimary,
+                    text = stringResource(R.string.home_image_count, work.imageCount),
+                    color = PikuColors.textFaint,
                     fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }

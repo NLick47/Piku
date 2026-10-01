@@ -28,7 +28,8 @@ internal fun HomeOverlays(
     showTagsPage: Boolean,
     onTagsBack: () -> Unit,
     onWorkClick: (Work) -> Unit,
-    onProfileOpen: (Long, String) -> Unit,
+    /** 浮层里点作者：带上作品，去向由宿主按源分发 */
+    onOpenAuthor: (Work) -> Unit,
     state: HomeUiState,
     dark: Boolean,
 ) {
@@ -45,7 +46,11 @@ internal fun HomeOverlays(
     }
     if (showHistoryPage) {
         Dialog(onDismissRequest = onHistoryBack, properties = fullScreenProps) {
-            HistoryScreen(onBack = onHistoryBack, onWorkClick = { onWorkClick(it) })
+            HistoryScreen(
+                onBack = onHistoryBack,
+                onWorkClick = { onWorkClick(it) },
+                onOpenAuthor = onOpenAuthor,
+            )
         }
     }
     if (showCollectionPage) {
@@ -53,7 +58,7 @@ internal fun HomeOverlays(
             CollectionScreen(
                 onBack = onCollectionBack,
                 onWorkClick = { onWorkClick(it) },
-                onAuthorClick = { work -> onProfileOpen(work.authorId, work.authorName) },
+                onAuthorClick = onOpenAuthor,
             )
         }
     }

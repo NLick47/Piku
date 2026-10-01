@@ -736,4 +736,15 @@
     <string name="account_source_logged_out">%1$s 未登录</string>
     <string name="pixiv_login_error_blocked">请求被 pixiv 拒绝：当前网络出口可能被限制，换个网络再试</string>
     <string name="pixiv_login_error_ratelimited">操作太频繁，稍后再试</string>
+
+    <!-- 画师主页（资料页形态） -->
+    <string name="author_tab_illust">插画</string>
+    <string name="author_tab_manga">漫画</string>
+    <string name="author_tab_bookmarks">收藏</string>
+    <string name="author_following_count">%1$d 关注</string>
+    <string name="author_bio_more">更多</string>
+    <string name="author_bio_collapse">收起</string>
+    <string name="author_login_hint">登录 pixiv 后可见 TA 的主页</string>
+    <string name="author_empty_bookmarks">TA 没有公开收藏</string>
+    <string name="author_copy_link">复制主页链接</string>
 </resources>

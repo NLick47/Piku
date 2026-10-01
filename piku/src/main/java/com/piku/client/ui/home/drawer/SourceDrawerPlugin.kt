@@ -66,7 +66,7 @@ interface DrawerScope {
     fun openWork(work: Work)
 
     /** 外壳导航：打开用户主页 */
-    fun openAuthorProfile(uid: Long, name: String)
+    fun openAuthorProfile(source: WorkSource, uid: Long, name: String)
 
     /** 外壳导航：出站打开网页——应用内没有对应页时的去向（如 pixiv 用户主页） */
     fun openExternal(url: String)

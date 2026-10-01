@@ -99,7 +99,7 @@ class PoipikuDrawerPlugin @Inject constructor(
                                     viewModel = hiltViewModel<PoipikuFollowUsersViewModel>(),
                                     onBack = onDismiss,
                                     onLoginClick = scope::openLogin,
-                                    onUserClick = { user -> scope.openAuthorProfile(user.userId, user.name) },
+                                    onUserClick = { user -> scope.openAuthorProfile(source, user.userId, user.name) },
                                 )
                             }
                         }
@@ -114,7 +114,7 @@ class PoipikuDrawerPlugin @Inject constructor(
                                 BlockUsersScreen(
                                     onBack = onDismiss,
                                     onLoginClick = scope::openLogin,
-                                    onUserClick = { user -> scope.openAuthorProfile(user.userId, user.name) },
+                                    onUserClick = { user -> scope.openAuthorProfile(source, user.userId, user.name) },
                                 )
                             }
                         }

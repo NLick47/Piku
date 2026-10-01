@@ -23,7 +23,9 @@ import com.piku.client.data.local.SettingsRepository
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.model.key
+import com.piku.client.domain.source.AuthorPageStyle
 import com.piku.client.domain.source.SourceAuthorOpen
+import com.piku.client.domain.source.SourceAuthRegistry
 import com.piku.client.domain.source.SourceRegistry
 import com.piku.client.domain.source.SourceWorkOpen
 import com.piku.client.ui.theme.PikuColors
@@ -34,6 +36,7 @@ import javax.inject.Inject
 @HiltViewModel
 class SourceOpenViewModel @Inject constructor(
     private val sourceRegistry: SourceRegistry,
+    private val authRegistry: SourceAuthRegistry,
     settingsRepository: SettingsRepository,
 ) : ViewModel() {
 
@@ -47,6 +50,15 @@ class SourceOpenViewModel @Inject constructor(
 
     /** 点作者的去向；null = 本源没有作者页，作者区不可点 */
     fun authorPage(work: Work): SourceAuthorOpen? = sourceRegistry.byId(work.source).authorPage(work)
+
+    /**
+     * 作者页形态。从 FollowUser 入口（我的关注/搜索用户）进来时没有 Work 可问，
+     * 由调用方带上源；从 Work 进来时可配合 [authorPage] 的返回值一起用。
+     */
+    fun authorPageStyle(source: WorkSource): AuthorPageStyle = sourceRegistry.authorPageStyle(source)
+
+    /** 源自己的登录页路由；null = 本源没注册登录插件 */
+    fun loginRoute(source: WorkSource): String? = authRegistry.byId(source)?.loginRoute
 }
 
 /**
@@ -60,6 +72,8 @@ internal fun SourceWorkOpenHost(
     work: Work,
     dark: Boolean,
     onDismiss: () -> Unit,
+    /** 详情里点作者：宿主给应用内跳转；null = 退回出站到源的网页（宿主没能力导航时） */
+    onOpenAuthor: ((Work) -> Unit)? = null,
     viewModel: SourceOpenViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -92,7 +106,12 @@ internal fun SourceWorkOpenHost(
                 },
             )
         } else {
-            SourceWorkDetailDialog(work = work, dark = dark, onDismiss = onDismiss)
+            SourceWorkDetailDialog(
+                work = work,
+                dark = dark,
+                onDismiss = onDismiss,
+                onOpenAuthor = onOpenAuthor,
+            )
         }
     }
 }

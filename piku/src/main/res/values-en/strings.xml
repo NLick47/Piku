@@ -726,4 +726,15 @@
     <string name="account_source_logged_out">%1$s not signed in</string>
     <string name="pixiv_login_error_blocked">pixiv refused the request: this network may be blocked — try another one</string>
     <string name="pixiv_login_error_ratelimited">Too many attempts — try again later</string>
+
+    <!-- Artist profile (profile style) -->
+    <string name="author_tab_illust">Illustrations</string>
+    <string name="author_tab_manga">Manga</string>
+    <string name="author_tab_bookmarks">Bookmarks</string>
+    <string name="author_following_count">%1$d following</string>
+    <string name="author_bio_more">More</string>
+    <string name="author_bio_collapse">Less</string>
+    <string name="author_login_hint">Sign in to pixiv to view this profile</string>
+    <string name="author_empty_bookmarks">No public bookmarks</string>
+    <string name="author_copy_link">Copy profile link</string>
 </resources>

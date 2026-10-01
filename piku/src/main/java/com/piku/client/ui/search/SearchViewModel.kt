@@ -446,8 +446,11 @@ class SearchViewModel @Inject constructor(
         }
     }
 
-    /** 点用户的去向：插件声明了就照声明（pixiv 出站到 pixiv 用户页），null 走默认用户页 */
+    /** 点用户的去向：插件声明了就照声明（pixiv 进应用内画师主页），null 走默认用户页 */
     fun userOpen(user: FollowUser): SourceAuthorOpen? = searchPlugin?.userPage(user)
+
+    /** 本页生效的源：用户行的作者页要按它挑形态 */
+    val sourceId: WorkSource get() = source
 
     fun toggleFollow(userId: Long) {
         val plugin = searchPlugin

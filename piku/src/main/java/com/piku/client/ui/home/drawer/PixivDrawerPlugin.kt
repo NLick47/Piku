@@ -42,10 +42,11 @@ class PixivDrawerPlugin @Inject constructor(
                                         onBack = onDismiss,
                                         onLoginClick = scope::openLogin,
                                         onUserClick = { user ->
+                                            // 去向由插件自己声明；形态由外壳按源挑页面
                                             when (val open = follows.userPage(user)) {
                                                 is SourceAuthorOpen.External -> scope.openExternal(open.url)
-                                                SourceAuthorOpen.NativeDetail ->
-                                                    scope.openAuthorProfile(user.userId, user.name)
+                                                SourceAuthorOpen.NativeDetail, SourceAuthorOpen.NativeProfile ->
+                                                    scope.openAuthorProfile(source, user.userId, user.name)
                                             }
                                         },
                                     )

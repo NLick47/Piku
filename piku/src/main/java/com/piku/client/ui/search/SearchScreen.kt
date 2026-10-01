@@ -64,6 +64,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.piku.client.R
 import com.piku.client.domain.model.FollowUser
+import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.source.SourceAuthorOpen
 import com.piku.client.ui.common.FeedbackHost
@@ -95,7 +96,7 @@ fun SearchScreen(
     onBack: () -> Unit,
     onSearch: (String) -> Unit,
     onWorkClick: (Work) -> Unit,
-    onUserClick: (FollowUser) -> Unit,
+    onUserClick: (WorkSource, FollowUser) -> Unit,
     onOpenLink: (PoipikuLink) -> Unit,
     onOpenExternal: (String) -> Unit,
     onLoginClick: () -> Unit,
@@ -130,11 +131,12 @@ fun SearchScreen(
     val showSuggestions = inputFocused && link == null &&
         query.trim().isNotEmpty() && state.suggestions.isNotEmpty()
 
-    // 用户行去向按插件声明分流（pixiv 出站到 pixiv 用户页），未声明走默认用户页
+    // 用户行去向按插件声明分流（出站 / 应用内作者页），未声明走默认用户页
     val handleUserClick: (FollowUser) -> Unit = { user ->
         when (val open = viewModel.userOpen(user)) {
             is SourceAuthorOpen.External -> onOpenExternal(open.url)
-            SourceAuthorOpen.NativeDetail, null -> onUserClick(user)
+            SourceAuthorOpen.NativeDetail, SourceAuthorOpen.NativeProfile, null ->
+                onUserClick(viewModel.sourceId, user)
         }
     }
 

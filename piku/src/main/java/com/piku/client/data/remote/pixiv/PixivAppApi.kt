@@ -22,6 +22,10 @@ object PixivAppConfig {
     const val RESTRICT_PUBLIC = "public"
     const val RESTRICT_PRIVATE = "private"
 
+    /** 画师作品列表的类型维度 */
+    const val TYPE_ILLUST = "illust"
+    const val TYPE_MANGA = "manga"
+
     /**
      * 内容过滤档。for_android 是限制最少的一档，R-18 是否显示交给本地开关过滤；
      * 换成 for_ios 会被服务端直接剃掉 R-18，本地开关就再也开不出来了。
@@ -69,6 +73,8 @@ data class PixivAppUser(
     @Serializable(with = FlexibleStringSerializer::class) val id: String = "",
     val name: String = "",
     val account: String = "",
+    /** 画师自述（简介）：仅 user/detail 返回，作品内嵌的 user 无此字段 */
+    val comment: String = "",
     @SerialName("profile_image_urls") val profileImageUrls: PixivAppProfileImages = PixivAppProfileImages(),
     /** 仅用户搜索等登录态接口返回；作品内嵌的 user 无此字段，默认 false */
     @SerialName("is_followed") val isFollowed: Boolean = false,
@@ -161,6 +167,33 @@ data class PixivUserPreviewsResponse(
 data class PixivUserPreview(
     val user: PixivAppUser = PixivAppUser(),
     val illusts: List<PixivAppIllust> = emptyList(),
+)
+
+/** 画师主页资料：user 是账号主体，profile 是资料区的统计与外链 */
+@Serializable
+data class PixivUserDetailResponse(
+    val user: PixivAppUser = PixivAppUser(),
+    val profile: PixivUserProfile = PixivUserProfile(),
+)
+
+/**
+ * 只取画师主页资料区用得上的字段。计数一律可空：字段缺失与「真的是 0」在界面上要能分开
+ * （粉丝数尤其——2026-10-01 真机确认 app-api 压根不返回 `total_follower`，
+ * 这个字段留着是给字段名留档，等哪天回来了再说；界面上不要用它）。
+ */
+@Serializable
+data class PixivUserProfile(
+    val webpage: String? = null,
+    @SerialName("total_follow_users") val totalFollowUsers: Int? = null,
+    @SerialName("total_follower") val totalFollower: Int? = null,
+    @SerialName("total_illusts") val totalIllusts: Int? = null,
+    @SerialName("total_manga") val totalManga: Int? = null,
+    /** 公开收藏数：收藏 Tab 的计数就是它（私密收藏数不对外） */
+    @SerialName("total_illust_bookmarks_public") val totalIllustBookmarksPublic: Int? = null,
+    @SerialName("background_image_url") val backgroundImageUrl: String? = null,
+    @SerialName("twitter_account") val twitterAccount: String = "",
+    @SerialName("twitter_url") val twitterUrl: String? = null,
+    @SerialName("is_premium") val isPremium: Boolean = false,
 )
 
 interface PixivAppApi {
@@ -305,4 +338,41 @@ interface PixivAppApi {
         @Header("X-Client-Hash") clientHash: String,
         @Field("illust_id") illustId: Long,
     ): PixivAppActionResponse
+
+    /** 画师主页资料（简介/统计/外链）。需登录 */
+    @GET("v1/user/detail")
+    @Headers(HEADER_USER_AGENT, HEADER_APP_OS, HEADER_APP_OS_VERSION, HEADER_APP_VERSION)
+    suspend fun userDetail(
+        @Header("X-Client-Time") clientTime: String,
+        @Header("X-Client-Hash") clientHash: String,
+        @Query("user_id") userId: Long,
+        @Query("filter") filter: String = PixivAppConfig.FILTER_ANDROID,
+    ): PixivUserDetailResponse
+
+    /** 画师的作品，按类型分池：插画与漫画分两次拉，各自 offset 翻页 */
+    @GET("v1/user/illusts")
+    @Headers(HEADER_USER_AGENT, HEADER_APP_OS, HEADER_APP_OS_VERSION, HEADER_APP_VERSION)
+    suspend fun userIllusts(
+        @Header("X-Client-Time") clientTime: String,
+        @Header("X-Client-Hash") clientHash: String,
+        @Query("user_id") userId: Long,
+        @Query("type") type: String,
+        @Query("filter") filter: String = PixivAppConfig.FILTER_ANDROID,
+        @Query("offset") offset: Int? = null,
+    ): PixivIllustsResponse
+
+    /**
+     * 别人的公开收藏（自己的能带私密，本应用只用公开）。
+     * 翻页游标是 max_bookmark_id 而不是 offset，与其它列表不同型。
+     */
+    @GET("v1/user/bookmarks/illust")
+    @Headers(HEADER_USER_AGENT, HEADER_APP_OS, HEADER_APP_OS_VERSION, HEADER_APP_VERSION)
+    suspend fun userBookmarks(
+        @Header("X-Client-Time") clientTime: String,
+        @Header("X-Client-Hash") clientHash: String,
+        @Query("user_id") userId: Long,
+        @Query("restrict") restrict: String = PixivAppConfig.RESTRICT_PUBLIC,
+        @Query("max_bookmark_id") maxBookmarkId: Long? = null,
+        @Query("filter") filter: String = PixivAppConfig.FILTER_ANDROID,
+    ): PixivIllustsResponse
 }

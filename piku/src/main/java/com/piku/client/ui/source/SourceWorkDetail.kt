@@ -79,6 +79,8 @@ internal fun SourceWorkDetailDialog(
     work: Work,
     dark: Boolean,
     onDismiss: () -> Unit,
+    /** 点作者：宿主给应用内跳转；null = 退回出站到 pixiv 用户页 */
+    onOpenAuthor: ((Work) -> Unit)? = null,
     viewModel: SourceWorkDetailViewModel = hiltViewModel(key = "source-detail-${work.id}"),
 ) {
     LaunchedEffect(work.id) { viewModel.load(work) }
@@ -308,13 +310,21 @@ internal fun SourceWorkDetailDialog(
                             }
                         },
                         onAuthorClick = {
-                            runCatching {
-                                context.startActivity(
-                                    Intent(
-                                        Intent.ACTION_VIEW,
-                                        Uri.parse("https://www.pixiv.net/users/${work.authorId}"),
-                                    ),
-                                )
+                            // 有能力导航就进应用内的画师主页（浮层先收掉，免得压在页面上）；
+                            // 没能力则保持出站，行为与加画师主页之前一致
+                            val open = onOpenAuthor
+                            if (open != null) {
+                                onDismiss()
+                                open(work)
+                            } else {
+                                runCatching {
+                                    context.startActivity(
+                                        Intent(
+                                            Intent.ACTION_VIEW,
+                                            Uri.parse("https://www.pixiv.net/users/${work.authorId}"),
+                                        ),
+                                    )
+                                }
                             }
                         },
                         hasImageModel = state.hasImageModel,

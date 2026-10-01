@@ -20,6 +20,7 @@ import com.piku.client.data.remote.pixiv.PixivPagesResponse
 import com.piku.client.data.remote.pixiv.PixivRankingResponse
 import com.piku.client.data.remote.pixiv.PixivRecommendResponse
 import com.piku.client.data.remote.pixiv.PixivTrendTagsResponse
+import com.piku.client.data.remote.pixiv.PixivUserDetailResponse
 import com.piku.client.data.remote.pixiv.PixivUserPreview
 import com.piku.client.data.remote.pixiv.PixivUserPreviewsResponse
 import com.piku.client.data.repository.PixivRepository
@@ -139,6 +140,32 @@ class PixivSearchSourceTest {
             clientHash: String,
             filter: String,
         ): PixivTrendTagsResponse = PixivTrendTagsResponse()
+
+        override suspend fun userDetail(
+            clientTime: String,
+            clientHash: String,
+            userId: Long,
+            filter: String,
+        ): PixivUserDetailResponse = PixivUserDetailResponse()
+
+        override suspend fun userIllusts(
+            clientTime: String,
+            clientHash: String,
+            userId: Long,
+            type: String,
+            filter: String,
+            offset: Int?,
+        ): PixivIllustsResponse = PixivIllustsResponse()
+
+        override suspend fun userBookmarks(
+            clientTime: String,
+            clientHash: String,
+            userId: Long,
+            restrict: String,
+            maxBookmarkId: Long?,
+            filter: String,
+        ): PixivIllustsResponse = PixivIllustsResponse()
+
 
         override suspend fun illustState(
             clientTime: String,
@@ -347,10 +374,10 @@ class PixivSearchSourceTest {
     }
 
     @Test
-    fun userPageGoesToPixivSite() {
+    fun userPageOpensInAppProfile() {
         val impl = source(FakeAppApi())
-        val open = impl.userPage(FollowUser(77, "n", null))
-        assertEquals("https://www.pixiv.net/users/77", (open as SourceAuthorOpen.External).url)
+
+        assertEquals(SourceAuthorOpen.NativeProfile, impl.userPage(FollowUser(77, "n", null)))
     }
 
     // ---------------- 响应格式钉线（字段经 PixEz / pixivpy 核对） ----------------

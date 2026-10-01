@@ -4,11 +4,13 @@ import com.piku.client.R
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.source.ContentSource
+import com.piku.client.domain.source.AuthorPageStyle
 import com.piku.client.domain.source.SourceFacetGroup
 import com.piku.client.domain.source.SourceFeed
 import com.piku.client.domain.source.SourcePage
 import com.piku.client.domain.source.SourceWorkOpen
 import com.piku.client.domain.source.SourceWorkPage
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -45,5 +47,10 @@ class ContentSourceAuthorPageTest {
         )
 
         assertNull(BareSource().authorPage(work))
+    }
+
+    @Test
+    fun defaultAuthorPageStyleIsWorks() {
+        assertEquals(AuthorPageStyle.Works, BareSource().authorPageStyle)
     }
 }

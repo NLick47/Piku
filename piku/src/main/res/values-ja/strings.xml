@@ -726,4 +726,15 @@
     <string name="account_source_logged_out">%1$s 未ログイン</string>
     <string name="pixiv_login_error_blocked">pixiv にリクエストを拒否されました。この回線が制限されている可能性があります</string>
     <string name="pixiv_login_error_ratelimited">操作が多すぎます。しばらくしてからお試しください</string>
+
+    <!-- 作家プロフィール（プロフィール形式） -->
+    <string name="author_tab_illust">イラスト</string>
+    <string name="author_tab_manga">マンガ</string>
+    <string name="author_tab_bookmarks">ブックマーク</string>
+    <string name="author_following_count">%1$d フォロー中</string>
+    <string name="author_bio_more">もっと見る</string>
+    <string name="author_bio_collapse">閉じる</string>
+    <string name="author_login_hint">pixiv にログインするとプロフィールを表示できます</string>
+    <string name="author_empty_bookmarks">公開ブックマークはありません</string>
+    <string name="author_copy_link">プロフィールのリンクをコピー</string>
 </resources>

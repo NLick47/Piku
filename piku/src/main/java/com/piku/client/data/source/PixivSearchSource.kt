@@ -70,9 +70,8 @@ class PixivSearchSource @Inject constructor(
     override suspend fun toggleFollow(userId: Long, follow: Boolean): Result<Unit> =
         repository.followUser(userId, follow)
 
-    // 应用内还没有 pixiv 用户页，与详情页作者行一致出站到 pixiv
-    override fun userPage(user: FollowUser): SourceAuthorOpen =
-        SourceAuthorOpen.External("https://www.pixiv.net/users/${user.userId}")
+    // 画师主页由主壳承载，与详情页作者行一致
+    override fun userPage(user: FollowUser): SourceAuthorOpen = SourceAuthorOpen.NativeProfile
 
     companion object {
         const val GROUP_SORT = "sort"

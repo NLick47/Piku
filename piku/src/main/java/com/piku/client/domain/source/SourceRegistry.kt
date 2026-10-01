@@ -16,6 +16,13 @@ class SourceRegistry @Inject constructor(
     /** 查不到给 null：外壳给"可能没有内容源"的地方用（如账号页按源渲染） */
     fun byIdOrNull(id: WorkSource): ContentSource? = byId[id]
 
+    /**
+     * 作者页形态：从 FollowUser 入口（我的关注/搜索用户）点进作者页时用，
+     * 那条路上没有 Work 可问，只能按源问。未注册的源退回默认形态。
+     */
+    fun authorPageStyle(id: WorkSource): AuthorPageStyle =
+        byId[id]?.authorPageStyle ?: AuthorPageStyle.Works
+
     /** 供换源控件列出可选源 */
     val all: List<ContentSource> get() = byId.values.toList()
 }

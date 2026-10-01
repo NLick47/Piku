@@ -7,6 +7,7 @@ import com.piku.client.domain.model.AppError
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.source.ContentSource
+import com.piku.client.domain.source.AuthorPageStyle
 import com.piku.client.domain.source.SourceAuthorOpen
 import com.piku.client.domain.source.SourceFacet
 import com.piku.client.domain.source.SourceFacetGroup
@@ -77,9 +78,10 @@ class PixivContentSource @Inject constructor(
 
     override fun open(work: Work): SourceWorkOpen = SourceWorkOpen.InAppViewer
 
-    // 与详情页作者行的去向一致：出站到 pixiv 的用户页
-    override fun authorPage(work: Work): SourceAuthorOpen =
-        SourceAuthorOpen.External("https://www.pixiv.net/users/${work.authorId}")
+    // 画师主页由主壳承载（资料区 + 分类 Tab + 作品墙），不再出站
+    override fun authorPage(work: Work): SourceAuthorOpen = SourceAuthorOpen.NativeProfile
+
+    override val authorPageStyle: AuthorPageStyle = AuthorPageStyle.Profile
 
     override suspend fun workPages(work: Work): Result<List<SourceWorkPage>> =
         repository.workPages(work.id)
