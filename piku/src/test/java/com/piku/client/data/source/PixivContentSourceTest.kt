@@ -13,11 +13,15 @@ import com.piku.client.data.remote.pixiv.PixivAppImageUrls
 import com.piku.client.data.remote.pixiv.PixivAutoWordsResponse
 import com.piku.client.data.remote.pixiv.PixivContentType
 import com.piku.client.data.remote.pixiv.PixivIllustsResponse
+import com.piku.client.data.remote.pixiv.PixivNovel
+import com.piku.client.data.remote.pixiv.PixivNovelDetailResponse
+import com.piku.client.data.remote.pixiv.PixivNovelsResponse
 import com.piku.client.data.remote.pixiv.PixivRankingItem
 import com.piku.client.data.remote.pixiv.PixivTrendTagsResponse
 import com.piku.client.data.remote.pixiv.PixivUserDetailResponse
 import com.piku.client.data.remote.pixiv.PixivUserPreviewsResponse
 import com.piku.client.domain.model.Work
+import com.piku.client.domain.model.WorkKind
 import com.piku.client.domain.model.WorkSource
 import com.piku.client.data.remote.pixiv.PixivIllustResponse
 import com.piku.client.data.remote.pixiv.PixivPage
@@ -30,10 +34,14 @@ import com.piku.client.data.repository.pixivNewFeedCursor
 import com.piku.client.data.repository.pixivTotalPages
 import com.piku.client.data.repository.toWork
 import com.piku.client.domain.source.SourceFacetStyle
+import com.piku.client.domain.source.sanitizeFacetChoices
+import com.piku.client.domain.source.defaultFacetChoices
 import com.piku.client.domain.source.AuthorPageStyle
 import com.piku.client.domain.source.SourceAuthorOpen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.ResponseBody
 import okhttp3.ResponseBody.Companion.toResponseBody
 import retrofit2.HttpException
 import retrofit2.Response
@@ -210,6 +218,74 @@ class PixivContentSourceTest {
             maxBookmarkId: Long?,
             filter: String,
         ): PixivIllustsResponse = PixivIllustsResponse()
+
+        var novels = emptyList<PixivNovel>()
+        var novelNextUrl: String? = null
+        var novelDetailResponse = PixivNovelDetailResponse()
+        var novelWebviewHtml: String = ""
+
+        override suspend fun novelRecommended(
+            clientTime: String,
+            clientHash: String,
+            filter: String,
+            includeRankingLabel: Boolean,
+            offset: Int?,
+        ): PixivNovelsResponse = PixivNovelsResponse(novels = novels)
+
+        override suspend fun novelFollow(
+            clientTime: String,
+            clientHash: String,
+            restrict: String,
+            offset: Int?,
+        ): PixivNovelsResponse = PixivNovelsResponse(novels = novels)
+
+        override suspend fun novelNew(
+            clientTime: String,
+            clientHash: String,
+            filter: String,
+            maxNovelId: Long?,
+        ): PixivNovelsResponse = PixivNovelsResponse(novels = novels, nextUrl = novelNextUrl)
+
+        override suspend fun novelDetail(
+            clientTime: String,
+            clientHash: String,
+            novelId: Long,
+        ): PixivNovelDetailResponse = novelDetailResponse
+
+        var searchedNovelWord: String? = null
+
+        var authorNovelsCalls = mutableListOf<Pair<Long, Int?>>()
+
+        override suspend fun userNovels(
+            clientTime: String,
+            clientHash: String,
+            userId: Long,
+            filter: String,
+            offset: Int?,
+        ): PixivNovelsResponse {
+            authorNovelsCalls.add(userId to offset)
+            return PixivNovelsResponse(novels = novels)
+        }
+
+        override suspend fun searchNovel(
+            clientTime: String,
+            clientHash: String,
+            word: String,
+            sort: String?,
+            searchAiType: Int?,
+            filter: String,
+            offset: Int?,
+        ): PixivNovelsResponse {
+            searchedNovelWord = word
+            return PixivNovelsResponse(novels = novels)
+        }
+
+        override suspend fun novelWebview(
+            clientTime: String,
+            clientHash: String,
+            novelId: Long,
+            viewerVersion: String,
+        ): ResponseBody = novelWebviewHtml.toResponseBody("text/html".toMediaTypeOrNull())
 
     }
 
@@ -616,8 +692,105 @@ class PixivContentSourceTest {
         val latestContent = PixivContentSource.FACETS.first { it.id == PixivContentSource.GROUP_LATEST_CONTENT }
         assertEquals(SourceFacetStyle.Dropdown, latestContent.style)
         assertEquals(PixivContentSource.FEED_LATEST, latestContent.feedId)
-        assertEquals(listOf("illust", "manga"), latestContent.options.map { it.id })
+        assertEquals(listOf("illust", "manga", "novel"), latestContent.options.map { it.id })
         assertEquals("illust", latestContent.options.first { it.selectedByDefault }.id)
+
+        // 推荐流有 content_type 参数，插画/漫画/小说三档都发得出去
+        val recommendContent = PixivContentSource.FACETS.first {
+            it.id == PixivContentSource.GROUP_CONTENT && it.feedId == PixivContentSource.FEED_RECOMMEND
+        }
+        assertEquals(listOf("illust", "manga", "novel"), recommendContent.options.map { it.id })
+        // 关注流接口不分插画/漫画：多给一档就是选了没反应
+        val followContent = PixivContentSource.FACETS.first {
+            it.id == PixivContentSource.GROUP_CONTENT && it.feedId == PixivContentSource.FEED_FOLLOW
+        }
+        assertEquals(listOf("illust", "novel"), followContent.options.map { it.id })
+    }
+
+    /** 小说档必须走小说接口并落成 NOVEL 作品：走错接口取到的是插画，kind 也不会是小说 */
+    @Test
+    fun novelFacetRoutesToNovelEndpoint() = runTest {
+        val appApi = FakeAppApi()
+        appApi.novels = listOf(
+            PixivNovel(
+                id = "77",
+                title = "novel77",
+                imageUrls = PixivAppImageUrls(large = "https://i.pximg.net/novel77.jpg"),
+                textLength = 1200,
+            ),
+        )
+        appApi.illusts = listOf(appIllust("88"))
+        val page = source(FakeApi(), appApi)
+            .page(PixivContentSource.FEED_RECOMMEND, mapOf(PixivContentSource.GROUP_CONTENT to PixivContentSource.FACET_NOVEL), 0)
+            .getOrThrow()
+        assertEquals(listOf(77L), page.items.map { it.id })
+        assertEquals(listOf(WorkKind.NOVEL), page.items.map { it.kind })
+        assertEquals(1200, page.items.first().textLength)
+    }
+
+    /**
+     * 切流的档位隔离：换流后只能用新流自己的档位（VM 按流分别记，换流时取新流那份），
+     * 万一有旧档位漏过来，收敛也只认这一流声明过的选项。
+     */
+    @Test
+    fun facetChoicesStayInsideOneFeed() = runTest {
+        val source = PixivContentSource(repository(FakeApi()))
+        // 关注流选了小说：在关注流里合法，原样保留
+        val follow = mapOf(PixivContentSource.GROUP_CONTENT to PixivContentSource.FACET_NOVEL)
+        assertEquals(follow, source.sanitizeFacetChoices(PixivContentSource.FEED_FOLLOW, follow))
+        // 榜单没有小说这一档：带着别流的档位过来要退回榜单自己的默认（周期片选照常在）
+        assertEquals(
+            mapOf(
+                PixivContentSource.GROUP_PERIOD to PixivContentSource.PERIOD_DAILY,
+                PixivContentSource.GROUP_CONTENT to PixivContentSource.FACET_ALL,
+            ),
+            source.sanitizeFacetChoices(PixivContentSource.FEED_RANKING, follow),
+        )
+        // 榜单的周期片选不属于推荐流，推荐流的默认档里不该出现
+        assertEquals(
+            mapOf(PixivContentSource.GROUP_CONTENT to PixivContentSource.FACET_ILLUST),
+            source.defaultFacetChoices(PixivContentSource.FEED_RECOMMEND),
+        )
+        assertEquals(
+            mapOf(
+                PixivContentSource.GROUP_PERIOD to PixivContentSource.PERIOD_DAILY,
+                PixivContentSource.GROUP_CONTENT to PixivContentSource.FACET_ALL,
+            ),
+            source.defaultFacetChoices(PixivContentSource.FEED_RANKING),
+        )
+        // 新流没有记忆时就是默认档：换流不带走上一个流的任何选择
+        assertEquals(
+            mapOf(PixivContentSource.GROUP_CONTENT to PixivContentSource.FACET_ILLUST),
+            source.sanitizeFacetChoices(PixivContentSource.FEED_RECOMMEND, null),
+        )
+    }
+
+    /** 正文来自 webview 页面里内嵌的 novel 对象：官方的 /v1/novel/text 已下线（真机 404） */
+    @Test
+    fun novelBodyExtractedFromWebviewHtml() = runTest {
+        val appApi = FakeAppApi()
+        appApi.novelWebviewHtml =
+            """<html><body>novel: {"id":"77","title":"題","text":"[chapter:一][newpage]本文"}, isOwnWork: false,</body></html>"""
+        assertEquals("一\n\n本文", repository(FakeApi(), appApi).novelBody(77).getOrThrow())
+    }
+
+    /** 页面结构变了（取不到 novel 对象）必须报终态，不能当成空正文放行 */
+    @Test
+    fun novelBodyFailsWhenWebviewHasNoNovelObject() = runTest {
+        val appApi = FakeAppApi()
+        appApi.novelWebviewHtml = "<html><body>not found</body></html>"
+        assertTrue(repository(FakeApi(), appApi).novelBody(77).isFailure)
+    }
+
+    /** 正文的 pixiv 私有标记按官方语义清洗：注音挂括号、超链接留标题、图片与跳转标记丢掉 */
+    @Test
+    fun novelTextMarkupCleanedToPlainText() {
+        val raw = "[chapter:第一章][newpage]本文[[rb:漢字>かんじ]]と[[jumpuri:参考>https://example.com]]" +
+            "[pixivimage:12345][jump:3]"
+        assertEquals(
+            "第一章\n\n本文漢字（かんじ）と参考",
+            com.piku.client.data.repository.cleanPixivNovelText(raw),
+        )
     }
 
     @Test

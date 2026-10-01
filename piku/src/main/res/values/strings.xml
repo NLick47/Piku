@@ -296,6 +296,9 @@
     <string name="search_filter_reset">重置</string>
     <string name="search_filter_apply">应用筛选</string>
     <string name="search_filter_sort">排序</string>
+    <string name="search_filter_kind">作品类型</string>
+    <string name="search_filter_kind_all">全部</string>
+    <string name="search_filter_kind_novel">小说</string>
     <string name="search_filter_sort_new">最新优先</string>
     <string name="search_filter_sort_old">最早优先</string>
     <string name="search_filter_sort_popular">热门优先</string>
@@ -713,6 +716,10 @@
     <string name="pixiv_filter_all">综合</string>
     <string name="pixiv_filter_illust">插画</string>
     <string name="pixiv_filter_manga">漫画</string>
+    <string name="pixiv_filter_novel">小说</string>
+    <string name="pixiv_novel_length">%1$d 字</string>
+    <string name="pixiv_novel_read">开始阅读</string>
+    <string name="pixiv_novel_loading">正在取正文</string>
     <string name="pixiv_stat_views">浏览</string>
     <string name="pixiv_stat_likes">点赞</string>
     <string name="pixiv_stat_bookmarks">收藏</string>
@@ -741,10 +748,12 @@
     <string name="author_tab_illust">插画</string>
     <string name="author_tab_manga">漫画</string>
     <string name="author_tab_bookmarks">收藏</string>
+    <string name="author_tab_novel">小说</string>
     <string name="author_following_count">%1$d 关注</string>
     <string name="author_bio_more">更多</string>
     <string name="author_bio_collapse">收起</string>
     <string name="author_login_hint">登录 pixiv 后可见 TA 的主页</string>
     <string name="author_empty_bookmarks">TA 没有公开收藏</string>
+    <string name="author_empty_novel">TA 还没有小说</string>
     <string name="author_copy_link">复制主页链接</string>
 </resources>

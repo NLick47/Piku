@@ -28,8 +28,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** 画师主页的分类页。计数挂在这些页上没有意义——只有插画/漫画/收藏三个池子 */
-enum class AuthorTab { ILLUST, MANGA, BOOKMARKS }
+/** 画师主页的分类页。计数挂在这些页上没有意义——只有插画/漫画/收藏三个池子；小说小众，垫最后 */
+enum class AuthorTab { ILLUST, MANGA, BOOKMARKS, NOVEL }
 
 data class AuthorUiState(
     val userId: Long = -1L,
@@ -41,6 +41,7 @@ data class AuthorUiState(
     val favoriteIds: Set<WorkKey> = emptySet(),
     val illustCount: Int? = null,
     val mangaCount: Int? = null,
+    val novelCount: Int? = null,
     val bookmarkCount: Int? = null,
     val loading: Boolean = false,
     val loadingMore: Boolean = false,
@@ -302,6 +303,10 @@ class AuthorProfileViewModel @Inject constructor(
             AuthorTab.BOOKMARKS -> repository
                 .authorBookmarks(userId, page.cursor)
                 .map { TabPage(it.items, it.nextCursor) }
+
+            AuthorTab.NOVEL -> repository
+                .authorNovels(userId, offset)
+                .map { TabPage(it.items, it.nextCursor) }
         }
         if (gen != generation) return
         result
@@ -349,6 +354,7 @@ class AuthorProfileViewModel @Inject constructor(
                         userName = profile.name.ifBlank { it.userName },
                         illustCount = profile.illustCount,
                         mangaCount = profile.mangaCount,
+                        novelCount = profile.novelCount,
                         bookmarkCount = profile.bookmarkCount,
                     )
                 }

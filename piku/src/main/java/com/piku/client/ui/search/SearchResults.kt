@@ -58,6 +58,7 @@ import com.piku.client.R
 import com.piku.client.domain.model.FollowUser
 import com.piku.client.domain.model.TagCard
 import com.piku.client.domain.model.WorkKey
+import com.piku.client.domain.model.WorkKind
 import com.piku.client.domain.model.key
 import com.piku.client.domain.model.Work
 import com.piku.client.ui.common.FollowPillButton
@@ -68,6 +69,7 @@ import com.piku.client.ui.common.PikuSegmented
 import com.piku.client.ui.common.LoginPrompt
 import com.piku.client.ui.common.UserAvatar
 import com.piku.client.ui.common.WorkCard
+import com.piku.client.ui.source.NovelWorkCard
 import com.piku.client.ui.source.ProportionalWorkCard
 import com.piku.client.ui.theme.PikuColors
 import com.piku.client.ui.theme.WorkCardBgDark
@@ -526,8 +528,16 @@ private fun SearchWorkGrid(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalItemSpacing = 12.dp,
     ) {
-        items(works, key = { it.id }) { work ->
-            if (proportional) {
+        items(works, key = { it.key.toString() }) { work ->
+            // 小说档整个列表都是小说：竖版封面卡片，其余照旧
+            if (work.kind == WorkKind.NOVEL) {
+                NovelWorkCard(
+                    work = work,
+                    onToggleFavorite = onToggleFavorite,
+                    onClick = onWorkClick,
+                    dark = dark,
+                )
+            } else if (proportional) {
                 ProportionalWorkCard(
                     work = work,
                     onToggleFavorite = onToggleFavorite,

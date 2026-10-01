@@ -8,6 +8,7 @@ import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.source.ContentSource
 import com.piku.client.domain.source.SourceFacetGroup
 import com.piku.client.domain.source.SourceFeed
+import com.piku.client.domain.source.sanitizeFacetChoices
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.source.ShellFavorites
 import com.piku.client.domain.source.SourceAuthRegistry
@@ -92,8 +93,11 @@ class SourceFeedViewModel @Inject constructor(
     /** 当前源的登录态订阅：登录/登出后缓存里的页（含 needLogin 标记）全脏了 */
     private var authJob: Job? = null
 
-    /** 每个源记住用户选过的流/维度，会话内切回不重置 */
-    private val selections = mutableMapOf<WorkSource, Selection>()
+    /** 每个源记住当前流 */
+    private val feedBySource = mutableMapOf<WorkSource, String>()
+
+    /** 每个流记住自己的维度选择：换流不带走别流的筛选（同名维度组在多个流里都存在） */
+    private val facetsByFeed = mutableMapOf<FeedKey, Map<String, String>>()
 
     /** (source, feedId, facetId) → 自治加载器；兼内存缓存 */
     private val loaders = object : LinkedHashMap<SourceKey, FeedLoader<SourceKey, Work>>(16, 0.75f, true) {
@@ -120,14 +124,15 @@ class SourceFeedViewModel @Inject constructor(
     fun selectFeed(feedId: String) {
         val state = _ui.value
         if (feedId == state.feedId) return
-        selections[state.source] = Selection(feedId, state.facetChoices)
+        // 只换流，不搬维度：新流按自己的默认维度起，切回来又恢复它自己那套
+        feedBySource[state.source] = feedId
         switchLoader()
     }
 
     fun selectFacet(groupId: String, optionId: String) {
         val state = _ui.value
         if (state.facetChoices[groupId] == optionId) return
-        selections[state.source] = Selection(state.feedId, state.facetChoices + (groupId to optionId))
+        facetsByFeed[FeedKey(state.source, state.feedId)] = state.facetChoices + (groupId to optionId)
         switchLoader()
     }
 
@@ -180,9 +185,10 @@ class SourceFeedViewModel @Inject constructor(
         val source = _ui.value.source
         if (source == WorkSource.POIPIKU) return
         val declaration = sourceRegistry.byId(source)
-        val selection = selections[source] ?: defaultSelection(declaration)
-        selections[source] = selection
-        val key = SourceKey(source, selection.feedId, selection.facets)
+        val feedId = feedBySource[source] ?: defaultFeedId(declaration).also { feedBySource[source] = it }
+        val facets = declaration.sanitizeFacetChoices(feedId, facetsByFeed[FeedKey(source, feedId)])
+        facetsByFeed[FeedKey(source, feedId)] = facets
+        val key = SourceKey(source, feedId, facets)
         currentKey = key
         // 占位流（能力未到，或"登录后才接得上"且已登录）：不建加载器、不发请求，
         // UI 展示"即将上线"；未登录时它仍是登录门，由 loader 判定
@@ -202,22 +208,15 @@ class SourceFeedViewModel @Inject constructor(
     }
 
     /**
-     * 默认选择：流取声明序第一个"当前可用"的——占位流、未登录时的登录门流都跳过，
-     * "登录后才接得上"的流登录后也没有数据，一并跳过，
-     * 例如 pixiv 未登录默认落在榜单而不是占位的推荐；每组维度认 selectedByDefault，
-     * 都没有就取该组第一个（有维度必有选中，UI 显示与取参才不会差一档）。
+     * 默认流：取声明序第一个"当前可用"的——占位流、未登录时的登录门流都跳过，
+     * "登录后才接得上"的流登录后也没有数据，一并跳过（pixiv 未登录默认落在榜单而不是占位的推荐）。
      */
-    private fun defaultSelection(declaration: ContentSource): Selection = Selection(
-        feedId = declaration.feeds.firstOrNull {
-            !it.comingSoon &&
-                !(it.pendingAfterLogin && sourceAuth.isLoggedIn(declaration.id)) &&
-                (!it.requiresLogin || sourceAuth.isLoggedIn(declaration.id))
-        }?.id ?: declaration.feeds.first().id,
-        facets = declaration.facets.associate { group ->
-            group.id to (group.options.firstOrNull { it.selectedByDefault }?.id
-                ?: group.options.first().id)
-        },
-    )
+    private fun defaultFeedId(declaration: ContentSource): String = declaration.feeds.firstOrNull {
+        !it.comingSoon &&
+            !(it.pendingAfterLogin && sourceAuth.isLoggedIn(declaration.id)) &&
+            (!it.requiresLogin || sourceAuth.isLoggedIn(declaration.id))
+    }?.id ?: declaration.feeds.first().id
+
 
     private fun obtainLoader(key: SourceKey, declaration: ContentSource): FeedLoader<SourceKey, Work> =
         loaders.getOrPut(key) { createLoader(key, declaration) }
@@ -296,7 +295,7 @@ class SourceFeedViewModel @Inject constructor(
         switchLoader()
     }
 
-    private data class Selection(val feedId: String, val facets: Map<String, String>)
+    private data class FeedKey(val source: WorkSource, val feedId: String)
 
     private companion object {
         const val MAX_LOADERS = 12

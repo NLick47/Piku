@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
@@ -43,6 +44,9 @@ import com.piku.client.ui.myposts.MyPostsScreen
 import com.piku.client.ui.login.PixivLoginScreen
 import com.piku.client.ui.publish.PublishScreen
 import com.piku.client.ui.search.PoipikuLink
+import com.piku.client.ui.search.SearchScreen
+import com.piku.client.ui.source.SourceWorkOpenHost
+import com.piku.client.ui.theme.LocalDarkTheme
 import com.piku.client.ui.search.SearchScreen
 import com.piku.client.ui.search.parsePoipikuLink
 import com.piku.client.ui.source.SourceOpenViewModel
@@ -133,9 +137,14 @@ fun AppNavHost(
     // 点击卡片即预热详情页首图：详情页首图是同一张图的 _640，与卡片渲染的 _360
     // 缓存互不相通，预热与详情页 HTML/append 请求并行
     val prefetchDetailImage = rememberWorkDetailPrefetch()
+    var sourceDetailWork by remember { mutableStateOf<Work?>(null) }
     val openDetail: (Work) -> Unit = { work ->
-        prefetchDetailImage(work.thumbnailUrl)
-        navController.navigate(Routes.detail(work.authorId, work.id, work.thumbnailUrl))
+        if (work.source == WorkSource.PIXIV) {
+            sourceDetailWork = work
+        } else {
+            prefetchDetailImage(work.thumbnailUrl)
+            navController.navigate(Routes.detail(work.authorId, work.id, work.thumbnailUrl))
+        }
     }
 
     LaunchedEffect(deepLink) {
@@ -509,6 +518,15 @@ fun AppNavHost(
                 )
             }
         }
+        }
+
+        sourceDetailWork?.let { work ->
+            SourceWorkOpenHost(
+                work = work,
+                dark = LocalDarkTheme.current,
+                onDismiss = { sourceDetailWork = null },
+                onOpenAuthor = openAuthorOfWork,
+            )
         }
     }
 }

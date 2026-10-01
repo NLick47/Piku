@@ -83,6 +83,8 @@ import com.piku.client.ui.common.FeedbackHost
 import com.piku.client.ui.common.LoaderDots
 import com.piku.client.ui.common.LoginPrompt
 import com.piku.client.ui.detail.TranslateChip
+import com.piku.client.domain.model.WorkKind
+import com.piku.client.ui.source.NovelWorkCard
 import com.piku.client.ui.source.ProportionalWorkCard
 import com.piku.client.ui.theme.HomeBgBottomDark
 import com.piku.client.ui.theme.HomeBgBottomLight
@@ -272,21 +274,33 @@ fun AuthorProfileScreen(
                             item(span = StaggeredGridItemSpan.FullLine) {
                                 AuthorNotice(
                                     text = stringResource(
-                                        if (state.tab == AuthorTab.BOOKMARKS) R.string.author_empty_bookmarks
-                                        else R.string.user_works_empty,
+                                        when (state.tab) {
+                                            AuthorTab.BOOKMARKS -> R.string.author_empty_bookmarks
+                                            AuthorTab.NOVEL -> R.string.author_empty_novel
+                                            else -> R.string.user_works_empty
+                                        },
                                     ),
                                 )
                             }
                         }
                         items(items = state.works, key = { it.key.toString() }) { work ->
-                            ProportionalWorkCard(
-                                work = work,
-                                onToggleFavorite = viewModel::toggleFavorite,
-                                onClick = onWorkClick,
-                                dark = dark,
-                                // 这一页全是同一个作者，卡片再挂一行作者名是纯噪声
-                                showAuthor = false,
-                            )
+                            if (work.kind == WorkKind.NOVEL) {
+                                NovelWorkCard(
+                                    work = work,
+                                    onToggleFavorite = viewModel::toggleFavorite,
+                                    onClick = onWorkClick,
+                                    dark = dark,
+                                )
+                            } else {
+                                ProportionalWorkCard(
+                                    work = work,
+                                    onToggleFavorite = viewModel::toggleFavorite,
+                                    onClick = onWorkClick,
+                                    dark = dark,
+                                    // 这一页全是同一个作者，卡片再挂一行作者名是纯噪声
+                                    showAuthor = false,
+                                )
+                            }
                         }
                         if (state.loadMoreErrorRes != null) {
                             item(span = StaggeredGridItemSpan.FullLine) {
@@ -742,6 +756,7 @@ private fun AuthorTabRow(state: AuthorUiState, onSelect: (AuthorTab) -> Unit) {
     val labelIllust = stringResource(R.string.author_tab_illust)
     val labelManga = stringResource(R.string.author_tab_manga)
     val labelBookmarks = stringResource(R.string.author_tab_bookmarks)
+    val labelNovel = stringResource(R.string.author_tab_novel)
 
     data class TabItem(val tab: AuthorTab, val label: String, val count: Int?)
 
@@ -749,6 +764,7 @@ private fun AuthorTabRow(state: AuthorUiState, onSelect: (AuthorTab) -> Unit) {
         add(TabItem(AuthorTab.ILLUST, labelIllust, state.illustCount))
         add(TabItem(AuthorTab.MANGA, labelManga, state.mangaCount))
         add(TabItem(AuthorTab.BOOKMARKS, labelBookmarks, state.bookmarkCount))
+        add(TabItem(AuthorTab.NOVEL, labelNovel, state.novelCount))
     }
 
     Box(Modifier.fillMaxWidth().padding(top = 12.dp)) {

@@ -3,6 +3,7 @@ package com.piku.client.data.remote.pixiv
 import com.piku.client.data.auth.PixivAuthEndpoints
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import okhttp3.ResponseBody
 import retrofit2.http.Field
 import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
@@ -31,6 +32,9 @@ object PixivAppConfig {
      * 换成 for_ios 会被服务端直接剃掉 R-18，本地开关就再也开不出来了。
      */
     const val FILTER_ANDROID = "for_android"
+
+    /** 小说正文 webview 的版本水位：沿用 pixiv 客户端在用的值，换值可能拿不到正文 */
+    const val NOVEL_VIEWER_VERSION = "20221031_ai"
 }
 
 /** 应用接口域共用的身份头；注解参数须是编译期常量，逐条 const 串起 */
@@ -157,6 +161,56 @@ data class PixivTrendIllust(
 )
 
 /** v1/search/user 与 v1/user/following 共用：条目是用户+代表作组合。total 不总在，null = 未知 */
+/** 一件小说（app-api 版）。小说没有多页图，封面走 image_urls，正文另取 */
+@Serializable
+data class PixivNovel(
+    @Serializable(with = FlexibleStringSerializer::class) val id: String = "",
+    val title: String = "",
+    val caption: String = "",
+    @SerialName("image_urls") val imageUrls: PixivAppImageUrls = PixivAppImageUrls(),
+    val user: PixivAppUser = PixivAppUser(),
+    val tags: List<PixivNovelTag> = emptyList(),
+    @SerialName("create_date") val createDate: String = "",
+    @SerialName("text_length") val textLength: Int = 0,
+    /** 0=全年龄 1=R-18 2=R-18G */
+    @SerialName("x_restrict") val xRestrict: Int = 0,
+    @SerialName("total_bookmarks") val totalBookmarks: Int? = null,
+    @SerialName("total_view") val totalView: Int? = null,
+    @SerialName("total_comments") val totalComments: Int? = null,
+    @SerialName("is_bookmarked") val isBookmarked: Boolean = false,
+    val visible: Boolean = true,
+    val series: PixivNovelSeries? = null,
+) {
+    val novelId: Long get() = id.toLongOrNull() ?: 0
+}
+
+@Serializable
+data class PixivNovelTag(val name: String = "")
+
+@Serializable
+data class PixivNovelSeries(
+    @Serializable(with = FlexibleStringSerializer::class) val id: String = "",
+    val title: String = "",
+) {
+    val seriesId: Long get() = id.toLongOrNull() ?: 0
+}
+
+@Serializable
+data class PixivNovelsResponse(
+    val novels: List<PixivNovel> = emptyList(),
+    @SerialName("next_url") val nextUrl: String? = null,
+)
+
+@Serializable
+data class PixivNovelDetailResponse(val novel: PixivNovel = PixivNovel())
+
+/** 小说正文：官方把 /v1/novel/text 摘掉了（2026-10 实测 404），只剩 webview 这条返回 HTML 的路 */
+@Serializable
+data class PixivWebviewNovel(
+    val text: String = "",
+    val title: String = "",
+)
+
 @Serializable
 data class PixivUserPreviewsResponse(
     @SerialName("user_previews") val userPreviews: List<PixivUserPreview> = emptyList(),
@@ -188,6 +242,7 @@ data class PixivUserProfile(
     @SerialName("total_follower") val totalFollower: Int? = null,
     @SerialName("total_illusts") val totalIllusts: Int? = null,
     @SerialName("total_manga") val totalManga: Int? = null,
+    @SerialName("total_novels") val totalNovels: Int? = null,
     /** 公开收藏数：收藏 Tab 的计数就是它（私密收藏数不对外） */
     @SerialName("total_illust_bookmarks_public") val totalIllustBookmarksPublic: Int? = null,
     @SerialName("background_image_url") val backgroundImageUrl: String? = null,
@@ -236,6 +291,19 @@ interface PixivAppApi {
         @Query("filter") filter: String = "for_android",
         @Query("offset") offset: Int? = null,
     ): PixivIllustsResponse
+
+    /** 关键词搜小说；search_target 枚举与搜作品不同，外壳在小说档不暴露对象组，只传排序与 AI 过滤 */
+    @GET("v1/search/novel")
+    @Headers(HEADER_USER_AGENT, HEADER_APP_OS, HEADER_APP_OS_VERSION, HEADER_APP_VERSION)
+    suspend fun searchNovel(
+        @Header("X-Client-Time") clientTime: String,
+        @Header("X-Client-Hash") clientHash: String,
+        @Query("word") word: String,
+        @Query("sort") sort: String? = null,
+        @Query("search_ai_type") searchAiType: Int? = null,
+        @Query("filter") filter: String = PixivAppConfig.FILTER_ANDROID,
+        @Query("offset") offset: Int? = null,
+    ): PixivNovelsResponse
 
     /** 关键词搜用户；登录态下 user.is_followed 有值 */
     @GET("v1/search/user")
@@ -361,6 +429,17 @@ interface PixivAppApi {
         @Query("offset") offset: Int? = null,
     ): PixivIllustsResponse
 
+    /** 画师的小说，offset 翻页；下一页看 next_url，与 user/illusts 同型 */
+    @GET("v1/user/novels")
+    @Headers(HEADER_USER_AGENT, HEADER_APP_OS, HEADER_APP_OS_VERSION, HEADER_APP_VERSION)
+    suspend fun userNovels(
+        @Header("X-Client-Time") clientTime: String,
+        @Header("X-Client-Hash") clientHash: String,
+        @Query("user_id") userId: Long,
+        @Query("filter") filter: String = PixivAppConfig.FILTER_ANDROID,
+        @Query("offset") offset: Int? = null,
+    ): PixivNovelsResponse
+
     /**
      * 别人的公开收藏（自己的能带私密，本应用只用公开）。
      * 翻页游标是 max_bookmark_id 而不是 offset，与其它列表不同型。
@@ -375,4 +454,57 @@ interface PixivAppApi {
         @Query("max_bookmark_id") maxBookmarkId: Long? = null,
         @Query("filter") filter: String = PixivAppConfig.FILTER_ANDROID,
     ): PixivIllustsResponse
+
+    /** 推荐小说；与插画推荐同为 offset 翻页，需登录 */
+    @GET("v1/novel/recommended")
+    @Headers(HEADER_USER_AGENT, HEADER_APP_OS, HEADER_APP_OS_VERSION, HEADER_APP_VERSION)
+    suspend fun novelRecommended(
+        @Header("X-Client-Time") clientTime: String,
+        @Header("X-Client-Hash") clientHash: String,
+        @Query("filter") filter: String = PixivAppConfig.FILTER_ANDROID,
+        @Query("include_ranking_label") includeRankingLabel: Boolean = false,
+        @Query("offset") offset: Int? = null,
+    ): PixivNovelsResponse
+
+    /** 已关注作者的新小说，时间倒序，offset 翻页。需登录 */
+    @GET("v1/novel/follow")
+    @Headers(HEADER_USER_AGENT, HEADER_APP_OS, HEADER_APP_OS_VERSION, HEADER_APP_VERSION)
+    suspend fun novelFollow(
+        @Header("X-Client-Time") clientTime: String,
+        @Header("X-Client-Hash") clientHash: String,
+        @Query("restrict") restrict: String = PixivAppConfig.RESTRICT_PUBLIC,
+        @Query("offset") offset: Int? = null,
+    ): PixivNovelsResponse
+
+    /** 新着小说：全站最新，翻页靠 max_novel_id 游标而不是 offset */
+    @GET("v1/novel/new")
+    @Headers(HEADER_USER_AGENT, HEADER_APP_OS, HEADER_APP_OS_VERSION, HEADER_APP_VERSION)
+    suspend fun novelNew(
+        @Header("X-Client-Time") clientTime: String,
+        @Header("X-Client-Hash") clientHash: String,
+        @Query("filter") filter: String = PixivAppConfig.FILTER_ANDROID,
+        @Query("max_novel_id") maxNovelId: Long? = null,
+    ): PixivNovelsResponse
+
+    /** 小说详情（简介/标签/统计/系列）。v2 比 v1 多 series_prev/next 信息 */
+    @GET("v2/novel/detail")
+    @Headers(HEADER_USER_AGENT, HEADER_APP_OS, HEADER_APP_OS_VERSION, HEADER_APP_VERSION)
+    suspend fun novelDetail(
+        @Header("X-Client-Time") clientTime: String,
+        @Header("X-Client-Hash") clientHash: String,
+        @Query("novel_id") novelId: Long,
+    ): PixivNovelDetailResponse
+
+    /**
+     * 小说正文。官方的 /v1/novel/text 已下线（实测 404），现在只有这条 webview：
+     * 回的是 HTML，正文藏在页面里 `novel: {...}` 这个 JS 对象里。
+     */
+    @GET("webview/v2/novel")
+    @Headers(HEADER_USER_AGENT, HEADER_APP_OS, HEADER_APP_OS_VERSION, HEADER_APP_VERSION)
+    suspend fun novelWebview(
+        @Header("X-Client-Time") clientTime: String,
+        @Header("X-Client-Hash") clientHash: String,
+        @Query("id") novelId: Long,
+        @Query("viewer_version") viewerVersion: String = PixivAppConfig.NOVEL_VIEWER_VERSION,
+    ): ResponseBody
 }

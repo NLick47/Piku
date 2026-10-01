@@ -1,6 +1,7 @@
 package com.piku.client.domain.source
 
 import androidx.annotation.StringRes
+import com.piku.client.domain.model.AppError
 import com.piku.client.domain.model.FollowUser
 import com.piku.client.domain.model.WorkSource
 
@@ -46,6 +47,22 @@ interface SourceSearch {
         page: Int,
     ): Result<SourcePage> = searchWorks(tag, filters, page)
 
+    /**
+     * 小说检索。[FILTER_KIND] 组选中 [KIND_NOVEL] 时外壳走这里，与作品检索互斥。
+     * 声明了 kind 组的源必须实现它。
+     */
+    suspend fun searchNovels(
+        query: String,
+        filters: Map<String, String>,
+        page: Int,
+    ): Result<SourcePage> = Result.failure(AppError.NotFound)
+
+    /**
+     * 当前选择下要隐藏的筛选组：档位不同，接口吃得的参数不同
+     * （搜小说不支持按投稿期间、检索对象枚举也不同），隐藏比置灰诚实。
+     */
+    fun hiddenFilterGroups(selected: Map<String, String>): Set<String> = emptySet()
+
     /** 用户检索；仅 supportsUsers 的源会被调到 */
     suspend fun searchUsers(query: String, page: Int): Result<List<FollowUser>> =
         Result.success(emptyList())
@@ -55,6 +72,13 @@ interface SourceSearch {
 
     /** 点用户的去向；null = 外壳按默认（poipiku 用户页）处理 */
     fun userPage(user: FollowUser): SourceAuthorOpen? = null
+
+    companion object {
+        /** 作品类型维度组：声明了它的源，外壳在小说档走 [searchNovels] */
+        const val FILTER_KIND = "kind"
+        const val KIND_ALL = "all"
+        const val KIND_NOVEL = "novel"
+    }
 }
 
 /** [SourceSearch] 的 filters 里开关置真值（关 = 键不出现） */

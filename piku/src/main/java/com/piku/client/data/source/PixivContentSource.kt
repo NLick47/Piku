@@ -6,6 +6,7 @@ import com.piku.client.data.repository.PixivRepository
 import com.piku.client.domain.model.AppError
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkSource
+import com.piku.client.domain.model.WorkKind
 import com.piku.client.domain.source.ContentSource
 import com.piku.client.domain.source.AuthorPageStyle
 import com.piku.client.domain.source.SourceAuthorOpen
@@ -40,11 +41,21 @@ class PixivContentSource @Inject constructor(
         if (feedId !in IMPLEMENTED_FEEDS) return Result.failure(AppError.NotFound)
         val offset = page * PixivAppConfig.PAGE_SIZE
         val result = when (feedId) {
-            FEED_RECOMMEND -> repository.recommendedFeed(offset = offset)
-                .map { items -> SourcePage(items = items) }
+            FEED_RECOMMEND -> if (facets[GROUP_CONTENT] == FACET_NOVEL) {
+                repository.novelRecommended(offset).map { items -> SourcePage(items = items) }
+            } else {
+                // 插画推荐接口自带 content_type：漫画档要传下去，否则选了漫画还是回插画
+                repository.recommendedFeed(
+                    offset = offset,
+                    contentType = facets[GROUP_CONTENT] ?: FACET_ILLUST,
+                ).map { items -> SourcePage(items = items) }
+            }
 
-            FEED_FOLLOW -> repository.followFeed(offset = offset)
-                .map { items -> SourcePage(items = items) }
+            FEED_FOLLOW -> if (facets[GROUP_CONTENT] == FACET_NOVEL) {
+                repository.novelFollowFeed(offset).map { items -> SourcePage(items = items) }
+            } else {
+                repository.followFeed(offset = offset).map { items -> SourcePage(items = items) }
+            }
 
             FEED_LATEST -> latestPage(facets, page)
 
@@ -65,6 +76,14 @@ class PixivContentSource @Inject constructor(
 
     private suspend fun latestPage(facets: Map<String, String>, page: Int): Result<SourcePage> {
         val contentType = facets[GROUP_LATEST_CONTENT] ?: FACET_ILLUST
+        if (contentType == FACET_NOVEL) {
+            val cursor = latestCursors["$contentType:$page"]
+            if (page > 0 && cursor == null) return Result.success(SourcePage(items = emptyList()))
+            return repository.novelNew(cursor?.toLongOrNull())
+                .onSuccess { next ->
+                    next.nextCursor?.let { latestCursors["$contentType:${page + 1}"] = it }
+                }
+        }
         val cursor = latestCursors["$contentType:$page"]
         if (page > 0 && cursor == null) return Result.success(SourcePage(items = emptyList()))
         return repository.newFeed(contentType, cursor?.toLongOrNull())
@@ -87,7 +106,9 @@ class PixivContentSource @Inject constructor(
         repository.workPages(work.id)
 
     override suspend fun workDetailText(work: Work): Result<SourceWorkText?> =
-        repository.workText(work.id)
+        if (work.kind == WorkKind.NOVEL) repository.novelText(work.id) else repository.workText(work.id)
+
+    override suspend fun novelBody(work: Work): Result<String> = repository.novelBody(work.id)
 
     override suspend fun relatedWorks(work: Work): Result<List<Work>> =
         repository.recommend(work.id)
@@ -104,6 +125,7 @@ class PixivContentSource @Inject constructor(
         const val FACET_ALL = "all"
         const val FACET_ILLUST = "illust"
         const val FACET_MANGA = "manga"
+        const val FACET_NOVEL = "novel"
 
         /** 已接通的流；未列进的声明流视为占位（能力未到），取页给终态而不是空页 */
         val IMPLEMENTED_FEEDS = setOf(FEED_RECOMMEND, FEED_FOLLOW, FEED_RANKING, FEED_LATEST)
@@ -160,7 +182,28 @@ class PixivContentSource @Inject constructor(
                     SourceFacet(id = FACET_MANGA, labelRes = R.string.pixiv_filter_manga),
                 ),
             ),
-            // 新着的内容类型：插画/漫画两档。app-api 对空 content_type（全部混排）的行为未验证，先不提供「全部」
+            // 推荐流的内容类型：插画/漫画/小说。小说走独立的推荐端点，不与插画混排
+            SourceFacetGroup(
+                id = GROUP_CONTENT,
+                style = SourceFacetStyle.Dropdown,
+                feedId = FEED_RECOMMEND,
+                options = listOf(
+                    SourceFacet(id = FACET_ILLUST, labelRes = R.string.pixiv_filter_illust, selectedByDefault = true),
+                    SourceFacet(id = FACET_MANGA, labelRes = R.string.pixiv_filter_manga),
+                    SourceFacet(id = FACET_NOVEL, labelRes = R.string.pixiv_filter_novel),
+                ),
+            ),
+            // 关注流只有插画与小说两档：关注流接口不分插画/漫画
+            SourceFacetGroup(
+                id = GROUP_CONTENT,
+                style = SourceFacetStyle.Dropdown,
+                feedId = FEED_FOLLOW,
+                options = listOf(
+                    SourceFacet(id = FACET_ILLUST, labelRes = R.string.pixiv_filter_illust, selectedByDefault = true),
+                    SourceFacet(id = FACET_NOVEL, labelRes = R.string.pixiv_filter_novel),
+                ),
+            ),
+            // 新着的内容类型：插画/漫画/小说。app-api 对空 content_type（全部混排）的行为未验证，先不提供「全部」
             SourceFacetGroup(
                 id = GROUP_LATEST_CONTENT,
                 style = SourceFacetStyle.Dropdown,
@@ -168,6 +211,7 @@ class PixivContentSource @Inject constructor(
                 options = listOf(
                     SourceFacet(id = FACET_ILLUST, labelRes = R.string.pixiv_filter_illust, selectedByDefault = true),
                     SourceFacet(id = FACET_MANGA, labelRes = R.string.pixiv_filter_manga),
+                    SourceFacet(id = FACET_NOVEL, labelRes = R.string.pixiv_filter_novel),
                 ),
             ),
         )

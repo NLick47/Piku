@@ -27,6 +27,8 @@ import com.piku.client.domain.model.WorkStats
 import com.piku.client.domain.model.key
 import com.piku.client.domain.translation.TagsTranslationController
 import com.piku.client.domain.model.mergeTranslatedFields
+import com.piku.client.domain.model.WorkKind
+import com.piku.client.domain.source.ContentSource
 import com.piku.client.domain.source.SourceAuthRegistry
 import com.piku.client.domain.source.SourceRegistry
 import com.piku.client.domain.source.SourceWorkPage
@@ -124,6 +126,13 @@ class SourceWorkDetailViewModel @Inject constructor(
         val followSending: Boolean = false,
         /** 已加入个人标签的标签名（PIXIV 那一份） */
         val customTags: List<String> = emptyList(),
+        /** 小说正文：点阅读才拉（体量大，不跟详情一起取） */
+        val novelText: String = "",
+        val novelBodyLoading: Boolean = false,
+        val novelReaderOpen: Boolean = false,
+        val novelFontSize: Float = SettingsRepository.NOVEL_FONT_DEFAULT,
+        val novelReaderLight: Boolean = true,
+        val novelProgressPercent: Int = 0,
     ) {
         val hasTranslation: Boolean get() = detail?.translated?.hasAny == true
 
@@ -153,7 +162,9 @@ class SourceWorkDetailViewModel @Inject constructor(
     private val _ui = MutableStateFlow(UiState())
     val ui: StateFlow<UiState> = _ui.asStateFlow()
 
-    private var loadedWorkId: Long = -1
+    private var loadedWorkKey: String = ""
+    /** 当前作品的站内 id；保存/分享的命名与日志用它（小说不走这几条路） */
+    private val workId: Long get() = currentWork?.id ?: 0L
     /** 收藏/关注操作的对象；VM 按作品驻留，进来就不变 */
     private var currentWork: Work? = null
 
@@ -239,12 +250,22 @@ class SourceWorkDetailViewModel @Inject constructor(
                 _ui.update { it.copy(favoriteFolders = folders) }
             }
         }
+        viewModelScope.launch {
+            settingsRepository.novelFontSize.collect { size ->
+                _ui.update { it.copy(novelFontSize = size) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.novelReaderLight.collect { light ->
+                _ui.update { it.copy(novelReaderLight = light) }
+            }
+        }
     }
 
     /** 打开作品时加载一次；[force] 供失败重试强制重拉 */
     fun load(work: Work, force: Boolean = false) {
-        if (!force && loadedWorkId == work.id && _ui.value.detail != null) return
-        loadedWorkId = work.id
+        if (!force && loadedWorkKey == work.key.toString() && _ui.value.detail != null) return
+        loadedWorkKey = work.key.toString()
         currentWork = work
         translatedImages.clear()
         imageTranslateJob?.cancel()
@@ -273,61 +294,120 @@ class SourceWorkDetailViewModel @Inject constructor(
         viewModelScope.launch {
             // 按作品自己的源取页：跨源列表（收藏/历史）点进来的作品不必等于当前首页源
             val source = sourceRegistry.byId(work.source)
+            if (work.kind == WorkKind.NOVEL) loadNovel(work, source) else loadIllust(work, source)
+        }
+    }
+
+    /** 小说没有页表：详情只取简介/标签/统计，正文等点阅读再拉 */
+    private suspend fun loadNovel(work: Work, source: ContentSource) {
+        val text = source.workDetailText(work).getOrNull()
+        if (text == null) {
+            _ui.update { it.copy(loading = false, failed = true, detail = null) }
+            return
+        }
+        _ui.update {
+            it.copy(
+                loading = false,
+                detail = it.detail?.copy(description = text.description, tags = text.tags),
+                stats = text.stats,
+            )
+        }
+        recordHistoryUseCase(work)
+        if (settingsRepository.aiTranslateEnabled.value) translate()
+    }
+
+    private suspend fun loadIllust(work: Work, source: ContentSource) {
+        coroutineScope {
             // 取页与取文本并行：总耗时从两次相加变成取最慢的一个
-            coroutineScope {
-                val pagesDeferred = async { source.workPages(work) }
-                val textDeferred = async { source.workDetailText(work) }
-                val pages = pagesDeferred.await()
-                val text = textDeferred.await().getOrNull()
-                pages.fold(
-                    onSuccess = { list ->
-                        if (list.isEmpty()) {
-                            _ui.update { it.copy(loading = false, failed = true, detail = null) }
-                            return@fold
-                        }
-                        val detail = WorkDetail(
-                            title = work.title,
-                            description = text?.description.orEmpty(),
-                            authorName = work.authorName,
-                            authorAvatarUrl = work.authorAvatarUrl.orEmpty(),
-                            categoryCd = -1,
-                            categoryName = "",
-                            imageUrls = inlineImageUrls(
-                                list,
-                                upgradeToFull = worthUpgradingInline(list, imageRouteController),
-                                sourceThumbnailUrl = work.thumbnailUrl,
-                            ),
-                            tags = text?.tags.orEmpty(),
-                            r18 = work.r18,
-                        )
-                        _ui.update {
-                            it.copy(loading = false, detail = detail, pages = list, stats = text?.stats)
-                        }
-                        // 相关作品单独一路：详情先出来，它后到就补在底部，取不到就算了
-                        launch {
-                            val related = source.relatedWorks(work).getOrNull().orEmpty()
-                            // 成人门跟源走：pixiv 由账号侧服务端管控不再过滤，poipiku 沿用成人开关
-                            val filtered = if (work.source == WorkSource.PIXIV) {
-                                related
-                            } else {
-                                val adultEnabled = settingsRepository.showAdultContent.first()
-                                related.filter { item -> adultEnabled || !item.r18 }
-                            }
-                            _ui.update { it.copy(related = filtered) }
-                        }
-                        // 与 poipiku 详情一致：打开即记历史（upsert 去重）
-                        recordHistoryUseCase(work)
-                        // 与 poipiku 详情一致：开了 AI 翻译就自动译一次（失败静默）
-                        if (settingsRepository.aiTranslateEnabled.value) translate()
-                    },
-                    onFailure = {
-                        // 打底的预览一并撤掉：重进时「detail != null」守卫才会放行自动重拉
+            val pagesDeferred = async { source.workPages(work) }
+            val textDeferred = async { source.workDetailText(work) }
+            val pages = pagesDeferred.await()
+            val text = textDeferred.await().getOrNull()
+            pages.fold(
+                onSuccess = { list ->
+                    if (list.isEmpty()) {
                         _ui.update { it.copy(loading = false, failed = true, detail = null) }
-                    },
+                        return@fold
+                    }
+                    val detail = WorkDetail(
+                        title = work.title,
+                        description = text?.description.orEmpty(),
+                        authorName = work.authorName,
+                        authorAvatarUrl = work.authorAvatarUrl.orEmpty(),
+                        categoryCd = -1,
+                        categoryName = "",
+                        imageUrls = inlineImageUrls(
+                            list,
+                            upgradeToFull = worthUpgradingInline(list, imageRouteController),
+                            sourceThumbnailUrl = work.thumbnailUrl,
+                        ),
+                        tags = text?.tags.orEmpty(),
+                        r18 = work.r18,
+                    )
+                    _ui.update {
+                        it.copy(loading = false, detail = detail, pages = list, stats = text?.stats)
+                    }
+                    // 相关作品单独一路：详情先出来，它后到就补在底部，取不到就算了
+                    launch {
+                        val related = source.relatedWorks(work).getOrNull().orEmpty()
+                        // 成人门跟源走：pixiv 由账号侧服务端管控不再过滤，poipiku 沿用成人开关
+                        val filtered = if (work.source == WorkSource.PIXIV) {
+                            related
+                        } else {
+                            val adultEnabled = settingsRepository.showAdultContent.first()
+                            related.filter { item -> adultEnabled || !item.r18 }
+                        }
+                        _ui.update { it.copy(related = filtered) }
+                    }
+                    // 与 poipiku 详情一致：打开即记历史（upsert 去重）
+                    recordHistoryUseCase(work)
+                    // 与 poipiku 详情一致：开了 AI 翻译就自动译一次（失败静默）
+                    if (settingsRepository.aiTranslateEnabled.value) translate()
+                },
+                onFailure = {
+                    // 打底的预览一并撤掉：重进时「detail != null」守卫才会放行自动重拉
+                    _ui.update { it.copy(loading = false, failed = true, detail = null) }
+                },
+            )
+        }
+    }
+
+    fun openNovelReader() {
+        val work = currentWork ?: return
+        if (_ui.value.novelText.isNotBlank()) {
+            _ui.update { it.copy(novelReaderOpen = true) }
+            return
+        }
+        viewModelScope.launch {
+            _ui.update { it.copy(novelBodyLoading = true) }
+            val body = sourceRegistry.byId(work.source).novelBody(work).getOrNull()
+            if (body.isNullOrBlank()) {
+                _ui.update { it.copy(novelBodyLoading = false) }
+                feedback.show(R.string.home_error_network)
+                return@launch
+            }
+            _ui.update {
+                it.copy(
+                    novelBodyLoading = false,
+                    novelText = body,
+                    novelReaderOpen = true,
+                    novelProgressPercent = settingsRepository.getNovelProgress(work.key),
                 )
             }
         }
     }
+
+    fun closeNovelReader() {
+        _ui.update { it.copy(novelReaderOpen = false) }
+    }
+
+    fun saveNovelProgress(percent: Int) {
+        currentWork?.let { settingsRepository.setNovelProgress(it.key, percent) }
+    }
+
+    fun setNovelFontSize(size: Float) = settingsRepository.setNovelFontSize(size)
+
+    fun setNovelReaderLight(light: Boolean) = settingsRepository.setNovelReaderLight(light)
 
     /**
      * 标题行 chip 短按：已有译文 = 整页原/译切换（不含标签）；没有 = 立即翻短字段。
@@ -372,7 +452,7 @@ class SourceWorkDetailViewModel @Inject constructor(
         val detail = _ui.value.detail ?: return
         if (_ui.value.translating) return
         if (!translationRepository.hasKey()) {
-            Log.d("PikuDiag", "source detail translate skip work=$loadedWorkId: no api key")
+            Log.d("PikuDiag", "source detail translate skip work=$workId: no api key")
             return
         }
         viewModelScope.launch {
@@ -401,7 +481,7 @@ class SourceWorkDetailViewModel @Inject constructor(
 
     // ---------------- 保存与分享（与 poipiku 详情同款语义，数据换成源的作品页） ----------------
 
-    private val workUrl: String get() = "https://www.pixiv.net/artworks/$loadedWorkId"
+    private val workUrl: String get() = "https://www.pixiv.net/artworks/$workId"
 
     /** 保存单页：有原图存原图，与 poipiku 一致 */
     fun saveImage(page: Int) {
@@ -411,7 +491,7 @@ class SourceWorkDetailViewModel @Inject constructor(
         viewModelScope.launch {
             _ui.update { it.copy(savingImage = true) }
             val url = item.originalUrl.ifBlank { item.fullUrl }.ifBlank { item.url }
-            val result = runCatching { imageSaver.save(url, "Piku_${loadedWorkId}_${page + 1}") }
+            val result = runCatching { imageSaver.save(url, "Piku_${workId}_${page + 1}") }
             _ui.update { it.copy(savingImage = false) }
             feedback.show(
                 if (result.isSuccess) R.string.detail_save_saved else R.string.detail_save_failed,
@@ -431,7 +511,7 @@ class SourceWorkDetailViewModel @Inject constructor(
             var ok = 0
             pages.forEachIndexed { index, item ->
                 val url = item.originalUrl.ifBlank { item.fullUrl }.ifBlank { item.url }
-                val result = runCatching { imageSaver.save(url, "Piku_${loadedWorkId}_${index + 1}") }
+                val result = runCatching { imageSaver.save(url, "Piku_${workId}_${index + 1}") }
                 if (result.isSuccess) ok += 1
             }
             val failed = pages.size - ok
@@ -457,7 +537,7 @@ class SourceWorkDetailViewModel @Inject constructor(
         shareJob = viewModelScope.launch {
             _ui.update { it.copy(sharingImage = true, sharingTargetPackage = targetPackage) }
             try {
-                val uri = imageShareHelper.getImageUri(item.fullUrl.ifBlank { item.url }, loadedWorkId, page)
+                val uri = imageShareHelper.getImageUri(item.fullUrl.ifBlank { item.url }, workId, page)
                 _ui.update { it.copy(sharingImage = false, sharingTargetPackage = null) }
                 _shareRequest.value = DetailViewModel.ImageShareRequest(
                     uri = uri,
@@ -468,7 +548,7 @@ class SourceWorkDetailViewModel @Inject constructor(
                 _ui.update { it.copy(sharingImage = false, sharingTargetPackage = null) }
                 throw e
             } catch (e: Exception) {
-                Log.d("SourceDetailTranslate", "share fail work=$loadedWorkId page=$page: ${e.message}")
+                Log.d("SourceDetailTranslate", "share fail work=$workId page=$page: ${e.message}")
                 _ui.update { it.copy(sharingImage = false, sharingTargetPackage = null) }
                 // 失败时面板仍开着，先让 UI 收起（否则 snackbar 被面板盖住），与 poipiku 同
                 _shareSheetDismiss.tryEmit(Unit)

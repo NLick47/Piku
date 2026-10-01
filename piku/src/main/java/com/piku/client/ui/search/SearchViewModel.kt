@@ -120,6 +120,8 @@ data class SearchUiState(
     /** 检索筛选声明与当前选中值（组 → 选项 id，开关 → "1"） */
     val filterGroups: List<SearchFilterGroupSpec> = emptyList(),
     val filterToggles: List<SearchFilterToggleSpec> = emptyList(),
+    /** 按档位收敛后的可见组（小说档藏期间/对象），筛选行与面板都渲染这份 */
+    val visibleFilterGroups: List<SearchFilterGroupSpec> = emptyList(),
     val selectedFilters: Map<String, String> = emptyMap(),
 )
 
@@ -195,6 +197,7 @@ class SearchViewModel @Inject constructor(
             proportional = searchPlugin?.proportional == true,
             filterGroups = searchPlugin?.filterGroups ?: emptyList(),
             filterToggles = searchPlugin?.filterToggles ?: emptyList(),
+            visibleFilterGroups = searchPlugin?.filterGroups ?: emptyList(),
             selectedFilters = searchPlugin?.let(::defaultFilters) ?: emptyMap(),
         ),
     )
@@ -436,7 +439,14 @@ class SearchViewModel @Inject constructor(
     /** 应用筛选：记下选中值，作品与选中的标签作品全量重载 */
     fun applyFilters(selected: Map<String, String>) {
         if (searchPlugin == null) return
-        _uiState.update { it.copy(selectedFilters = selected) }
+        _uiState.update {
+            it.copy(
+                selectedFilters = selected,
+                visibleFilterGroups = searchPlugin.filterGroups.filterNot { group ->
+                    group.id in searchPlugin.hiddenFilterGroups(selected)
+                },
+            )
+        }
         if (base.isEmpty()) return
         worksPage = 0
         loadWorks(append = false)
@@ -635,8 +645,16 @@ class SearchViewModel @Inject constructor(
             else it.copy(worksLoading = true, worksErrorRes = null, worksLoadMoreErrorRes = null, worksNeedLogin = false)
         }
         viewModelScope.launch {
-            plugin.searchWorks(base, _uiState.value.selectedFilters, targetPage)
-                .onSuccess { page ->
+            // 小说档走专用接口：type 维度是筛选不是 tab，结果也换小说卡片
+            val filters = _uiState.value.selectedFilters
+            val searchNovel = plugin.filterGroups.any { it.id == SourceSearch.FILTER_KIND } &&
+                filters[SourceSearch.FILTER_KIND] == SourceSearch.KIND_NOVEL
+            val request = if (searchNovel) {
+                plugin.searchNovels(base, filters, targetPage)
+            } else {
+                plugin.searchWorks(base, filters, targetPage)
+            }
+            request.onSuccess { page ->
                     worksPage = targetPage
                     _uiState.update {
                         it.copy(

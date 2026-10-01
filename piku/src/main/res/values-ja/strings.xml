@@ -284,6 +284,9 @@
     <string name="search_filter_reset">リセット</string>
     <string name="search_filter_apply">適用</string>
     <string name="search_filter_sort">並び替え</string>
+    <string name="search_filter_kind">作品種別</string>
+    <string name="search_filter_kind_all">すべて</string>
+    <string name="search_filter_kind_novel">小説</string>
     <string name="search_filter_sort_new">新着順</string>
     <string name="search_filter_sort_old">古い順</string>
     <string name="search_filter_sort_popular">人気順</string>
@@ -703,6 +706,10 @@
     <string name="pixiv_filter_all">総合</string>
     <string name="pixiv_filter_illust">イラスト</string>
     <string name="pixiv_filter_manga">マンガ</string>
+    <string name="pixiv_filter_novel">小説</string>
+    <string name="pixiv_novel_length">%1$d文字</string>
+    <string name="pixiv_novel_read">読む</string>
+    <string name="pixiv_novel_loading">本文を取得中</string>
     <string name="pixiv_stat_views">閲覧数</string>
     <string name="pixiv_stat_likes">いいね</string>
     <string name="pixiv_stat_bookmarks">ブックマーク</string>
@@ -731,10 +738,12 @@
     <string name="author_tab_illust">イラスト</string>
     <string name="author_tab_manga">マンガ</string>
     <string name="author_tab_bookmarks">ブックマーク</string>
+    <string name="author_tab_novel">小説</string>
     <string name="author_following_count">%1$d フォロー中</string>
     <string name="author_bio_more">もっと見る</string>
     <string name="author_bio_collapse">閉じる</string>
     <string name="author_login_hint">pixiv にログインするとプロフィールを表示できます</string>
     <string name="author_empty_bookmarks">公開ブックマークはありません</string>
+    <string name="author_empty_novel">まだ小説はありません</string>
     <string name="author_copy_link">プロフィールのリンクをコピー</string>
 </resources>

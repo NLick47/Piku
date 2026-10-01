@@ -21,7 +21,11 @@ import com.piku.client.data.remote.pixiv.PixivTrendTag
 import com.piku.client.domain.model.AuthorProfile
 import com.piku.client.domain.model.FollowUser
 import com.piku.client.domain.model.FollowUserPage
+import com.piku.client.data.remote.PikuJson
+import com.piku.client.data.remote.pixiv.PixivNovel
+import com.piku.client.data.remote.pixiv.PixivWebviewNovel
 import com.piku.client.domain.model.Work
+import com.piku.client.domain.model.WorkKind
 import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.model.WorkStats
 import com.piku.client.domain.source.SourcePage
@@ -29,6 +33,8 @@ import com.piku.client.domain.source.SourceSuggestion
 import com.piku.client.domain.source.SourceTrendingTag
 import com.piku.client.domain.source.SourceWorkPage
 import com.piku.client.domain.source.SourceWorkText
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -66,11 +72,15 @@ class PixivRepository @Inject constructor(
         }
 
     // 个性化推荐 按 offset 翻页 签名头须同一时间串算出 故在此算一对再传下
-    suspend fun recommendedFeed(offset: Int): Result<List<Work>> = apiCall {
+    suspend fun recommendedFeed(
+        offset: Int,
+        contentType: String = PixivAppConfig.TYPE_ILLUST,
+    ): Result<List<Work>> = apiCall {
         val signature = endpoints.clientSignature(runtime.now())
         val response = appApi.recommended(
             clientTime = signature.time,
             clientHash = signature.hash,
+            contentType = contentType,
             offset = offset,
         )
         response.illusts.mapNotNull { it.toWork() }
@@ -98,8 +108,26 @@ class PixivRepository @Inject constructor(
         SourcePage(items = response.illusts.mapNotNull { it.toWork() })
     }
 
-    suspend fun searchUsers(word: String, offset: Int): Result<List<FollowUser>> = apiCall {
+    /** 搜小说：与搜作品同构，参数只有排序与 AI 过滤（对象/期间组外壳在小说档不展示） */
+    suspend fun searchNovels(
+        word: String,
+        sort: String?,
+        hideAi: Boolean,
+        offset: Int,
+    ): Result<SourcePage> = apiCall {
         val signature = endpoints.clientSignature(runtime.now())
+        val response = appApi.searchNovel(
+            clientTime = signature.time,
+            clientHash = signature.hash,
+            word = word,
+            sort = sort,
+            searchAiType = if (hideAi) 0 else null,
+            offset = offset,
+        )
+        SourcePage(items = response.novels.mapNotNull { it.toWork() })
+    }
+
+    suspend fun searchUsers(word: String, offset: Int): Result<List<FollowUser>> = apiCall {        val signature = endpoints.clientSignature(runtime.now())
         val response = appApi.searchUser(
             clientTime = signature.time,
             clientHash = signature.hash,
@@ -194,6 +222,72 @@ class PixivRepository @Inject constructor(
         response.body.illusts.mapNotNull { it.toWork() }
     }
 
+    suspend fun novelRecommended(offset: Int): Result<List<Work>> = apiCall {
+        val signature = endpoints.clientSignature(runtime.now())
+        val response = appApi.novelRecommended(
+            clientTime = signature.time,
+            clientHash = signature.hash,
+            offset = offset,
+        )
+        response.novels.mapNotNull { it.toWork() }
+    }
+
+    suspend fun novelFollowFeed(offset: Int): Result<List<Work>> = apiCall {
+        val signature = endpoints.clientSignature(runtime.now())
+        val response = appApi.novelFollow(
+            clientTime = signature.time,
+            clientHash = signature.hash,
+            offset = offset,
+        )
+        response.novels.mapNotNull { it.toWork() }
+    }
+
+    suspend fun novelNew(cursor: Long?): Result<SourcePage> = apiCall {
+        val signature = endpoints.clientSignature(runtime.now())
+        val response = appApi.novelNew(
+            clientTime = signature.time,
+            clientHash = signature.hash,
+            maxNovelId = cursor,
+        )
+        SourcePage(
+            items = response.novels.mapNotNull { it.toWork() },
+            nextCursor = pixivNovelCursor(response.nextUrl)?.toString(),
+        )
+    }
+
+    suspend fun novelText(novelId: Long): Result<SourceWorkText?> = apiCall {
+        val signature = endpoints.clientSignature(runtime.now())
+        val response = appApi.novelDetail(
+            clientTime = signature.time,
+            clientHash = signature.hash,
+            novelId = novelId,
+        )
+        val novel = response.novel
+        if (!novel.visible) return@apiCall null
+        SourceWorkText(
+            description = cleanPixivDescription(novel.caption),
+            tags = novel.tags.map { it.name }.filter { it.isNotBlank() },
+            stats = novel.toWorkStats(),
+        )
+    }
+
+    /**
+     * 小说正文。官方的 /v1/novel/text 已下线（2026-10 真机实测 404），只有 webview 这条：
+     * 回的是 HTML，正文藏在页面里 `novel: {...}` 这个对象里，取出来再按 JSON 解析。
+     */
+    suspend fun novelBody(novelId: Long): Result<String> = apiCall {
+        val signature = endpoints.clientSignature(runtime.now())
+        val html = withContext(Dispatchers.IO) {
+            appApi.novelWebview(
+                clientTime = signature.time,
+                clientHash = signature.hash,
+                novelId = novelId,
+            ).string()
+        }
+        val json = WEBVIEW_NOVEL_JSON.find(html)?.groupValues[1] ?: throw AppError.NotFound
+        cleanPixivNovelText(PikuJson.decodeFromString<PixivWebviewNovel>(json).text)
+    }
+
     // ---------------- 关注与云端收藏（app-api；Bearer 由传输层按主机补） ----------------
 
     /** 登录用户视角的作品状态：是否已收藏（云端）、是否已关注作者。未登录时调用方不该发起 */
@@ -286,6 +380,21 @@ class PixivRepository @Inject constructor(
             items = response.illusts.mapNotNull { it.toWork() },
             // 令牌只表「还有下一页」；到底与否以接口的 next_url 为准——
             // 条目会被 mapNotNull 丢掉（无图/无 id 的占位），按数量猜会提前判定到底
+            nextCursor = response.nextUrl?.takeIf { it.isNotBlank() },
+        )
+    }
+
+    /** 画师的小说：offset 翻页，下一页看 next_url，与 authorIllusts 同型 */
+    suspend fun authorNovels(userId: Long, offset: Int): Result<SourcePage> = apiCall {
+        val signature = endpoints.clientSignature(runtime.now())
+        val response = appApi.userNovels(
+            clientTime = signature.time,
+            clientHash = signature.hash,
+            userId = userId,
+            offset = offset.takeIf { it > 0 },
+        )
+        SourcePage(
+            items = response.novels.mapNotNull { it.toWork() },
             nextCursor = response.nextUrl?.takeIf { it.isNotBlank() },
         )
     }
@@ -462,6 +571,7 @@ internal fun PixivUserDetailResponse.toAuthorProfile(requestedId: Long): AuthorP
     comment = cleanPixivDescription(user.comment),
     illustCount = profile.totalIllusts,
     mangaCount = profile.totalManga,
+    novelCount = profile.totalNovels,
     bookmarkCount = profile.totalIllustBookmarksPublic,
     followCount = profile.totalFollowUsers,
     twitterUrl = profile.twitterUrl?.takeIf { it.isNotBlank() },
@@ -479,6 +589,68 @@ internal fun pixivBookmarkCursor(nextUrl: String?): Long? {
         ?.substringAfter('=')
         ?.toLongOrNull()
 }
+
+internal fun PixivNovel.toWork(): Work? {
+    val novelId = novelId
+    val thumb = imageUrls.large.ifBlank { imageUrls.medium }.ifBlank { imageUrls.squareMedium }
+    if (novelId <= 0 || thumb.isBlank()) return null
+    return Work(
+        id = novelId,
+        authorId = user.userId,
+        authorName = user.name,
+        authorAvatarUrl = user.profileImageUrls.medium.ifBlank { null },
+        categoryCd = -1,
+        categoryName = "",
+        title = title,
+        thumbnailUrl = thumb,
+        textLength = textLength,
+        imageCount = 1,
+        r18 = xRestrict > 0,
+        source = WorkSource.PIXIV,
+        kind = WorkKind.NOVEL,
+    )
+}
+
+internal fun PixivNovel.toWorkStats(): WorkStats = WorkStats(
+    views = totalView ?: 0,
+    bookmarks = totalBookmarks ?: 0,
+    postedAt = createDate,
+    pageCount = 1,
+    authorAccount = user.account,
+)
+
+/** 新着小说的下一页游标：max_novel_id */
+internal fun pixivNovelCursor(nextUrl: String?): Long? {
+    if (nextUrl.isNullOrBlank()) return null
+    return nextUrl.substringAfter('?', "")
+        .split('&')
+        .firstOrNull { it.substringBefore('=') == "max_novel_id" }
+        ?.substringAfter('=')
+        ?.toLongOrNull()
+}
+
+/** webview 页面里内嵌的小说对象：正文在 text 字段，页面结构变了就解析不出来 */
+private val WEBVIEW_NOVEL_JSON = Regex("""novel:\s+(\{.+?\}),\s+isOwnWork""", RegexOption.DOT_MATCHES_ALL)
+
+private val NOVEL_CHAPTER = Regex("""\[chapter:([^\]]*)\]""")
+private val NOVEL_JUMPURI = Regex("""\[\[jumpuri:([^>\]]*)>[^\]]*\]\]""")
+private val NOVEL_RUBY = Regex("""\[\[rb:([^>\]]*)>([^\]]*)\]\]""")
+private val NOVEL_IMAGE = Regex("""\[(?:pixivimage|uploadedimage):[^\]]*\]""")
+private val NOVEL_JUMP = Regex("""\[jump:[^\]]*\]""")
+
+/**
+ * 正文的 pixiv 私有标记换成纯文本：注音挂括号、超链接留标题、图片与跳转标记丢弃
+ * （阅读器不渲染内嵌图，留标记只会变成噪音）。[newpage] 转成空行保留段落感。
+ */
+internal fun cleanPixivNovelText(raw: String): String = raw
+    .replace(NOVEL_RUBY) { m -> "${m.groupValues[1]}（${m.groupValues[2]}）" }
+    .replace(NOVEL_JUMPURI) { m -> m.groupValues[1] }
+    .replace(NOVEL_CHAPTER) { m -> "\n${m.groupValues[1]}\n" }
+    .replace("[newpage]", "\n\n")
+    .replace(NOVEL_IMAGE, "")
+    .replace(NOVEL_JUMP, "")
+    .replace(Regex("\n{3,}"), "\n\n")
+    .trim()
 
 internal fun PixivTrendTag.toTrendingTag(): SourceTrendingTag? {
     val thumb = illust.imageUrls.large.ifBlank { illust.imageUrls.medium }.ifBlank { illust.imageUrls.squareMedium }

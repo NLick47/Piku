@@ -242,14 +242,15 @@ fun SearchScreen(
                             selected = state.tab,
                             onSelect = viewModel::selectTab,
                         )
-                        val hasFilterSpec = state.filterGroups.isNotEmpty() || state.filterToggles.isNotEmpty()
+                        // 面板与摘要行都只看可见组：小说档下期间/对象组整体退场
+                        val hasFilterSpec = state.visibleFilterGroups.isNotEmpty() || state.filterToggles.isNotEmpty()
                         if (state.tab == SearchTab.WORKS && state.pluginActive && hasFilterSpec) {
                             SearchFilterBar(
-                                groups = state.filterGroups,
+                                groups = state.visibleFilterGroups,
                                 toggles = state.filterToggles,
                                 selected = state.selectedFilters,
                                 onResetGroup = { groupId ->
-                                    val defaultId = state.filterGroups
+                                    val defaultId = state.visibleFilterGroups
                                         .firstOrNull { it.id == groupId }
                                         ?.options?.firstOrNull { it.default }?.id
                                     if (defaultId != null) {
@@ -314,7 +315,7 @@ fun SearchScreen(
         }
         if (showFilterSheet) {
             SearchFilterSheet(
-                groups = state.filterGroups,
+                groups = state.visibleFilterGroups,
                 toggles = state.filterToggles,
                 selected = state.selectedFilters,
                 onApply = { selected ->

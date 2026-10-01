@@ -5,6 +5,9 @@ import com.piku.client.data.auth.PixivAuthRuntime
 import com.piku.client.data.local.InMemorySharedPreferences
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.data.remote.PikuJson
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.ResponseBody
+import okhttp3.ResponseBody.Companion.toResponseBody
 import com.piku.client.data.remote.pixiv.PixivApi
 import com.piku.client.data.remote.pixiv.PixivAppActionResponse
 import com.piku.client.data.remote.pixiv.PixivAppApi
@@ -16,6 +19,8 @@ import com.piku.client.data.remote.pixiv.PixivAppUser
 import com.piku.client.data.remote.pixiv.PixivAutoWordsResponse
 import com.piku.client.data.remote.pixiv.PixivIllustResponse
 import com.piku.client.data.remote.pixiv.PixivIllustsResponse
+import com.piku.client.data.remote.pixiv.PixivNovelDetailResponse
+import com.piku.client.data.remote.pixiv.PixivNovelsResponse
 import com.piku.client.data.remote.pixiv.PixivPagesResponse
 import com.piku.client.data.remote.pixiv.PixivRankingResponse
 import com.piku.client.data.remote.pixiv.PixivRecommendResponse
@@ -29,6 +34,7 @@ import com.piku.client.data.repository.toTrendingTag
 import com.piku.client.domain.model.FollowUser
 import com.piku.client.domain.source.FILTER_TOGGLE_ON
 import com.piku.client.domain.source.SourceAuthorOpen
+import com.piku.client.domain.source.SourceSearch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -63,6 +69,7 @@ class PixivSearchSourceTest {
         )
 
         val searchCalls = mutableListOf<SearchCall>()
+        val novelSearchCalls = mutableListOf<SearchCall>()
         val userCalls = mutableListOf<Pair<String, Int?>>()
         val followCalls = mutableListOf<Pair<Long, Boolean>>()
         var searchResponse = PixivIllustsResponse()
@@ -166,6 +173,64 @@ class PixivSearchSourceTest {
             filter: String,
         ): PixivIllustsResponse = PixivIllustsResponse()
 
+        override suspend fun novelRecommended(
+            clientTime: String,
+            clientHash: String,
+            filter: String,
+            includeRankingLabel: Boolean,
+            offset: Int?,
+        ): PixivNovelsResponse = PixivNovelsResponse()
+
+        override suspend fun novelFollow(
+            clientTime: String,
+            clientHash: String,
+            restrict: String,
+            offset: Int?,
+        ): PixivNovelsResponse = PixivNovelsResponse()
+
+        override suspend fun novelNew(
+            clientTime: String,
+            clientHash: String,
+            filter: String,
+            maxNovelId: Long?,
+        ): PixivNovelsResponse = PixivNovelsResponse()
+
+        override suspend fun novelDetail(
+            clientTime: String,
+            clientHash: String,
+            novelId: Long,
+        ): PixivNovelDetailResponse = PixivNovelDetailResponse()
+
+        override suspend fun searchNovel(
+            clientTime: String,
+            clientHash: String,
+            word: String,
+            sort: String?,
+            searchAiType: Int?,
+            filter: String,
+            offset: Int?,
+        ): PixivNovelsResponse {
+            novelSearchCalls.add(
+                SearchCall(word, null, sort, null, searchAiType, filter, offset),
+            )
+            return PixivNovelsResponse()
+        }
+
+        override suspend fun userNovels(
+            clientTime: String,
+            clientHash: String,
+            userId: Long,
+            filter: String,
+            offset: Int?,
+        ): PixivNovelsResponse = PixivNovelsResponse()
+
+        override suspend fun novelWebview(
+            clientTime: String,
+            clientHash: String,
+            novelId: Long,
+            viewerVersion: String,
+        ): ResponseBody = "".toResponseBody("text/html".toMediaTypeOrNull())
+
 
         override suspend fun illustState(
             clientTime: String,
@@ -225,7 +290,18 @@ class PixivSearchSourceTest {
     @Test
     fun filterGroupsMatchApiEnums() {
         val groups = PixivSearchSource.FILTER_GROUPS
-        assertEquals(listOf("sort", "target", "duration"), groups.map { it.id })
+        assertEquals(listOf("kind", "sort", "target", "duration"), groups.map { it.id })
+
+        // 类型组在小说档要隐藏期间/对象：接口不支持，藏起来比置灰诚实
+        val impl = source(FakeAppApi())
+        assertEquals(
+            emptySet<String>(),
+            impl.hiddenFilterGroups(mapOf(SourceSearch.FILTER_KIND to SourceSearch.KIND_ALL)),
+        )
+        assertEquals(
+            setOf(PixivSearchSource.GROUP_DURATION, PixivSearchSource.GROUP_TARGET),
+            impl.hiddenFilterGroups(mapOf(SourceSearch.FILTER_KIND to SourceSearch.KIND_NOVEL)),
+        )
 
         val sort = groups.first { it.id == PixivSearchSource.GROUP_SORT }
         assertEquals(
@@ -320,6 +396,31 @@ class PixivSearchSourceTest {
         )
 
         assertEquals(PixivSearchSource.TARGET_EXACT, appApi.searchCalls.single().searchTarget)
+    }
+
+    /** 小说档走专用端点：不传 target/duration（接口没有这两个参数），排序与 AI 过滤照常 */
+    @Test
+    fun novelSearchRoutesToNovelEndpoint() = runTest {
+        val appApi = FakeAppApi()
+        val impl = source(appApi)
+        val filters = mapOf(
+            SourceSearch.FILTER_KIND to SourceSearch.KIND_NOVEL,
+            PixivSearchSource.GROUP_SORT to PixivSearchSource.SORT_NEW,
+            PixivSearchSource.GROUP_TARGET to PixivSearchSource.TARGET_TITLE,
+            PixivSearchSource.GROUP_DURATION to PixivSearchSource.DURATION_WEEK,
+            PixivSearchSource.TOGGLE_HIDE_AI to FILTER_TOGGLE_ON,
+        )
+
+        impl.searchNovels("お嬢", filters, page = 1)
+
+        val call = appApi.novelSearchCalls.single()
+        assertEquals("お嬢", call.word)
+        assertEquals(PixivSearchSource.SORT_NEW, call.sort)
+        assertNull(call.searchTarget)
+        assertNull(call.duration)
+        assertEquals(0, call.searchAiType)
+        assertEquals(30, call.offset)
+        assertEquals(0, appApi.searchCalls.size)
     }
 
     // ---------------- R-18 不再本地过滤（下发由账号侧表示设置在服务端管控） ----------------

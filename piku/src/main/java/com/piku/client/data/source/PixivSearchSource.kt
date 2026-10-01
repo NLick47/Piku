@@ -42,6 +42,14 @@ class PixivSearchSource @Inject constructor(
     override suspend fun suggest(query: String): Result<List<SourceSuggestion>> =
         repository.suggest(query)
 
+    override fun hiddenFilterGroups(selected: Map<String, String>): Set<String> =
+        if (selected[SourceSearch.FILTER_KIND] == SourceSearch.KIND_NOVEL) {
+            // 小说接口不支持按期间过滤，检索对象枚举也与作品不同：藏起来比置灰诚实
+            setOf(GROUP_DURATION, GROUP_TARGET)
+        } else {
+            emptySet()
+        }
+
     override suspend fun searchWorks(
         query: String,
         filters: Map<String, String>,
@@ -56,6 +64,17 @@ class PixivSearchSource @Inject constructor(
             offset = page * PixivAppConfig.PAGE_SIZE,
         )
     }
+
+    override suspend fun searchNovels(
+        query: String,
+        filters: Map<String, String>,
+        page: Int,
+    ): Result<SourcePage> = repository.searchNovels(
+        word = query,
+        sort = filters[GROUP_SORT]?.ifBlank { null } ?: SORT_NEW,
+        hideAi = filters[TOGGLE_HIDE_AI] == FILTER_TOGGLE_ON,
+        offset = page * PixivAppConfig.PAGE_SIZE,
+    )
 
     // 标签 tab 点中的是确定的标签，按完全一致检索，其余筛选照常生效
     override suspend fun searchTagWorks(
@@ -97,6 +116,21 @@ class PixivSearchSource @Inject constructor(
 
         /** 声明是纯数据，单独暴露以便不构造本类即可测试与断言 */
         val FILTER_GROUPS = listOf(
+            SearchFilterGroupSpec(
+                id = SourceSearch.FILTER_KIND,
+                labelRes = R.string.search_filter_kind,
+                options = listOf(
+                    SearchFilterOptionSpec(
+                        id = SourceSearch.KIND_ALL,
+                        labelRes = R.string.search_filter_kind_all,
+                        default = true,
+                    ),
+                    SearchFilterOptionSpec(
+                        id = SourceSearch.KIND_NOVEL,
+                        labelRes = R.string.search_filter_kind_novel,
+                    ),
+                ),
+            ),
             SearchFilterGroupSpec(
                 id = GROUP_SORT,
                 labelRes = R.string.search_filter_sort,

@@ -284,6 +284,9 @@
     <string name="search_filter_reset">Reset</string>
     <string name="search_filter_apply">Apply</string>
     <string name="search_filter_sort">Sort</string>
+    <string name="search_filter_kind">Work type</string>
+    <string name="search_filter_kind_all">All</string>
+    <string name="search_filter_kind_novel">Novel</string>
     <string name="search_filter_sort_new">Newest</string>
     <string name="search_filter_sort_old">Oldest</string>
     <string name="search_filter_sort_popular">Popular</string>
@@ -703,6 +706,10 @@
     <string name="pixiv_filter_all">All</string>
     <string name="pixiv_filter_illust">Illust</string>
     <string name="pixiv_filter_manga">Manga</string>
+    <string name="pixiv_filter_novel">Novel</string>
+    <string name="pixiv_novel_length">%1$d chars</string>
+    <string name="pixiv_novel_read">Read</string>
+    <string name="pixiv_novel_loading">Loading text</string>
     <string name="pixiv_stat_views">Views</string>
     <string name="pixiv_stat_likes">Likes</string>
     <string name="pixiv_stat_bookmarks">Bookmarks</string>
@@ -731,10 +738,12 @@
     <string name="author_tab_illust">Illustrations</string>
     <string name="author_tab_manga">Manga</string>
     <string name="author_tab_bookmarks">Bookmarks</string>
+    <string name="author_tab_novel">Novel</string>
     <string name="author_following_count">%1$d following</string>
     <string name="author_bio_more">More</string>
     <string name="author_bio_collapse">Less</string>
     <string name="author_login_hint">Sign in to pixiv to view this profile</string>
     <string name="author_empty_bookmarks">No public bookmarks</string>
+    <string name="author_empty_novel">No novels yet</string>
     <string name="author_copy_link">Copy profile link</string>
 </resources>

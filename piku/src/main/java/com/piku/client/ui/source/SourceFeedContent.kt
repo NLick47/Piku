@@ -31,8 +31,6 @@ import androidx.compose.foundation.lazy.staggeredgrid.itemsIndexed
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -42,6 +40,7 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -52,6 +51,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
@@ -67,6 +67,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import com.piku.client.R
 import com.piku.client.data.remote.GitHubRelease
 import com.piku.client.domain.model.Work
+import com.piku.client.domain.model.WorkKind
 import com.piku.client.domain.model.key
 import com.piku.client.domain.source.SourceFacetGroup
 import com.piku.client.domain.source.SourceFacetStyle
@@ -167,6 +168,8 @@ internal fun SourceFeedContent(
     }
 
     val showFeedTabs = state.feeds.count { !it.comingSoon } > 1
+    // 当前流生效的维度组：tab 行最右挂下拉，下方维度行放片选
+    val currentFacets = state.facets.filter { it.feedId == null || it.feedId == state.feedId }
 
     Column(Modifier.fillMaxSize()) {
         Box(
@@ -210,17 +213,20 @@ internal fun SourceFeedContent(
                         selectedFeedId = state.feedId,
                         onSelectFeed = viewModel::selectFeed,
                         tabColors = tabColors,
+                        dark = dark,
+                        dropdownFacets = currentFacets.filter { it.style == SourceFacetStyle.Dropdown },
+                        facetChoices = state.facetChoices,
+                        onSelectFacet = viewModel::selectFacet,
                     )
                 }
             }
         }
 
-        // 维度行：第二维不进 tab 行（tab 多了会挤掉它），只随所属流出现
+        // 维度行：剩下的片选不进 tab 行（tab 多了会挤掉它），只随所属流出现
         FacetRow(
-            groups = state.facets.filter { it.feedId == null || it.feedId == state.feedId },
+            groups = currentFacets,
             choices = state.facetChoices,
             onSelect = viewModel::selectFacet,
-            colors = tabColors ?: FeedTabColors.default(),
         )
 
         Box(Modifier.fillMaxSize()) {
@@ -302,7 +308,7 @@ internal fun SourceFeedContent(
     }
 }
 
-/** tab 行：只放流。第二维（周期/内容）在下方维度行，tab 再多也不会挤掉它们 */
+/** tab 行：流靠左，内容类型筛选挂行尾最右；周期片选在下方维度行，tab 再多也不会挤掉它 */
 @Composable
 private fun SourceTabBand(
     feeds: List<SourceFeed>,
@@ -310,11 +316,15 @@ private fun SourceTabBand(
     selectedFeedId: String,
     onSelectFeed: (String) -> Unit,
     tabColors: FeedTabColors?,
+    dark: Boolean,
+    dropdownFacets: List<SourceFacetGroup>,
+    facetChoices: Map<String, String>,
+    onSelectFacet: (groupId: String, optionId: String) -> Unit,
 ) {
-    // 占位流（能力未到）不上 tab 行：首页不放假东西；只剩一条流时 tab 项整个收起
-    if (!showFeedTabs) return
     val colors = tabColors ?: FeedTabColors.default()
-    val visibleFeeds = feeds.filterNot { it.comingSoon }
+    // 占位流（能力未到）不上 tab 行：首页不放假东西；只剩一条流时 tab 项整个收起
+    val visibleFeeds = if (showFeedTabs) feeds.filterNot { it.comingSoon } else emptyList()
+    if (visibleFeeds.isEmpty() && dropdownFacets.isEmpty()) return
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -335,34 +345,53 @@ private fun SourceTabBand(
                 colors = colors,
             )
         }
+        if (dropdownFacets.isNotEmpty()) {
+            Spacer(Modifier.weight(1f))
+            dropdownFacets.forEach { group ->
+                FacetEntry(
+                    group = group,
+                    selectedId = facetChoices[group.id],
+                    dark = dark,
+                    onSelect = onSelectFacet,
+                    colors = colors,
+                )
+            }
+        }
     }
 }
 
-/** 内容类型筛选：外观与 poipiku 的分类入口一致，点开是下拉 */
+/** 内容类型筛选：外观与 tab 同排同款，点开是主题化的浮层面板 */
 @Composable
 private fun FacetEntry(
     group: SourceFacetGroup,
     selectedId: String?,
+    dark: Boolean,
     onSelect: (groupId: String, optionId: String) -> Unit,
     colors: FeedTabColors,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    // 入口自己的高度给面板当落点偏移：面板 top = 入口 bottom + 6dp
+    var anchorHeightPx by remember { mutableIntStateOf(0) }
     val selected = group.options.firstOrNull { it.id == selectedId } ?: group.options.first()
-    Box {
-        CategoryEntry(
-            label = stringResource(selected.labelRes),
-            active = !selected.selectedByDefault,
-            onClick = { menuOpen = true },
-            colors = colors,
-        )
-        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-            group.options.forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(stringResource(option.labelRes)) },
-                    onClick = {
+    Box(Modifier.onSizeChanged { anchorHeightPx = it.height }) {
+        Box(Modifier.onSizeChanged { anchorHeightPx = it.height }) {
+            CategoryEntry(
+                label = stringResource(selected.labelRes),
+                active = !selected.selectedByDefault,
+                onClick = { menuOpen = true },
+                colors = colors,
+            )
+            if (menuOpen) {
+                FacetMenuPopup(
+                    options = group.options,
+                    selectedId = selected.id,
+                    dark = dark,
+                    anchorHeightPx = anchorHeightPx,
+                    onSelect = { optionId ->
                         menuOpen = false
-                        onSelect(group.id, option.id)
+                        onSelect(group.id, optionId)
                     },
+                    onDismiss = { menuOpen = false },
                 )
             }
         }
@@ -402,7 +431,15 @@ private fun SourceGrid(
             }
         }
         itemsIndexed(gridItems, key = { _, work -> work.key.toString() }) { index, work ->
-            if (state.proportional) {
+            // 小说是另一种作品：竖版封面 + 字数，没有页数与真实比例
+            if (work.kind == WorkKind.NOVEL) {
+                NovelWorkCard(
+                    work = work,
+                    onToggleFavorite = onToggleFavorite,
+                    onClick = onWorkClick,
+                    dark = dark,
+                )
+            } else if (state.proportional) {
                 // 源给了原作宽高：按真实比例排版，竖图不再被裁成方图
                 ProportionalWorkCard(
                     work = work,
@@ -600,17 +637,15 @@ private fun CenteredMessage(
     }
 }
 
-/** 维度行：片选 chips 一击直达，下拉挂行尾；只渲染当前流的维度 */
+/** 维度行：只剩周期这类片选一击直达；下拉筛选已挂到 tab 行最右 */
 @Composable
 private fun FacetRow(
     groups: List<SourceFacetGroup>,
     choices: Map<String, String>,
     onSelect: (groupId: String, optionId: String) -> Unit,
-    colors: FeedTabColors,
 ) {
     val chips = groups.filter { it.style == SourceFacetStyle.Chips }
-    val dropdowns = groups.filter { it.style == SourceFacetStyle.Dropdown }
-    if (chips.isEmpty() && dropdowns.isEmpty()) return
+    if (chips.isEmpty()) return
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -624,17 +659,6 @@ private fun FacetRow(
                     label = stringResource(option.labelRes),
                     selected = choices[group.id] == option.id,
                     onClick = { onSelect(group.id, option.id) },
-                )
-            }
-        }
-        if (dropdowns.isNotEmpty()) {
-            Spacer(Modifier.weight(1f))
-            dropdowns.forEach { group ->
-                FacetEntry(
-                    group = group,
-                    selectedId = choices[group.id],
-                    onSelect = onSelect,
-                    colors = colors,
                 )
             }
         }

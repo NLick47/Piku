@@ -13,6 +13,7 @@ data class AuthorProfile(
     /** null = 该源不提供这一项 */
     val illustCount: Int? = null,
     val mangaCount: Int? = null,
+    val novelCount: Int? = null,
     /** 公开收藏数（私密收藏数接口不给） */
     val bookmarkCount: Int? = null,
     val followCount: Int? = null,

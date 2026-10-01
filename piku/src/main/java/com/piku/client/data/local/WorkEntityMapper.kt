@@ -1,38 +1,47 @@
 package com.piku.client.data.local
 
 import com.piku.client.domain.model.Work
+import com.piku.client.domain.model.decodeWorkId
 
-fun FavoriteEntity.toWork() = Work(
-    id = workId.toLong(),
-    authorId = authorId,
-    authorName = authorName,
-    authorAvatarUrl = authorAvatarUrl,
-    categoryCd = -1,
-    categoryName = "",
-    title = title,
-    thumbnailUrl = thumbnailUrl,
-    imageCount = imageCount,
-    r18 = r18,
-    source = source,
-)
+fun FavoriteEntity.toWork(): Work {
+    val (id, kind) = decodeWorkId(workId)
+    return Work(
+        id = id,
+        authorId = authorId,
+        authorName = authorName,
+        authorAvatarUrl = authorAvatarUrl,
+        categoryCd = -1,
+        categoryName = "",
+        title = title,
+        thumbnailUrl = thumbnailUrl,
+        imageCount = imageCount,
+        r18 = r18,
+        source = source,
+        kind = kind,
+    )
+}
 
-fun HistoryEntity.toWork() = Work(
-    id = workId.toLong(),
-    authorId = authorId,
-    authorName = authorName,
-    authorAvatarUrl = authorAvatarUrl,
-    categoryCd = -1,
-    categoryName = "",
-    title = title,
-    thumbnailUrl = thumbnailUrl,
-    imageCount = imageCount,
-    r18 = r18,
-    source = source,
-)
+fun HistoryEntity.toWork(): Work {
+    val (id, kind) = decodeWorkId(workId)
+    return Work(
+        id = id,
+        authorId = authorId,
+        authorName = authorName,
+        authorAvatarUrl = authorAvatarUrl,
+        categoryCd = -1,
+        categoryName = "",
+        title = title,
+        thumbnailUrl = thumbnailUrl,
+        imageCount = imageCount,
+        r18 = r18,
+        source = source,
+        kind = kind,
+    )
+}
 
 fun Work.toFavoriteEntity(addedAt: Long = System.currentTimeMillis()) = FavoriteEntity(
     source = source,
-    workId = id.toString(),
+    workId = kind.encode(id),
     authorId = authorId,
     title = title,
     authorName = authorName,
@@ -45,12 +54,12 @@ fun Work.toFavoriteEntity(addedAt: Long = System.currentTimeMillis()) = Favorite
 
 fun Work.toHistoryEntity(visitedAt: Long = System.currentTimeMillis()) = HistoryEntity(
     source = source,
-    workId = id.toString(),
+    workId = kind.encode(id),
     authorId = authorId,
     title = title,
     authorName = authorName,
-    authorAvatarUrl = authorAvatarUrl,
     thumbnailUrl = thumbnailUrl,
+    authorAvatarUrl = authorAvatarUrl,
     imageCount = imageCount,
     r18 = r18,
     visitedAt = visitedAt,

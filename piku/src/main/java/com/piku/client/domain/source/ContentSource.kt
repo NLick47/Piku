@@ -2,6 +2,7 @@ package com.piku.client.domain.source
 
 import androidx.annotation.StringRes
 import com.piku.client.R
+import com.piku.client.domain.model.AppError
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.model.WorkStats
@@ -52,6 +53,12 @@ interface ContentSource {
      * 这一路是异步的，取不到就整块不显示，不影响详情本身。
      */
     suspend fun relatedWorks(work: Work): Result<List<Work>> = Result.success(emptyList())
+
+    /**
+     * 小说正文。只有 [Work.kind] 是小说的作品会调到：正文体量大，单独一路取，
+     * 不跟详情一起拉。没有小说的源维持默认，调用方据此判定该作品不可读。
+     */
+    suspend fun novelBody(work: Work): Result<String> = Result.failure(AppError.NotFound)
 }
 
 /** 详情页的源补充文本 */

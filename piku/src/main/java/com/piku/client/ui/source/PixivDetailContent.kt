@@ -342,7 +342,7 @@ private fun FavoriteStarButton(
 }
 
 @Composable
-private fun AuthorLine(
+internal fun AuthorLine(
     detail: WorkDetail,
     stats: WorkStats?,
     onAuthorClick: () -> Unit,
@@ -421,7 +421,7 @@ private fun AuthorLine(
 
 /** 关注小胶囊：未关注实心、已关注描边弱化；点自己区域不触发整行跳作者页 */
 @Composable
-private fun FollowPill(followed: Boolean, enabled: Boolean, onClick: () -> Unit) {
+internal fun FollowPill(followed: Boolean, enabled: Boolean, onClick: () -> Unit) {
     val shape = RoundedCornerShape(13.dp)
     Text(
         text = stringResource(if (followed) R.string.detail_followed else R.string.detail_follow),
@@ -478,7 +478,7 @@ private fun StatsRow(
  * 写出来只是把一行撑成两行。[label] 只留给无障碍朗读。
  */
 @Composable
-private fun StatCell(icon: ImageVector, value: String, label: String, modifier: Modifier) {
+internal fun StatCell(icon: ImageVector, value: String, label: String, modifier: Modifier) {
     Row(
         modifier,
         horizontalArrangement = Arrangement.Center,
@@ -502,7 +502,7 @@ private fun StatCell(icon: ImageVector, value: String, label: String, modifier: 
 
 /** 投稿时间 · 尺寸 · 张数；三项都没有时整行不出现 */
 @Composable
-private fun MetaLine(stats: WorkStats?) {
+internal fun MetaLine(stats: WorkStats?) {
     val source = stats ?: return
     val posted = source.postedAt.takeIf { it.length >= 10 }?.substring(0, 10).orEmpty()
     val size = if (source.width > 0 && source.height > 0) {
@@ -524,7 +524,7 @@ private fun MetaLine(stats: WorkStats?) {
 
 /** 简介：超过三行折叠出「展开/收起」；原/译由标题行那颗 chip 统一切 */
 @Composable
-private fun DescriptionBlock(
+internal fun DescriptionBlock(
     detail: WorkDetail,
     dark: Boolean,
     showTranslation: Boolean,
@@ -568,7 +568,7 @@ private fun DescriptionBlock(
  * 「原/译」独立于正文统一切换：chip 常驻（有文本模型才出），默认态由「自动翻译标签」设置决定。
  */
 @Composable
-private fun TagsBlock(
+internal fun TagsBlock(
     detail: WorkDetail,
     customTags: Set<String>,
     dark: Boolean,

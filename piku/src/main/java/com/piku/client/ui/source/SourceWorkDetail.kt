@@ -53,13 +53,16 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.piku.client.R
 import com.piku.client.data.local.ShareTargets
 import com.piku.client.domain.model.Work
+import com.piku.client.domain.model.WorkKind
 import com.piku.client.domain.model.WorkSource
+import com.piku.client.domain.model.key
 import com.piku.client.ui.detail.DETAIL_TOP_BAR_HEIGHT
 import com.piku.client.ui.detail.DetailSkeleton
 import com.piku.client.ui.detail.DetailTopBar
 import com.piku.client.ui.common.FeedbackHost
 import com.piku.client.ui.detail.FavoriteSheet
 import com.piku.client.ui.detail.ViewerOverlay
+import com.piku.client.ui.detail.FullNovelViewer
 import com.piku.client.ui.detail.ImageActionSheet
 import com.piku.client.ui.theme.BlobPinkDark
 import com.piku.client.ui.theme.BlobPinkLight
@@ -81,7 +84,7 @@ internal fun SourceWorkDetailDialog(
     onDismiss: () -> Unit,
     /** 点作者：宿主给应用内跳转；null = 退回出站到 pixiv 用户页 */
     onOpenAuthor: ((Work) -> Unit)? = null,
-    viewModel: SourceWorkDetailViewModel = hiltViewModel(key = "source-detail-${work.id}"),
+    viewModel: SourceWorkDetailViewModel = hiltViewModel(key = "source-detail-${work.key}"),
 ) {
     LaunchedEffect(work.id) { viewModel.load(work) }
     // 点底部相关作品叠一层新详情（新作品 = 新 key = 新 VM）：返回自然回到上一个作品，
@@ -273,7 +276,61 @@ internal fun SourceWorkDetailDialog(
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                     )
                 }
-                else -> {
+                // 小说与插画是两套版式：小说没有图区，正文交给阅读器
+                else -> if (work.kind == WorkKind.NOVEL) {
+                    NovelDetailContent(
+                        work = work,
+                        detail = detail,
+                        stats = state.stats,
+                        dark = dark,
+                        language = state.language,
+                        topInset = topInset,
+                        customTags = state.customTags.toSet(),
+                        novelBodyLoading = state.novelBodyLoading,
+                        onReadClick = viewModel::openNovelReader,
+                        onTagClick = { tag ->
+                            runCatching {
+                                context.startActivity(
+                                    Intent(
+                                        Intent.ACTION_VIEW,
+                                        Uri.parse("https://www.pixiv.net/tags/${Uri.encode(tag)}"),
+                                    ),
+                                )
+                            }
+                        },
+                        onToggleCustomTag = viewModel::toggleCustomTag,
+                        onAuthorClick = {
+                            val open = onOpenAuthor
+                            if (open != null) {
+                                onDismiss()
+                                open(work)
+                            } else {
+                                runCatching {
+                                    context.startActivity(
+                                        Intent(
+                                            Intent.ACTION_VIEW,
+                                            Uri.parse("https://www.pixiv.net/users/${work.authorId}"),
+                                        ),
+                                    )
+                                }
+                            }
+                        },
+                        isFavorite = state.isFavorite,
+                        onBookmarkToggle = { viewModel.toggleFavorite() },
+                        onBookmarkLongPress = { favoriteSheetVisible = true },
+                        followed = state.followed,
+                        showFollow = state.loggedIn && work.source == WorkSource.PIXIV && work.authorId > 0,
+                        followSending = state.followSending,
+                        onFollowClick = viewModel::toggleFollow,
+                        showTranslation = state.showTranslationAll,
+                        translating = state.translating,
+                        onToggleTranslation = viewModel::onTopBarTranslateClick,
+                        onRetranslate = viewModel::onRetranslate,
+                        showTranslatedTags = state.showTranslatedTags,
+                        tagsTranslating = state.tagsTranslating,
+                        onToggleTagsTranslation = viewModel::onToggleTagsTranslation,
+                    )
+                } else {
                     // pixiv 走自己的版面：图通栏置顶 + 概览卡（计数/元信息），与 poipiku 互不干涉
                     PixivDetailContent(
                         detail = detail,
@@ -428,6 +485,23 @@ internal fun SourceWorkDetailDialog(
                 hdPages = state.hdPages,
                 onHdToggle = viewModel::onHdToggle,
             )
+            // 阅读器盖在顶栏与详情之上，与 poipiku 详情页同级
+            if (state.novelReaderOpen && state.novelText.isNotBlank()) {
+                FullNovelViewer(
+                    text = state.novelText,
+                    title = detail?.translated?.title
+                        ?.takeIf { state.showTranslationAll && it.isNotBlank() }
+                        ?: detail?.title.orEmpty(),
+                    fontSize = state.novelFontSize,
+                    light = state.novelReaderLight,
+                    initialPercent = state.novelProgressPercent,
+                    onProgressSave = viewModel::saveNovelProgress,
+                    onFontSizeChange = viewModel::setNovelFontSize,
+                    onLightChange = viewModel::setNovelReaderLight,
+                    onClose = viewModel::closeNovelReader,
+                    onWorkClick = { _, _, _ -> },
+                )
+            }
             FeedbackHost(channel = viewModel.feedback, snackbarHostState = snackbarHostState)
             SnackbarHost(
                 hostState = snackbarHostState,
