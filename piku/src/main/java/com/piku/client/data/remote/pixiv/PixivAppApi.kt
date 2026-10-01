@@ -15,12 +15,18 @@ object PixivAppConfig {
 
     const val BASE_URL = "https://app-api.pixiv.net/"
 
-    /** 推荐流一页多少条：接口单次上限 30 */
+    /** app-api 列表流一页多少条：推荐与关注单次上限都是 30 */
     const val PAGE_SIZE = 30
 
     /** 收藏/关注的可见性：public 正常，private 私密收藏 / 悄悄关注 */
     const val RESTRICT_PUBLIC = "public"
     const val RESTRICT_PRIVATE = "private"
+
+    /**
+     * 内容过滤档。for_android 是限制最少的一档，R-18 是否显示交给本地开关过滤；
+     * 换成 for_ios 会被服务端直接剃掉 R-18，本地开关就再也开不出来了。
+     */
+    const val FILTER_ANDROID = "for_android"
 }
 
 /** 应用接口域共用的身份头；注解参数须是编译期常量，逐条 const 串起 */
@@ -166,8 +172,19 @@ interface PixivAppApi {
         @Header("X-Client-Time") clientTime: String,
         @Header("X-Client-Hash") clientHash: String,
         @Query("content_type") contentType: String = "illust",
-        @Query("filter") filter: String = "for_android",
+        @Query("filter") filter: String = PixivAppConfig.FILTER_ANDROID,
         @Query("include_ranking_illusts") includeRankingIllusts: Boolean = false,
+        @Query("offset") offset: Int? = null,
+    ): PixivIllustsResponse
+
+    /** 关注流：已关注画师的新作，时间倒序。与推荐同为 offset 翻页，restrict=private 只看悄悄关注 */
+    @GET("v2/illust/follow")
+    @Headers(HEADER_USER_AGENT, HEADER_APP_OS, HEADER_APP_OS_VERSION, HEADER_APP_VERSION)
+    suspend fun followFeed(
+        @Header("X-Client-Time") clientTime: String,
+        @Header("X-Client-Hash") clientHash: String,
+        @Query("restrict") restrict: String = PixivAppConfig.RESTRICT_PUBLIC,
+        @Query("filter") filter: String = PixivAppConfig.FILTER_ANDROID,
         @Query("offset") offset: Int? = null,
     ): PixivIllustsResponse
 

@@ -1,4 +1,6 @@
-package com.piku.client.ui.home
+package com.piku.client.ui.home.drawer
+
+import com.piku.client.ui.home.sheets.ConfirmDestructiveDialog
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border

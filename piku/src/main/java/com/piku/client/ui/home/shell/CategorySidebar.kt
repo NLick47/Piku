@@ -1,4 +1,4 @@
-package com.piku.client.ui.home
+package com.piku.client.ui.home.shell
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background

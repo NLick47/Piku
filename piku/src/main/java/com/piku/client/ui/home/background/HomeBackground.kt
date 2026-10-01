@@ -1,6 +1,8 @@
-package com.piku.client.ui.home
+package com.piku.client.ui.home.background
 
 import androidx.compose.foundation.layout.Box
+import com.piku.client.ui.home.heroParallaxOffsetPx
+
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height

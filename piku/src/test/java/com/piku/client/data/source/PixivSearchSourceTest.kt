@@ -76,6 +76,14 @@ class PixivSearchSourceTest {
             offset: Int?,
         ): PixivIllustsResponse = PixivIllustsResponse()
 
+        override suspend fun followFeed(
+            clientTime: String,
+            clientHash: String,
+            restrict: String,
+            filter: String,
+            offset: Int?,
+        ): PixivIllustsResponse = PixivIllustsResponse()
+
         override suspend fun searchIllust(
             clientTime: String,
             clientHash: String,

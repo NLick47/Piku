@@ -39,13 +39,17 @@ class PixivContentSource @Inject constructor(
 
     override suspend fun page(feedId: String, facets: Map<String, String>, page: Int): Result<SourcePage> {
         // 登录门未开前其余流不可达；真到达即实现缺口，给终态而非空页
-        if (feedId != FEED_RANKING && feedId != FEED_RECOMMEND) return Result.failure(AppError.NotFound)
+        if (feedId !in IMPLEMENTED_FEEDS) return Result.failure(AppError.NotFound)
         val adultEnabled = settingsRepository.showAdultContent.first()
-        val result = if (feedId == FEED_RECOMMEND) {
-            repository.recommendedFeed(offset = page * PixivAppConfig.PAGE_SIZE)
+        val offset = page * PixivAppConfig.PAGE_SIZE
+        val result = when (feedId) {
+            FEED_RECOMMEND -> repository.recommendedFeed(offset = offset)
                 .map { items -> SourcePage(items = items) }
-        } else {
-            repository.ranking(
+
+            FEED_FOLLOW -> repository.followFeed(offset = offset)
+                .map { items -> SourcePage(items = items) }
+
+            else -> repository.ranking(
                 mode = facets[GROUP_PERIOD] ?: PERIOD_DAILY,
                 content = facets[GROUP_CONTENT] ?: FACET_ALL,
                 page = page + 1,
@@ -85,6 +89,9 @@ class PixivContentSource @Inject constructor(
         const val PERIOD_DAILY = "daily"
         const val FACET_ALL = "all"
 
+        /** 已接通的流；声明里其余流仍是占位（能力未到），取页给终态而不是空页 */
+        val IMPLEMENTED_FEEDS = setOf(FEED_RECOMMEND, FEED_FOLLOW, FEED_RANKING)
+
         /** 声明是纯数据，单独暴露以便不构造本类（也就无需 DI）即可测试与断言 */
         val FEEDS = listOf(
             SourceFeed(
@@ -99,7 +106,7 @@ class PixivContentSource @Inject constructor(
                 id = FEED_FOLLOW,
                 labelRes = R.string.pixiv_tab_follow_new,
                 requiresLogin = true,
-                pendingAfterLogin = true,
+                proportional = true,
             ),
             SourceFeed(id = FEED_RANKING, labelRes = R.string.pixiv_tab_ranking, ranked = true),
             SourceFeed(

@@ -1,4 +1,4 @@
-package com.piku.client.ui.home
+package com.piku.client.ui.home.background
 
 import org.junit.Assert.assertEquals
 import org.junit.Test

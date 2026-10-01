@@ -1,4 +1,4 @@
-package com.piku.client.ui.home
+package com.piku.client.ui.home.background
 
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat

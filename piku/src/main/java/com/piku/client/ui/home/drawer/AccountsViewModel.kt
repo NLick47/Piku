@@ -1,4 +1,4 @@
-package com.piku.client.ui.home
+package com.piku.client.ui.home.drawer
 
 import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel

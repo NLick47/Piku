@@ -1,4 +1,6 @@
-package com.piku.client.ui.home
+package com.piku.client.ui.home.sheets
+
+import com.piku.client.ui.home.UpdateCheckState
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke

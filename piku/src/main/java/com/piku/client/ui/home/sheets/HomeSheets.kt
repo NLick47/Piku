@@ -1,4 +1,6 @@
-package com.piku.client.ui.home
+package com.piku.client.ui.home.sheets
+
+import com.piku.client.ui.home.drawer.labelRes
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween

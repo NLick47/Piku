@@ -68,6 +68,8 @@ class PixivContentSourceTest {
 
     private class FakeAppApi : PixivAppApi {
         val calls = mutableListOf<Int?>()
+        /** 关注流调用：offset 与 restrict 成对记下，两者都是接口契约的一部分 */
+        val followCalls = mutableListOf<Pair<Int?, String>>()
         val signatures = mutableListOf<Pair<String, String>>()
         var illusts = emptyList<PixivAppIllust>()
 
@@ -80,6 +82,18 @@ class PixivContentSourceTest {
             offset: Int?,
         ): PixivIllustsResponse {
             calls.add(offset)
+            signatures.add(clientTime to clientHash)
+            return PixivIllustsResponse(illusts = illusts)
+        }
+
+        override suspend fun followFeed(
+            clientTime: String,
+            clientHash: String,
+            restrict: String,
+            filter: String,
+            offset: Int?,
+        ): PixivIllustsResponse {
+            followCalls.add(offset to restrict)
             signatures.add(clientTime to clientHash)
             return PixivIllustsResponse(illusts = illusts)
         }
@@ -400,6 +414,45 @@ class PixivContentSourceTest {
         assertEquals("https://i.pximg.net/1.jpg", work.thumbnailUrl)
     }
 
+    /** 关注流与推荐同款翻页：0 起页换算成接口 offset */
+    @Test
+    fun followPageTranslatesToOffset() = runTest {
+        val app = FakeAppApi()
+        val src = source(FakeApi(), app)
+
+        src.page(PixivContentSource.FEED_FOLLOW, emptyMap(), 0)
+        src.page(PixivContentSource.FEED_FOLLOW, emptyMap(), 2)
+
+        assertEquals(listOf(0, 2 * PixivAppConfig.PAGE_SIZE), app.followCalls.map { it.first })
+        // 默认公开关注；private（悄悄关注）另有入口，这里不该发
+        assertTrue(app.followCalls.all { it.second == PixivAppConfig.RESTRICT_PUBLIC })
+    }
+
+    /** 关注卡同样按比例排版；R-18 跟随成人内容开关 */
+    @Test
+    fun followCarriesSizeAndHidesR18WhenDisabled() = runTest {
+        val app = FakeAppApi().apply {
+            illusts = listOf(appIllust("1"), appIllust("2", xRestrict = 1))
+        }
+
+        val page = source(FakeApi(), app).page(PixivContentSource.FEED_FOLLOW, emptyMap(), 0).getOrThrow()
+
+        assertEquals(listOf(1L), page.items.map { it.id })
+        val work = page.items.single()
+        assertEquals(1200, work.thumbWidth)
+        assertEquals(1800, work.thumbHeight)
+        assertEquals("https://i.pximg.net/1.jpg", work.thumbnailUrl)
+    }
+
+    /** 未接通的流（最新/发现）取页给终态：引擎不该为占位流重试 */
+    @Test
+    fun pendingFeedsFailInsteadOfReturningEmptyPage() = runTest {
+        val src = source(FakeApi())
+
+        assertTrue(src.page(PixivContentSource.FEED_LATEST, emptyMap(), 0).isFailure)
+        assertTrue(src.page(PixivContentSource.FEED_DISCOVER, emptyMap(), 0).isFailure)
+    }
+
     /** 作者区出站到 pixiv 用户页：与详情页作者行的去向一致 */
     @Test
     fun authorPageOpensPixivUserInBrowser() {
@@ -426,6 +479,12 @@ class PixivContentSourceTest {
         // 已接通：登录后就该有内容，不再是「即将上线」
         assertFalse(recommend.pendingAfterLogin)
         assertTrue(recommend.proportional)
+        val follow = PixivContentSource.FEEDS.first { it.id == PixivContentSource.FEED_FOLLOW }
+        assertTrue(follow.requiresLogin)
+        assertFalse(follow.pendingAfterLogin)
+        assertTrue(follow.proportional)
+        // 关注流按投稿时间倒序：刷新要能算「新增 N 条」
+        assertTrue(follow.chronological)
         val ranking = PixivContentSource.FEEDS.first { it.id == PixivContentSource.FEED_RANKING }
         assertTrue(ranking.ranked)
         assertFalse(ranking.requiresLogin)

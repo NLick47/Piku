@@ -1,4 +1,4 @@
-package com.piku.client.ui.home
+package com.piku.client.ui.home.background
 
 import androidx.compose.ui.graphics.Color
 import com.piku.client.data.local.SettingsRepository
