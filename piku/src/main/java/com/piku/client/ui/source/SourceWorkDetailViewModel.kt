@@ -30,8 +30,11 @@ import com.piku.client.domain.model.mergeTranslatedFields
 import com.piku.client.domain.source.SourceAuthRegistry
 import com.piku.client.domain.source.SourceRegistry
 import com.piku.client.domain.source.SourceWorkPage
+import com.piku.client.domain.usecase.AddCustomTagUseCase
+import com.piku.client.domain.usecase.ObserveCustomTagsUseCase
 import com.piku.client.domain.usecase.ObserveLanguageUseCase
 import com.piku.client.domain.usecase.RecordHistoryUseCase
+import com.piku.client.domain.usecase.RemoveCustomTagUseCase
 import com.piku.client.ui.detail.DetailViewModel
 import com.piku.client.ui.detail.ViewerImage
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -71,6 +74,9 @@ class SourceWorkDetailViewModel @Inject constructor(
     private val pixivRepository: PixivRepository,
     private val favoriteRepository: FavoriteRepository,
     private val sourceAuthRegistry: SourceAuthRegistry,
+    private val observeCustomTagsUseCase: ObserveCustomTagsUseCase,
+    private val addCustomTagUseCase: AddCustomTagUseCase,
+    private val removeCustomTagUseCase: RemoveCustomTagUseCase,
 ) : ViewModel() {
 
     /** 保存/分享结果的就地提示，由宿主 SnackbarHost 呈现（与 poipiku 详情同款通道） */
@@ -116,6 +122,8 @@ class SourceWorkDetailViewModel @Inject constructor(
         val followed: Boolean = false,
         /** 关注请求在途：防连点，与 poipiku 详情同语义 */
         val followSending: Boolean = false,
+        /** 已加入个人标签的标签名（PIXIV 那一份） */
+        val customTags: List<String> = emptyList(),
     ) {
         val hasTranslation: Boolean get() = detail?.translated?.hasAny == true
 
@@ -148,6 +156,9 @@ class SourceWorkDetailViewModel @Inject constructor(
     private var loadedWorkId: Long = -1
     /** 收藏/关注操作的对象；VM 按作品驻留，进来就不变 */
     private var currentWork: Work? = null
+
+    /** 本页只承载 pixiv 作品，个人标签记在 PIXIV 名下 */
+    private val tagSource = WorkSource.PIXIV
     private var favoriteCollectorsWired = false
     private var pixivStateLoadedForWork: Long = -1
     /** 云端收藏镜像串行化：两次快速点击必须按先加后删落云端，乱序会让云端与本地相反 */
@@ -205,6 +216,11 @@ class SourceWorkDetailViewModel @Inject constructor(
             // 标签默认显示态跟随「自动翻译标签」；用户点过 chip 后的覆盖值不受设置变化影响
             settingsRepository.autoTranslateTags.collect { enabled ->
                 _ui.update { it.copy(autoTranslateTags = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            observeCustomTagsUseCase(tagSource).collect { tags ->
+                _ui.update { it.copy(customTags = tags) }
             }
         }
         // pixiv 登录态：登录/登出实时改关注按钮显隐；刚登录时补拉一次关注状态回显
@@ -336,6 +352,20 @@ class SourceWorkDetailViewModel @Inject constructor(
      * 编排在 [tagsTranslation]，两个源的详情页共用同一份。
      */
     fun onToggleTagsTranslation() = tagsTranslation.toggle()
+
+    /** 把作品标签加入/移出个人标签（存进 PIXIV 那份，与 poipiku 详情页同语义） */
+    fun toggleCustomTag(tag: String) {
+        val added = tag in _ui.value.customTags
+        viewModelScope.launch {
+            if (added) {
+                removeCustomTagUseCase(tagSource, tag)
+                feedback.show(R.string.detail_tag_removed)
+            } else {
+                addCustomTagUseCase(tagSource, tag)
+                feedback.show(R.string.detail_tag_added)
+            }
+        }
+    }
 
     private fun translate() {
         val detail = _ui.value.detail ?: return

@@ -1,11 +1,13 @@
 package com.piku.client.domain.usecase
 
 import com.piku.client.data.local.CustomTagRepository
-import kotlinx.coroutines.flow.Flow
+import com.piku.client.domain.model.WorkSource
+import kotlinx.coroutines.flow.StateFlow
 import javax.inject.Inject
 
 class ObserveCustomTagsUseCase @Inject constructor(
     private val customTagRepository: CustomTagRepository,
 ) {
-    operator fun invoke(): Flow<List<String>> = customTagRepository.customTags
+    operator fun invoke(source: WorkSource): StateFlow<List<String>> =
+        customTagRepository.tags(source)
 }

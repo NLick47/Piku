@@ -309,6 +309,8 @@ internal fun SourceWorkDetailDialog(
                                 )
                             }
                         },
+                        customTags = state.customTags.toSet(),
+                        onToggleCustomTag = viewModel::toggleCustomTag,
                         onAuthorClick = {
                             // 有能力导航就进应用内的画师主页（浮层先收掉，免得压在页面上）；
                             // 没能力则保持出站，行为与加画师主页之前一致

@@ -36,6 +36,7 @@ import com.piku.client.domain.model.RestrictionReason
 import com.piku.client.domain.model.TranslatedFields
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkDetail
+import com.piku.client.domain.model.WorkSource
 import com.piku.client.ui.common.FeedbackChannel
 import com.piku.client.domain.model.mergeTranslatedFields
 import com.piku.client.domain.model.key
@@ -269,6 +270,9 @@ class DetailViewModel @Inject constructor(
     val authorId: Long = savedStateHandle["authorId"] ?: -1L
     val workId: Long = savedStateHandle["workId"] ?: -1L
 
+    /** 主壳详情页只承载声明 NativeDetail 的源（当前仅 poipiku），标签记在它名下 */
+    private val tagSource = WorkSource.POIPIKU
+
     /**
      * 来源页（feed/历史/收藏/相关作品）的缩略图：与详情页首图是同一张图的两个尺寸
      * （列表卡片渲染 _360，详情页首图是 _640）。图区拿它当低清打底，避免首图到位前
@@ -487,7 +491,7 @@ class DetailViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            observeCustomTagsUseCase().collect { tags ->
+            observeCustomTagsUseCase(tagSource).collect { tags ->
                 _uiState.update { it.copy(customTags = tags) }
             }
         }
@@ -1250,10 +1254,10 @@ class DetailViewModel @Inject constructor(
         val state = _uiState.value
         viewModelScope.launch {
             if (tag in state.customTags) {
-                removeCustomTagUseCase(tag)
+                removeCustomTagUseCase(tagSource, tag)
                 feedback.show(R.string.detail_tag_removed)
             } else {
-                addCustomTagUseCase(tag)
+                addCustomTagUseCase(tagSource, tag)
                 feedback.show(R.string.detail_tag_added)
             }
         }

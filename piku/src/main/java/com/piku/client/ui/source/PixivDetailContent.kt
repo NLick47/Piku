@@ -13,8 +13,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -63,11 +61,10 @@ import com.piku.client.domain.model.WorkDetail
 import com.piku.client.domain.model.WorkStats
 import com.piku.client.ui.detail.ImagePager
 import com.piku.client.ui.detail.HeadlineTranslateChip
+import com.piku.client.ui.detail.TagFlow
 import com.piku.client.ui.detail.TagsTranslateChip
 import com.piku.client.ui.detail.linkify
 import com.piku.client.ui.detail.tagsTranslationShown
-import com.piku.client.ui.theme.AccentDark
-import com.piku.client.ui.theme.LoginTextSecondaryDark
 import com.piku.client.ui.theme.OverlayScrimHeavy
 import com.piku.client.ui.theme.PikuColors
 import com.piku.client.ui.theme.StarDark
@@ -99,6 +96,9 @@ internal fun PixivDetailContent(
     onImageShown: ((Int, Painter) -> Unit)? = null,
     onAuthorClick: () -> Unit,
     onTagClick: (String) -> Unit,
+    /** 已加入个人标签的标签名（PIXIV 那一份） */
+    customTags: Set<String> = emptySet(),
+    onToggleCustomTag: (String) -> Unit = {},
     hasImageModel: Boolean = false,
     imageTranslated: Boolean = false,
     imageTranslatingPage: Int? = null,
@@ -172,6 +172,8 @@ internal fun PixivDetailContent(
                 language = language,
                 onAuthorClick = onAuthorClick,
                 onTagClick = onTagClick,
+                customTags = customTags,
+                onToggleCustomTag = onToggleCustomTag,
                 showTranslation = showTranslation,
                 translating = translating,
                 onToggleTranslation = onToggleTranslation,
@@ -201,6 +203,8 @@ private fun OverviewCard(
     language: AppLanguage,
     onAuthorClick: () -> Unit,
     onTagClick: (String) -> Unit,
+    customTags: Set<String>,
+    onToggleCustomTag: (String) -> Unit,
     showTranslation: Boolean,
     translating: Boolean,
     onToggleTranslation: () -> Unit,
@@ -268,10 +272,12 @@ private fun OverviewCard(
         MetaLine(stats = stats)
         TagsBlock(
             detail = detail,
+            customTags = customTags,
             dark = dark,
             showTranslation = showTranslatedTags,
             tagsTranslating = tagsTranslating,
             onTagClick = onTagClick,
+            onToggleCustomTag = onToggleCustomTag,
             onToggleTranslation = onToggleTagsTranslation,
         )
     }
@@ -557,50 +563,39 @@ private fun DescriptionBlock(
 }
 
 /**
- * 标签：只读 chip，点一个去搜这个标签。
- * 不用 poipiku 那套带「+」的 TagFlow——pixiv 作品加不进个人标签，挂个点了没反应的按钮是噪音。
+ * 标签：点一个去搜这个标签，右侧「+」加入个人标签（存进 PIXIV 那一份）。
+ * 与 poipiku 详情页共用 [TagFlow]，差异只在归档到哪个源。
  * 「原/译」独立于正文统一切换：chip 常驻（有文本模型才出），默认态由「自动翻译标签」设置决定。
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TagsBlock(
     detail: WorkDetail,
+    customTags: Set<String>,
     dark: Boolean,
     showTranslation: Boolean,
     tagsTranslating: Boolean,
     onTagClick: (String) -> Unit,
+    onToggleCustomTag: (String) -> Unit,
     onToggleTranslation: () -> Unit,
 ) {
     if (detail.tags.isEmpty()) return
     Spacer(Modifier.height(12.dp))
     val shown = tagsTranslationShown(showTranslation, detail.tags, detail.translated?.tags)
-    val displayTags = detail.translated?.tags?.takeIf { shown } ?: detail.tags
-    val shape = RoundedCornerShape(12.dp)
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        detail.tags.forEachIndexed { index, tag ->
-            Text(
-                text = "#${displayTags.getOrElse(index) { tag }}",
-                color = if (dark) LoginTextSecondaryDark else AccentDark,
-                fontSize = 11.sp,
-                modifier = Modifier
-                    .clip(shape)
-                    .background(PikuColors.surfaceSoft)
-                    .border(BorderStroke(0.5.dp, PikuColors.border), shape)
-                    .clickable { onTagClick(tag) }
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
+    TagFlow(
+        tags = detail.tags,
+        customTags = customTags,
+        dark = dark,
+        onTagClick = onTagClick,
+        onToggleCustomTag = onToggleCustomTag,
+        displayTags = detail.translated?.tags?.takeIf { shown } ?: detail.tags,
+        trailing = {
+            TagsTranslateChip(
+                shown = shown,
+                translating = tagsTranslating,
+                onClick = onToggleTranslation,
             )
-        }
-        // 标签区恒有这颗 chip（标签非空即出）：有译文切原/译，无译文点了去翻
-        TagsTranslateChip(
-            shown = shown,
-            translating = tagsTranslating,
-            onClick = onToggleTranslation,
-            modifier = Modifier.align(Alignment.CenterVertically),
-        )
-    }
+        },
+    )
 }
 
 /**

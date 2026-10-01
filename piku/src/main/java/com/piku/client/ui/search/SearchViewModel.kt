@@ -221,7 +221,7 @@ class SearchViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            observeCustomTagsUseCase().collect { tags ->
+            observeCustomTagsUseCase(source).collect { tags ->
                 _uiState.update { it.copy(customTags = tags) }
             }
         }

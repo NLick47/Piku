@@ -2,6 +2,7 @@ package com.piku.client.ui.tags
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.piku.client.data.local.SettingsRepository
 import com.piku.client.domain.model.AppError
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkKey
@@ -13,9 +14,11 @@ import com.piku.client.domain.usecase.RemoveCustomTagUseCase
 import com.piku.client.domain.usecase.ToggleFavoriteUseCase
 import com.piku.client.ui.common.toFeedErrorRes
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -33,6 +36,7 @@ data class TagsUiState(
     val endReached: Boolean = false,
 )
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class TagViewModel @Inject constructor(
     private val observeCustomTagsUseCase: ObserveCustomTagsUseCase,
@@ -41,6 +45,7 @@ class TagViewModel @Inject constructor(
     private val loadTagFeedUseCase: LoadTagFeedUseCase,
     private val observeFavoriteIdsUseCase: ObserveFavoriteIdsUseCase,
     private val toggleFavoriteUseCase: ToggleFavoriteUseCase,
+    private val settingsRepository: SettingsRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TagsUiState())
@@ -51,9 +56,16 @@ class TagViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            observeCustomTagsUseCase().collect { tags ->
-                _uiState.update { it.copy(tags = tags, loaded = true) }
-            }
+            // 本页是首页上的浮层（HomeOverlays），ViewModel 与首页同寿：
+            // 源必须实时跟设置走，构造时锁死的话切源后这张页还在读写旧源
+            settingsRepository.homeSource.collect { resetOnSourceChange() }
+        }
+        viewModelScope.launch {
+            settingsRepository.homeSource
+                .flatMapLatest { observeCustomTagsUseCase(it) }
+                .collect { tags ->
+                    _uiState.update { it.copy(tags = tags, loaded = true) }
+                }
         }
         viewModelScope.launch {
             observeFavoriteIdsUseCase().collect { ids ->
@@ -80,6 +92,23 @@ class TagViewModel @Inject constructor(
         loadPage(append = false)
     }
 
+    /** 换首页源时整页复位：选中的标签和作品列表都属于旧源 */
+    private fun resetOnSourceChange() {
+        generation++
+        page = 0
+        _uiState.update {
+            it.copy(
+                selectedTag = null,
+                works = emptyList(),
+                loading = false,
+                loadingMore = false,
+                errorRes = null,
+                loadMoreErrorRes = null,
+                endReached = false,
+            )
+        }
+    }
+
     fun backToList() {
         generation++
         _uiState.update {
@@ -95,11 +124,11 @@ class TagViewModel @Inject constructor(
     }
 
     fun addTag(tag: String) {
-        viewModelScope.launch { addCustomTagUseCase(tag) }
+        viewModelScope.launch { addCustomTagUseCase(settingsRepository.homeSource.value, tag) }
     }
 
     fun removeTag(tag: String) {
-        viewModelScope.launch { removeCustomTagUseCase(tag) }
+        viewModelScope.launch { removeCustomTagUseCase(settingsRepository.homeSource.value, tag) }
     }
 
     fun toggleFavorite(work: Work) {

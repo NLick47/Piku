@@ -17,6 +17,7 @@ import com.piku.client.domain.model.PoipikuCategory
 import com.piku.client.domain.model.PublishDraft
 import com.piku.client.domain.model.ShowVisibility
 import com.piku.client.domain.model.UploadKind
+import com.piku.client.domain.model.WorkSource
 import com.piku.client.ui.common.FeedbackChannel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -129,7 +130,8 @@ class PublishViewModel @Inject constructor(
 
     private var autoSaveJob: Job? = null
 
-    val myTags: StateFlow<List<String>> get() = customTagRepository.customTags
+    /** 投稿只能在 poipiku，标签候选也取它那一份 */
+    val myTags: StateFlow<List<String>> get() = customTagRepository.tags(WorkSource.POIPIKU)
 
     /** 标签自动补全建议 */
     private val _tagSuggestions = MutableStateFlow<List<String>>(emptyList())

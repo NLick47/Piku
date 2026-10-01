@@ -1,57 +1,62 @@
 package com.piku.client.data.local
 
 import android.content.SharedPreferences
+import com.piku.client.domain.model.WorkSource
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * 用户自定义标签存储（搜索页待机态与标签页的快捷入口）。
- * 以 JSON 数组形式保存在 SharedPreferences 中，保证插入顺序（最新添加的排在最前）。
- * 使用 SharedPreferences（而非 DataStore）是为了去掉 DataStore 依赖、缩小 APK；
- * 与 [LanguageStore]/[SettingsRepository] 同一套模式：内存 StateFlow 为准。
- * 增删方法无挂起点，调用线程（主线程）上读改写原子完成，不会并发丢失更新。
- */
 @Singleton
 class CustomTagRepository @Inject constructor(
     private val prefs: SharedPreferences,
 ) {
 
-    private val _customTags = MutableStateFlow(load())
-    val customTags: StateFlow<List<String>> = _customTags.asStateFlow()
+    private val tagsBySource: Map<WorkSource, MutableStateFlow<List<String>>> =
+        loadAll().mapValues { MutableStateFlow(it.value) }
+
+    fun tags(source: WorkSource): StateFlow<List<String>> = tagsBySource.getValue(source)
 
     /** 添加标签（自动去首尾空白、去 # 前缀（含叠加的 #）、去重）。返回是否真正新增了标签。 */
-    fun addCustomTag(tag: String): Boolean {
+    fun addCustomTag(source: WorkSource, tag: String): Boolean {
         val normalized = normalize(tag) ?: return false
-        val current = _customTags.value
+        val current = tags(source).value
         if (normalized in current) return false
-        val next = listOf(normalized) + current
-        _customTags.value = next
-        prefs.edit().putString(KEY_CUSTOM_TAGS, encode(next)).apply()
+        write(source, listOf(normalized) + current)
         return true
     }
 
-    fun removeCustomTag(tag: String) {
+    fun removeCustomTag(source: WorkSource, tag: String) {
         val normalized = normalize(tag) ?: return
-        val current = _customTags.value
+        val current = tags(source).value
         val next = current.filterNot { it == normalized }
         if (next.size == current.size) return
-        _customTags.value = next
-        prefs.edit().putString(KEY_CUSTOM_TAGS, encode(next)).apply()
+        write(source, next)
     }
 
-    private fun load(): List<String> = prefs.getString(KEY_CUSTOM_TAGS, null)
-        ?.let { raw ->
-            runCatching {
-                Json.decodeFromString(ListSerializer(String.serializer()), raw)
-            }.getOrNull()
-        }
-        ?: emptyList()
+    private fun write(source: WorkSource, tags: List<String>) {
+        tagsBySource.getValue(source).value = tags
+        prefs.edit().putString(key(source), encode(tags)).apply()
+    }
+
+    private fun loadAll(): Map<WorkSource, List<String>> {
+        val loaded = WorkSource.entries.associateWith { decode(prefs.getString(key(it), null)) }
+        if (loaded.values.any { it.isNotEmpty() }) return loaded
+        // 加源维度之前只有一份全局列表，整体归给 POIPIKU（当时标签页与投稿页都只查它）
+        val legacy = decode(prefs.getString(KEY_LEGACY, null))
+        if (legacy.isEmpty()) return loaded
+        prefs.edit().putString(key(WorkSource.POIPIKU), encode(legacy)).remove(KEY_LEGACY).apply()
+        return loaded + (WorkSource.POIPIKU to legacy)
+    }
+
+    private fun decode(raw: String?): List<String> = raw?.let {
+        runCatching {
+            Json.decodeFromString(ListSerializer(String.serializer()), it)
+        }.getOrNull()
+    } ?: emptyList()
 
     private fun encode(tags: List<String>): String =
         Json.encodeToString(ListSerializer(String.serializer()), tags)
@@ -63,6 +68,7 @@ class CustomTagRepository @Inject constructor(
     }
 
     private companion object {
-        const val KEY_CUSTOM_TAGS = "custom_tags"
+        fun key(source: WorkSource) = "custom_tags_${source.name}"
+        const val KEY_LEGACY = "custom_tags"
     }
 }

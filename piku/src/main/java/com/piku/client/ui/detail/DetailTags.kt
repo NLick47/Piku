@@ -179,15 +179,6 @@ internal fun tagsTranslationShown(
     translatedTags: List<String>?,
 ): Boolean = showTranslation && translatedTags?.size == tags.size
 
-/**
- * 标签区那颗「原/译」（含翻译中转圈）：标签非空即出——
- * 有译文切原/译，无译文点了去翻。
- *
- * 芯片表达的是「当前实际显示的是译文」，而不是「想要的显示态」：
- * 跟随后者会让没翻出的作品挂一颗「原」，点了却无译文可回。
- * 两个源共用同一份实现（poipiku 那版为准），容器各自选：poipiku 走 TagFlow 的
- * trailing（支持加个人标签），pixiv 走 FlowRow 末项（pixiv 加不了个人标签）。
- */
 @Composable
 internal fun TagsTranslateChip(
     shown: Boolean,
