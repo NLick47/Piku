@@ -26,6 +26,8 @@ import com.piku.client.domain.model.key
 import com.piku.client.domain.source.AuthorPageStyle
 import com.piku.client.domain.source.SourceAuthorOpen
 import com.piku.client.domain.source.SourceAuthRegistry
+import com.piku.client.domain.source.SourceLink
+import com.piku.client.domain.source.SourceLinkResolver
 import com.piku.client.domain.source.SourceRegistry
 import com.piku.client.domain.source.SourceWorkOpen
 import com.piku.client.ui.theme.PikuColors
@@ -37,6 +39,7 @@ import javax.inject.Inject
 class SourceOpenViewModel @Inject constructor(
     private val sourceRegistry: SourceRegistry,
     private val authRegistry: SourceAuthRegistry,
+    private val linkResolver: SourceLinkResolver,
     settingsRepository: SettingsRepository,
 ) : ViewModel() {
 
@@ -59,6 +62,9 @@ class SourceOpenViewModel @Inject constructor(
 
     /** 源自己的登录页路由；null = 本源没注册登录插件 */
     fun loginRoute(source: WorkSource): String? = authRegistry.byId(source)?.loginRoute
+
+    /** 站内链接解析：深链唤起与搜索框粘贴共用；链接自带源归属（host 定源），与外壳当前源无关 */
+    fun resolveLink(url: String): SourceLink? = linkResolver.parse(url)
 }
 
 /**

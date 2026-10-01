@@ -32,6 +32,7 @@ import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.source.AuthorPageStyle
 import com.piku.client.domain.source.SourceAuthRoutes
 import com.piku.client.domain.source.SourceAuthorOpen
+import com.piku.client.domain.source.SourceLink
 import com.piku.client.domain.source.SourceWorkOpen
 import com.piku.client.ui.author.AuthorProfileScreen
 import com.piku.client.ui.collection.CollectionScreen
@@ -45,12 +46,9 @@ import com.piku.client.ui.login.RegisterScreen
 import com.piku.client.ui.myposts.MyPostsScreen
 import com.piku.client.ui.login.PixivLoginScreen
 import com.piku.client.ui.publish.PublishScreen
-import com.piku.client.ui.search.PoipikuLink
 import com.piku.client.ui.search.SearchScreen
 import com.piku.client.ui.source.SourceWorkDetailScreen
 import com.piku.client.ui.source.SourceWorkOpenHost
-import com.piku.client.ui.search.SearchScreen
-import com.piku.client.ui.search.parsePoipikuLink
 import com.piku.client.ui.source.SourceOpenViewModel
 import com.piku.client.ui.tags.TagScreen
 import androidx.compose.animation.ExperimentalSharedTransitionApi
@@ -193,22 +191,6 @@ fun AppNavHost(
         }
     }
 
-    LaunchedEffect(deepLink) {
-        if (deepLink == null) return@LaunchedEffect
-        when (val link = parsePoipikuLink(deepLink)) {
-            is PoipikuLink.Work ->
-                navController.navigate(Routes.detail(link.authorId, link.workId)) {
-                    launchSingleTop = true
-                }
-            is PoipikuLink.User ->
-                navController.navigate(Routes.userWorks(link.userId)) {
-                    launchSingleTop = true
-                }
-            null -> Unit
-        }
-        onDeepLinkConsumed()
-    }
-
     // 连按返回防抖 + 栈底保护：快速连按（含转场动画未结束时）只弹出最上层，
     // 且绝不弹出 startDestination（HOME）——返回栈清空会白屏。
     // previousBackStackEntry 为 null 表示当前已在栈底，直接忽略本次弹出。
@@ -271,6 +253,22 @@ fun AppNavHost(
             is SourceAuthorOpen.External -> openExternal(open.url)
             null -> Unit
         }
+    }
+
+    /** 站内链接的去向：作品引用走 [openWork] 的源声明分流，作者引用按形态挑作者页 */
+    val openLink: (SourceLink) -> Unit = { link ->
+        when (link) {
+            is SourceLink.Work -> openWork(link.toStubWork())
+            is SourceLink.User -> openAuthor(link.source, link.userId, "")
+        }
+    }
+
+    // 深链唤起：解析跨源（host 定源，与外壳当前源无关），不认识的 URL 落回首页。
+    // 搜索框粘贴不走这里，由 SearchScreen.onOpenLink 汇入同一个 openLink
+    LaunchedEffect(deepLink) {
+        if (deepLink == null) return@LaunchedEffect
+        sourceOpen.resolveLink(deepLink)?.let(openLink)
+        onDeepLinkConsumed()
     }
 
     SharedTransitionLayout {
@@ -400,14 +398,7 @@ fun AppNavHost(
                         openAuthor(source, user.userId, user.name)
                     },
                     onOpenExternal = openExternal,
-                    onOpenLink = { link ->
-                        when (link) {
-                            is PoipikuLink.Work ->
-                                navController.navigate(Routes.detail(link.authorId, link.workId))
-                            is PoipikuLink.User ->
-                                navController.navigate(Routes.userWorks(link.userId))
-                        }
-                    },
+                    onOpenLink = openLink,
                 )
             }
         }
@@ -624,3 +615,19 @@ fun AppNavHost(
         // R-18 门留在 SourceWorkOpenHost（feed/收藏/历史的两段式路径）
     }
 }
+
+/** 链接引用 → 可导航的最小 Work：只有源/id/kind，展示字段空缺 = 详情壳骨架屏首帧 */
+private fun SourceLink.Work.toStubWork() = Work(
+    id = workId,
+    authorId = authorId,
+    authorName = "",
+    authorAvatarUrl = null,
+    categoryCd = -1,
+    categoryName = "",
+    title = "",
+    thumbnailUrl = "",
+    imageCount = 0,
+    r18 = false,
+    source = source,
+    kind = kind,
+)

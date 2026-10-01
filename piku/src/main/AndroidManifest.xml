@@ -29,15 +29,33 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- 站内深链：host 清单来自各源的 SourceLinkParser.hosts（domain/source），path 只登记
+                 解析器真正能打开的页面形态。PatternMatcher 不支持 [0-9] 字符类，数字段只能用 .* 宽匹配，
+                 多余形态由解析器拒绝后落首页兜底；pixiv 小说页的 query（?id=）不参与 path 匹配 -->
             <intent-filter android:autoVerify="false">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" />
-                <data android:scheme="http" />
-                <data android:host="poipiku.com" />
-                <data android:host="www.poipiku.com" />
-                <data android:host="m.poipiku.com" />
+                <!-- poipiku：作品页（/{作者}/{作品}.html）与作者页（/{作者}/ 或 /{作者}.html） -->
+                <data android:scheme="https" android:host="poipiku.com" android:pathPattern="/.*\\.html" />
+                <data android:scheme="https" android:host="poipiku.com" android:pathPattern="/.*/" />
+                <data android:scheme="https" android:host="www.poipiku.com" android:pathPattern="/.*\\.html" />
+                <data android:scheme="https" android:host="www.poipiku.com" android:pathPattern="/.*/" />
+                <data android:scheme="https" android:host="m.poipiku.com" android:pathPattern="/.*\\.html" />
+                <data android:scheme="https" android:host="m.poipiku.com" android:pathPattern="/.*/" />
+                <!-- pixiv：插画/漫画、小说、作者页（容忍 /en 前缀），其余路径留给浏览器 -->
+                <data android:scheme="https" android:host="pixiv.net" android:pathPattern="/artworks/.*" />
+                <data android:scheme="https" android:host="pixiv.net" android:pathPattern="/en/artworks/.*" />
+                <data android:scheme="https" android:host="pixiv.net" android:pathPattern="/novel/show\\.php" />
+                <data android:scheme="https" android:host="pixiv.net" android:pathPattern="/en/novel/show\\.php" />
+                <data android:scheme="https" android:host="pixiv.net" android:pathPattern="/users/.*" />
+                <data android:scheme="https" android:host="pixiv.net" android:pathPattern="/en/users/.*" />
+                <data android:scheme="https" android:host="www.pixiv.net" android:pathPattern="/artworks/.*" />
+                <data android:scheme="https" android:host="www.pixiv.net" android:pathPattern="/en/artworks/.*" />
+                <data android:scheme="https" android:host="www.pixiv.net" android:pathPattern="/novel/show\\.php" />
+                <data android:scheme="https" android:host="www.pixiv.net" android:pathPattern="/en/novel/show\\.php" />
+                <data android:scheme="https" android:host="www.pixiv.net" android:pathPattern="/users/.*" />
+                <data android:scheme="https" android:host="www.pixiv.net" android:pathPattern="/en/users/.*" />
             </intent-filter>
         </activity>
 

@@ -22,6 +22,8 @@ import com.piku.client.domain.source.SourceAuthorOpen
 import com.piku.client.domain.source.SourceSearch
 import com.piku.client.domain.source.SourceSearchRegistry
 import com.piku.client.domain.source.SourceAuthRegistry
+import com.piku.client.domain.source.SourceLink
+import com.piku.client.domain.source.SourceLinkResolver
 import com.piku.client.domain.source.SourceSuggestion
 import com.piku.client.domain.source.SourceTrendingTag
 import com.piku.client.domain.usecase.ClearSearchHistoryUseCase
@@ -146,6 +148,7 @@ class SearchViewModel @Inject constructor(
     private val observeCustomTagsUseCase: ObserveCustomTagsUseCase,
     private val detailRepository: DetailRepository,
     private val authRepository: AuthRepository,
+    private val linkResolver: SourceLinkResolver,
 ) : ViewModel() {
 
     private val keyword: String = savedStateHandle["keyword"] ?: ""
@@ -458,6 +461,12 @@ class SearchViewModel @Inject constructor(
 
     /** 点用户的去向：插件声明了就照声明（pixiv 进应用内画师主页），null 走默认用户页 */
     fun userOpen(user: FollowUser): SourceAuthorOpen? = searchPlugin?.userPage(user)
+
+    /**
+     * 站内链接识别：跨源解析（host 定源），命中即「打开链接」直达，不走当前源的检索，
+     * 也不写搜索历史。与当前源是哪个无关——p 站源下贴 poipiku 链接照样识别。
+     */
+    fun resolveLink(raw: String): SourceLink? = linkResolver.parse(raw)
 
     /** 本页生效的源：用户行的作者页要按它挑形态 */
     val sourceId: WorkSource get() = source

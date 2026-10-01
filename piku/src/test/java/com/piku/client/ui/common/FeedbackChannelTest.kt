@@ -10,7 +10,7 @@ import org.junit.Test
 class FeedbackChannelTest {
 
     @Test
-    fun `在场收集者能收到事件`() = runTest {
+    fun deliversEventToActiveCollector() = runTest {
         val channel = FeedbackChannel()
         val received = mutableListOf<FeedbackMessage>()
         val job = launch { channel.messages.collect { received += it } }
@@ -26,7 +26,7 @@ class FeedbackChannelTest {
     }
 
     @Test
-    fun `没有收集者时事件被丢弃而不是排队`() = runTest {
+    fun dropsEventInsteadOfQueueingWhenNoCollector() = runTest {
         val channel = FeedbackChannel()
 
         // 页面不在场（ViewModel 已创建但页面未打开）
@@ -42,7 +42,7 @@ class FeedbackChannelTest {
     }
 
     @Test
-    fun `重新订阅不会重放离开前的事件`() = runTest {
+    fun doesNotReplayConsumedEventOnResubscribe() = runTest {
         val channel = FeedbackChannel()
 
         // 第一次进入页面：收到一条提示后立刻离开（收集协程被取消，事件已消费）
@@ -65,7 +65,7 @@ class FeedbackChannelTest {
     }
 
     @Test
-    fun `带动作的事件携带按钮文案与回调`() = runTest {
+    fun actionEventCarriesLabelAndCallback() = runTest {
         val channel = FeedbackChannel()
         val received = mutableListOf<FeedbackMessage>()
         val job = launch { channel.messages.collect { received += it } }

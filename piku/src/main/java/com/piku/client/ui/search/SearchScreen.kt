@@ -67,6 +67,7 @@ import com.piku.client.domain.model.FollowUser
 import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.source.SourceAuthorOpen
+import com.piku.client.domain.source.SourceLink
 import com.piku.client.ui.common.FeedbackHost
 import com.piku.client.ui.common.PikuBackButton
 import com.piku.client.ui.theme.GlassHeaderTintDark
@@ -97,7 +98,7 @@ fun SearchScreen(
     onSearch: (String) -> Unit,
     onWorkClick: (Work) -> Unit,
     onUserClick: (WorkSource, FollowUser) -> Unit,
-    onOpenLink: (PoipikuLink) -> Unit,
+    onOpenLink: (SourceLink) -> Unit,
     onOpenExternal: (String) -> Unit,
     onLoginClick: () -> Unit,
     onManageTags: () -> Unit,
@@ -117,8 +118,9 @@ fun SearchScreen(
     val searchTerm = state.keyword.trimStart('#').removePrefix("@").trim()
     val hasQuery = searchTerm.isNotEmpty()
 
-    // 实时识别 poipiku 链接：命中后操作按钮切换为"打开链接"，提交时直接跳转不写历史
-    val link = remember(query) { parsePoipikuLink(query) }
+    // 实时识别站内链接（跨源解析，host 定源）：命中后操作按钮切换为"打开链接"，
+    // 提交时直接跳转不写历史；与当前源无关，p 站源下贴 poipiku 链接照样识别
+    val link = remember(query) { viewModel.resolveLink(query) }
 
     // 一键译搜：中日互译——纯汉字→日语，含假名→中文；@ 用户搜索与链接不出现
     val scope = rememberCoroutineScope()
@@ -154,7 +156,7 @@ fun SearchScreen(
         if (keyword.isEmpty()) return
         keyboardController?.hide()
         viewModel.clearSuggestions()
-        val target = parsePoipikuLink(keyword)
+        val target = viewModel.resolveLink(keyword)
         if (target != null) {
             // 链接直达：导航到作品/作者页，不写入搜索历史
             onOpenLink(target)
