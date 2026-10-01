@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -65,7 +66,10 @@ class PixivAuthRepository @Inject constructor(
     private var refreshJob: Job? = null
 
     init {
-        store.current()?.let(::scheduleRefresh)
+        store.current()?.let { token ->
+            Log.d(TAG, "pixiv token restored: uid=${token.userId} ttl=${token.expiresAt - runtime.now()}ms")
+            scheduleRefresh(token)
+        }
     }
 
     /** 登录页地址：直连 pixiv 应用接口域，不经任何 Cloudflare 中继（cf 出网 IP 被 pixiv 挡死） */
@@ -100,6 +104,16 @@ class PixivAuthRepository @Inject constructor(
 
     /** 当前登录用户的数字 id（关注列表等按 user_id 查询的接口用）；未登录给 null */
     fun currentUserId(): Long? = store.current()?.userId?.toLongOrNull()
+
+    fun freshAccessToken(): String? {
+        val token = store.current() ?: return null
+        if (!token.isExpiring(runtime.now())) return token.accessToken
+        // 传输线程没有协程上下文，同步等刷新；刷新自身有网络超时兜底
+        return runBlocking {
+            refresh()
+            store.current()?.takeIf { !it.isExpiring(runtime.now()) }?.accessToken
+        } ?: token.accessToken
+    }
 
     /**
      * 换令牌。**必须留下失败的可诊断信息**：这个端点的失败原因（invalid_grant /
@@ -174,6 +188,8 @@ class PixivAuthRepository @Inject constructor(
         var rejected = false
         tokenMutex.withLock {
             val current = store.current() ?: return@withLock
+            // 取令牌等刷新时会并发走到这：已经新鲜就别重复打这一发
+            if (!current.isExpiring(runtime.now())) return@withLock
             val epoch = sessionEpoch.get()
             exchange(endpoints.refreshTokenFields(current.refreshToken))
                 .onSuccess { token -> if (sessionEpoch.get() == epoch) adopt(token) }

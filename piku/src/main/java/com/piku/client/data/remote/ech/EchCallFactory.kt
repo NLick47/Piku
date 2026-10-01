@@ -1,6 +1,8 @@
 package com.piku.client.data.remote.ech
 
 import android.util.Log
+import com.piku.client.data.remote.NetworkRuntime
+import com.piku.client.data.remote.RetryPolicy
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
@@ -32,7 +34,11 @@ class EchCallFactory(
     private val userAgent: String,
     private val authHeaders: (String) -> List<Pair<String, String>> = { emptyList() },
     private val timeoutMs: Int = DEFAULT_TIMEOUT_MS,
+    private val runtime: NetworkRuntime = NetworkRuntime(),
 ) : Call.Factory {
+
+    /** 与 poipiku 通道共用一套重试语义；这里额度收紧到重试一次 */
+    private val policy = RetryPolicy(maxAttempts = RETRY_ATTEMPTS)
 
     override fun newCall(request: Request): Call = EchCall(request)
 
@@ -97,20 +103,57 @@ class EchCallFactory(
         private val tags = ConcurrentHashMap<Class<*>, Any>()
 
         private fun perform(): Response {
-            val config = echConfig() ?: throw IOException("ECH 配置不可用（pixiv 直连依赖它）")
             val host = original.url.host
             val body = original.body?.let { requestBody ->
                 Buffer().also { requestBody.writeTo(it) }.readByteArray()
             }
             val headers = buildHeaders(body?.size)
+            val where = "${original.method} ${original.url.host}${original.url.encodedPath}"
+            var attempts = RetryPolicy.Attempts()
+            while (true) {
+                if (canceled.get()) throw IOException("Canceled")
+                val config = echConfig() ?: throw IOException("ECH 配置不可用（pixiv 直连依赖它）")
+                // 这条通道不走 OkHttp 拦截器，出错时只能靠这行看清"到底发了什么上线路"
+                Log.d(
+                    TAG,
+                    "ech $where bodyLen=${body?.size ?: 0} headers=${headers.joinToString(",") { it.first }}",
+                )
 
-            // 这条通道不走 OkHttp 拦截器，出错时只能靠这行看清"到底发了什么上线路"
-            Log.d(
-                TAG,
-                "ech ${original.method} ${original.url.host}${original.url.encodedPath} " +
-                    "bodyLen=${body?.size ?: 0} headers=${headers.joinToString(",") { it.first }}",
-            )
+                val response = try {
+                    send(config, host, body, headers)
+                } catch (e: IOException) {
+                    if (canceled.get()) throw IOException("Canceled")
+                    val decision = policy.ioFailure(e, original.method == "GET", attempts)
+                    if (decision !is RetryPolicy.Decision.Retry) {
+                        Log.w(TAG, "ech failed $where: ${e.message}")
+                        throw e
+                    }
+                    attempts = decision.attempts
+                    Log.w(TAG, "ech retry $where attempt=${attempts.io} ${e.javaClass.simpleName}: ${e.message}")
+                    runtime.sleeper(decision.delayMs)
+                    continue
+                }
+                if (response.isSuccessful) return response
+                val decision = policy.httpFailure(response.code, original.method == "GET", attempts)
+                if (decision !is RetryPolicy.Decision.Retry) {
+                    // 首页把所有失败都显示成同一句「网络错误」，服务端到底回了什么只能靠这行
+                    Log.w(TAG, "ech ${response.code} $where")
+                    return response
+                }
+                attempts = decision.attempts
+                response.close()
+                Log.w(TAG, "ech retry http=${response.code} $where attempt=${attempts.http}")
+                runtime.sleeper(decision.delayMs)
+            }
+        }
 
+        /** 试一轮：所有已知地址挨个试，全失败抛最后一个错 */
+        private fun send(
+            config: ByteArray,
+            host: String,
+            body: ByteArray?,
+            headers: List<Pair<String, String>>,
+        ): Response {
             var lastError: IOException? = null
             for (ip in endpoints(host)) {
                 try {
@@ -161,6 +204,9 @@ class EchCallFactory(
         const val TAG = "PikuDiag"
         const val THREAD_NAME = "piku-ech-call"
         const val DEFAULT_TIMEOUT_MS = 30_000
+
+        /** 初次 + 重试一次：冷启动的网络抖动够用，又不会把失败拖得太久 */
+        const val RETRY_ATTEMPTS = 2
     }
 }
 

@@ -4,7 +4,8 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
 import com.piku.client.BuildConfig
-import com.piku.client.data.auth.PixivAuthStore
+import com.piku.client.data.auth.PixivAuthEndpoints
+import com.piku.client.data.auth.PixivAuthRepository
 import com.piku.client.data.auth.pixivAuthHeaders
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.data.remote.ApiConfig
@@ -37,6 +38,7 @@ import com.piku.client.data.remote.pixiv.PixivApiConfig
 import com.piku.client.data.remote.pixiv.PixivAppApi
 import com.piku.client.data.remote.pixiv.PixivAppConfig
 import com.piku.client.data.remote.translation.LlmChatApi
+import dagger.Lazy
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -245,7 +247,7 @@ object NetworkModule {
         doHDns: DoHDns,
         diagnostics: NetworkDiagnostics,
         sniFactory: SniStrippingSocketFactory,
-        pixivAuthStore: PixivAuthStore,
+        pixivAuth: Lazy<PixivAuthRepository>,
     ): Call.Factory {
         // 开发期借本机代理出网（见 PixivApiConfig.DEBUG_PROXY）：原生通道走不了 HTTP 代理，
         // 这一段保留旧的 OkHttp 路径，发布包里 DEBUG_PROXY 为 null，不生效
@@ -264,7 +266,15 @@ object NetworkModule {
                         .getOrDefault(emptyList())
             },
             userAgent = PIXIV_USER_AGENT,
-            authHeaders = { host -> pixivAuthHeaders(host, pixivAuthStore.accessToken()) },
+            authHeaders = { host ->
+                // 只有应用接口要令牌。刷新那一发打的是 oauth 域 也走这条通道
+                // 若在这里等令牌就会自己等自己死锁 所以先按主机放行
+                if (host == PixivAuthEndpoints.PIXIV_APP_API_HOST) {
+                    pixivAuthHeaders(host, pixivAuth.get().freshAccessToken())
+                } else {
+                    emptyList()
+                }
+            },
         )
     }
 

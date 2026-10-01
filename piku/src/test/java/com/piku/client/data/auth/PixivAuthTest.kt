@@ -142,6 +142,42 @@ class PixivAuthTest {
         assertTrue(pixivAuthHeaders(PixivAuthEndpoints.PIXIV_APP_API_HOST, "  ").isEmpty())
     }
 
+    @Test
+    fun expiredTokenIsRefreshedBeforeHandout() = runTest {
+        val api = FakeApi(ok().copy(accessToken = "AT2"))
+        val store = PixivAuthStore(InMemoryStorage(), FakeCipher(), PikuJson)
+        store.save(token().copy(expiresAt = 500L))
+        val repository = repository(api = api, store = store, now = 1_000L)
+
+        assertEquals("AT2", repository.freshAccessToken())
+        assertEquals("补刷新只打一发，调度器里排着的那个要跳过", 1, api.requests.size)
+        repository.logout()
+    }
+
+    @Test
+    fun freshTokenIsHandedOutWithoutAnotherRequest() = runTest {
+        val api = FakeApi(ok())
+        val store = PixivAuthStore(InMemoryStorage(), FakeCipher(), PikuJson)
+        store.save(token().copy(expiresAt = 10_000_000L))
+        val repository = repository(api = api, store = store, now = 1_000L)
+
+        assertEquals("AT", repository.freshAccessToken())
+        assertEquals("令牌还新鲜，一次请求都不该有", 0, api.requests.size)
+        repository.logout()
+    }
+
+    @Test
+    fun refreshFailureStillHandsOutTheCachedToken() = runTest {
+        val api = FakeApi(ok()).apply { failure = IOException("no route") }
+        val store = PixivAuthStore(InMemoryStorage(), FakeCipher(), PikuJson)
+        store.save(token().copy(expiresAt = 500L))
+        val repository = repository(api = api, store = store, now = 1_000L)
+
+        assertEquals("AT", repository.freshAccessToken())
+        assertTrue("刷新失败不等于凭据被拒，登录态要留着", repository.isLoggedIn())
+        repository.logout()
+    }
+
     // ---------------- 凭据存储：与 poipiku 完全隔离 ----------------
 
     @Test
