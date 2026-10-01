@@ -12,9 +12,12 @@ import com.piku.client.data.remote.pixiv.PixivAppConfig
 import com.piku.client.data.remote.pixiv.PixivAppIllust
 import com.piku.client.data.remote.pixiv.PixivAppIllustDetailResponse
 import com.piku.client.data.remote.pixiv.PixivAppImageUrls
+import com.piku.client.data.remote.pixiv.PixivAutoWordsResponse
 import com.piku.client.data.remote.pixiv.PixivContentType
 import com.piku.client.data.remote.pixiv.PixivIllustsResponse
 import com.piku.client.data.remote.pixiv.PixivRankingItem
+import com.piku.client.data.remote.pixiv.PixivTrendTagsResponse
+import com.piku.client.data.remote.pixiv.PixivUserPreviewsResponse
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkSource
 import com.piku.client.data.remote.pixiv.PixivIllustResponse
@@ -126,6 +129,38 @@ class PixivContentSourceTest {
             clientHash: String,
             illustId: Long,
         ): PixivAppActionResponse = PixivAppActionResponse()
+
+        override suspend fun searchIllust(
+            clientTime: String,
+            clientHash: String,
+            word: String,
+            searchTarget: String?,
+            sort: String?,
+            duration: String?,
+            searchAiType: Int?,
+            filter: String,
+            offset: Int?,
+        ): PixivIllustsResponse = PixivIllustsResponse(illusts = illusts)
+
+        override suspend fun searchUser(
+            clientTime: String,
+            clientHash: String,
+            word: String,
+            filter: String,
+            offset: Int?,
+        ): PixivUserPreviewsResponse = PixivUserPreviewsResponse()
+
+        override suspend fun autocomplete(
+            clientTime: String,
+            clientHash: String,
+            word: String,
+        ): PixivAutoWordsResponse = PixivAutoWordsResponse()
+
+        override suspend fun trendingTags(
+            clientTime: String,
+            clientHash: String,
+            filter: String,
+        ): PixivTrendTagsResponse = PixivTrendTagsResponse()
     }
 
     private fun http404() = HttpException(Response.error<Any>(404, "".toResponseBody()))

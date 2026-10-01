@@ -4,6 +4,7 @@ import com.piku.client.data.auth.PixivAuthRepository
 import com.piku.client.data.auth.PoipikuAuth
 import com.piku.client.data.repository.FavoriteRepository
 import com.piku.client.data.source.PixivContentSource
+import com.piku.client.data.source.PixivSearchSource
 import com.piku.client.data.source.PoipikuContentBackup
 import com.piku.client.data.source.PoipikuContentSource
 import com.piku.client.domain.model.Work
@@ -11,6 +12,7 @@ import com.piku.client.domain.source.ContentSource
 import com.piku.client.domain.source.ShellFavorites
 import com.piku.client.domain.source.SourceAuth
 import com.piku.client.domain.source.SourceContentBackup
+import com.piku.client.domain.source.SourceSearch
 import com.piku.client.ui.home.drawer.PoipikuDrawerPlugin
 import com.piku.client.ui.home.drawer.SourceDrawerPlugin
 import com.piku.client.ui.source.SourceFeedConfig
@@ -47,6 +49,11 @@ object SourceModule {
     @Provides
     @IntoSet
     fun pixivAuth(impl: PixivAuthRepository): SourceAuth = impl
+
+    /** 搜索插件按源登记：检索页问这张表，没登记的源走外壳默认搜索 */
+    @Provides
+    @IntoSet
+    fun pixivSearch(impl: PixivSearchSource): SourceSearch = impl
 
     /** 抽屉插件按源登记：源专属抽屉条目与浮层由插件自己声明，外壳只按当前源渲染 */
     @Provides

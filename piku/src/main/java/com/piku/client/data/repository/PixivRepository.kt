@@ -15,10 +15,15 @@ import com.piku.client.data.remote.pixiv.PixivIllustBody
 import com.piku.client.data.remote.pixiv.PixivWorkCard
 import com.piku.client.data.remote.pixiv.PixivPageUrls
 import com.piku.client.data.remote.pixiv.PixivRankingItem
+import com.piku.client.data.remote.pixiv.PixivUserPreview
+import com.piku.client.data.remote.pixiv.PixivTrendTag
+import com.piku.client.domain.model.FollowUser
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.model.WorkStats
 import com.piku.client.domain.source.SourcePage
+import com.piku.client.domain.source.SourceSuggestion
+import com.piku.client.domain.source.SourceTrendingTag
 import com.piku.client.domain.source.SourceWorkPage
 import com.piku.client.domain.source.SourceWorkText
 import javax.inject.Inject
@@ -66,6 +71,60 @@ class PixivRepository @Inject constructor(
             offset = offset,
         )
         response.illusts.mapNotNull { it.toWork() }
+    }
+
+    suspend fun searchWorks(
+        word: String,
+        searchTarget: String?,
+        sort: String?,
+        duration: String?,
+        hideAi: Boolean,
+        offset: Int,
+    ): Result<SourcePage> = apiCall {
+        val signature = endpoints.clientSignature(runtime.now())
+        val response = appApi.searchIllust(
+            clientTime = signature.time,
+            clientHash = signature.hash,
+            word = word,
+            searchTarget = searchTarget,
+            sort = sort,
+            duration = duration,
+            searchAiType = if (hideAi) 0 else null,
+            offset = offset,
+        )
+        SourcePage(items = response.illusts.mapNotNull { it.toWork() })
+    }
+
+    suspend fun searchUsers(word: String, offset: Int): Result<List<FollowUser>> = apiCall {
+        val signature = endpoints.clientSignature(runtime.now())
+        val response = appApi.searchUser(
+            clientTime = signature.time,
+            clientHash = signature.hash,
+            word = word,
+            offset = offset,
+        )
+        response.userPreviews.mapNotNull { it.toFollowUser() }
+    }
+
+    suspend fun suggest(word: String): Result<List<SourceSuggestion>> = apiCall {
+        val signature = endpoints.clientSignature(runtime.now())
+        val response = appApi.autocomplete(
+            clientTime = signature.time,
+            clientHash = signature.hash,
+            word = word,
+        )
+        response.tags
+            .filter { it.name.isNotBlank() }
+            .map { SourceSuggestion(name = it.name, translatedName = it.translatedName) }
+    }
+
+    suspend fun trendingTags(): Result<List<SourceTrendingTag>> = apiCall {
+        val signature = endpoints.clientSignature(runtime.now())
+        val response = appApi.trendingTags(
+            clientTime = signature.time,
+            clientHash = signature.hash,
+        )
+        response.trendTags.mapNotNull { it.toTrendingTag() }
     }
 
     /** 关注流：已关注画师的新作，时间倒序，与推荐同为 offset 翻页。需登录，未登录时调用方不该发起 */
@@ -284,3 +343,27 @@ internal fun PixivRankingItem.toWork(): Work = Work(
     r18 = contentType.sexual > 0,
     source = WorkSource.PIXIV,
 )
+
+/** 用户搜索条目 → 用户行；id 解析不出的丢掉 */
+internal fun PixivUserPreview.toFollowUser(): FollowUser? {
+    val id = user.userId
+    if (id <= 0L) return null
+    return FollowUser(
+        userId = id,
+        name = user.name,
+        avatarUrl = user.profileImageUrls.medium.ifBlank { null },
+        followed = user.isFollowed,
+    )
+}
+
+internal fun PixivTrendTag.toTrendingTag(): SourceTrendingTag? {
+    val thumb = illust.imageUrls.large.ifBlank { illust.imageUrls.medium }.ifBlank { illust.imageUrls.squareMedium }
+    if (tag.isBlank() || thumb.isBlank()) return null
+    return SourceTrendingTag(
+        name = tag,
+        translatedName = translatedName,
+        thumbnailUrl = thumb,
+        width = illust.width,
+        height = illust.height,
+    )
+}
