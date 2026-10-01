@@ -13,6 +13,7 @@ import com.piku.client.domain.source.ShellFavorites
 import com.piku.client.domain.source.SourceAuth
 import com.piku.client.domain.source.SourceContentBackup
 import com.piku.client.domain.source.SourceSearch
+import com.piku.client.ui.home.drawer.PixivDrawerPlugin
 import com.piku.client.ui.home.drawer.PoipikuDrawerPlugin
 import com.piku.client.ui.home.drawer.SourceDrawerPlugin
 import com.piku.client.ui.source.SourceFeedConfig
@@ -59,6 +60,10 @@ object SourceModule {
     @Provides
     @IntoSet
     fun poipikuDrawerPlugin(impl: PoipikuDrawerPlugin): SourceDrawerPlugin = impl
+
+    @Provides
+    @IntoSet
+    fun pixivDrawerPlugin(impl: PixivDrawerPlugin): SourceDrawerPlugin = impl
 
     /** 收藏态与收藏切换同理：外壳只依赖能力接口 */
     @Provides

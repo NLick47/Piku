@@ -21,6 +21,7 @@ import androidx.lifecycle.ViewModel
 import com.piku.client.R
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.domain.model.Work
+import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.model.key
 import com.piku.client.domain.source.SourceAuthorOpen
 import com.piku.client.domain.source.SourceRegistry
@@ -73,7 +74,8 @@ internal fun SourceWorkOpenHost(
             onDismiss()
         }
 
-        SourceWorkOpen.InAppViewer -> if (work.r18 && !adultEnabled) {
+        // 成人门只对 poipiku 系生效：pixiv 的 R-18 由账号侧表示设置在服务端管控，不再设门
+        SourceWorkOpen.InAppViewer -> if (work.source != WorkSource.PIXIV && work.r18 && !adultEnabled) {
             AlertDialog(
                 onDismissRequest = onDismiss,
                 title = { Text(stringResource(R.string.detail_gate_adult_title)) },

@@ -3,7 +3,6 @@ package com.piku.client.ui.source
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.piku.client.R
-import com.piku.client.data.local.SettingsRepository
 import com.piku.client.domain.model.WorkKey
 import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.source.ContentSource
@@ -24,7 +23,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -49,7 +47,6 @@ class SourceFeedViewModel @Inject constructor(
     observeHomeSourceUseCase: ObserveHomeSourceUseCase,
     /** 与 isLoggedIn 同一取舍：只依赖能力接口而非仓库，外壳保持无状态依赖，单测也好塞 */
     private val favorites: ShellFavorites,
-    private val settingsRepository: SettingsRepository,
     /** 按源问登录态：poipiku 与 pixiv 是两套账号体系，互不放行 */
     private val sourceAuth: SourceAuthRegistry,
     private val config: SourceFeedConfig,
@@ -84,8 +81,6 @@ class SourceFeedViewModel @Inject constructor(
         val loginRoute: String? = null,
         /** 收藏状态（键带源）：卡片心形与详情都从这里取 */
         val favoriteIds: Set<WorkKey> = emptySet(),
-        /** 看图器的 R-18 门：与 poipiku 详情的门同开关，但判定在查看器自己这里 */
-        val adultEnabled: Boolean = false,
     )
 
     private val _ui = MutableStateFlow(UiState())
@@ -119,13 +114,6 @@ class SourceFeedViewModel @Inject constructor(
             favorites.favoriteIds.collect { ids ->
                 _ui.update { it.copy(favoriteIds = ids) }
             }
-        }
-        // R-18 过滤发生在源的取页里：开关一变，缓存里的旧页就脏了，整体失效重建
-        viewModelScope.launch {
-            settingsRepository.showAdultContent
-                .onEach { enabled -> _ui.update { it.copy(adultEnabled = enabled) } }
-                .drop(1)
-                .collect { invalidateAll() }
         }
     }
 

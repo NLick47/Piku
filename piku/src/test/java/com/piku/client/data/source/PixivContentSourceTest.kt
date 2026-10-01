@@ -3,8 +3,6 @@ package com.piku.client.data.source
 import com.piku.client.data.auth.PixivAuthEndpoints
 import com.piku.client.data.auth.PixivAuthRuntime
 import com.piku.client.data.auth.pixivClientHash
-import com.piku.client.data.local.InMemorySharedPreferences
-import com.piku.client.data.local.SettingsRepository
 import com.piku.client.data.remote.pixiv.PixivApi
 import com.piku.client.data.remote.pixiv.PixivAppActionResponse
 import com.piku.client.data.remote.pixiv.PixivAppApi
@@ -214,7 +212,7 @@ class PixivContentSourceTest {
         )
 
     private fun source(api: FakeApi, appApi: FakeAppApi = FakeAppApi()): PixivContentSource =
-        PixivContentSource(repository(api, appApi), SettingsRepository(InMemorySharedPreferences()))
+        PixivContentSource(repository(api, appApi))
 
     private fun appIllust(id: String, xRestrict: Int = 0) = PixivAppIllust(
         id = id,
@@ -260,25 +258,18 @@ class PixivContentSourceTest {
         assertEquals(-1, work.categoryCd)
     }
 
-    /** R-18 在源里过滤，跟随成人内容开关；开关关着时 sexual>0 的条目不得出现 */
+    /** R-18/敏感的下发由 pixiv 账号侧表示设置在服务端管控：源里不过滤，sexual>0 的条目原样透出 */
     @Test
-    fun r18EntriesHiddenWhenAdultContentDisabled() = runTest {
-        val prefs = InMemorySharedPreferences()
-        val settings = SettingsRepository(prefs)
+    fun r18EntriesPassThroughUntouched() = runTest {
         val api = FakeApi().apply {
             response = PixivRankingResponse(
                 contents = listOf(item(1), item(2, sexual = 1), item(3, sexual = 2)),
             )
         }
 
-        val hidden = PixivContentSource(repository(api), settings)
-            .page(PixivContentSource.FEED_RANKING, emptyMap(), 0).getOrThrow()
-        assertEquals(listOf(1L), hidden.items.map { it.id })
+        val page = source(api).page(PixivContentSource.FEED_RANKING, emptyMap(), 0).getOrThrow()
 
-        settings.setShowAdultContent(true)
-        val shown = PixivContentSource(repository(api), settings)
-            .page(PixivContentSource.FEED_RANKING, emptyMap(), 0).getOrThrow()
-        assertEquals(listOf(1L, 2L, 3L), shown.items.map { it.id })
+        assertEquals(listOf(1L, 2L, 3L), page.items.map { it.id })
     }
 
     /**
@@ -414,17 +405,17 @@ class PixivContentSourceTest {
         assertEquals(pixivClientHash(time), hash)
     }
 
-    /** 推荐卡带原作宽高（按比例排版用）；R-18 依旧跟随成人内容开关 */
+    /** 推荐卡带原作宽高（按比例排版用）；R-18 不再被源过滤 */
     @Test
-    fun recommendedCarriesSizeAndHidesR18WhenDisabled() = runTest {
+    fun recommendedCarriesSizeAndKeepsR18() = runTest {
         val app = FakeAppApi().apply {
             illusts = listOf(appIllust("1"), appIllust("2", xRestrict = 1))
         }
 
         val page = source(FakeApi(), app).page(PixivContentSource.FEED_RECOMMEND, emptyMap(), 0).getOrThrow()
 
-        assertEquals(listOf(1L), page.items.map { it.id })
-        val work = page.items.single()
+        assertEquals(listOf(1L, 2L), page.items.map { it.id })
+        val work = page.items.first()
         assertEquals(1200, work.thumbWidth)
         assertEquals(1800, work.thumbHeight)
         assertEquals("https://i.pximg.net/1.jpg", work.thumbnailUrl)
@@ -444,17 +435,17 @@ class PixivContentSourceTest {
         assertTrue(app.followCalls.all { it.second == PixivAppConfig.RESTRICT_PUBLIC })
     }
 
-    /** 关注卡同样按比例排版；R-18 跟随成人内容开关 */
+    /** 关注卡同样按比例排版；R-18 不再被源过滤 */
     @Test
-    fun followCarriesSizeAndHidesR18WhenDisabled() = runTest {
+    fun followCarriesSizeAndKeepsR18() = runTest {
         val app = FakeAppApi().apply {
             illusts = listOf(appIllust("1"), appIllust("2", xRestrict = 1))
         }
 
         val page = source(FakeApi(), app).page(PixivContentSource.FEED_FOLLOW, emptyMap(), 0).getOrThrow()
 
-        assertEquals(listOf(1L), page.items.map { it.id })
-        val work = page.items.single()
+        assertEquals(listOf(1L, 2L), page.items.map { it.id })
+        val work = page.items.first()
         assertEquals(1200, work.thumbWidth)
         assertEquals(1800, work.thumbHeight)
         assertEquals("https://i.pximg.net/1.jpg", work.thumbnailUrl)
@@ -514,17 +505,17 @@ class PixivContentSourceTest {
         )
     }
 
-    /** 新着卡同样按比例排版；R-18 跟随成人内容开关 */
+    /** 新着卡同样按比例排版；R-18 不再被源过滤 */
     @Test
-    fun latestCarriesSizeAndHidesR18WhenDisabled() = runTest {
+    fun latestCarriesSizeAndKeepsR18() = runTest {
         val app = FakeAppApi().apply {
             illusts = listOf(appIllust("1"), appIllust("2", xRestrict = 1))
         }
 
         val page = source(FakeApi(), app).page(PixivContentSource.FEED_LATEST, emptyMap(), 0).getOrThrow()
 
-        assertEquals(listOf(1L), page.items.map { it.id })
-        val work = page.items.single()
+        assertEquals(listOf(1L, 2L), page.items.map { it.id })
+        val work = page.items.first()
         assertEquals(1200, work.thumbWidth)
         assertEquals(1800, work.thumbHeight)
         assertEquals("https://i.pximg.net/1.jpg", work.thumbnailUrl)

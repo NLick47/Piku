@@ -12,6 +12,12 @@ interface SourceDrawerPlugin {
     val source: WorkSource
 
     /**
+     * 本源接管外壳设置区的「成人内容」行：true 时外壳不再渲染通用 R-18 开关。
+     * 用于开关对本源无效的源（如 pixiv：R-18/敏感的下发由账号侧表示设置在服务端管控）。
+     */
+    val ownsAdultRow: Boolean get() = false
+
+    /**
      * 组合期声明本源的抽屉贡献。在这里读本源的登录态/资料流，决定给哪些条目；
      * 没有独有功能就不覆写。条目会由外壳按 [DrawerContribution.slot] 插进固定排版。
      */

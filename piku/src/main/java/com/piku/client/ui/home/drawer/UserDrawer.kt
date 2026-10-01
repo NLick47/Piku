@@ -353,12 +353,15 @@ private fun DrawerPanel(
                 dark = dark,
                 accent = iconAccent,
             )
-            AdultContentRow(
-                adultEnabled = adultEnabled,
-                onToggleAdult = onToggleAdult,
-                dark = dark,
-                accent = iconAccent,
-            )
+            // 本源接管了成人行的（如 pixiv：R-18 由账号侧服务端管控，开关无效）不再渲染
+            if (sourceDrawer?.ownsAdultRow != true) {
+                AdultContentRow(
+                    adultEnabled = adultEnabled,
+                    onToggleAdult = onToggleAdult,
+                    dark = dark,
+                    accent = iconAccent,
+                )
+            }
             DrawerMenuRow(
                 icon = Icons.Outlined.DarkMode,
                 label = stringResource(R.string.menu_theme),

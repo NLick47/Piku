@@ -257,8 +257,6 @@ class SourceWorkDetailViewModel @Inject constructor(
         viewModelScope.launch {
             // 按作品自己的源取页：跨源列表（收藏/历史）点进来的作品不必等于当前首页源
             val source = sourceRegistry.byId(work.source)
-            // 与榜单同源的过滤口径：关掉成人内容显示时，相关作品里的 R-18 也一并去掉
-            val adultEnabled = settingsRepository.showAdultContent.first()
             // 取页与取文本并行：总耗时从两次相加变成取最慢的一个
             coroutineScope {
                 val pagesDeferred = async { source.workPages(work) }
@@ -292,9 +290,14 @@ class SourceWorkDetailViewModel @Inject constructor(
                         // 相关作品单独一路：详情先出来，它后到就补在底部，取不到就算了
                         launch {
                             val related = source.relatedWorks(work).getOrNull().orEmpty()
-                            _ui.update {
-                                it.copy(related = related.filter { item -> adultEnabled || !item.r18 })
+                            // 成人门跟源走：pixiv 由账号侧服务端管控不再过滤，poipiku 沿用成人开关
+                            val filtered = if (work.source == WorkSource.PIXIV) {
+                                related
+                            } else {
+                                val adultEnabled = settingsRepository.showAdultContent.first()
+                                related.filter { item -> adultEnabled || !item.r18 }
                             }
+                            _ui.update { it.copy(related = filtered) }
                         }
                         // 与 poipiku 详情一致：打开即记历史（upsert 去重）
                         recordHistoryUseCase(work)

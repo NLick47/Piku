@@ -178,11 +178,8 @@ class PixivSearchSourceTest {
         runtime = PixivAuthRuntime(dispatcher = Dispatchers.Unconfined, now = { FIXED_NOW }),
     )
 
-    private fun source(appApi: FakeAppApi, adult: Boolean = true): PixivSearchSource {
-        val settings = SettingsRepository(InMemorySharedPreferences())
-        settings.setShowAdultContent(adult)
-        return PixivSearchSource(repository(appApi), settings)
-    }
+    private fun source(appApi: FakeAppApi): PixivSearchSource =
+        PixivSearchSource(repository(appApi))
 
     private companion object {
         const val FIXED_NOW = 1_700_000_000_000L
@@ -290,10 +287,10 @@ class PixivSearchSourceTest {
         assertEquals(PixivSearchSource.TARGET_EXACT, appApi.searchCalls.single().searchTarget)
     }
 
-    // ---------------- 本地 R-18 开关与内容源同规则 ----------------
+    // ---------------- R-18 不再本地过滤（下发由账号侧表示设置在服务端管控） ----------------
 
     @Test
-    fun r18FilteredByLocalAdultSwitch() = runTest {
+    fun r18ResultsPassThroughUntouched() = runTest {
         val r18 = PixivAppIllust(
             id = "1",
             title = "r18",
@@ -304,12 +301,9 @@ class PixivSearchSourceTest {
 
         val appApi = FakeAppApi().apply { searchResponse = PixivIllustsResponse(illusts = listOf(r18, normal)) }
 
-        val filtered = source(appApi, adult = false).searchWorks("x", emptyMap(), 0).getOrThrow().items
-        assertEquals(listOf(2L), filtered.map { it.id })
-        assertFalse(filtered.first().r18)
-
-        val kept = source(appApi, adult = true).searchWorks("x", emptyMap(), 0).getOrThrow().items
-        assertEquals(2, kept.size)
+        val items = source(appApi).searchWorks("x", emptyMap(), 0).getOrThrow().items
+        assertEquals(listOf(1L, 2L), items.map { it.id })
+        assertTrue(items.first().r18)
     }
 
     // ---------------- 用户搜索与关注路由 ----------------

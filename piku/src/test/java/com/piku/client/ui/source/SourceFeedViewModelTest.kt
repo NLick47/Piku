@@ -139,19 +139,18 @@ class SourceFeedViewModelTest {
         fake: FakeSource,
         auth: FakeAuth = FakeAuth(WorkSource.PIXIV, loggedIn = true),
         startSource: WorkSource = WorkSource.PIXIV,
-    ): Pair<SourceFeedViewModel, SettingsRepository> {
+    ): SourceFeedViewModel {
         val settings = SettingsRepository(InMemorySharedPreferences())
         settings.setHomeSource(startSource)
         val vm = SourceFeedViewModel(
             sourceRegistry = SourceRegistry(setOf(fake)),
             observeHomeSourceUseCase = ObserveHomeSourceUseCase(settings),
             favorites = FakeFavorites(),
-            settingsRepository = settings,
             sourceAuth = SourceAuthRegistry(setOf(auth)),
             config = SourceFeedConfig(prefetchEnabled = false),
         )
         dispatcher.scheduler.advanceUntilIdle()
-        return vm to settings
+        return vm
     }
 
     @Test
@@ -160,7 +159,7 @@ class SourceFeedViewModelTest {
             items = listOf(work(1), work(2))
             totalPages = 5
         }
-        val (vm, _) = build(fake)
+        val vm = build(fake)
 
         val s = vm.ui.value
         assertEquals(WorkSource.PIXIV, s.source)
@@ -177,7 +176,7 @@ class SourceFeedViewModelTest {
     @Test
     fun facetSwitchReloadsWithSameFeed() {
         val fake = FakeSource().apply { items = listOf(work(1)) }
-        val (vm, _) = build(fake)
+        val vm = build(fake)
 
         vm.selectFacet("type", "illust")
         dispatcher.scheduler.advanceUntilIdle()
@@ -198,7 +197,7 @@ class SourceFeedViewModelTest {
     @Test
     fun facetSwitchBackReusesCachedLoaderWithoutRefetch() {
         val fake = FakeSource().apply { items = listOf(work(1)) }
-        val (vm, _) = build(fake)
+        val vm = build(fake)
 
         vm.selectFacet("type", "illust")
         dispatcher.scheduler.advanceUntilIdle()
@@ -216,7 +215,7 @@ class SourceFeedViewModelTest {
     @Test
     fun loginGatedFeedSendsNoRequestWhenLoggedOut() {
         val fake = FakeSource().apply { items = listOf(work(1)) }
-        val (vm, _) = build(fake, FakeAuth(WorkSource.PIXIV, loggedIn = false))
+        val vm = build(fake, FakeAuth(WorkSource.PIXIV, loggedIn = false))
 
         vm.selectFeed("secret")
         dispatcher.scheduler.advanceUntilIdle()
@@ -230,7 +229,7 @@ class SourceFeedViewModelTest {
     @Test
     fun loginGatedFeedLoadsWhenLoggedIn() {
         val fake = FakeSource().apply { items = listOf(work(9)) }
-        val (vm, _) = build(fake, FakeAuth(WorkSource.PIXIV, loggedIn = true))
+        val vm = build(fake, FakeAuth(WorkSource.PIXIV, loggedIn = true))
 
         vm.selectFeed("secret")
         dispatcher.scheduler.advanceUntilIdle()
@@ -247,7 +246,7 @@ class SourceFeedViewModelTest {
             items = listOf(work(1), work(2))
             totalPages = 1
         }
-        val (vm, _) = build(fake)
+        val vm = build(fake)
 
         vm.loadMore()
         dispatcher.scheduler.advanceUntilIdle()
@@ -261,7 +260,7 @@ class SourceFeedViewModelTest {
     @Test
     fun loadMoreAppendsPagesWhenTotalPagesUnknown() {
         val fake = FakeSource().apply { items = listOf(work(1)) }
-        val (vm, _) = build(fake)
+        val vm = build(fake)
         vm.loadMore()
         dispatcher.scheduler.advanceUntilIdle()
         // 同一条目重复返回会被引擎按 id 去重
@@ -275,7 +274,7 @@ class SourceFeedViewModelTest {
         val fake = FakeSource().apply {
             outcome = Result.failure(AppError.Network)
         }
-        val (vm, _) = build(fake)
+        val vm = build(fake)
 
         assertTrue(vm.ui.value.failed)
 
@@ -305,7 +304,7 @@ class SourceFeedViewModelTest {
                 ),
             )
         }
-        val (vm, _) = build(fake)
+        val vm = build(fake)
 
         assertEquals(mapOf("type" to "illust"), vm.ui.value.facetChoices)
         assertEquals(listOf(Triple("popular", mapOf("type" to "illust"), 0)), fake.pages)
@@ -315,7 +314,7 @@ class SourceFeedViewModelTest {
     @Test
     fun openRoutesBySourceDeclaration() {
         val fake = FakeSource().apply { items = listOf(work(1)) }
-        val (vm, _) = build(fake)
+        val vm = build(fake)
         val work = vm.ui.value.items.first()
 
         assertEquals(SourceWorkOpen.InAppViewer, vm.open(work))
@@ -324,31 +323,11 @@ class SourceFeedViewModelTest {
         assertEquals(SourceWorkOpen.External("https://example.com/${work.id}"), vm.open(work))
     }
 
-    /** R-18 门的数据源：成人开关的当前值要能到达壳状态（初始值也算） */
-    @Test
-    fun adultToggleReachesShellState() {
-        val fake = FakeSource().apply { items = listOf(work(1)) }
-        val settings = SettingsRepository(InMemorySharedPreferences())
-        settings.setShowAdultContent(true)
-        settings.setHomeSource(WorkSource.PIXIV)
-        val vm = SourceFeedViewModel(
-            sourceRegistry = SourceRegistry(setOf(fake)),
-            observeHomeSourceUseCase = ObserveHomeSourceUseCase(settings),
-            favorites = FakeFavorites(),
-            settingsRepository = settings,
-            sourceAuth = SourceAuthRegistry(setOf(FakeAuth(WorkSource.PIXIV, loggedIn = true))),
-            config = SourceFeedConfig(prefetchEnabled = false),
-        )
-        dispatcher.scheduler.advanceUntilIdle()
-
-        assertTrue(vm.ui.value.adultEnabled)
-    }
-
     /** poipiku 是主源，由 HomeViewModel 的壳负责：通用壳不得为它建加载器 */
     @Test
     fun poipikuSelectionNeverTriggersLoads() {
         val fake = FakeSource()
-        val (vm, _) = build(fake, startSource = WorkSource.POIPIKU)
+        val vm = build(fake, startSource = WorkSource.POIPIKU)
 
         dispatcher.scheduler.advanceUntilIdle()
 
@@ -368,7 +347,7 @@ class SourceFeedViewModelTest {
                 SourceFeed(id = "ranking", labelRes = R.string.pixiv_tab_ranking, ranked = true),
             )
         }
-        val (vm, _) = build(fake, FakeAuth(WorkSource.PIXIV, loggedIn = false))
+        val vm = build(fake, FakeAuth(WorkSource.PIXIV, loggedIn = false))
 
         assertEquals("ranking", vm.ui.value.feedId)
         assertTrue("榜单流要给壳带名次标记", vm.ui.value.ranked)
@@ -384,7 +363,7 @@ class SourceFeedViewModelTest {
                 SourceFeed(id = "ranking", labelRes = R.string.pixiv_tab_ranking),
             )
         }
-        val (vm, _) = build(fake)
+        val vm = build(fake)
         fake.pages.clear()
 
         vm.selectFeed("recommend")
@@ -422,7 +401,7 @@ class SourceFeedViewModelTest {
                 ),
             )
         }
-        val (vm, _) = build(fake)
+        val vm = build(fake)
 
         assertEquals(mapOf("period" to "daily", "type" to "all"), vm.ui.value.facetChoices)
 
@@ -450,7 +429,6 @@ class SourceFeedViewModelTest {
             sourceRegistry = SourceRegistry(setOf(fake)),
             observeHomeSourceUseCase = ObserveHomeSourceUseCase(settings),
             favorites = favorites,
-            settingsRepository = settings,
             sourceAuth = SourceAuthRegistry(setOf(FakeAuth(WorkSource.PIXIV, loggedIn = true))),
             config = SourceFeedConfig(prefetchEnabled = false),
         )
@@ -469,7 +447,7 @@ class SourceFeedViewModelTest {
     @Test
     fun loginGateCarriesSourceLoginRoute() {
         val fake = FakeSource().apply { items = listOf(work(1)) }
-        val (vm, _) = build(fake, FakeAuth(WorkSource.PIXIV, loggedIn = false))
+        val vm = build(fake, FakeAuth(WorkSource.PIXIV, loggedIn = false))
 
         vm.selectFeed("secret")
         dispatcher.scheduler.advanceUntilIdle()
@@ -489,7 +467,7 @@ class SourceFeedViewModelTest {
             )
         }
         val auth = FakeAuth(WorkSource.PIXIV, loggedIn = false)
-        val (vm, _) = build(fake, auth)
+        val vm = build(fake, auth)
 
         vm.selectFeed("secret")
         dispatcher.scheduler.advanceUntilIdle()
@@ -516,7 +494,7 @@ class SourceFeedViewModelTest {
             )
         }
         val auth = FakeAuth(WorkSource.PIXIV, loggedIn = true)
-        val (vm, _) = build(fake, auth)
+        val vm = build(fake, auth)
 
         vm.selectFeed("secret")
         dispatcher.scheduler.advanceUntilIdle()
@@ -544,7 +522,7 @@ class SourceFeedViewModelTest {
             )
         }
         val auth = FakeAuth(WorkSource.PIXIV, loggedIn = false)
-        val (vm, _) = build(fake, auth)
+        val vm = build(fake, auth)
 
         vm.selectFeed("follow")
         dispatcher.scheduler.advanceUntilIdle()
@@ -571,7 +549,6 @@ class SourceFeedViewModelTest {
             sourceRegistry = SourceRegistry(setOf(fake)),
             observeHomeSourceUseCase = ObserveHomeSourceUseCase(settings),
             favorites = FakeFavorites(),
-            settingsRepository = settings,
             sourceAuth = SourceAuthRegistry(emptySet()),
             config = SourceFeedConfig(prefetchEnabled = false),
         )

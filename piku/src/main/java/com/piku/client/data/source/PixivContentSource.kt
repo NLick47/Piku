@@ -1,7 +1,6 @@
 package com.piku.client.data.source
 
 import com.piku.client.R
-import com.piku.client.data.local.SettingsRepository
 import com.piku.client.data.remote.pixiv.PixivAppConfig
 import com.piku.client.data.repository.PixivRepository
 import com.piku.client.domain.model.AppError
@@ -17,14 +16,12 @@ import com.piku.client.domain.source.SourcePage
 import com.piku.client.domain.source.SourceWorkOpen
 import com.piku.client.domain.source.SourceWorkPage
 import com.piku.client.domain.source.SourceWorkText
-import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class PixivContentSource @Inject constructor(
     private val repository: PixivRepository,
-    private val settingsRepository: SettingsRepository,
 ) : ContentSource {
 
     override val id = WorkSource.PIXIV
@@ -40,7 +37,6 @@ class PixivContentSource @Inject constructor(
     override suspend fun page(feedId: String, facets: Map<String, String>, page: Int): Result<SourcePage> {
         // 登录门未开前其余流不可达；真到达即实现缺口，给终态而非空页
         if (feedId !in IMPLEMENTED_FEEDS) return Result.failure(AppError.NotFound)
-        val adultEnabled = settingsRepository.showAdultContent.first()
         val offset = page * PixivAppConfig.PAGE_SIZE
         val result = when (feedId) {
             FEED_RECOMMEND -> repository.recommendedFeed(offset = offset)
@@ -62,7 +58,8 @@ class PixivContentSource @Inject constructor(
                     if (page > 0 && error == AppError.NotFound) SourcePage(items = emptyList()) else throw error
                 }
         }
-        return result.map { it.copy(items = if (adultEnabled) it.items else it.items.filterNot { work -> work.r18 }) }
+        // R-18/敏感的下发由 pixiv 账号侧表示设置在服务端管控，客户端不再过滤
+        return result
     }
 
     private suspend fun latestPage(facets: Map<String, String>, page: Int): Result<SourcePage> {

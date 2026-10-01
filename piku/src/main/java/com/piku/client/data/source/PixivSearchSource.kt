@@ -1,7 +1,6 @@
 package com.piku.client.data.source
 
 import com.piku.client.R
-import com.piku.client.data.local.SettingsRepository
 import com.piku.client.data.repository.PixivRepository
 import com.piku.client.data.remote.pixiv.PixivAppConfig
 import com.piku.client.domain.model.FollowUser
@@ -15,7 +14,6 @@ import com.piku.client.domain.source.SearchFilterToggleSpec
 import com.piku.client.domain.source.SourceSuggestion
 import com.piku.client.domain.source.SourceSearch
 import com.piku.client.domain.source.SourceTrendingTag
-import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -26,7 +24,6 @@ import javax.inject.Singleton
 @Singleton
 class PixivSearchSource @Inject constructor(
     private val repository: PixivRepository,
-    private val settingsRepository: SettingsRepository,
 ) : SourceSearch {
 
     override val sourceId = WorkSource.PIXIV
@@ -50,7 +47,6 @@ class PixivSearchSource @Inject constructor(
         filters: Map<String, String>,
         page: Int,
     ): Result<SourcePage> {
-        val adultEnabled = settingsRepository.showAdultContent.first()
         return repository.searchWorks(
             word = query,
             searchTarget = filters[GROUP_TARGET]?.ifBlank { null } ?: TARGET_PARTIAL,
@@ -58,7 +54,7 @@ class PixivSearchSource @Inject constructor(
             duration = filters[GROUP_DURATION]?.ifBlank { null },
             hideAi = filters[TOGGLE_HIDE_AI] == FILTER_TOGGLE_ON,
             offset = page * PixivAppConfig.PAGE_SIZE,
-        ).map { r18 -> r18.copy(items = if (adultEnabled) r18.items else r18.items.filterNot { it.r18 }) }
+        )
     }
 
     // 标签 tab 点中的是确定的标签，按完全一致检索，其余筛选照常生效
