@@ -272,8 +272,6 @@ internal fun PixivAppIllust.toWork(): Work? {
     val illustId = illustId
     val thumb = imageUrls.large.ifBlank { imageUrls.medium }.ifBlank { imageUrls.squareMedium }
     if (illustId <= 0 || thumb.isBlank()) return null
-    // 审查占位条目：pixiv 把标题作者全空、头像换 no_profile 没法看也没法查 直接丢
-    if ("/common/images/limit_" in thumb) return null
     return Work(
         id = illustId,
         authorId = user.userId,

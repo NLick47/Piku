@@ -90,8 +90,9 @@ class PixivRecommendedMappingTest {
     }
 
     @Test
-    fun sanityGatedPlaceholderEntryIsDropped() {
+    fun sanityGatedPlaceholderEntryPassesThrough() {
         // pixiv 对审查拦下的作品回匿名条目：缩略图是占位图 名字头像全空
+        // 客户端不替 pixiv 过滤，原样透出（点击进详情由可见性接口自然给终态）
         val placeholder = "https://s.pximg.net/common/images/limit_sanity_level_360.png"
         val gated = illust(
             urls = PixivAppImageUrls(squareMedium = placeholder, medium = placeholder, large = placeholder),
@@ -102,6 +103,9 @@ class PixivRecommendedMappingTest {
             ),
         )
 
-        assertNull(gated.toWork())
+        val work = gated.toWork()
+        assertEquals(99L, work?.authorId)
+        assertEquals(placeholder, work?.thumbnailUrl)
+        assertEquals("", work?.authorName)
     }
 }
