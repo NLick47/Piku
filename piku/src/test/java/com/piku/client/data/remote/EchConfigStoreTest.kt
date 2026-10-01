@@ -101,4 +101,67 @@ class EchConfigStoreTest {
         assertNull("缓存空时就是 null，不能递归", store.current())
         assertFalse(store.isFresh())
     }
+
+    @Test
+    fun restoredConfigIsServedWithoutTouchingTheNetwork() {
+        var fetches = 0
+        val store = EchConfigStore(
+            fetcher = {
+                fetches++
+                aliDnsRecord
+            },
+            restore = { parsedConfig() to System.currentTimeMillis() + 60_000 },
+        )
+
+        val config = store.currentOrFetch(8_000)
+
+        assertEquals("盘上的配置要直接能用", parsedConfig().toList(), config!!.toList())
+        assertEquals("不该发起任何拉取", 0, fetches)
+    }
+
+    @Test
+    fun expiredRestoredConfigIsStillServed() {
+        // 过期配置照样给：后台刷新去，请求不等它
+        val store = EchConfigStore(
+            fetcher = {
+                Thread.sleep(300)
+                aliDnsRecord
+            },
+            restore = { parsedConfig() to System.currentTimeMillis() - 1_000 },
+        )
+
+        val config = store.current()
+
+        assertEquals("过期了也不能让 pixiv 断线", parsedConfig().toList(), config!!.toList())
+        assertFalse(store.isFresh())
+    }
+
+    @Test
+    fun successfulFetchIsPersisted() {
+        var saved: Pair<ByteArray, Long>? = null
+        val store = EchConfigStore(
+            fetcher = { aliDnsRecord },
+            persist = { config, expiresAt -> saved = config to expiresAt },
+        )
+
+        assertNotNull(store.currentOrFetch(3_000))
+
+        val (config, expiresAt) = saved!!
+        assertEquals(parsedConfig().toList(), config.toList())
+        assertTrue("落盘的过期时间要在未来", expiresAt > System.currentTimeMillis())
+    }
+
+    @Test
+    fun unparsableAnswerIsReported() {
+        var reported: Exception? = null
+        val store = EchConfigStore(
+            fetcher = { """{"Status":0,"Answer":[]}""" },
+            onError = { reported = it },
+        )
+
+        assertNull(store.currentOrFetch(3_000))
+        assertNotNull("响应解析不出也要留痕，别静默吞掉", reported)
+    }
+
+    private fun parsedConfig(): ByteArray = parseEchRecord(aliDnsRecord)!!.first
 }

@@ -16,10 +16,16 @@ import java.util.concurrent.atomic.AtomicBoolean
  * 于是"线路按 SNI 字符串拦"这条规则就看不见我们真正要访问的域名了。
  *
  * 取配置的通道钉 AliDNS 的 IP：不需要解析，握手也不带 SNI，可拦的东西都没有。
+ *
+ * 配置落盘由 [persist]/[restore] 注入：冷启动直接用上次的，过期也先顶着后台刷新，
+ * 首次安装才需要等一次现场拉取。
  */
 class EchConfigStore(
     private val clock: () -> Long = System::currentTimeMillis,
     private val fetcher: () -> String = ::fetchEchRecord,
+    private val persist: (ByteArray, Long) -> Unit = { _, _ -> },
+    private val restore: () -> Pair<ByteArray, Long>? = { null },
+    private val onError: (Exception) -> Unit = {},
 ) {
 
     private class Entry(val config: ByteArray, val expiresAt: Long)
@@ -31,18 +37,21 @@ class EchConfigStore(
     @Volatile
     private var inFlight: CountDownLatch? = null
 
-    /** 当前可用配置；没有或已过期返回 null（调用方按普通 TLS 走），顺手触发一次后台刷新 */
-    fun current(): ByteArray? {
-        val entry = cached
-        if (entry != null && clock() < entry.expiresAt) return entry.config
-        refreshAsync()
-        return null
+    init {
+        restore()?.let { (config, expiresAt) -> cached = Entry(config, expiresAt) }
     }
 
-    /**
-     * 冷启动第一次请求用：没有缓存就等一次刷新，最多等 [timeoutMs]。
-     * 取不到就返回 null，由调用方报"ECH 配置不可用"，不无限期挂着。
-     */
+    /** 过期也照给：ECH 配置很少变，宁可先用旧的再后台刷新，也不该让请求断线 */
+    fun current(): ByteArray? {
+        val entry = cached ?: run {
+            refreshAsync()
+            return null
+        }
+        if (clock() >= entry.expiresAt) refreshAsync()
+        return entry.config
+    }
+
+    /** 只在盘上也没货时才等一次现场拉取，最多 [timeoutMs] */
     fun currentOrFetch(timeoutMs: Long): ByteArray? {
         current()?.let { return it }
         refreshAsync()
@@ -63,11 +72,18 @@ class EchConfigStore(
         inFlight = latch
         executor.execute {
             try {
-                parseEchRecord(fetcher())?.let { (config, ttlMs) ->
-                    cached = Entry(config, clock() + ttlMs.coerceIn(MIN_TTL_MS, MAX_TTL_MS))
+                val entry = parseEchRecord(fetcher())?.let { (config, ttlMs) ->
+                    val expiresAt = clock() + ttlMs.coerceIn(MIN_TTL_MS, MAX_TTL_MS)
+                    Entry(config, expiresAt)
                 }
-            } catch (_: Exception) {
-                // 取不到就继续用旧的；过期后 current() 自然回落普通 TLS
+                if (entry == null) {
+                    onError(IllegalStateException("DNS 应答里没有可用的 ech 记录"))
+                } else {
+                    cached = entry
+                    persist(entry.config, entry.expiresAt)
+                }
+            } catch (e: Exception) {
+                onError(e)
             } finally {
                 inFlight = null
                 refreshing.set(false)

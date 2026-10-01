@@ -1,6 +1,8 @@
 package com.piku.client.di
 
+import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import com.piku.client.BuildConfig
 import com.piku.client.data.auth.PixivAuthStore
 import com.piku.client.data.auth.pixivAuthHeaders
@@ -38,6 +40,7 @@ import com.piku.client.data.remote.translation.LlmChatApi
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import kotlinx.serialization.json.Json
 import okhttp3.Call
@@ -47,8 +50,10 @@ import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
+import java.io.File
 import java.net.InetSocketAddress
 import java.net.Proxy
+import java.nio.ByteBuffer
 import java.util.concurrent.TimeUnit
 import javax.inject.Named
 import javax.inject.Singleton
@@ -64,10 +69,33 @@ object NetworkModule {
     /**
      * Cloudflare 的共享 ECH 配置：pixiv 的接口直连全靠它（见 piku-ech）。
      * 取配置的通道钉 AliDNS 的 IP，握手不带 SNI，没有可拦的东西。
+     * 配置落盘 filesDir：冷启动不再把"现场拉配置"压在首屏请求的关键路径上。
      */
     @Provides
     @Singleton
-    fun provideEchConfigStore(): EchConfigStore = EchConfigStore()
+    fun provideEchConfigStore(
+        @ApplicationContext context: Context,
+    ): EchConfigStore {
+        val file = File(context.filesDir, ECH_CONFIG_FILE)
+        return EchConfigStore(
+            persist = { config, expiresAt ->
+                runCatching {
+                    file.writeBytes(config + ByteBuffer.allocate(8).putLong(expiresAt).array())
+                }
+            },
+            restore = {
+                runCatching {
+                    val all = file.readBytes()
+                    if (all.size <= 8) return@runCatching null
+                    val expiresAt = ByteBuffer.wrap(all, all.size - 8, 8).long
+                    all.copyOfRange(0, all.size - 8) to expiresAt
+                }.getOrNull()
+            },
+            onError = { e ->
+                Log.w(TAG, "ech config fetch failed: ${e.javaClass.simpleName}: ${e.message}")
+            },
+        )
+    }
 
     @Provides
     @Singleton
@@ -448,9 +476,13 @@ object NetworkModule {
     private const val TRANSLATE_PLACEHOLDER_BASE_URL = "https://localhost/"
     private val USER_AGENT = ApiConfig.PIKU_USER_AGENT
 
+    private const val TAG = "PikuDiag"
+
     /** pixiv 的网页接口对 UA 敏感，用桌面 Chrome 的 UA */
     /** 冷启动第一次请求最多等这么久取 ECH 配置 */
     private const val ECH_CONFIG_WAIT_MS = 8_000L
+
+    private const val ECH_CONFIG_FILE = "ech_config.bin"
 
     private const val PIXIV_USER_AGENT =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
