@@ -29,7 +29,6 @@ import com.piku.client.domain.source.SourceAuthRoutes
 import com.piku.client.ui.collection.CollectionScreen
 import com.piku.client.ui.detail.DetailScreen
 import com.piku.client.ui.detail.rememberWorkDetailPrefetch
-import com.piku.client.ui.follow.FollowUsersScreen
 import com.piku.client.ui.follow.UserWorksScreen
 import com.piku.client.ui.history.HistoryScreen
 import com.piku.client.ui.home.HomeScreen
@@ -58,7 +57,6 @@ object Routes {
     const val DETAIL = "detail/{authorId}/{workId}?thumb={thumb}"
     const val HISTORY = "history"
     const val TAGS = "tags"
-    const val FOLLOW_USERS = "follow_users"
     const val USER_WORKS = "user_works/{userId}?userName={userName}"
     const val MY_POSTS = "my_posts/{userId}?userName={userName}"
     const val EDIT_POST = "edit_post/{workId}"
@@ -66,8 +64,6 @@ object Routes {
     const val MAX_DETAIL_DEPTH = 3
 
     fun home() = "home"
-
-    fun followUsers() = FOLLOW_USERS
 
     /**
      * 统一搜索页：keyword 为空串表示待机态（搜索历史 + 热门标签）；
@@ -297,15 +293,6 @@ fun AppNavHost(
                     },
                 )
             }
-        }
-        composable(Routes.FOLLOW_USERS) {
-            FollowUsersScreen(
-                onBack = safePopBack,
-                onLoginClick = { navController.navigate(Routes.LOGIN) },
-                onUserClick = { user: FollowUser ->
-                    navController.navigate(Routes.userWorks(user.userId, user.name))
-                },
-            )
         }
         composable(
             route = Routes.SEARCH,

@@ -150,10 +150,11 @@ data class PixivTrendIllust(
     val height: Int = 0,
 )
 
-/** v1/search/user 的用户搜索，条目是用户+代表作组合（同关注列表的 user_previews） */
+/** v1/search/user 与 v1/user/following 共用：条目是用户+代表作组合。total 不总在，null = 未知 */
 @Serializable
 data class PixivUserPreviewsResponse(
     @SerialName("user_previews") val userPreviews: List<PixivUserPreview> = emptyList(),
+    val total: Int? = null,
 )
 
 @Serializable
@@ -211,6 +212,16 @@ interface PixivAppApi {
         @Header("X-Client-Hash") clientHash: String,
         @Query("word") word: String,
         @Query("filter") filter: String = "for_android",
+        @Query("offset") offset: Int? = null,
+    ): PixivUserPreviewsResponse
+
+    @GET("v1/user/following")
+    @Headers(HEADER_USER_AGENT, HEADER_APP_OS, HEADER_APP_OS_VERSION, HEADER_APP_VERSION)
+    suspend fun userFollowing(
+        @Header("X-Client-Time") clientTime: String,
+        @Header("X-Client-Hash") clientHash: String,
+        @Query("user_id") userId: Long,
+        @Query("restrict") restrict: String = PixivAppConfig.RESTRICT_PUBLIC,
         @Query("offset") offset: Int? = null,
     ): PixivUserPreviewsResponse
 

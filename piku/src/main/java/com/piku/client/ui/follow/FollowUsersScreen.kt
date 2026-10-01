@@ -43,7 +43,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.piku.client.R
 import com.piku.client.domain.model.FollowUser
@@ -64,15 +63,18 @@ import com.piku.client.ui.theme.LocalDarkTheme
 import com.piku.client.ui.theme.PikuColors
 import kotlinx.coroutines.flow.distinctUntilChanged
 
-/** 我的关注列表页：展示关注的创作者，可跳转其作品页或在行内取消关注 */
+/**
+ * 我的关注列表页（壳子，与源无关）：展示已关注的创作者，可跳转其作品页或在行内取消关注。
+ * 数据由 [viewModel] 给——各源用自己的 Hilt 绑定实例化，壳子只管排版与状态。
+ */
 @Composable
 fun FollowUsersScreen(
+    viewModel: FollowUsersViewModel,
     onBack: () -> Unit,
     onLoginClick: () -> Unit,
     onUserClick: (FollowUser) -> Unit,
     dark: Boolean = LocalDarkTheme.current,
 ) {
-    val viewModel: FollowUsersViewModel = hiltViewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -91,9 +93,8 @@ fun FollowUsersScreen(
         Column(Modifier.fillMaxSize()) {
             FollowTopBar(
                 title = stringResource(R.string.follow_users_title),
-                count = if (state.total > 0) {
-                    stringResource(R.string.follow_users_count, state.total)
-                } else null,
+                count = state.total?.takeIf { it > 0 }
+                    ?.let { stringResource(R.string.follow_users_count, it) },
                 onBack = onBack,
                 dark = dark,
             )
@@ -140,7 +141,7 @@ fun FollowUsersScreen(
                         state = state,
                         dark = dark,
                         onUserClick = onUserClick,
-                        onUnfollow = viewModel::unfollow,
+                        onToggleFollow = viewModel::toggleFollow,
                         onLoadMore = viewModel::loadMore,
                         onRetryLoadMore = viewModel::retryLoadMore,
                     )
@@ -203,7 +204,7 @@ private fun FollowUserList(
     state: FollowUsersUiState,
     dark: Boolean,
     onUserClick: (FollowUser) -> Unit,
-    onUnfollow: (Long) -> Unit,
+    onToggleFollow: (Long) -> Unit,
     onLoadMore: () -> Unit,
     onRetryLoadMore: () -> Unit,
 ) {
@@ -236,7 +237,7 @@ private fun FollowUserList(
                 unfollowed = user.userId in state.unfollowedIds,
                 dark = dark,
                 onClick = { onUserClick(user) },
-                onUnfollow = { onUnfollow(user.userId) },
+                onToggleFollow = { onToggleFollow(user.userId) },
                 modifier = Modifier.animateItem(),
             )
         }
@@ -275,7 +276,7 @@ private fun FollowUserRow(
     unfollowed: Boolean,
     dark: Boolean,
     onClick: () -> Unit,
-    onUnfollow: () -> Unit,
+    onToggleFollow: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(20.dp)
@@ -317,7 +318,7 @@ private fun FollowUserRow(
                 refollow = true,
                 sending = unfollowing,
                 dark = dark,
-                onClick = onUnfollow,
+                onClick = onToggleFollow,
             )
         }
     }

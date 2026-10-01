@@ -164,6 +164,14 @@ class PixivContentSourceTest {
             offset: Int?,
         ): PixivUserPreviewsResponse = PixivUserPreviewsResponse()
 
+        override suspend fun userFollowing(
+            clientTime: String,
+            clientHash: String,
+            userId: Long,
+            restrict: String,
+            offset: Int?,
+        ): PixivUserPreviewsResponse = PixivUserPreviewsResponse()
+
         override suspend fun autocomplete(
             clientTime: String,
             clientHash: String,

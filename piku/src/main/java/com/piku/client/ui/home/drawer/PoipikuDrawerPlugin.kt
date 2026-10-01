@@ -13,6 +13,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.piku.client.R
 import com.piku.client.data.repository.ProfileRepository
@@ -21,6 +22,7 @@ import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.model.UserProfile
 import com.piku.client.ui.follow.BlockUsersScreen
 import com.piku.client.ui.follow.FollowUsersScreen
+import com.piku.client.ui.follow.PoipikuFollowUsersViewModel
 import com.piku.client.ui.profile.ProfileEditSheet
 import com.piku.client.ui.publish.PublishScreen
 import com.piku.client.ui.theme.LocalDarkTheme
@@ -94,6 +96,7 @@ class PoipikuDrawerPlugin @Inject constructor(
                         scope.openOverlay { onDismiss, _ ->
                             FullscreenDrawerOverlay(onDismiss = onDismiss) {
                                 FollowUsersScreen(
+                                    viewModel = hiltViewModel<PoipikuFollowUsersViewModel>(),
                                     onBack = onDismiss,
                                     onLoginClick = scope::openLogin,
                                     onUserClick = { user -> scope.openAuthorProfile(user.userId, user.name) },
@@ -173,23 +176,5 @@ private fun PoipikuPublishOverlay(
                 buildPublishedWork(workId, profile)?.let(onWorkOpen)
             },
         )
-    }
-}
-
-/** 与外壳抽屉页同款的全屏浮层窗：独立窗口天然挡住首页与抽屉点击 */
-@Composable
-private fun FullscreenDrawerOverlay(
-    onDismiss: () -> Unit,
-    content: @Composable () -> Unit,
-) {
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false,
-            dismissOnClickOutside = false,
-        ),
-    ) {
-        content()
     }
 }

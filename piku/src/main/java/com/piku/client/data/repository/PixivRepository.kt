@@ -18,6 +18,7 @@ import com.piku.client.data.remote.pixiv.PixivRankingItem
 import com.piku.client.data.remote.pixiv.PixivUserPreview
 import com.piku.client.data.remote.pixiv.PixivTrendTag
 import com.piku.client.domain.model.FollowUser
+import com.piku.client.domain.model.FollowUserPage
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.model.WorkStats
@@ -104,6 +105,24 @@ class PixivRepository @Inject constructor(
             offset = offset,
         )
         response.userPreviews.mapNotNull { it.toFollowUser() }
+    }
+
+    /**
+     * 我的关注列表。user_id 是**自己**的数字 id（调用方从登录令牌里取）；
+     * offset 翻页，total 接口不保证给（null = 未知，翻页以空页为准）。
+     */
+    suspend fun userFollowing(userId: Long, offset: Int): Result<FollowUserPage> = apiCall {
+        val signature = endpoints.clientSignature(runtime.now())
+        val response = appApi.userFollowing(
+            clientTime = signature.time,
+            clientHash = signature.hash,
+            userId = userId,
+            offset = offset.takeIf { it > 0 },
+        )
+        FollowUserPage(
+            users = response.userPreviews.mapNotNull { it.toFollowUser() },
+            total = response.total,
+        )
     }
 
     suspend fun suggest(word: String): Result<List<SourceSuggestion>> = apiCall {

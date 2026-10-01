@@ -16,6 +16,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -46,6 +47,13 @@ class PixivAuthRepository @Inject constructor(
     private val _account = MutableStateFlow(store.current()?.toAccount())
     override val account: StateFlow<SourceAccount?> = _account.asStateFlow()
 
+    /**
+     * 会话版本：登录/登出换人时自增，订阅方（如关注列表页）据此重拉。
+     * 令牌静默刷新**不**自增——会话没换人，已拉到的数据仍然有效。
+     */
+    private val _sessionVersion = MutableStateFlow(0L)
+    val sessionVersion: StateFlow<Long> = _sessionVersion.asStateFlow()
+
     private val scope = CoroutineScope(SupervisorJob() + runtime.dispatcher)
 
     /** 串行化「换令牌 / 刷新」：两个都可能在途，后到的响应不该盖掉先到的 */
@@ -73,19 +81,25 @@ class PixivAuthRepository @Inject constructor(
                         // 换令牌期间用户已登出：结果作废，不写回登录态
                         if (sessionEpoch.get() != epoch) throw PixivAuthError.Cancelled
                         adopt(token)
+                        _sessionVersion.update { it + 1 }
                     }
             }
         }
 
     override fun logout() {
         Log.d(TAG, "pixiv logout")
+        val hadSession = store.current() != null
         sessionEpoch.incrementAndGet()
         refreshJob?.cancel()
         refreshJob = null
         store.clear()
         _account.value = null
         _status.value = AuthStatus.LOGGED_OUT
+        if (hadSession) _sessionVersion.update { it + 1 }
     }
+
+    /** 当前登录用户的数字 id（关注列表等按 user_id 查询的接口用）；未登录给 null */
+    fun currentUserId(): Long? = store.current()?.userId?.toLongOrNull()
 
     /**
      * 换令牌。**必须留下失败的可诊断信息**：这个端点的失败原因（invalid_grant /

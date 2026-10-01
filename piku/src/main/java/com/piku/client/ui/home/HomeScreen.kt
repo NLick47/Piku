@@ -195,6 +195,11 @@ fun HomeScreen(
 
         override fun openAuthorProfile(uid: Long, name: String) = onProfileOpen(uid, name)
 
+        // 应用内没有对应页时的去向（如 pixiv 用户主页）：交给系统浏览器
+        override fun openExternal(url: String) {
+            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+        }
+
         override fun openOverlay(
             closeDrawer: Boolean,
             content: @Composable (onDismiss: () -> Unit, onClose: () -> Unit) -> Unit,

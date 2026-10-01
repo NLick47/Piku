@@ -68,6 +68,9 @@ interface DrawerScope {
     /** 外壳导航：打开用户主页 */
     fun openAuthorProfile(uid: Long, name: String)
 
+    /** 外壳导航：出站打开网页——应用内没有对应页时的去向（如 pixiv 用户主页） */
+    fun openExternal(url: String)
+
     /**
      * 打开本源声明的浮层（投稿页/资料编辑/列表页都走这一条通道）。
      * [closeDrawer] = 先收起抽屉再开（全屏页）；false = 盖在抽屉上（sheet 类）。

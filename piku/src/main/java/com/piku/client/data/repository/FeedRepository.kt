@@ -84,7 +84,7 @@ class FeedRepository @Inject constructor(
             } else {
                 null
             }
-            FollowUserPage(users = users, total = total ?: users.size)
+            FollowUserPage(users = users, total = total)
         }
 
     /**

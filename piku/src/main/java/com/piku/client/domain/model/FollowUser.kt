@@ -10,5 +10,5 @@ data class FollowUser(
 
 data class FollowUserPage(
     val users: List<FollowUser>,
-    val total: Int,
+    val total: Int? = null,
 )
