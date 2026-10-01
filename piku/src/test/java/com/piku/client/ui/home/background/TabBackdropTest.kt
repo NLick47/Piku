@@ -1,4 +1,8 @@
-package com.piku.client.ui.home
+package com.piku.client.ui.home.background
+
+import com.piku.client.ui.home.FeedTabColors
+import com.piku.client.ui.home.TAB_LUMA_THRESHOLD
+import com.piku.client.ui.home.feedTabColors
 
 import androidx.compose.ui.graphics.Color
 import com.piku.client.data.local.SampledImage

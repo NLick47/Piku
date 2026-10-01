@@ -68,6 +68,17 @@ class PixivRepository @Inject constructor(
         response.illusts.mapNotNull { it.toWork() }
     }
 
+    /** 关注流：已关注画师的新作，时间倒序，与推荐同为 offset 翻页。需登录，未登录时调用方不该发起 */
+    suspend fun followFeed(offset: Int): Result<List<Work>> = apiCall {
+        val signature = endpoints.clientSignature(runtime.now())
+        val response = appApi.followFeed(
+            clientTime = signature.time,
+            clientHash = signature.hash,
+            offset = offset,
+        )
+        response.illusts.mapNotNull { it.toWork() }
+    }
+
     /**
      * 详情补充文本与统计。简介是 HTML 片段：<br /> 换算行、其余标签剥掉（详情壳按纯文本展示）。
      * 计数与元信息同一个接口就带出来了，不再多打一次请求。

@@ -1,4 +1,4 @@
-package com.piku.client.ui.home
+package com.piku.client.ui.home.sheets
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background

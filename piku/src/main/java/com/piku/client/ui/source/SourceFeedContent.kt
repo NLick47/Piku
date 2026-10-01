@@ -84,11 +84,11 @@ import com.piku.client.ui.home.FeedTabColors
 import com.piku.client.ui.home.FeedTabItem
 import com.piku.client.ui.home.GlassHeaderTopPadding
 import com.piku.client.ui.home.LOAD_MORE_NEAR_END
-import com.piku.client.ui.home.LiquidGlassBackdrop
+import com.piku.client.ui.home.background.LiquidGlassBackdrop
 import com.piku.client.ui.home.RefreshNoticeBar
 import com.piku.client.ui.home.SearchMenuButton
 import com.piku.client.ui.home.SkeletonGrid
-import com.piku.client.ui.home.TabBand
+import com.piku.client.ui.home.background.TabBand
 import com.piku.client.ui.home.ThumbnailPrefetchEffect
 import com.piku.client.ui.home.UpdateBannerBar
 import com.piku.client.ui.home.UserMenuButton

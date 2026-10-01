@@ -1,4 +1,6 @@
-package com.piku.client.ui.home
+package com.piku.client.ui.home.background
+
+import com.piku.client.ui.home.HERO_PARALLAX_MAX_PX
 
 import kotlin.math.abs
 import kotlin.math.max

@@ -1,4 +1,7 @@
-package com.piku.client.ui.home
+package com.piku.client.ui.home.sheets
+
+import com.piku.client.ui.home.CatalogRefreshState
+import com.piku.client.ui.home.HomeUiState
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke

@@ -1,114 +1,65 @@
 package com.piku.client.ui.home
 
-import android.app.Activity
 import android.content.Intent
 import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.outlined.CameraAlt
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Wallpaper
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DrawerValue
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.currentStateAsState
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.piku.client.BuildConfig
-import com.piku.client.R
-import com.piku.client.data.local.SettingsRepository
-import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.model.Work
-import com.piku.client.ui.profile.ProfileEditSheet
-import com.piku.client.ui.publish.PublishScreen
-import com.piku.client.ui.common.AvatarViewerDialog
+import com.piku.client.domain.model.WorkSource
 import com.piku.client.ui.common.labelRes
-import com.piku.client.ui.collection.CollectionScreen
-import com.piku.client.ui.follow.BlockUsersScreen
-import com.piku.client.ui.follow.FollowUsersScreen
-import com.piku.client.ui.history.HistoryScreen
-import com.piku.client.ui.tags.TagScreen
+import com.piku.client.ui.home.background.HomeBackdropLayer
+import com.piku.client.ui.home.background.HomeBackgroundEditOverlay
+import com.piku.client.ui.home.background.rememberHomeBackdropState
+import com.piku.client.ui.home.background.rememberHomeBackgroundEdit
+import com.piku.client.ui.home.drawer.AccountsViewModel
+import com.piku.client.ui.home.drawer.UserDrawer
+import com.piku.client.ui.home.shell.PoipikuHomeShell
+import com.piku.client.ui.publish.PublishScreen
 import com.piku.client.ui.source.SourceFeedContent
-import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.LocalDarkTheme
-import com.piku.client.ui.theme.PikuColors
-import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
-private const val GITHUB_REPO_URL = "https://github.com/NLick47/Piku"
-private const val GITHUB_ISSUES_URL = "https://github.com/NLick47/Piku/issues"
-
+/**
+ * 首页宿主：只做装配与分发，不实现任何一块功能——
+ * - 内容壳按当前源分流：主源（poipiku）走 [PoipikuHomeShell]（tab 图标/分类侧栏是主源语义），
+ *   其余源走 ui/source 的声明驱动通用壳 [SourceFeedContent]。新增源注册进
+ *   SourceRegistry / SourceAuthRegistry 后即可换源、登录、展示，宿主与两个壳都不用改。
+ * - 背景域（取景/取色/编辑会话）在 background/ 包，抽屉在 drawer/ 包，
+ *   二级弹层在 [HomeDialogs]，抽屉功能页浮层在 [HomeOverlays]。
+ * - 数据源隔离：宿主不接触任何源的凭据与实现细节，账号信息一律经
+ *   AccountsViewModel 的"当前源账号行"（源自己声明登录态与路由）。
+ */
 @Composable
 fun HomeScreen(
     shouldReopenDrawer: Boolean = false,
@@ -129,70 +80,31 @@ fun HomeScreen(
     // 抽屉头部显示的是"当前首页源"的账号，所以这里跟的是账号源而不是 poipiku 的登录态
     val accountsViewModel: AccountsViewModel = hiltViewModel()
     val headerAccount by accountsViewModel.current.collectAsStateWithLifecycle()
-    var isBackgroundEditMode by rememberSaveable { mutableStateOf(false) }
-    var bgPreviewMode by rememberSaveable { mutableIntStateOf(BG_PREVIEW_REAL) }
-    var bgEditTarget by rememberSaveable { mutableIntStateOf(BG_EDIT_TARGET_HERO) }
-    var bgPanelCollapsed by rememberSaveable { mutableStateOf(false) }
-    val effectiveBgTarget = if (state.customBackgroundPath == null) {
-        BG_EDIT_TARGET_HERO
-    } else {
-        bgEditTarget
-    }
-    LaunchedEffect(state.customBackgroundPath) {
-        // 头部图被清除后同步落回头部层，避免残留的背景层目标在下次选图时继续生效
-        if (state.customBackgroundPath == null && bgEditTarget != BG_EDIT_TARGET_HERO) {
-            bgEditTarget = BG_EDIT_TARGET_HERO
-        }
-    }
-    val pickBackgroundLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickVisualMedia(),
-    ) { uri: Uri? ->
-        if (uri != null) {
-            viewModel.setCustomBackground(uri)
-            isBackgroundEditMode = true
-        }
-    }
-    val pickBackdropLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickVisualMedia(),
-    ) { uri: Uri? ->
-        if (uri != null) viewModel.setCustomBackdrop(uri)
-    }
     val dark = LocalDarkTheme.current
     val isTablet = LocalConfiguration.current.screenWidthDp >= 600
     val context = LocalContext.current
-    var showCategories by rememberSaveable { mutableStateOf(false) }
-    var showThemeSheet by rememberSaveable { mutableStateOf(false) }
-    var showHomeSourceSheet by rememberSaveable { mutableStateOf(false) }
-    var showImageRouteSheet by rememberSaveable { mutableStateOf(false) }
-    var originalOffsetX by remember { mutableFloatStateOf(0f) }
-    var originalOffsetY by remember { mutableFloatStateOf(0f) }
-    var originalDim by remember { mutableFloatStateOf(SettingsRepository.BACKGROUND_DIM_DEFAULT) }
-    var originalScale by remember { mutableFloatStateOf(SettingsRepository.BACKGROUND_SCALE_DEFAULT) }
-    var originalHeroOffsetX by remember { mutableFloatStateOf(0f) }
-    var originalHeroOffsetY by remember { mutableFloatStateOf(0f) }
-    var originalHeroScale by remember { mutableFloatStateOf(SettingsRepository.HERO_SCALE_DEFAULT) }
-    var originalBlur by remember { mutableFloatStateOf(SettingsRepository.BACKGROUND_BLUR_DEFAULT) }
-    var originalHeroFraction by remember { mutableFloatStateOf(SettingsRepository.BACKGROUND_HERO_DEFAULT) }
-    var showRetentionSheet by rememberSaveable { mutableStateOf(false) }
-    var showLanguageSheet by rememberSaveable { mutableStateOf(false) }
-    var showAiTranslateSheet by rememberSaveable { mutableStateOf(false) }
-    var showCatalogSource by rememberSaveable { mutableStateOf(false) }
-    var showAboutSheet by rememberSaveable { mutableStateOf(false) }
-    var showWebDavSettings by rememberSaveable { mutableStateOf(false) }
-    var showNetworkDiag by rememberSaveable { mutableStateOf(false) }
+
+    // ---- 背景域：取景/取色派生 + 编辑会话（详见 background/ 包） ----
+    val backdrop = rememberHomeBackdropState(state, dark, viewModel::sampleBackgroundImage)
+    val edit = rememberHomeBackgroundEdit(viewModel, state)
+
+    // ---- 抽屉触发的二级弹层开关 ----
+    val dialogs = rememberHomeDialogsState()
+
+    // ---- 抽屉功能页与发布草稿：任一激活时禁掉抽屉手势 ----
     var showHistoryPage by rememberSaveable { mutableStateOf(false) }
     var showCollectionPage by rememberSaveable { mutableStateOf(false) }
     var showTagsPage by rememberSaveable { mutableStateOf(false) }
     var showFollowUsersPage by rememberSaveable { mutableStateOf(false) }
     var showBlockUsersPage by rememberSaveable { mutableStateOf(false) }
     var showAccountsPage by rememberSaveable { mutableStateOf(false) }
-    var showProfileEdit by rememberSaveable { mutableStateOf(false) }
     var publishDraftId by rememberSaveable { mutableStateOf<Long?>(null) }
-    var showAvatarViewer by rememberSaveable { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val anyOverlayActive = showHistoryPage || showAccountsPage ||
-        showCollectionPage || showTagsPage || showFollowUsersPage || showBlockUsersPage || showWebDavSettings ||
+        showCollectionPage || showTagsPage || showFollowUsersPage || showBlockUsersPage || dialogs.showWebDavSettings ||
         publishDraftId != null
+
+    // ---- 滚动：网格状态、头部底衬进度、视差、停顶判定 ----
     val isScrolling = remember { mutableStateOf(false) }
     val gridState = rememberLazyStaggeredGridState()
     // 传给头部在绘制阶段读取：滚动只重绘底边那条线，不触发重组
@@ -205,94 +117,16 @@ fun HomeScreen(
             gridState.firstVisibleItemIndex == 0 && gridState.firstVisibleItemScrollOffset == 0
         }
     }
-    var tabBand by remember { mutableStateOf<TabBand?>(null) }
-    // 取景几何的视口：用配置里的屏幕尺寸同步算。别走 onSizeChanged——那要等一帧，
-    // 首帧只能按 null 取景（忽略偏移），图片已在缓存时（旋转/重建）会看到取景跳一下
-    val density = LocalDensity.current
-    val configuration = LocalConfiguration.current
-    val screenHeightDp = configuration.screenHeightDp.toFloat()
-    val viewWidthPx = with(density) { configuration.screenWidthDp.dp.toPx() }
-    val viewHeightPx = with(density) { configuration.screenHeightDp.dp.toPx() }
-    val zoneHeightDp = heroZoneHeightDp(
-        screenHeightDp = screenHeightDp,
-        heroFraction = state.backgroundHeroFraction,
-    ).dp
-    val zoneHeightPx = with(density) { zoneHeightDp.toPx() }
-    // 手势里读到的必须是当前值：pointerInput 的 key 只跟编辑目标/背景层走，
-    // 设置改了不会重启它的协程，捕获到旧 state 就会用旧缩放/旧清晰区算平移量
-    val currentState by rememberUpdatedState(state)
-    val currentViewWidth by rememberUpdatedState(viewWidthPx)
-    val currentViewHeight by rememberUpdatedState(viewHeightPx)
-    val currentZoneHeight by rememberUpdatedState(zoneHeightPx)
-    val heroFrame = contentFrame(
-        imgWidth = state.backgroundImgWidth,
-        imgHeight = state.backgroundImgHeight,
-        viewWidth = viewWidthPx,
-        viewHeight = zoneHeightPx,
-        scale = state.heroScale,
-        offsetX = state.heroOffsetX,
-        offsetY = state.heroOffsetY,
-    )
-    val separatedBackdrop = state.backdropPath != null
-    val frostScale = if (separatedBackdrop) state.backgroundScale else state.heroScale.coerceAtLeast(1f)
-    val frostOffsetX = if (separatedBackdrop) state.backgroundOffsetX else state.heroOffsetX
-    val frostOffsetY = if (separatedBackdrop) state.backgroundOffsetY else state.heroOffsetY
-    val frostFrame = contentFrame(
-        imgWidth = if (separatedBackdrop) state.backdropImgWidth else state.backgroundImgWidth,
-        imgHeight = if (separatedBackdrop) state.backdropImgHeight else state.backgroundImgHeight,
-        viewWidth = viewWidthPx,
-        viewHeight = viewHeightPx,
-        scale = frostScale,
-        offsetX = frostOffsetX,
-        offsetY = frostOffsetY,
-    )
-    val veil = veilColor(dark, state.backgroundScrimDark, state.backgroundScrimLight)
-    // 标签行字色：量的是标签行压到的那块图片。换图、改头部清晰区高度、缩放、拖取景都会改
-    // 取样矩形，颜色跟着变；遮罩按停顶状态算——滚动时头部另有玻璃底衬接管，取色不该随滚动跳
-    val tabLuma by produceState<Float?>(
-        initialValue = null,
-        state.customBackgroundPath,
-        state.backdropPath,
-        heroFrame,
-        frostFrame,
-        tabBand,
-        state.backgroundDim,
-        dark,
-        veil,
-        zoneHeightPx,
-        viewHeightPx,
-    ) {
-        val band = tabBand
-        val sample = band?.let {
-            tabBandSample(
-                bandTop = it.topPx,
-                bandBottom = it.bottomPx,
-                heroPath = state.customBackgroundPath,
-                heroFrame = heroFrame,
-                frostPath = state.backdropPath ?: state.customBackgroundPath,
-                frostFrame = frostFrame,
-            )
+    // 内容换血（切 tab/分类/重载/洗牌）时回顶
+    var seenFeedEpoch by remember { mutableIntStateOf(state.feedEpoch) }
+    LaunchedEffect(state.feedEpoch) {
+        if (state.feedEpoch != seenFeedEpoch) {
+            gridState.scrollToItem(0)
+            seenFeedEpoch = state.feedEpoch
         }
-        val imageLuma = sample?.let { viewModel.sampleBackgroundImage(it.path) }
-            ?.let { meanLumaOfRect(it, sample.rect) }
-        // 量不到（没设背景/标签行不在图上/图读不出来）就退回主题色；
-        // 只是取景变了的话保留上一次结果，拖缩放时字色才不会一闪一闪
-        if (band == null || sample == null || imageLuma == null) {
-            value = null
-            return@produceState
-        }
-        val stops = veilStops(
-            heroFrac = (zoneHeightPx / viewHeightPx).coerceIn(0f, 0.9f),
-            dimBase = veilDim(dark, state.backgroundDim),
-            midFactor = veilMidFactor(dark),
-        )
-        val bandMidT = ((band.topPx + band.bottomPx) / 2f / viewHeightPx).coerceIn(0f, 1f)
-        value = veiledLuma(imageLuma, veilAlphaAt(stops, bandMidT), veil)
     }
-    val tabColors = feedTabColors(
-        hasCustomBackground = state.customBackgroundPath != null,
-        bandLuma = tabLuma,
-    )
+
+    // ---- 抽屉开合（带生命周期守卫：转场/后台时按钮不重复触发） ----
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -329,14 +163,6 @@ fun HomeScreen(
         if (drawerState.isOpen) viewModel.retryUserProfile()
     }
 
-    var seenFeedEpoch by remember { mutableIntStateOf(state.feedEpoch) }
-    LaunchedEffect(state.feedEpoch) {
-        if (state.feedEpoch != seenFeedEpoch) {
-            gridState.scrollToItem(0)
-            seenFeedEpoch = state.feedEpoch
-        }
-    }
-
     val onOpenUpdate = remember(state.updateBanner, state.updateCheckState) {
         {
             val release = state.updateBanner
@@ -347,6 +173,7 @@ fun HomeScreen(
             viewModel.dismissUpdateBanner()
         }
     }
+    val onGoTop = { gridState.scrollToTopSmart(scope) }
 
     UserDrawer(
         drawerState = drawerState,
@@ -361,25 +188,14 @@ fun HomeScreen(
         updateAvailable = state.updateCheckState is UpdateCheckState.Available,
         onToggleAdult = viewModel::toggleAdultContent,
         onSettingsClick = {},
-        onAboutClick = { showAboutSheet = true },
-        onThemeClick = { showThemeSheet = true },
+        onAboutClick = { dialogs.showAboutSheet = true },
+        onThemeClick = { dialogs.showThemeSheet = true },
         homeSourceLabelRes = state.homeSource.labelRes(),
-        onHomeSourceClick = { showHomeSourceSheet = true },
-        onImageRouteClick = { showImageRouteSheet = true },
+        onHomeSourceClick = { dialogs.showHomeSource = true },
+        onImageRouteClick = { dialogs.showImageRouteSheet = true },
         onBackgroundClick = {
             scope.launch { drawerState.close() }
-            viewModel.consumeBackgroundError()
-            originalOffsetX = state.backgroundOffsetX
-            originalOffsetY = state.backgroundOffsetY
-            originalDim = state.backgroundDim
-            originalScale = state.backgroundScale
-            originalHeroOffsetX = state.heroOffsetX
-            originalHeroOffsetY = state.heroOffsetY
-            originalHeroScale = state.heroScale
-            originalBlur = state.backgroundBlur
-            originalHeroFraction = state.backgroundHeroFraction
-            bgPreviewMode = BG_PREVIEW_REAL
-            isBackgroundEditMode = true
+            edit.enterEdit(state)
         },
         onHistoryClick = {
             showHistoryPage = true
@@ -400,7 +216,7 @@ fun HomeScreen(
             scope.launch { drawerState.close() }
             publishDraftId = -1L
         },
-        onProfileClick = { showProfileEdit = true },
+        onProfileClick = { dialogs.showProfileEdit = true },
         onLoginClick = {
             onLoginClick()
         },
@@ -428,59 +244,37 @@ fun HomeScreen(
             }
         },
         // 头像的查看/保存走的是"账号资料"那一套，所以只有有主页的源才点得动
-        onAvatarClick = { if (headerAccount?.profileId != null) showAvatarViewer = true },
+        onAvatarClick = { if (headerAccount?.profileId != null) dialogs.showAvatarViewer = true },
         gesturesEnabled = !anyOverlayActive,
         dark = dark,
         aiTranslateEnabled = state.aiTranslateEnabled,
         historyRetentionDays = state.historyRetentionDays,
         onAiTranslateClick = {
-            showAiTranslateSheet = true
+            dialogs.showAiTranslateSheet = true
         },
         onLanguageClick = {
-            showLanguageSheet = true
+            dialogs.showLanguageSheet = true
         },
         onRetentionClick = {
-            showRetentionSheet = true
+            dialogs.showRetentionSheet = true
         },
         onWebDavClick = {
             scope.launch { drawerState.close() }
-            showWebDavSettings = true
+            dialogs.showWebDavSettings = true
         },
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            val customBgPath = state.customBackgroundPath
-            if (customBgPath != null) {
-                CustomHomeBackground(
-                    heroPath = customBgPath,
-                    heroFrame = heroFrame,
-                    heroHeight = zoneHeightDp,
-                    heroScale = state.heroScale,
-                    backdropPath = state.backdropPath,
-                    frostScale = frostScale,
-                    frostOffsetX = frostOffsetX,
-                    frostOffsetY = frostOffsetY,
-                    dim = state.backgroundDim,
-                    dark = dark,
-                    scrimDark = state.backgroundScrimDark,
-                    scrimLight = state.backgroundScrimLight,
-                    blurDp = state.backgroundBlur,
-                    editMode = isBackgroundEditMode && bgPreviewMode != BG_PREVIEW_REAL,
-                    scrolledOverTopPx = parallax,
-                )
-            } else {
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-                        .drawWithCache {
-                            val backdrop = homeBackdrop(dark, size)
-                            onDrawBehind { drawBackdrop(backdrop) }
-                        },
-                )
-            }
+            // 背景层：自定义头图 + 雾化，或默认渐变（取景几何与编辑会话在 background/ 包）
+            HomeBackdropLayer(
+                state = state,
+                backdrop = backdrop,
+                dark = dark,
+                editPreviewing = edit.previewingContent,
+                scrolledOverTopPx = parallax,
+            )
 
             val contentAlpha by animateFloatAsState(
-                targetValue = if (!isBackgroundEditMode || bgPreviewMode == BG_PREVIEW_REAL) 1f else 0f,
+                targetValue = if (edit.contentVisible) 1f else 0f,
                 label = "contentAlpha"
             )
 
@@ -489,7 +283,7 @@ fun HomeScreen(
                     .fillMaxSize()
                     .graphicsLayer { alpha = contentAlpha }
             ) {
-                // 非 poipiku 源一律走声明驱动的通用壳；poipiku 保留专属壳（tab 图标/分类侧栏是它的语义）
+                // 换源分发：主源走专属壳，其余源走声明驱动的通用壳——新增源不需要改这里
                 if (state.homeSource != WorkSource.POIPIKU) {
                     SourceFeedContent(
                         dark = dark,
@@ -499,8 +293,8 @@ fun HomeScreen(
                         menuEnabled = drawerButtonEnabled,
                         hasCustomBackground = state.customBackgroundPath != null,
                         drawerIsOpen = drawerState.isOpen,
-                        tabColors = tabColors,
-                        onTabBand = { tabBand = it },
+                        tabColors = backdrop.tabColors,
+                        onTabBand = backdrop.onTabBand,
                         onOpenDrawer = openDrawer,
                         onSearchClick = onSearchClick,
                         updateBanner = state.updateBanner,
@@ -509,559 +303,58 @@ fun HomeScreen(
                         onNativeDetail = onWorkClick,
                         onLoginClick = onSourceLoginClick,
                     )
-                } else if (isTablet) {
-                    Row(Modifier.fillMaxSize()) {
-                        CategorySidebar(
-                            selected = state.category,
-                            onSelect = viewModel::selectCategory,
-                            dark = dark,
-                        )
-                        Column(Modifier.weight(1f)) {
-                            Box(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .statusBarsPadding()
-                                    .padding(top = 8.dp),
-                            ) {
-                                LiquidGlassBackdrop(
-                                    dark = dark,
-                                    isScrolling = isScrolling,
-                                    modifier = Modifier.matchParentSize(),
-                                    translucent = state.customBackgroundPath != null,
-                                    progress = feedProgress,
-                                )
-                                Column(Modifier.fillMaxWidth()) {
-                                    TabletTopBar(
-                                        avatarUrl = state.userAvatarUrl,
-                                        onMenuClick = openDrawer,
-                                        menuEnabled = drawerButtonEnabled,
-                                        onSearchClick = onSearchClick,
-                                        onDoubleTapTop = { gridState.scrollToTopSmart(scope) },
-                                        dark = dark,
-                                    )
-                                    Box(Modifier.reportTabBand { tabBand = it }) {
-                                        FeedTabRow(
-                                            feedTab = state.feedTab,
-                                            onSelectFeedTab = viewModel::selectFeedTab,
-                                            dark = dark,
-                                            tabColors = tabColors,
-                                        )
-                                    }
-                                }
-                            }
-                            HomeContent(
-                                state = state,
-                                onRetry = viewModel::retry,
-                                onLoadMore = viewModel::loadMore,
-                                onRetryLoadMore = viewModel::retryLoadMore,
-                                onShuffle = viewModel::shuffleRandom,
-                                onToggleFavorite = viewModel::toggleFavorite,
-                                onWorkClick = onWorkClick,
-                                onAuthorClick = onAuthorClick,
-                                onLoginClick = onLoginClick,
-                                onDismissRefreshNotice = viewModel::dismissRefreshNotice,
-                                onGoTop = { gridState.scrollToTopSmart(scope) },
-                                onOpenUpdate = onOpenUpdate,
-                                onDismissUpdateBanner = viewModel::dismissUpdateBanner,
-                                dark = dark,
-                                isScrolling = isScrolling,
-                                gridState = gridState,
-                            )
-                        }
-                    }
                 } else {
-                    Column(Modifier.fillMaxSize()) {
-                        GlassHeader(
-                            state = state,
-                            avatarUrl = state.userAvatarUrl,
-                            onMenuClick = openDrawer,
-                            menuEnabled = drawerButtonEnabled,
-                            onSearchClick = onSearchClick,
-                            onSelectFeedTab = viewModel::selectFeedTab,
-                            onCategoryClick = { showCategories = true },
-                            onDoubleTapTop = { gridState.scrollToTopSmart(scope) },
-                            dark = dark,
-                            isScrolling = isScrolling,
-                            scrollProgress = feedProgress,
-                            drawerIsOpen = drawerState.isOpen,
-                            atTop = atTop,
-                            tabColors = tabColors,
-                            onTabBand = { tabBand = it },
-                        )
-                        HomeContent(
-                            state = state,
-                            onRetry = viewModel::retry,
-                            onLoadMore = viewModel::loadMore,
-                            onRetryLoadMore = viewModel::retryLoadMore,
-                            onShuffle = viewModel::shuffleRandom,
-                            onToggleFavorite = viewModel::toggleFavorite,
-                            onWorkClick = onWorkClick,
-                            onAuthorClick = onAuthorClick,
-                            onLoginClick = onLoginClick,
-                            onDismissRefreshNotice = viewModel::dismissRefreshNotice,
-                            onGoTop = { gridState.scrollToTopSmart(scope) },
-                            onOpenUpdate = onOpenUpdate,
-                            onDismissUpdateBanner = viewModel::dismissUpdateBanner,
-                            dark = dark,
-                            isScrolling = isScrolling,
-                            gridState = gridState,
-                        )
-                    }
-                }
-            }
-
-            if (isBackgroundEditMode) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .pointerInput(effectiveBgTarget, state.backdropPath) {
-                            detectTransformGestures { _, pan, zoom, _ ->
-                                val editedState = currentState
-                                if (editedState.customBackgroundPath != null) {
-                                    val editHero = effectiveBgTarget == BG_EDIT_TARGET_HERO ||
-                                        editedState.backdropPath == null
-                                    if (editHero) {
-                                        val ns = (editedState.heroScale * zoom).coerceIn(
-                                            SettingsRepository.HERO_SCALE_MIN,
-                                            SettingsRepository.HERO_SCALE_MAX,
-                                        )
-                                        if (ns != editedState.heroScale) viewModel.setHeroScale(ns)
-                                        // 按新缩放的取景算可平移量：缩放会同步放大拖动范围，拖拽与手指 1:1
-                                        val frame = contentFrame(
-                                            imgWidth = editedState.backgroundImgWidth,
-                                            imgHeight = editedState.backgroundImgHeight,
-                                            viewWidth = currentViewWidth,
-                                            viewHeight = currentZoneHeight,
-                                            scale = ns,
-                                            offsetX = editedState.heroOffsetX,
-                                            offsetY = editedState.heroOffsetY,
-                                        ) ?: return@detectTransformGestures
-                                        viewModel.setHeroOffset(
-                                            dragOffset(editedState.heroOffsetX, pan.x, frame.slackX),
-                                            dragOffset(editedState.heroOffsetY, pan.y, frame.slackY),
-                                        )
-                                    } else {
-                                        val ns = (editedState.backgroundScale * zoom).coerceIn(
-                                            SettingsRepository.BACKGROUND_SCALE_MIN,
-                                            SettingsRepository.BACKGROUND_SCALE_MAX,
-                                        )
-                                        if (ns != editedState.backgroundScale) viewModel.setBackgroundScale(ns)
-                                        val frame = contentFrame(
-                                            imgWidth = editedState.backdropImgWidth,
-                                            imgHeight = editedState.backdropImgHeight,
-                                            viewWidth = currentViewWidth,
-                                            viewHeight = currentViewHeight,
-                                            scale = ns,
-                                            offsetX = editedState.backgroundOffsetX,
-                                            offsetY = editedState.backgroundOffsetY,
-                                        ) ?: return@detectTransformGestures
-                                        viewModel.setBackgroundOffset(
-                                            dragOffset(editedState.backgroundOffsetX, pan.x, frame.slackX),
-                                            dragOffset(editedState.backgroundOffsetY, pan.y, frame.slackY),
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                        .pointerInput(effectiveBgTarget, state.backdropPath) {
-                            detectTapGestures(onDoubleTap = {
-                                if (state.customBackgroundPath != null) {
-                                    if (effectiveBgTarget == BG_EDIT_TARGET_BACKDROP &&
-                                        state.backdropPath != null
-                                    ) {
-                                        viewModel.setBackgroundOffset(0f, 0f, persist = true)
-                                        viewModel.setBackgroundScale(
-                                            SettingsRepository.BACKGROUND_SCALE_DEFAULT,
-                                            persist = true,
-                                        )
-                                    } else {
-                                        viewModel.setHeroOffset(0f, 0f, persist = true)
-                                        viewModel.setHeroScale(
-                                            SettingsRepository.HERO_SCALE_DEFAULT,
-                                            persist = true,
-                                        )
-                                    }
-                                }
-                            })
-                        }
-                )
-
-                BackgroundBlueprintOverlay(
-                    dark = dark,
-                    zoneHeightPx = zoneHeightPx,
-                    heroFrame = heroFrame,
-                    framedT = ((1f - state.heroScale) / (1f - SettingsRepository.HERO_SCALE_MIN))
-                        .coerceIn(0f, 1f),
-                    readoutX = if (effectiveBgTarget == BG_EDIT_TARGET_BACKDROP &&
-                        state.backdropPath != null
-                    ) {
-                        state.backgroundOffsetX
-                    } else {
-                        state.heroOffsetX
-                    },
-                    readoutY = if (effectiveBgTarget == BG_EDIT_TARGET_BACKDROP &&
-                        state.backdropPath != null
-                    ) {
-                        state.backgroundOffsetY
-                    } else {
-                        state.heroOffsetY
-                    },
-                    minimal = bgPreviewMode == BG_PREVIEW_REAL,
-                    editingBackdrop = effectiveBgTarget == BG_EDIT_TARGET_BACKDROP &&
-                        state.backdropPath != null,
-                )
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .navigationBarsPadding()
-                        .imePadding()
-                        .padding(horizontal = 16.dp, vertical = 24.dp),
-                    contentAlignment = Alignment.BottomCenter
-                ) {
-                    val toggleBgPreview = {
-                        bgPreviewMode = if (bgPreviewMode == BG_PREVIEW_REAL) {
-                            BG_PREVIEW_HIDDEN
-                        } else {
-                            BG_PREVIEW_REAL
-                        }
-                    }
-                    val panelCollapsed = bgPanelCollapsed && state.customBackgroundPath != null
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (dark) Color(0xE61C1A18) else Color(0xE6FFFFFF)
-                        ),
-                        shape = RoundedCornerShape(24.dp),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .animateContentSize()
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            ) {}
-                    ) {
-                        if (panelCollapsed) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                TextButton(
-                                    onClick = toggleBgPreview,
-                                    colors = ButtonDefaults.textButtonColors(
-                                        contentColor = PikuColors.textPrimary
-                                    ),
-                                ) {
-                                    Icon(
-                                        imageVector = if (bgPreviewMode == BG_PREVIEW_REAL) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(
-                                        text = stringResource(
-                                            if (bgPreviewMode == BG_PREVIEW_REAL) R.string.background_preview_real else R.string.background_preview_hidden
-                                        ),
-                                        fontSize = 13.sp
-                                    )
-                                }
-                                Spacer(Modifier.weight(1f))
-                                IconButton(onClick = { bgPanelCollapsed = false }) {
-                                    Icon(
-                                        imageVector = Icons.Filled.KeyboardArrowUp,
-                                        contentDescription = stringResource(R.string.background_panel_expand),
-                                    )
-                                }
-                            }
-                        } else {
-                            BackgroundEditPanel(
-                                state = state,
-                                bgPreviewMode = bgPreviewMode,
-                                bgEditTarget = effectiveBgTarget,
-                                dark = dark,
-                                onTogglePreview = toggleBgPreview,
-                                onSelectTarget = { bgEditTarget = it },
-                                onCollapse = { bgPanelCollapsed = true },
-                                onPickImage = {
-                                    if (effectiveBgTarget == BG_EDIT_TARGET_BACKDROP) {
-                                        pickBackdropLauncher.launch(
-                                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                                        )
-                                    } else {
-                                        pickBackgroundLauncher.launch(
-                                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                                        )
-                                    }
-                                },
-                                onClearBackground = { viewModel.clearCustomBackground() },
-                                onRestoreFollow = { viewModel.restoreFollowBackground() },
-                                onDismiss = {
-                                    viewModel.persistHeroOffset()
-                                    viewModel.setBackgroundOffset(
-                                        state.backgroundOffsetX, state.backgroundOffsetY, persist = true,
-                                    )
-                                    viewModel.setBackgroundDim(state.backgroundDim, persist = true)
-                                    viewModel.setBackgroundScale(state.backgroundScale, persist = true)
-                                    viewModel.setBackgroundBlur(state.backgroundBlur, persist = true)
-                                    viewModel.setHeroScale(state.heroScale, persist = true)
-                                    viewModel.setBackgroundHeroFraction(state.backgroundHeroFraction, persist = true)
-                                    isBackgroundEditMode = false
-                                },
-                                onConfirm = {
-                                    viewModel.setHeroOffset(state.heroOffsetX, state.heroOffsetY, persist = true)
-                                    viewModel.setHeroScale(state.heroScale, persist = true)
-                                    viewModel.setBackgroundOffset(
-                                        state.backgroundOffsetX, state.backgroundOffsetY, persist = true,
-                                    )
-                                    viewModel.setBackgroundDim(state.backgroundDim, persist = true)
-                                    viewModel.setBackgroundScale(state.backgroundScale, persist = true)
-                                    viewModel.setBackgroundBlur(state.backgroundBlur, persist = true)
-                                    viewModel.setBackgroundHeroFraction(state.backgroundHeroFraction, persist = true)
-                                    isBackgroundEditMode = false
-                                },
-                                onRevert = {
-                                    viewModel.setHeroOffset(originalHeroOffsetX, originalHeroOffsetY, persist = true)
-                                    viewModel.setHeroScale(originalHeroScale, persist = true)
-                                    viewModel.setBackgroundOffset(
-                                        originalOffsetX, originalOffsetY, persist = true,
-                                    )
-                                    viewModel.setBackgroundDim(originalDim, persist = true)
-                                    viewModel.setBackgroundScale(originalScale, persist = true)
-                                    viewModel.setBackgroundBlur(originalBlur, persist = true)
-                                    viewModel.setBackgroundHeroFraction(originalHeroFraction, persist = true)
-                                    isBackgroundEditMode = false
-                                },
-                                onBackgroundDimChange = { viewModel.setBackgroundDim(it) },
-                                onBackgroundBlurChange = { viewModel.setBackgroundBlur(it) },
-                                onBackgroundScaleChange = { viewModel.setBackgroundScale(it) },
-                                onHeroScaleChange = { viewModel.setHeroScale(it) },
-                                onHeroFractionChange = { viewModel.setBackgroundHeroFraction(it) },
-                                onSettingsFinished = {
-                                    viewModel.persistHeroOffset()
-                                    viewModel.setBackgroundOffset(
-                                        state.backgroundOffsetX, state.backgroundOffsetY, persist = true,
-                                    )
-                                    viewModel.setBackgroundDim(state.backgroundDim, persist = true)
-                                    viewModel.setBackgroundScale(state.backgroundScale, persist = true)
-                                    viewModel.setBackgroundBlur(state.backgroundBlur, persist = true)
-                                    viewModel.setHeroScale(state.heroScale, persist = true)
-                                    viewModel.setBackgroundHeroFraction(state.backgroundHeroFraction, persist = true)
-                                },
-                            )
-                        }
-                    }
-                }
-            }
-
-            if (showCategories) {
-                CategorySheet(
-                    selected = state.category,
-                    onSelect = {
-                        viewModel.selectCategory(it)
-                        showCategories = false
-                    },
-                    onDismiss = { showCategories = false },
-                    dark = dark,
-                )
-            }
-
-            if (showHomeSourceSheet) {
-                HomeSourceSheet(
-                    selected = state.homeSource,
-                    options = viewModel.sourceOptions,
-                    labelRes = viewModel::homeSourceLabelRes,
-                    onSelect = { source ->
-                        viewModel.setHomeSource(source)
-                        showHomeSourceSheet = false
-                    },
-                    onDismiss = { showHomeSourceSheet = false },
-                    dark = dark,
-                )
-            }
-
-            if (showThemeSheet) {
-                ThemeModeSheet(
-                    selected = state.themeMode,
-                    onSelect = { mode ->
-                        viewModel.setThemeMode(mode)
-                        showThemeSheet = false
-                    },
-                    onDismiss = { showThemeSheet = false },
-                    dark = dark,
-                )
-            }
-
-            if (showImageRouteSheet) {
-                ImageRouteSheet(
-                    selected = state.imageRouteMode,
-                    onSelect = { mode ->
-                        viewModel.setImageRouteMode(mode)
-                        showImageRouteSheet = false
-                    },
-                    onDismiss = { showImageRouteSheet = false },
-                    dark = dark,
-                )
-            }
-
-            if (showRetentionSheet) {
-                RetentionSheet(
-                    selectedDays = state.historyRetentionDays,
-                    onSelect = { days ->
-                        viewModel.setHistoryRetentionDays(days)
-                        showRetentionSheet = false
-                    },
-                    onDismiss = { showRetentionSheet = false },
-                    dark = dark,
-                )
-            }
-
-            if (showLanguageSheet) {
-                LanguageSheet(
-                    selected = state.language,
-                    onSelect = { language ->
-                        viewModel.setLanguage(language)
-                        showLanguageSheet = false
-                        (context as? Activity)?.recreate()
-                    },
-                    onDismiss = { showLanguageSheet = false },
-                    dark = dark,
-                )
-            }
-
-            if (showAiTranslateSheet) {
-                AiTranslateSheet(
-                    state = state,
-                    onToggleEnabled = viewModel::setAiTranslateEnabled,
-                    onToggleTagsAuto = viewModel::setAutoTranslateTags,
-                    onSelectModel = viewModel::selectTranslateModel,
-                    onSelectNovelModel = viewModel::selectTranslateNovelModel,
-                    onSelectImageModel = viewModel::selectTranslateImageModel,
-                    onSaveCatalog = viewModel::saveCatalog,
-                    onResetCatalog = viewModel::resetCatalogUrl,
-                    onActivateSource = viewModel::activateCatalogSource,
-                    onSaveAsSource = { url, key -> viewModel.saveCatalogAsSource(null, url, key) },
-                    onRenameSource = { source, name -> viewModel.renameCatalogSource(source.id, name) },
-                    onDeleteSource = { source -> viewModel.deleteCatalogSource(source.id) },
-                    onOpenSources = { showCatalogSource = true },
-                    catalogOpen = showCatalogSource,
-                    onDismiss = { showAiTranslateSheet = false },
-                    dark = dark,
-                )
-            }
-
-            if (showCatalogSource) {
-                Dialog(
-                    onDismissRequest = { showCatalogSource = false },
-                    properties = DialogProperties(
-                        usePlatformDefaultWidth = false,
-                        decorFitsSystemWindows = false,
-                        dismissOnClickOutside = false,
-                    ),
-                ) {
-                    CatalogSourceScreen(
+                    PoipikuHomeShell(
                         state = state,
-                        onSaveCatalog = viewModel::saveCatalog,
-                        onResetCatalog = viewModel::resetCatalogUrl,
-                        onActivateSource = viewModel::activateCatalogSource,
-                        onSaveAsSource = { url, key -> viewModel.saveCatalogAsSource(null, url, key) },
-                        onRenameSource = { source, name -> viewModel.renameCatalogSource(source.id, name) },
-                        onDeleteSource = { source -> viewModel.deleteCatalogSource(source.id) },
-                        onBack = { showCatalogSource = false },
+                        isTablet = isTablet,
                         dark = dark,
+                        isScrolling = isScrolling,
+                        gridState = gridState,
+                        scrollProgress = feedProgress,
+                        atTop = atTop,
+                        tabColors = backdrop.tabColors,
+                        onTabBand = backdrop.onTabBand,
+                        drawerIsOpen = drawerState.isOpen,
+                        menuEnabled = drawerButtonEnabled,
+                        onOpenDrawer = openDrawer,
+                        onSearchClick = onSearchClick,
+                        onCategoryClick = { dialogs.showCategories = true },
+                        onSelectFeedTab = viewModel::selectFeedTab,
+                        onSelectCategory = viewModel::selectCategory,
+                        onGoTop = onGoTop,
+                        onRetry = viewModel::retry,
+                        onLoadMore = viewModel::loadMore,
+                        onRetryLoadMore = viewModel::retryLoadMore,
+                        onShuffle = viewModel::shuffleRandom,
+                        onToggleFavorite = viewModel::toggleFavorite,
+                        onWorkClick = onWorkClick,
+                        onAuthorClick = onAuthorClick,
+                        onLoginClick = onLoginClick,
+                        onDismissRefreshNotice = viewModel::dismissRefreshNotice,
+                        onOpenUpdate = onOpenUpdate,
+                        onDismissUpdateBanner = viewModel::dismissUpdateBanner,
                     )
                 }
             }
 
-            if (showAvatarViewer) {
-                AvatarViewerDialog(
-                    avatarUrl = state.userProfile?.avatarUrl,
-                    onDismiss = { showAvatarViewer = false },
-                    onSave = { url -> viewModel.saveAvatar(url) },
-                )
-            }
-
-            if (showAboutSheet) {
-                AboutSheet(
-                    currentVersion = displayVersionName(),
-                    autoCheckEnabled = state.autoCheckEnabled,
-                    updateCheckState = state.updateCheckState,
-                    onToggleAutoCheck = { viewModel.setAutoCheckEnabled(!state.autoCheckEnabled) },
-                    onCheckUpdate = {
-                        if (state.updateCheckState !is UpdateCheckState.Checking) {
-                            viewModel.checkForUpdateManual()
-                        }
-                    },
-                    onOpenUpdate = onOpenUpdate,
-                    onOpenGithub = {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(GITHUB_REPO_URL)))
-                    },
-                    onOpenFeedback = {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(GITHUB_ISSUES_URL)))
-                    },
-                    onOpenNetworkDiag = {
-                        viewModel.refreshNetworkReport(live = false)
-                        showNetworkDiag = true
-                    },
-                    onDismiss = { showAboutSheet = false },
+            if (edit.isEditMode) {
+                HomeBackgroundEditOverlay(
+                    viewModel = viewModel,
+                    edit = edit,
+                    state = state,
+                    backdrop = backdrop,
                     dark = dark,
                 )
             }
 
-            if (showNetworkDiag) {
-                val report by viewModel.networkReport.collectAsStateWithLifecycle()
-                NetworkDiagDialog(
-                    text = report.text,
-                    loading = report.loading,
-                    onRefresh = { viewModel.refreshNetworkReport(live = true) },
-                    onClear = { viewModel.clearNetworkDiagnostics() },
-                    onDismiss = { showNetworkDiag = false },
-                    dark = dark,
-                )
-            }
-            if (showWebDavSettings) {
-                Dialog(
-                    onDismissRequest = { showWebDavSettings = false },
-                    properties = DialogProperties(
-                        usePlatformDefaultWidth = false,
-                        decorFitsSystemWindows = false,
-                        dismissOnClickOutside = false,
-                    ),
-                ) {
-                    WebDavSettingsScreen(
-                        url = state.webDavUrl,
-                        username = state.webDavUsername,
-                        password = state.webDavPassword,
-                        enabled = state.webDavEnabled,
-                        lastSyncAt = state.lastSyncAt,
-                        syncResult = state.syncResult,
-                        syncState = state.syncState,
-                        testConnectionState = state.testConnectionState,
-                        onUrlChange = viewModel::setWebDavUrl,
-                        onUsernameChange = viewModel::setWebDavUsername,
-                        onPasswordChange = viewModel::setWebDavPassword,
-                        onEnabledChange = viewModel::setWebDavEnabled,
-                        onTestConnection = viewModel::testWebDavConnection,
-                        onClearTestResult = viewModel::clearTestConnectionState,
-                        onSyncNow = viewModel::syncNow,
-                        onBack = { showWebDavSettings = false; scope.launch { drawerState.open() } },
-                        dark = dark,
-                    )
-                }
-            }
-
-            if (showProfileEdit) {
-                ProfileEditSheet(
-                    profile = state.userProfile,
-                    dark = dark,
-                    onOpenPublicProfile = {
-                        val url = state.userProfile?.profileUrl
-                        if (url != null) {
-                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                        }
-                    },
-                    onDismiss = { showProfileEdit = false },
-                )
-            }
+            HomeDialogs(
+                dialogs = dialogs,
+                viewModel = viewModel,
+                state = state,
+                dark = dark,
+                onOpenUpdate = onOpenUpdate,
+                onCloseAndReopenDrawer = { scope.launch { drawerState.open() } },
+            )
 
             HomeOverlays(
                 showAccountsPage = showAccountsPage,
@@ -1143,465 +436,3 @@ fun HomeScreen(
         }
     }
 }
-
-@Composable
-private fun HomeOverlays(
-    showAccountsPage: Boolean,
-    onAccountsBack: () -> Unit,
-    onAccountsLogin: (SourceAccountRow) -> Unit,
-    showHistoryPage: Boolean,
-    onHistoryBack: () -> Unit,
-    showCollectionPage: Boolean,
-    onCollectionBack: () -> Unit,
-    showTagsPage: Boolean,
-    onTagsBack: () -> Unit,
-    showFollowUsersPage: Boolean,
-    onFollowUsersBack: () -> Unit,
-    showBlockUsersPage: Boolean,
-    onBlockUsersBack: () -> Unit,
-    onWorkClick: (Work) -> Unit,
-    onLoginClick: () -> Unit,
-    onProfileOpen: (Long, String) -> Unit,
-    state: HomeUiState,
-    dark: Boolean,
-) {
-    val fullScreenProps = DialogProperties(
-        usePlatformDefaultWidth = false,
-        decorFitsSystemWindows = false,
-        dismissOnClickOutside = false,
-    )
-
-    if (showAccountsPage) {
-        Dialog(onDismissRequest = onAccountsBack, properties = fullScreenProps) {
-            AccountsScreen(onBack = onAccountsBack, onLogin = onAccountsLogin, dark = dark)
-        }
-    }
-    if (showHistoryPage) {
-        Dialog(onDismissRequest = onHistoryBack, properties = fullScreenProps) {
-            HistoryScreen(onBack = onHistoryBack, onWorkClick = { onWorkClick(it) })
-        }
-    }
-    if (showCollectionPage) {
-        Dialog(onDismissRequest = onCollectionBack, properties = fullScreenProps) {
-            CollectionScreen(
-                onBack = onCollectionBack,
-                onWorkClick = { onWorkClick(it) },
-                onAuthorClick = { work -> onProfileOpen(work.authorId, work.authorName) },
-            )
-        }
-    }
-    if (showTagsPage) {
-        Dialog(onDismissRequest = onTagsBack, properties = fullScreenProps) {
-            TagScreen(onBack = onTagsBack, onWorkClick = { onWorkClick(it) })
-        }
-    }
-    if (showFollowUsersPage) {
-        Dialog(onDismissRequest = onFollowUsersBack, properties = fullScreenProps) {
-            FollowUsersScreen(
-                onBack = onFollowUsersBack,
-                onLoginClick = onLoginClick,
-                onUserClick = { user -> onProfileOpen(user.userId, user.name) },
-            )
-        }
-    }
-    if (showBlockUsersPage) {
-        Dialog(onDismissRequest = onBlockUsersBack, properties = fullScreenProps) {
-            BlockUsersScreen(
-                onBack = onBlockUsersBack,
-                onLoginClick = onLoginClick,
-                onUserClick = { user -> onProfileOpen(user.userId, user.name) },
-            )
-        }
-    }
-}
-
-/**
- * 背景编辑底部面板：参数控制面板。
- * 从 HomeScreen 的巨大 Card 内容区抽取，避免主函数超过 800 行。
- */
-@Composable
-private fun BackgroundEditPanel(
-    state: HomeUiState,
-    bgPreviewMode: Int,
-    bgEditTarget: Int,
-    dark: Boolean,
-    onTogglePreview: () -> Unit,
-    onSelectTarget: (Int) -> Unit,
-    onCollapse: () -> Unit,
-    onPickImage: () -> Unit,
-    onClearBackground: () -> Unit,
-    onRestoreFollow: () -> Unit,
-    onDismiss: () -> Unit,
-    onConfirm: () -> Unit,
-    onRevert: () -> Unit,
-    onBackgroundDimChange: (Float) -> Unit,
-    onBackgroundBlurChange: (Float) -> Unit,
-    onBackgroundScaleChange: (Float) -> Unit,
-    onHeroScaleChange: (Float) -> Unit,
-    onHeroFractionChange: (Float) -> Unit,
-    onSettingsFinished: () -> Unit,
-) {
-    val screenHeightDp = LocalConfiguration.current.screenHeightDp.toFloat()
-
-    Column(
-        modifier = Modifier
-            .padding(20.dp)
-            .animateContentSize()
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = Icons.Outlined.Wallpaper,
-                contentDescription = null,
-                tint = PikuColors.textPrimary,
-                modifier = Modifier.size(20.dp)
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = stringResource(R.string.background_select_title),
-                color = PikuColors.textPrimary,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-            )
-            if (state.customBackgroundPath != null) {
-                Spacer(Modifier.weight(1f))
-                IconButton(onClick = onCollapse) {
-                    Icon(
-                        imageVector = Icons.Filled.KeyboardArrowDown,
-                        contentDescription = stringResource(R.string.background_panel_collapse),
-                    )
-                }
-            }
-        }
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = if (state.customBackgroundPath != null) {
-                stringResource(R.string.background_drag_hint)
-            } else {
-                stringResource(R.string.background_select_hint)
-            },
-            color = PikuColors.textFaint,
-            fontSize = 12.sp,
-        )
-        Spacer(Modifier.height(16.dp))
-
-        if (state.customBackgroundPath != null) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
-            ) {
-                listOf(
-                    BG_EDIT_TARGET_HERO to R.string.background_edit_target_hero,
-                    BG_EDIT_TARGET_BACKDROP to R.string.background_edit_target_backdrop,
-                ).forEach { (target, labelRes) ->
-                    val selected = bgEditTarget == target
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(50))
-                            .background(
-                                if (selected) {
-                                    if (dark) Color(0xFF6C538C) else Color(0xFFE8DEF8)
-                                } else {
-                                    if (dark) Color(0xFF332F2B) else Color(0xFFF0EDE9)
-                                }
-                            )
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                            ) { onSelectTarget(target) }
-                            .padding(vertical = 8.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = stringResource(labelRes),
-                            color = if (selected) {
-                                if (dark) Color.White else Color(0xFF21005D)
-                            } else {
-                                if (dark) Color.White else Color.Black
-                            },
-                            fontSize = 13.sp,
-                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                        )
-                    }
-                }
-            }
-            Spacer(Modifier.height(12.dp))
-
-            if (bgEditTarget == BG_EDIT_TARGET_BACKDROP) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = stringResource(
-                            if (state.backdropPath != null) R.string.background_backdrop_separated else R.string.background_follow_hint
-                        ),
-                        color = PikuColors.textFaint,
-                        fontSize = 12.sp,
-                        modifier = Modifier.weight(1f),
-                    )
-                    if (state.backdropPath != null) {
-                        TextButton(
-                            onClick = onRestoreFollow,
-                            colors = ButtonDefaults.textButtonColors(contentColor = AccentDark),
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
-                        ) {
-                            Text(
-                                text = stringResource(R.string.background_restore_follow),
-                                fontSize = 12.sp
-                            )
-                        }
-                    }
-                }
-                Spacer(Modifier.height(4.dp))
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = stringResource(R.string.background_dim_label),
-                        color = PikuColors.textPrimary,
-                        fontSize = 13.sp,
-                    )
-                    Spacer(Modifier.weight(1f))
-                    Text(
-                        text = "${(state.backgroundDim * 100).roundToInt()}%",
-                        color = PikuColors.textFaint,
-                        fontSize = 12.sp,
-                    )
-                }
-                Slider(
-                    value = state.backgroundDim,
-                    onValueChange = onBackgroundDimChange,
-                    onValueChangeFinished = onSettingsFinished,
-                    valueRange = 0f..SettingsRepository.BACKGROUND_DIM_MAX,
-                )
-                Spacer(Modifier.height(8.dp))
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = stringResource(R.string.background_blur_label),
-                        color = PikuColors.textPrimary,
-                        fontSize = 13.sp,
-                    )
-                    Spacer(Modifier.weight(1f))
-                    Text(
-                        text = "${state.backgroundBlur.roundToInt()}dp",
-                        color = PikuColors.textFaint,
-                        fontSize = 12.sp,
-                    )
-                }
-                Slider(
-                    value = state.backgroundBlur,
-                    onValueChange = onBackgroundBlurChange,
-                    onValueChangeFinished = onSettingsFinished,
-                    valueRange = SettingsRepository.BACKGROUND_BLUR_MIN..SettingsRepository.BACKGROUND_BLUR_MAX,
-                )
-
-                if (state.backdropPath != null) {
-                    Spacer(Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = stringResource(R.string.background_backdrop_scale_label),
-                            color = PikuColors.textPrimary,
-                            fontSize = 13.sp,
-                        )
-                        Spacer(Modifier.weight(1f))
-                        Text(
-                            text = "${String.format("%.2f", state.backgroundScale)}x",
-                            color = PikuColors.textFaint,
-                            fontSize = 12.sp,
-                        )
-                    }
-                    Slider(
-                        value = state.backgroundScale,
-                        onValueChange = onBackgroundScaleChange,
-                        onValueChangeFinished = onSettingsFinished,
-                        valueRange = SettingsRepository.BACKGROUND_SCALE_MIN..SettingsRepository.BACKGROUND_SCALE_MAX,
-                    )
-                }
-            } else {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = stringResource(R.string.background_hero_scale_label),
-                        color = PikuColors.textPrimary,
-                        fontSize = 13.sp,
-                    )
-                    Spacer(Modifier.weight(1f))
-                    Text(
-                        text = "${String.format("%.2f", state.heroScale)}x",
-                        color = PikuColors.textFaint,
-                        fontSize = 12.sp,
-                    )
-                }
-                Slider(
-                    value = heroScaleToSlider(state.heroScale),
-                    onValueChange = { onHeroScaleChange(sliderToHeroScale(it)) },
-                    onValueChangeFinished = onSettingsFinished,
-                )
-                if (state.heroScale < 1f) {
-                    Text(
-                        text = stringResource(R.string.background_frame_hint),
-                        color = PikuColors.textFaint,
-                        fontSize = 11.sp,
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = stringResource(R.string.background_hero_label),
-                        color = PikuColors.textPrimary,
-                        fontSize = 13.sp,
-                    )
-                    Spacer(Modifier.weight(1f))
-                    Text(
-                        // 读数给实际清晰区占比：比例被 200~420dp 钳住时（短屏/高屏两端）
-                        // 设置值不等于实际高度，显示钳后的值才不会和画面不一致
-                        text = "${(heroZoneHeightDp(screenHeightDp, state.backgroundHeroFraction) /
-                            screenHeightDp * 100).roundToInt()}%",
-                        color = PikuColors.textFaint,
-                        fontSize = 12.sp,
-                    )
-                }
-                val heroRange = heroFractionRange(screenHeightDp)
-                Slider(
-                    value = state.backgroundHeroFraction.coerceIn(heroRange.start, heroRange.endInclusive),
-                    onValueChange = onHeroFractionChange,
-                    onValueChangeFinished = onSettingsFinished,
-                    valueRange = heroRange,
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-        }
-
-        state.backgroundErrorRes?.let { res ->
-            Text(
-                text = stringResource(res),
-                color = PikuColors.error,
-                fontSize = 12.sp,
-                modifier = Modifier.padding(bottom = 12.dp)
-            )
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
-        ) {
-            Button(
-                onClick = onPickImage,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (dark) Color(0xFF332F2B) else Color(0xFFF0EDE9),
-                    contentColor = if (dark) Color.White else Color.Black
-                ),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                modifier = Modifier.weight(1f)
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.CameraAlt,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text = stringResource(
-                        when {
-                            state.customBackgroundPath == null -> R.string.background_pick_image
-                            bgEditTarget == BG_EDIT_TARGET_BACKDROP ->
-                                if (state.backdropPath != null) R.string.background_change_backdrop else R.string.background_pick_backdrop
-                            else -> R.string.background_change_image
-                        }
-                    ),
-                    fontSize = 13.sp
-                )
-            }
-
-            if (state.customBackgroundPath != null) {
-                Button(
-                    onClick = onTogglePreview,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (bgPreviewMode != BG_PREVIEW_REAL) {
-                            if (dark) Color(0xFF6C538C) else Color(0xFFE8DEF8)
-                        } else {
-                            if (dark) Color(0xFF332F2B) else Color(0xFFF0EDE9)
-                        },
-                        contentColor = if (bgPreviewMode != BG_PREVIEW_REAL) {
-                            if (dark) Color.White else Color(0xFF21005D)
-                        } else {
-                            if (dark) Color.White else Color.Black
-                        }
-                    ),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(
-                        imageVector = if (bgPreviewMode == BG_PREVIEW_REAL) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        text = stringResource(
-                            if (bgPreviewMode == BG_PREVIEW_REAL) R.string.background_preview_real else R.string.background_preview_hidden
-                        ),
-                        fontSize = 13.sp
-                    )
-                }
-            }
-        }
-
-        Spacer(Modifier.height(12.dp))
-        androidx.compose.material3.HorizontalDivider(color = if (dark) Color(0xFF2C2825) else Color(0xFFEAE7E4))
-        Spacer(Modifier.height(12.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (state.customBackgroundPath != null) {
-                TextButton(
-                    onClick = onClearBackground,
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = PikuColors.error
-                    )
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Delete,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        text = stringResource(R.string.background_reset),
-                        fontSize = 13.sp
-                    )
-                }
-            }
-
-            Spacer(Modifier.weight(1f))
-
-            TextButton(
-                onClick = onRevert,
-                colors = ButtonDefaults.textButtonColors(
-                    contentColor = PikuColors.textFaint
-                )
-            ) {
-                Text(text = stringResource(R.string.search_cancel), fontSize = 13.sp)
-            }
-
-            Button(
-                onClick = onConfirm,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = AccentDark,
-                    contentColor = Color.White
-                )
-            ) {
-                Text(text = stringResource(R.string.profile_edit_save), fontSize = 13.sp)
-            }
-        }
-    }
-}
-
-/** 显示用版本号：debug 构建用 DEBUG_VERSION_NAME，release 去掉 "-xxx" 后缀 */
-private fun displayVersionName(): String =
-    if (BuildConfig.DEBUG && BuildConfig.DEBUG_VERSION_NAME.isNotBlank()) {
-        BuildConfig.DEBUG_VERSION_NAME
-    } else {
-        BuildConfig.VERSION_NAME.substringBefore("-")
-    }
