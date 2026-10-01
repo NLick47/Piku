@@ -282,10 +282,6 @@ fun AppNavHost(
                         backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = true
                         navController.navigate(Routes.TAGS)
                     },
-                    onFollowUsersClick = {
-                        backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = true
-                        navController.navigate(Routes.followUsers())
-                    },
                     onSearchClick = { navController.navigate(Routes.search()) },
                     onAuthorClick = { work: Work ->
                         // 卡片作者区：不写 SHOULD_REOPEN_DRAWER，避免回到首页时抽屉被自动弹出

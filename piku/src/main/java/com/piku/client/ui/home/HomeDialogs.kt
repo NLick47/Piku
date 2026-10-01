@@ -28,7 +28,6 @@ import com.piku.client.ui.home.sheets.NetworkDiagDialog
 import com.piku.client.ui.home.sheets.RetentionSheet
 import com.piku.client.ui.home.sheets.ThemeModeSheet
 import com.piku.client.ui.home.sheets.WebDavSettingsScreen
-import com.piku.client.ui.profile.ProfileEditSheet
 
 private const val GITHUB_REPO_URL = "https://github.com/NLick47/Piku"
 private const val GITHUB_ISSUES_URL = "https://github.com/NLick47/Piku/issues"
@@ -44,6 +43,7 @@ internal fun displayVersionName(): String =
 /**
  * 首页二级弹层的可见开关。宿主持有（经抽屉/主壳触发置位），[HomeDialogs] 负责渲染与销账；
  * 各开关互斥性不成立（如 AI 翻译弹层上还能叠模型目录、关于页上能叠网络诊断），所以是平铺布尔而不是单槽枚举。
+ * 资料编辑不在其中：它是 poipiku 账号的能力，由它的抽屉插件自己挂载。
  */
 @Stable
 internal class HomeDialogsState internal constructor(
@@ -56,7 +56,6 @@ internal class HomeDialogsState internal constructor(
     private val aiTranslateSheet: MutableState<Boolean>,
     private val aboutSheet: MutableState<Boolean>,
     private val webDavSettings: MutableState<Boolean>,
-    private val profileEdit: MutableState<Boolean>,
     private val avatarViewer: MutableState<Boolean>,
 ) {
     var showCategories: Boolean
@@ -86,9 +85,6 @@ internal class HomeDialogsState internal constructor(
     var showWebDavSettings: Boolean
         get() = webDavSettings.value
         set(value) { webDavSettings.value = value }
-    var showProfileEdit: Boolean
-        get() = profileEdit.value
-        set(value) { profileEdit.value = value }
     var showAvatarViewer: Boolean
         get() = avatarViewer.value
         set(value) { avatarViewer.value = value }
@@ -105,7 +101,6 @@ internal fun rememberHomeDialogsState(): HomeDialogsState {
     val aiTranslateSheet = rememberSaveable { mutableStateOf(false) }
     val aboutSheet = rememberSaveable { mutableStateOf(false) }
     val webDavSettings = rememberSaveable { mutableStateOf(false) }
-    val profileEdit = rememberSaveable { mutableStateOf(false) }
     val avatarViewer = rememberSaveable { mutableStateOf(false) }
     return remember {
         HomeDialogsState(
@@ -118,7 +113,6 @@ internal fun rememberHomeDialogsState(): HomeDialogsState {
             aiTranslateSheet = aiTranslateSheet,
             aboutSheet = aboutSheet,
             webDavSettings = webDavSettings,
-            profileEdit = profileEdit,
             avatarViewer = avatarViewer,
         )
     }
@@ -341,19 +335,5 @@ internal fun HomeDialogs(
                 dark = dark,
             )
         }
-    }
-
-    if (dialogs.showProfileEdit) {
-        ProfileEditSheet(
-            profile = state.userProfile,
-            dark = dark,
-            onOpenPublicProfile = {
-                val url = state.userProfile?.profileUrl
-                if (url != null) {
-                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                }
-            },
-            onDismiss = { dialogs.showProfileEdit = false },
-        )
     }
 }

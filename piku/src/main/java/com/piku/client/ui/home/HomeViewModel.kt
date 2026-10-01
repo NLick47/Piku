@@ -42,6 +42,8 @@ import com.piku.client.domain.model.UserProfile
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkKey
 import com.piku.client.domain.usecase.CheckForUpdateUseCase
+import com.piku.client.ui.home.drawer.SourceDrawerPlugin
+import com.piku.client.ui.home.drawer.SourceDrawerRegistry
 import com.piku.client.domain.usecase.ObserveAdultContentUseCase
 import com.piku.client.domain.usecase.ObserveAutoCheckEnabledUseCase
 import com.piku.client.domain.usecase.ObserveBackgroundDimUseCase
@@ -240,10 +242,15 @@ class HomeViewModel @Inject constructor(
     private val networkDiagnostics: NetworkDiagnostics,
     private val networkDiagnosis: NetworkDiagnosis,
     private val environmentReader: NetworkEnvironmentReader,
+    /** 抽屉插件注册表：外壳按当前源取插件交给抽屉渲染，宿主不解释插件条目 */
+    private val drawerPlugins: SourceDrawerRegistry,
 ) : ViewModel() {
 
     /** 网络诊断弹窗的内容与忙碌状态 */
     data class NetworkReportState(val text: String = "", val loading: Boolean = false)
+
+    /** 当前源的抽屉插件；查不到 = 该源没有独有功能 */
+    fun drawerPlugin(source: WorkSource): SourceDrawerPlugin? = drawerPlugins.byIdOrNull(source)
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()

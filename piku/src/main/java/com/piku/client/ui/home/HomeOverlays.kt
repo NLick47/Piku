@@ -6,16 +6,15 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.piku.client.domain.model.Work
 import com.piku.client.ui.collection.CollectionScreen
-import com.piku.client.ui.follow.BlockUsersScreen
-import com.piku.client.ui.follow.FollowUsersScreen
 import com.piku.client.ui.history.HistoryScreen
 import com.piku.client.ui.home.drawer.AccountsScreen
 import com.piku.client.ui.home.drawer.SourceAccountRow
 import com.piku.client.ui.tags.TagScreen
 
 /**
- * 抽屉功能页的承载：账号、浏览记录、收藏、标签、关注/屏蔽列表。
+ * 抽屉通用功能页的承载：账号、浏览记录、收藏、标签。
  * 都是全屏 Dialog 浮层（独立窗口天然挡住首页点击），返回时由宿主重新拉出抽屉。
+ * 关注/屏蔽列表是 poipiku 账号的能力，浮层随条目归了它的抽屉插件（PoipikuDrawerPlugin）。
  */
 @Composable
 internal fun HomeOverlays(
@@ -28,12 +27,7 @@ internal fun HomeOverlays(
     onCollectionBack: () -> Unit,
     showTagsPage: Boolean,
     onTagsBack: () -> Unit,
-    showFollowUsersPage: Boolean,
-    onFollowUsersBack: () -> Unit,
-    showBlockUsersPage: Boolean,
-    onBlockUsersBack: () -> Unit,
     onWorkClick: (Work) -> Unit,
-    onLoginClick: () -> Unit,
     onProfileOpen: (Long, String) -> Unit,
     state: HomeUiState,
     dark: Boolean,
@@ -66,24 +60,6 @@ internal fun HomeOverlays(
     if (showTagsPage) {
         Dialog(onDismissRequest = onTagsBack, properties = fullScreenProps) {
             TagScreen(onBack = onTagsBack, onWorkClick = { onWorkClick(it) })
-        }
-    }
-    if (showFollowUsersPage) {
-        Dialog(onDismissRequest = onFollowUsersBack, properties = fullScreenProps) {
-            FollowUsersScreen(
-                onBack = onFollowUsersBack,
-                onLoginClick = onLoginClick,
-                onUserClick = { user -> onProfileOpen(user.userId, user.name) },
-            )
-        }
-    }
-    if (showBlockUsersPage) {
-        Dialog(onDismissRequest = onBlockUsersBack, properties = fullScreenProps) {
-            BlockUsersScreen(
-                onBack = onBlockUsersBack,
-                onLoginClick = onLoginClick,
-                onUserClick = { user -> onProfileOpen(user.userId, user.name) },
-            )
         }
     }
 }

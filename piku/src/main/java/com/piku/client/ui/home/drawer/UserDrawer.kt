@@ -34,21 +34,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.AltRoute
-import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.CloudSync
-import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.DeleteSweep
-import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.GTranslate
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Login
 import androidx.compose.material.icons.outlined.ManageAccounts
 import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.PostAdd
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.Tag
@@ -84,18 +79,18 @@ import com.piku.client.R
 import com.piku.client.domain.model.AppLanguage
 import com.piku.client.domain.model.ImageRouteMode
 import com.piku.client.domain.model.ThemeMode
-import com.piku.client.domain.model.UserProfile
 import com.piku.client.ui.common.UserAvatar
 import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.PikuColors
 import com.piku.client.ui.theme.themedSwitchColors
 
+/**
+ * 用户抽屉的外壳：头部与通用功能（账号管理/资料库/设置区/底部账号动作）在这里渲染，
+ * 源专属条目由 [sourceDrawer] 声明、按 [DrawerSlot] 插进对应位置——外壳不解释插件条目。
+ */
 @Composable
 fun UserDrawer(
     drawerState: DrawerState,
-    userProfile: UserProfile?,
-    /** poipiku（主源）的登录态：抽屉里 poipiku 专属入口用它，与头部显示的源无关 */
-    loggedIn: Boolean,
     /** 头部显示的那一个账号 = 当前首页源的账号；null = 还没算出来（画骨架） */
     headerAccount: SourceAccountRow?,
     adultEnabled: Boolean,
@@ -114,11 +109,6 @@ fun UserDrawer(
     onHistoryClick: () -> Unit,
     onCollectionClick: () -> Unit,
     onTagsClick: () -> Unit,
-    onFollowUsersClick: () -> Unit,
-    onBlockUsersClick: () -> Unit = {},
-    onProfileClick: () -> Unit,
-    onPublishClick: () -> Unit = {},
-    onLoginClick: () -> Unit,
     /** 头部左侧：主源进个人主页、其它源进账号页、未登录进对应源的登录页 */
     onHeaderClick: () -> Unit,
     /** 头部右侧 chevron 与菜单行：进账号管理页 */
@@ -137,6 +127,10 @@ fun UserDrawer(
     /** 首页源：当前源的文案资源与换源入口 */
     homeSourceLabelRes: Int = R.string.home_source_poipiku,
     onHomeSourceClick: () -> Unit = {},
+    /** 当前首页源的抽屉插件；null = 该源没有独有功能，抽屉只有通用功能 */
+    sourceDrawer: SourceDrawerPlugin? = null,
+    /** 插件条目要用的外壳环境（登录页/导航/浮层通道），宿主装配 */
+    drawerScope: DrawerScope,
     content: @Composable () -> Unit,
 ) {
     var settingsExpanded by remember { mutableStateOf(false) }
@@ -145,8 +139,6 @@ fun UserDrawer(
         drawerState = drawerState,
         drawerContent = {
             DrawerPanel(
-                userProfile = userProfile,
-                loggedIn = loggedIn,
                 headerAccount = headerAccount,
                 adultEnabled = adultEnabled,
                 themeMode = themeMode,
@@ -167,11 +159,6 @@ fun UserDrawer(
                 onHistoryClick = onHistoryClick,
                 onCollectionClick = onCollectionClick,
                 onTagsClick = onTagsClick,
-                onFollowUsersClick = onFollowUsersClick,
-                onBlockUsersClick = onBlockUsersClick,
-                onProfileClick = onProfileClick,
-                onPublishClick = onPublishClick,
-                onLoginClick = onLoginClick,
                 onHeaderClick = onHeaderClick,
                 onAccountsClick = onAccountsClick,
                 onAccountAction = onAccountAction,
@@ -186,6 +173,8 @@ fun UserDrawer(
                 onWebDavClick = onWebDavClick,
                 homeSourceLabelRes = homeSourceLabelRes,
                 onHomeSourceClick = onHomeSourceClick,
+                sourceDrawer = sourceDrawer,
+                drawerScope = drawerScope,
             )
         },
         scrimColor = if (dark) Color(0xB3000000) else Color(0x99000000),
@@ -196,8 +185,6 @@ fun UserDrawer(
 
 @Composable
 private fun DrawerPanel(
-    userProfile: UserProfile?,
-    loggedIn: Boolean,
     headerAccount: SourceAccountRow?,
     adultEnabled: Boolean,
     themeMode: ThemeMode,
@@ -215,11 +202,6 @@ private fun DrawerPanel(
     onHistoryClick: () -> Unit,
     onCollectionClick: () -> Unit,
     onTagsClick: () -> Unit,
-    onFollowUsersClick: () -> Unit,
-    onBlockUsersClick: () -> Unit = {},
-    onProfileClick: () -> Unit,
-    onPublishClick: () -> Unit = {},
-    onLoginClick: () -> Unit,
     onHeaderClick: () -> Unit,
     onAccountsClick: () -> Unit,
     onAccountAction: () -> Unit,
@@ -234,11 +216,18 @@ private fun DrawerPanel(
     onWebDavClick: () -> Unit,
     homeSourceLabelRes: Int,
     onHomeSourceClick: () -> Unit,
+    sourceDrawer: SourceDrawerPlugin?,
+    drawerScope: DrawerScope,
 ) {
-    val primary = PikuColors.textPrimary
     val faint = PikuColors.textFaint
     val divider = PikuColors.border
     val iconAccent = PikuColors.accent
+
+    // 源专属条目：当前源的插件在组合期声明，外壳只按槽位摆放、用同一套行组件渲染
+    val contributions = sourceDrawer?.contributions(drawerScope).orEmpty()
+    val accountEntries = contributions.entriesIn(DrawerSlot.Account)
+    val libraryEntries = contributions.entriesIn(DrawerSlot.Library)
+    val settingsEntries = contributions.entriesIn(DrawerSlot.Settings)
 
     // 断开是破坏性动作，先确认；文案由该源自己的插件给
     var confirmDisconnect by remember { mutableStateOf(false) }
@@ -293,22 +282,14 @@ private fun DrawerPanel(
                 accent = iconAccent,
             )
             Spacer(Modifier.height(2.dp))
-            if (loggedIn) {
+            // 源专属的账号动作区（如 poipiku 的投稿/编辑资料）：
+            // 头行后的 2dp 间隔无条件保留，条目各自再垫 2dp——未登录时排版与原版逐像素一致
+            accountEntries.forEach { entry ->
                 Spacer(Modifier.height(2.dp))
                 DrawerMenuRow(
-                    icon = Icons.Outlined.PostAdd,
-                    label = stringResource(R.string.menu_publish),
-                    onClick = onPublishClick,
-                    dark = dark,
-                    accent = iconAccent,
-                )
-            }
-            if (userProfile?.profileUrl != null) {
-                Spacer(Modifier.height(2.dp))
-                DrawerMenuRow(
-                    icon = Icons.Outlined.Person,
-                    label = stringResource(R.string.menu_edit_profile),
-                    onClick = onProfileClick,
+                    icon = entry.icon,
+                    label = entry.label,
+                    onClick = entry.onClick,
                     dark = dark,
                     accent = iconAccent,
                 )
@@ -344,18 +325,12 @@ private fun DrawerPanel(
                 dark = dark,
                 accent = iconAccent,
             )
-            if (loggedIn) {
+            // 源专属的内容管理入口（如 poipiku 的关注/屏蔽列表）
+            libraryEntries.forEach { entry ->
                 DrawerMenuRow(
-                    icon = Icons.Outlined.Group,
-                    label = stringResource(R.string.menu_follow_users),
-                    onClick = onFollowUsersClick,
-                    dark = dark,
-                    accent = iconAccent,
-                )
-                DrawerMenuRow(
-                    icon = Icons.Outlined.Block,
-                    label = stringResource(R.string.menu_block_users),
-                    onClick = onBlockUsersClick,
+                    icon = entry.icon,
+                    label = entry.label,
+                    onClick = entry.onClick,
                     dark = dark,
                     accent = iconAccent,
                 )
@@ -495,6 +470,16 @@ private fun DrawerPanel(
                         accent = iconAccent,
                     )
                 }
+            }
+            // 源特有的设置项，挂在设置区末尾常显
+            settingsEntries.forEach { entry ->
+                DrawerMenuRow(
+                    icon = entry.icon,
+                    label = entry.label,
+                    onClick = entry.onClick,
+                    dark = dark,
+                    accent = iconAccent,
+                )
             }
             Spacer(Modifier.height(8.dp))
         }
@@ -823,6 +808,10 @@ private fun DrawerMenuRow(
         }
     }
 }
+
+/** 取一个槽位里的全部条目（按插件声明顺序） */
+private fun List<DrawerContribution>.entriesIn(slot: DrawerSlot): List<DrawerEntry> =
+    filter { it.slot == slot }.flatMap { it.entries }
 
 private fun ThemeMode.labelRes(): Int = when (this) {
     ThemeMode.SYSTEM -> R.string.theme_mode_system

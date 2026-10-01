@@ -28,8 +28,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -43,9 +41,10 @@ import com.piku.client.ui.home.background.HomeBackgroundEditOverlay
 import com.piku.client.ui.home.background.rememberHomeBackdropState
 import com.piku.client.ui.home.background.rememberHomeBackgroundEdit
 import com.piku.client.ui.home.drawer.AccountsViewModel
+import com.piku.client.ui.home.drawer.DrawerScope
+import com.piku.client.ui.home.drawer.SourceAccountRow
 import com.piku.client.ui.home.drawer.UserDrawer
 import com.piku.client.ui.home.shell.PoipikuHomeShell
-import com.piku.client.ui.publish.PublishScreen
 import com.piku.client.ui.source.SourceFeedContent
 import com.piku.client.ui.theme.LocalDarkTheme
 import kotlinx.coroutines.launch
@@ -56,7 +55,9 @@ import kotlinx.coroutines.launch
  *   其余源走 ui/source 的声明驱动通用壳 [SourceFeedContent]。新增源注册进
  *   SourceRegistry / SourceAuthRegistry 后即可换源、登录、展示，宿主与两个壳都不用改。
  * - 背景域（取景/取色/编辑会话）在 background/ 包，抽屉在 drawer/ 包，
- *   二级弹层在 [HomeDialogs]，抽屉功能页浮层在 [HomeOverlays]。
+ *   二级弹层在 [HomeDialogs]，抽屉通用功能页浮层在 [HomeOverlays]；
+ *   源专属的抽屉条目与浮层（投稿等）由 [com.piku.client.ui.home.drawer.SourceDrawerPlugin]
+ *   声明，宿主只装配 [DrawerScope] 与挂载，不认识任何一条。
  * - 数据源隔离：宿主不接触任何源的凭据与实现细节，账号信息一律经
  *   AccountsViewModel 的"当前源账号行"（源自己声明登录态与路由）。
  */
@@ -70,7 +71,6 @@ fun HomeScreen(
     onHistoryClick: () -> Unit,
     onCollectionClick: () -> Unit,
     onTagsClick: () -> Unit,
-    onFollowUsersClick: () -> Unit,
     onSearchClick: () -> Unit,
     onAuthorClick: (Work) -> Unit,
     onProfileOpen: (Long, String) -> Unit,
@@ -91,18 +91,19 @@ fun HomeScreen(
     // ---- 抽屉触发的二级弹层开关 ----
     val dialogs = rememberHomeDialogsState()
 
-    // ---- 抽屉功能页与发布草稿：任一激活时禁掉抽屉手势 ----
+    // ---- 抽屉功能页与插件浮层：任一激活时禁掉抽屉手势 ----
     var showHistoryPage by rememberSaveable { mutableStateOf(false) }
     var showCollectionPage by rememberSaveable { mutableStateOf(false) }
     var showTagsPage by rememberSaveable { mutableStateOf(false) }
-    var showFollowUsersPage by rememberSaveable { mutableStateOf(false) }
-    var showBlockUsersPage by rememberSaveable { mutableStateOf(false) }
     var showAccountsPage by rememberSaveable { mutableStateOf(false) }
-    var publishDraftId by rememberSaveable { mutableStateOf<Long?>(null) }
+    // 抽屉插件声明的浮层（投稿/资料编辑/关注屏蔽列表…）：内容由插件给，外壳只挂载不解释
+    var drawerOverlay by remember {
+        mutableStateOf<(@Composable (onDismiss: () -> Unit, onClose: () -> Unit) -> Unit)?>(null)
+    }
     val snackbarHostState = remember { SnackbarHostState() }
     val anyOverlayActive = showHistoryPage || showAccountsPage ||
-        showCollectionPage || showTagsPage || showFollowUsersPage || showBlockUsersPage || dialogs.showWebDavSettings ||
-        publishDraftId != null
+        showCollectionPage || showTagsPage || dialogs.showWebDavSettings ||
+        drawerOverlay != null
 
     // ---- 滚动：网格状态、头部底衬进度、视差、停顶判定 ----
     val isScrolling = remember { mutableStateOf(false) }
@@ -175,10 +176,37 @@ fun HomeScreen(
     }
     val onGoTop = { gridState.scrollToTopSmart(scope) }
 
+    // ---- 抽屉插件的外壳环境：源专属条目经它触达登录页/导航/浮层通道，宿主不解释条目语义 ----
+    val dismissDrawerOverlay: () -> Unit = {
+        drawerOverlay = null
+        scope.launch { drawerState.open() }
+    }
+    val closeDrawerOverlay = { drawerOverlay = null }
+    val drawerScope = object : DrawerScope {
+        override val account: SourceAccountRow? get() = headerAccount
+
+        override fun openLogin() {
+            val row = headerAccount
+            val route = row?.loginRoute
+            if (route != null) onSourceLoginClick(route) else onLoginClick()
+        }
+
+        override fun openWork(work: Work) = onWorkClick(work)
+
+        override fun openAuthorProfile(uid: Long, name: String) = onProfileOpen(uid, name)
+
+        override fun openOverlay(
+            closeDrawer: Boolean,
+            content: @Composable (onDismiss: () -> Unit, onClose: () -> Unit) -> Unit,
+        ) {
+            if (closeDrawer) scope.launch { drawerState.close() }
+            drawerOverlay = content
+        }
+    }
+
     UserDrawer(
         drawerState = drawerState,
-        userProfile = state.userProfile,
-        loggedIn = state.loggedIn,
+        headerAccount = headerAccount,
         adultEnabled = state.adultEnabled,
         themeMode = state.themeMode,
         imageRouteMode = state.imageRouteMode,
@@ -206,21 +234,6 @@ fun HomeScreen(
         onTagsClick = {
             showTagsPage = true
         },
-        onFollowUsersClick = {
-            showFollowUsersPage = true
-        },
-        onBlockUsersClick = {
-            showBlockUsersPage = true
-        },
-        onPublishClick = {
-            scope.launch { drawerState.close() }
-            publishDraftId = -1L
-        },
-        onProfileClick = { dialogs.showProfileEdit = true },
-        onLoginClick = {
-            onLoginClick()
-        },
-        headerAccount = headerAccount,
         // 头部点哪里全看这个源自己声明了什么能力，不看谁是"主源"：
         // 未登录 → 它的登录页；有账号主页 → 主页；没有 → 账号页
         onHeaderClick = {
@@ -262,6 +275,9 @@ fun HomeScreen(
             scope.launch { drawerState.close() }
             dialogs.showWebDavSettings = true
         },
+        // 当前源的抽屉插件：投稿这类源专属入口由它声明，看哪个源就渲染哪个源的
+        sourceDrawer = viewModel.drawerPlugin(state.homeSource),
+        drawerScope = drawerScope,
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             // 背景层：自定义头图 + 雾化，或默认渐变（取景几何与编辑会话在 background/ 包）
@@ -371,60 +387,16 @@ fun HomeScreen(
                 onCollectionBack = { showCollectionPage = false; scope.launch { drawerState.open() } },
                 showTagsPage = showTagsPage,
                 onTagsBack = { showTagsPage = false; scope.launch { drawerState.open() } },
-                showFollowUsersPage = showFollowUsersPage,
-                onFollowUsersBack = { showFollowUsersPage = false; scope.launch { drawerState.open() } },
-                showBlockUsersPage = showBlockUsersPage,
-                onBlockUsersBack = { showBlockUsersPage = false; scope.launch { drawerState.open() } },
                 onWorkClick = onWorkClick,
-                onLoginClick = onLoginClick,
                 onProfileOpen = onProfileOpen,
                 state = state,
                 dark = dark,
             )
 
-            val initialPublishId = publishDraftId
-            if (initialPublishId != null) {
-                val profile = state.userProfile
-                // 与浏览记录等抽屉页一致：全屏 Dialog 浮层，独立窗口天然挡住首页点击
-                Dialog(
-                    onDismissRequest = {
-                        publishDraftId = null
-                        scope.launch { drawerState.open() }
-                    },
-                    properties = DialogProperties(
-                        usePlatformDefaultWidth = false,
-                        decorFitsSystemWindows = false,
-                        dismissOnClickOutside = false,
-                    ),
-                ) {
-                    PublishScreen(
-                        initialDraftId = initialPublishId,
-                        onBack = {
-                            publishDraftId = null
-                            scope.launch { drawerState.open() }
-                        },
-                        onPublished = { workId ->
-                            publishDraftId = null
-                            val uid = profile?.uid?.toLongOrNull()
-                            if (uid != null) {
-                                onWorkClick(
-                                    Work(
-                                        id = workId,
-                                        authorId = uid,
-                                        authorName = profile.name.orEmpty(),
-                                        authorAvatarUrl = null,
-                                        categoryCd = 0,
-                                        categoryName = "",
-                                        title = "",
-                                        thumbnailUrl = "",
-                                        imageCount = 0,
-                                        r18 = false,
-                                    ),
-                                )
-                            }
-                        },
-                    )
-                }
+            // 抽屉插件声明的浮层（投稿页/资料编辑/关注屏蔽列表…）：
+            // 内容与关闭语义都由插件给，外壳只负责挂载，不解释其中任何一个
+            drawerOverlay?.let { overlayContent ->
+                overlayContent(dismissDrawerOverlay, closeDrawerOverlay)
             }
             SnackbarHost(
                 hostState = snackbarHostState,
