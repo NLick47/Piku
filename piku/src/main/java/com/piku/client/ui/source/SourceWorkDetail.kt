@@ -276,8 +276,9 @@ internal fun SourceWorkDetailDialog(
                         scrollState = scrollState,
                         topInset = topInset,
                         sourceThumbnailUrl = work.thumbnailUrl,
-                        // 页表没回来（预览打底期）不允许进看图器：viewerImages 为空会越界
-                        onImageClick = { page -> if (state.pages.isNotEmpty()) viewerPage = page },
+                        // 点击随时放行：viewerImages 在页表没回来时用屏上打底图兜底，页表到了自动补全
+                        onImageClick = { page -> if (state.viewerImages.isNotEmpty()) viewerPage = page },
+                        // 长按给保存/分享用，要等页表
                         onImageLongPress = { page -> if (state.pages.isNotEmpty()) imageActionPage = page },
                         onTagClick = { tag ->
                             runCatching {

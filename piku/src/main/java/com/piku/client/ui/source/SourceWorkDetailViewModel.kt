@@ -126,6 +126,10 @@ class SourceWorkDetailViewModel @Inject constructor(
         val viewerImages: List<ViewerImage>
             get() {
                 val displayed = detail?.imageUrls.orEmpty()
+                // 页表没回来先用屏上那张开图器，页表到了自动补全页数与原图
+                if (pages.isEmpty()) {
+                    return displayed.map { ViewerImage(thumbnailUrl = it, fullUrl = null) }
+                }
                 return pages.mapIndexed { index, page ->
                     ViewerImage(
                         thumbnailUrl = displayed.getOrNull(index) ?: page.url,
