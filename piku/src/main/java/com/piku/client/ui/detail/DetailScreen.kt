@@ -56,6 +56,7 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -67,6 +68,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
@@ -142,6 +144,8 @@ fun DetailScreen(
     // 长按命中的页码：分享期间面板保持打开（loading 转圈），成功/失败后才关闭；
     // 必须声明在分享 LaunchedEffect 之前，effect 内要把它置 -1 关面板
     var imageActionPage by rememberSaveable { mutableIntStateOf(-1) }
+    // 图区已上屏的图：看图器拿它当零延迟垫底，与 pixiv 详情同一条路径
+    val shownPainters = remember { mutableStateMapOf<Int, Painter>() }
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -323,6 +327,7 @@ fun DetailScreen(
                     scrollState = scrollState,
                     topInset = topInset,
                     sourceThumbnailUrl = viewModel.sourceThumbnailUrl,
+                    onImageShown = { page, painter -> shownPainters[page] = painter },
                     loadingMore = state.detailLoadingMore,
                     onFirstImageLoaded = viewModel::ensureFullImages,
                     // 加载失败但屏上已有内容：图区角落给常驻重试
@@ -477,6 +482,7 @@ fun DetailScreen(
                 onImageTranslateClick = viewModel::onImageTranslateClick,
                 // 进度存储语义是页码 1 起，壳的回调是 0 基
                 onPageChanged = { page -> viewModel.saveImageProgress(page + 1) },
+                previews = shownPainters,
             )
             if (state.novelReaderOpen && it.novelText.isNotBlank()) {
                 val novelTranslated = state.showTranslation(TranslateField.NOVEL)

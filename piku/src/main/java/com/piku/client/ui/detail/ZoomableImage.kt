@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateCentroid
@@ -51,6 +52,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
@@ -167,8 +169,8 @@ private fun ZoomableImage(
     dark: Boolean,
     /** 原图档：非空时叠在最上层，就绪前下层图一直在，不黑屏不闪烁 */
     hdUrl: String? = null,
-    /** 本页任一图首次画出来时回调；宿主据此把黑底换掉 */
-    onFirstPaint: () -> Unit = {},
+    /** 详情页图区正在显示的那张：直接画它，开图器零延迟，不依赖缓存命中 */
+    preview: Painter? = null,
     onTap: () -> Unit,
     onLongPress: () -> Unit,
 ) {
@@ -272,14 +274,24 @@ private fun ZoomableImage(
         contentAlignment = Alignment.Center,
     ) {
         if (thumbnailVisible) {
-            AsyncImage(
-                model = rememberAnimatedImage(image.thumbnailUrl),
-                contentDescription = contentDescription,
-                contentScale = ContentScale.Fit,
-                colorFilter = PikuColors.tameWhiteFilter,
-                modifier = Modifier.fillMaxSize(),
-                onSuccess = { onFirstPaint() },
-            )
+            // 详情页刚画过的那张优先：painter 已含解码好的图，首帧就是内容，等不到网络也等不到解码
+            if (preview != null) {
+                Image(
+                    painter = preview,
+                    contentDescription = contentDescription,
+                    contentScale = ContentScale.Fit,
+                    colorFilter = PikuColors.tameWhiteFilter,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                AsyncImage(
+                    model = rememberAnimatedImage(image.thumbnailUrl),
+                    contentDescription = contentDescription,
+                    contentScale = ContentScale.Fit,
+                    colorFilter = PikuColors.tameWhiteFilter,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
         if (image.fullUrl != null && image.fullUrl != image.thumbnailUrl) {
             SubcomposeAsyncImage(
@@ -288,7 +300,7 @@ private fun ZoomableImage(
                 contentScale = ContentScale.Fit,
                 colorFilter = PikuColors.tameWhiteFilter,
                 modifier = Modifier.fillMaxSize(),
-                onSuccess = { fullReady = true; onFirstPaint() },
+                onSuccess = { fullReady = true },
                 // 失败时把缩略图放回来：原图可能是在缩略图已经撤掉之后才失败的
                 onError = {
                     fullReady = false
@@ -439,13 +451,13 @@ fun FullScreenViewer(
     /** 开了原图档的页：对应页叠原图层，底栏出 HD 按钮；空集 = 源没有 HD 能力 */
     hdPages: Set<Int> = emptySet(),
     onHdToggle: (Int) -> Unit = {},
+    /** 详情页图区已上屏的图：各页的零延迟垫底，没有的页回落加载 */
+    previews: Map<Int, Painter> = emptyMap(),
 ) {
     val pagerState = rememberPagerState(
         pageCount = { images.size },
         initialPage = startPage,
     )
-    // 首图就绪前背景透明，透出详情页上那张已显示的图当垫底：开图器不黑屏
-    var viewerReady by remember { mutableStateOf(false) }
     var controlsVisible by remember { mutableStateOf(true) }
     var autoHideJob by remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
@@ -473,12 +485,9 @@ fun FullScreenViewer(
         modifier = Modifier
             .fillMaxSize()
             .background(
-                when {
-                    // 暗色下用深灰而非纯黑，降低白底大图与背景的对比，减少刺眼感
-                    !viewerReady -> Color.Transparent
-                    dark -> ViewerBackgroundDark
-                    else -> Color.Black
-                },
+                // 恒不透明：透明底"透出详情页当垫底"依赖打底图瞬间画出，慢一拍就是整个详情页裸奔。
+                // 黑底立即可见 + 打底小图快速跟上，才是可预测的行为
+                if (dark) ViewerBackgroundDark else Color.Black,
             ),
     ) {
         BackHandler(onBack = onClose)
@@ -505,7 +514,7 @@ fun FullScreenViewer(
                     contentDescription = null,
                     dark = dark,
                     hdUrl = images[page].hdUrl?.takeIf { page in hdPages },
-                    onFirstPaint = { viewerReady = true },
+                    preview = previews[page],
                     onTap = {
                         if (controlsVisible) {
                             controlsVisible = false

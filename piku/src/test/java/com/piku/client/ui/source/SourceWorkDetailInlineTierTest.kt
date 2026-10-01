@@ -4,8 +4,12 @@ import com.piku.client.data.local.InMemorySharedPreferences
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.data.remote.ImageRouteController
 import com.piku.client.data.remote.ImageUpstream
+import com.piku.client.data.remote.PikuJson
 import com.piku.client.data.remote.NetworkRuntime
+import com.piku.client.data.remote.pixiv.PixivPagesResponse
+import com.piku.client.data.repository.toSourceWorkPage
 import com.piku.client.domain.source.SourceWorkPage
+import kotlinx.serialization.decodeFromString
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -169,5 +173,57 @@ class SourceWorkDetailInlineTierTest {
     @Test
     fun inlineImageUrlsHandlesEmptyPages() {
         assertTrue(inlineImageUrls(emptyList(), upgradeToFull = false, sourceThumbnailUrl = largeThumb).isEmpty())
+    }
+
+    // 输入取自真实页表响应（/pixiv/pages-150105774.json），URL 不手搓
+    private val realPages: List<SourceWorkPage> by lazy {
+        val payload = javaClass.getResourceAsStream("/pixiv/pages-150105774.json")!!
+            .readBytes().decodeToString()
+        val response = PikuJson.decodeFromString<PixivPagesResponse>(payload)
+        response.body.take(2).map { it.urls.toSourceWorkPage(it.width, it.height) }
+    }
+
+    /** 搜索页那种方形缩略图：与首图不是同一文件，不能拿来垫 */
+    private val squareThumb =
+        "https://i.pximg.net/c/360x360_70/img-master/img/2026/09/26/00/05/02/150105774_p0_square1200.jpg"
+
+    /** 页 0 垫列表卡那张：图区首图打底用的同一张，缓存必中，主图还在下载也不会黑 */
+    @Test
+    fun viewerUnderlayKeepsTheListThumbnailOnPageZero() {
+        val displayed = realPages.map { it.fullUrl }
+
+        assertEquals(largeThumb, viewerUnderlayUrl(largeThumb, displayed, realPages, index = 0))
+    }
+
+    /** 图区停在打底档（未升档）同样垫列表卡那张，判定不看图区当前是哪一档 */
+    @Test
+    fun viewerUnderlayKeepsTheListThumbnailWhenInlineIsNotUpgraded() {
+        val displayed = realPages.map { it.url }
+
+        assertEquals(largeThumb, viewerUnderlayUrl(largeThumb, displayed, realPages, index = 0))
+    }
+
+    /** 列表卡与首图不是同一文件（方形缩略图）→ 退页表 small，绝不能垫 regular */
+    @Test
+    fun viewerUnderlayFallsBackToSmallWhenListThumbnailIsAnotherFile() {
+        val displayed = realPages.map { it.fullUrl }
+
+        assertEquals(realPages.first().url, viewerUnderlayUrl(squareThumb, displayed, realPages, index = 0))
+    }
+
+    /** 深链进来的空缩略图：同样退 small */
+    @Test
+    fun viewerUnderlayFallsBackToSmallWhenListThumbnailIsBlank() {
+        val displayed = realPages.map { it.fullUrl }
+
+        assertEquals(realPages.first().url, viewerUnderlayUrl("", displayed, realPages, index = 0))
+    }
+
+    /** 其余页垫页表 small（几十 KB），不能拿图区同款 regular 大图当打底 */
+    @Test
+    fun viewerUnderlayUsesThePageSmallTierForOtherPages() {
+        val displayed = realPages.map { it.fullUrl }
+
+        assertEquals(realPages[1].url, viewerUnderlayUrl(largeThumb, displayed, realPages, index = 1))
     }
 }

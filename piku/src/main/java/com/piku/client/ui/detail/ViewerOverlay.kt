@@ -1,6 +1,7 @@
 package com.piku.client.ui.detail
 
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.painter.Painter
 
 @Composable
 fun ViewerOverlay(
@@ -18,6 +19,8 @@ fun ViewerOverlay(
     onPageChanged: (Int) -> Unit,
     hdPages: Set<Int> = emptySet(),
     onHdToggle: (Int) -> Unit = {},
+    /** 详情页图区已上屏的图：各页的零延迟垫底，没有的页回落加载 */
+    previews: Map<Int, Painter> = emptyMap(),
 ) {
     if (page == null || images.isEmpty()) return
     FullScreenViewer(
@@ -34,5 +37,6 @@ fun ViewerOverlay(
         onPageChanged = onPageChanged,
         hdPages = hdPages,
         onHdToggle = onHdToggle,
+        previews = previews,
     )
 }

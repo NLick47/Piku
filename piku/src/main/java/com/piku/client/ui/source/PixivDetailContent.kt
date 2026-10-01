@@ -45,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
@@ -93,6 +94,8 @@ internal fun PixivDetailContent(
     sourceThumbnailUrl: String = "",
     onImageClick: (Int) -> Unit,
     onImageLongPress: (Int) -> Unit,
+    /** 该页有图成功上屏：把 painter 交出去，看图器拿它当零延迟垫底 */
+    onImageShown: ((Int, Painter) -> Unit)? = null,
     onAuthorClick: () -> Unit,
     onTagClick: (String) -> Unit,
     hasImageModel: Boolean = false,
@@ -137,6 +140,7 @@ internal fun PixivDetailContent(
                 fullBleed = true,
                 onImageClick = onImageClick,
                 onImageLongPress = onImageLongPress,
+                onImageShown = onImageShown,
                 // pixiv 没有密码、小说与访问门，这几路回调留空
                 onWorkClick = { _, _, _ -> },
                 password = "",

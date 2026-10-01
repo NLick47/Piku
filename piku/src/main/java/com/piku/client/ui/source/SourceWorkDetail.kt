@@ -5,6 +5,7 @@ import android.content.ClipData
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.util.Log
 import android.net.Uri
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -27,6 +28,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -37,6 +39,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -98,6 +101,8 @@ internal fun SourceWorkDetailDialog(
         var viewerPage by remember(work.id) { mutableStateOf(-1) }
         var imageActionPage by remember(work.id) { mutableStateOf(-1) }
         var favoriteSheetVisible by remember(work.id) { mutableStateOf(false) }
+        // 图区已上屏的图：看图器拿它当零延迟垫底，不依赖任何缓存命中
+        val shownPainters = remember(work.id) { mutableStateMapOf<Int, Painter>() }
         val context = LocalContext.current
         val scope = rememberCoroutineScope()
         val snackbarHostState = remember { SnackbarHostState() }
@@ -276,8 +281,20 @@ internal fun SourceWorkDetailDialog(
                         scrollState = scrollState,
                         topInset = topInset,
                         sourceThumbnailUrl = work.thumbnailUrl,
+                        onImageShown = { page, painter -> shownPainters[page] = painter },
                         // 点击随时放行：viewerImages 在页表没回来时用屏上打底图兜底，页表到了自动补全
-                        onImageClick = { page -> if (state.viewerImages.isNotEmpty()) viewerPage = page },
+                        onImageClick = { page ->
+                            val images = viewModel.viewerImages
+                            if (images.isNotEmpty()) {
+                                val item = images.getOrNull(page)
+                                Log.d(
+                                    "PikuDiag",
+                                    "viewer open page=$page pagesReady=${state.pages.isNotEmpty()} " +
+                                        "underlay=${item?.thumbnailUrl} full=${item?.fullUrl}",
+                                )
+                                viewerPage = page
+                            }
+                        },
                         // 长按给保存/分享用，要等页表
                         onImageLongPress = { page -> if (state.pages.isNotEmpty()) imageActionPage = page },
                         onTagClick = { tag ->
@@ -385,7 +402,8 @@ internal fun SourceWorkDetailDialog(
             )
             ViewerOverlay(
                 page = viewerPage.takeIf { it >= 0 },
-                images = state.viewerImages,
+                images = viewModel.viewerImages,
+                previews = shownPainters,
                 dark = dark,
                 onClose = { viewerPage = -1 },
                 onLongPressImage = { page -> imageActionPage = page },

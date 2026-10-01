@@ -64,6 +64,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
@@ -214,6 +215,8 @@ internal fun DetailContent(
     autoExpandImageHint: Boolean = false,
     /** 提示真的展开出来时回调，供外部消耗「已展示过」的一次性标记 */
     onImageHintShown: () -> Unit = {},
+    /** 该页有图成功上屏：把 painter 交出去，看图器拿它当零延迟垫底 */
+    onImageShown: ((Int, Painter) -> Unit)? = null,
     /** 受限门卡主按钮：LOGIN→去登录，ADULT→一键开启 R-18 显示，FOLLOW→浏览器打开 */
     onGateAction: () -> Unit = {},
     /** 门卡主按钮的动作进行中（R-18 开启 / 关注作者等），按钮转圈防连点 */
@@ -264,6 +267,7 @@ internal fun DetailContent(
                 onPageChanged = onPageChanged,
                 autoExpandImageHint = autoExpandImageHint,
                 onImageHintShown = onImageHintShown,
+                onImageShown = onImageShown,
             )
         }
         // p站版：图左右到边、排在首位，但不钻到顶栏底下——状态栏图标与挖孔摄像头都落在页面底色上
@@ -608,6 +612,8 @@ internal fun ImagePager(
     autoExpandImageHint: Boolean = false,
     /** 提示真的展开出来时回调，供外部消耗「已展示过」的一次性标记 */
     onImageHintShown: () -> Unit = {},
+    /** 该页有图成功上屏：把 painter 交出去（pixiv 详情拿它给看图器当零延迟垫底） */
+    onImageShown: ((Int, Painter) -> Unit)? = null,
 ) {
     val urls = displayImageUrls ?: detail.imageUrls
     val pagerState = rememberPagerState(pageCount = { urls.size })
@@ -753,6 +759,7 @@ internal fun ImagePager(
                                     if (size.width > 0f && size.height > 0f) {
                                         aspectCache[page] = size.width / size.height
                                     }
+                                    onImageShown?.invoke(page, state.painter)
                                 },
                             )
                         }
@@ -776,6 +783,7 @@ internal fun ImagePager(
                                 shownUrls[page] = urls[page]
                                 // 首图已经在屏上了：此刻再解析原图 URL，不和它抢带宽
                                 if (page == 0) onFirstImageLoaded()
+                                onImageShown?.invoke(page, state.painter)
                             },
                         )
                     }

@@ -121,25 +121,26 @@ class SourceWorkDetailViewModel @Inject constructor(
 
         /** 标签当前显示态：用户点过 chip 用覆盖值，否则跟随设置 */
         val showTranslatedTags: Boolean get() = tagsOverride ?: autoTranslateTags
-
-        /** 打底用图区正在显示的那张：同文件已被图区下载过，开图器不黑屏；HD 档给原图 */
-        val viewerImages: List<ViewerImage>
-            get() {
-                val displayed = detail?.imageUrls.orEmpty()
-                // 页表没回来先用屏上那张开图器，页表到了自动补全页数与原图
-                if (pages.isEmpty()) {
-                    return displayed.map { ViewerImage(thumbnailUrl = it, fullUrl = null) }
-                }
-                return pages.mapIndexed { index, page ->
-                    ViewerImage(
-                        thumbnailUrl = displayed.getOrNull(index) ?: page.url,
-                        fullUrl = page.fullUrl.takeIf { it.isNotBlank() },
-                        hdUrl = page.originalUrl.takeIf { it.isNotBlank() },
-                    )
-                }
-            }
-
     }
+
+    /** 查看器图片对：页 0 垫图区那张缓存必中的打底图，清晰图作为第二层后台盖上；HD 档给原图 */
+    val viewerImages: List<ViewerImage>
+        get() {
+            val s = _ui.value
+            val displayed = s.detail?.imageUrls.orEmpty()
+            // 页表没回来先用屏上那张开图器，页表到了自动补全页数与原图
+            if (s.pages.isEmpty()) {
+                return displayed.map { ViewerImage(thumbnailUrl = it, fullUrl = null) }
+            }
+            val listThumb = currentWork?.thumbnailUrl.orEmpty()
+            return s.pages.mapIndexed { index, page ->
+                ViewerImage(
+                    thumbnailUrl = viewerUnderlayUrl(listThumb, displayed, s.pages, index),
+                    fullUrl = page.fullUrl.takeIf { it.isNotBlank() },
+                    hdUrl = page.originalUrl.takeIf { it.isNotBlank() },
+                )
+            }
+        }
 
     private val _ui = MutableStateFlow(UiState())
     val ui: StateFlow<UiState> = _ui.asStateFlow()
@@ -718,6 +719,26 @@ private fun imageBoxArea(url: String): Long =
     BOX_AREA.find(url)?.let { it.groupValues[1].toLong() * it.groupValues[2].toLong() } ?: Long.MAX_VALUE
 
 private val BOX_AREA = Regex("/c/(\\d+)x(\\d+)")
+
+/**
+ * 查看器第 [index] 页的打底图：必须是一张「已经在缓存里」的图，否则开图器要现下载就是黑屏。
+ * 页 0 优先垫列表卡那张——它与图区首图打底是同一张，列表页与图区都渲染过，缓存必中；
+ * 没有可垫的（深链进来的空缩略图、与首图不同文件）退页表 small；其余页一律 small。
+ * 不能垫页表 regular：图区主图还没下载完时它要走网络
+ */
+internal fun viewerUnderlayUrl(
+    listThumbnailUrl: String,
+    displayed: List<String>,
+    pages: List<SourceWorkPage>,
+    index: Int,
+): String {
+    val page = pages.getOrNull(index) ?: return displayed.getOrNull(index).orEmpty()
+    if (index == 0) {
+        val shown = displayed.firstOrNull { it.isNotBlank() } ?: page.fullUrl
+        ThumbnailResolver.detailUnderlayUrl(listThumbnailUrl, shown)?.let { return it }
+    }
+    return page.url.ifBlank { displayed.getOrNull(index).orEmpty() }
+}
 
 /** 升不升清晰档由各图自己上游的实测说了算：认不出主机或没读数都停在打底档 */
 internal fun worthUpgradingInline(pages: List<SourceWorkPage>, controller: ImageRouteController): Boolean =
