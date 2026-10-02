@@ -4,15 +4,21 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.piku.client.R
+import com.piku.client.data.remote.pixiv.PixivAppConfig
 import com.piku.client.data.repository.CollectionEdit
 import com.piku.client.data.repository.FavoriteRepository
+import com.piku.client.data.repository.PixivRepository
 import com.piku.client.data.local.SettingsRepository
+import com.piku.client.domain.model.AuthStatus
 import com.piku.client.domain.model.FavoriteFolder
 import com.piku.client.domain.model.FolderSort
+import com.piku.client.domain.model.PixivBookmarkMirror
 import com.piku.client.domain.model.ReadingProgress
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.key
 import com.piku.client.domain.model.WorkKey
+import com.piku.client.domain.model.WorkSource
+import com.piku.client.domain.source.SourceAuthRegistry
 import com.piku.client.ui.common.FeedbackChannel
 import com.piku.client.ui.common.FeedbackText
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -96,6 +102,10 @@ data class CollectionUiState(
     val actionWorkFolderIds: Set<Long> = emptySet(),
     /** 从放大镜进入「全部收藏」时置位，工具栏聚焦一次检索框后立刻消费掉 */
     val focusSearch: Boolean = false,
+    /** 批量同步所选到 pixiv 进行中：工具条动作防连点 */
+    val syncingToPixiv: Boolean = false,
+    /** 同步进度（已完成数, 总数）：网慢时给「在动」的观感 */
+    val syncProgress: Pair<Int, Int>? = null,
 ) {
     val searching: Boolean get() = query.isNotBlank()
 
@@ -114,6 +124,8 @@ data class CollectionUiState(
 class CollectionViewModel @Inject constructor(
     private val favoriteRepository: FavoriteRepository,
     private val settingsRepository: SettingsRepository,
+    private val pixivRepository: PixivRepository,
+    private val sourceAuthRegistry: SourceAuthRegistry,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CollectionUiState())
@@ -450,6 +462,56 @@ class CollectionViewModel @Inject constructor(
     fun moveSelectedTo(target: FavoriteFolder) {
         val state = _uiState.value
         moveWorks(state.works.filter { it.key in state.selectedIds }, target)
+    }
+
+    /**
+     * 批量「同步所选到 pixiv」：给仅本地档攒下的收藏补上云端。
+     * 只处理 pixiv 源且未同步的；可见性取当前镜像档位（私密档补上去的也是私密）。
+     */
+    fun syncSelectedToPixiv() {
+        val state = _uiState.value
+        if (state.syncingToPixiv) return
+        val selected = state.works.filter {
+            it.key in state.selectedIds && it.source == WorkSource.PIXIV
+        }
+        if (selected.isEmpty()) {
+            feedback.show(R.string.collection_sync_none)
+            return
+        }
+        viewModelScope.launch {
+            val pixivAuth = sourceAuthRegistry.byId(WorkSource.PIXIV)
+            val loggedIn = pixivAuth != null && pixivAuth.status.first() == AuthStatus.LOGGED_IN
+            if (!loggedIn) {
+                feedback.show(R.string.collection_sync_login_hint)
+                return@launch
+            }
+            val alreadySynced = favoriteRepository.cloudSyncedKeys(selected.map { it.key })
+            val targets = selected.filterNot { it.key in alreadySynced }
+            if (targets.isEmpty()) {
+                feedback.show(R.string.collection_sync_none)
+                return@launch
+            }
+            _uiState.update { it.copy(syncingToPixiv = true, syncProgress = 0 to targets.size) }
+            val restrict = when (settingsRepository.pixivBookmarkMirror.value) {
+                PixivBookmarkMirror.PRIVATE -> PixivAppConfig.RESTRICT_PRIVATE
+                else -> PixivAppConfig.RESTRICT_PUBLIC
+            }
+            var synced = 0
+            var failed = 0
+            for ((index, work) in targets.withIndex()) {
+                pixivRepository.bookmarkIllust(work.id, add = true, restrict = restrict)
+                    .onSuccess { favoriteRepository.setCloudSynced(work.key, true) }
+                    .onSuccess { synced += 1 }
+                    .onFailure { failed += 1 }
+                _uiState.update { it.copy(syncProgress = (index + 1) to targets.size) }
+            }
+            _uiState.update { it.copy(syncingToPixiv = false, syncProgress = null) }
+            when {
+                failed == 0 -> feedback.show(R.string.collection_sync_done, synced)
+                synced == 0 -> feedback.show(R.string.detail_cloud_bookmark_failed)
+                else -> feedback.show(R.string.collection_sync_partial, synced, failed)
+            }
+        }
     }
 
     /**

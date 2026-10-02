@@ -324,14 +324,22 @@ class PixivRepository @Inject constructor(
         requireNoActionError(response)
     }
 
-    /** 加入/取消云端收藏。默认公开收藏；带标签、私密收藏的精细管理交给 P 站本家 */
-    suspend fun bookmarkIllust(illustId: Long, add: Boolean): Result<Unit> = apiCall {
+    /**
+     * 加入/取消云端收藏。[restrict] 传 private 即非公开收藏；
+     * 带标签的精细管理交给 pixiv 本家。取消收藏不受 restrict 影响。
+     */
+    suspend fun bookmarkIllust(
+        illustId: Long,
+        add: Boolean,
+        restrict: String = PixivAppConfig.RESTRICT_PUBLIC,
+    ): Result<Unit> = apiCall {
         val signature = endpoints.clientSignature(runtime.now())
         val response = if (add) {
             appApi.bookmarkAdd(
                 clientTime = signature.time,
                 clientHash = signature.hash,
                 illustId = illustId,
+                restrict = restrict,
             )
         } else {
             appApi.bookmarkDelete(

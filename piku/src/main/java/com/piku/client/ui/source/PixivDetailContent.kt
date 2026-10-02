@@ -123,6 +123,8 @@ internal fun PixivDetailContent(
     onRelatedClick: (Work) -> Unit = {},
     /** 收藏（本地）与关注：收纳进概览卡本体——关注在作者行，收藏在数据条的收藏格 */
     isFavorite: Boolean = false,
+    /** 本地收藏已镜像到 pixiv 云端：星标角标 */
+    cloudSynced: Boolean = false,
     followed: Boolean = false,
     showFollow: Boolean = false,
     followSending: Boolean = false,
@@ -194,6 +196,7 @@ internal fun PixivDetailContent(
                 tagsTranslating = tagsTranslating,
                 onToggleTagsTranslation = onToggleTagsTranslation,
                 isFavorite = isFavorite,
+                cloudSynced = cloudSynced,
                 followed = followed,
                 showFollow = showFollow,
                 followSending = followSending,
@@ -225,6 +228,7 @@ private fun OverviewCard(
     tagsTranslating: Boolean,
     onToggleTagsTranslation: () -> Unit,
     isFavorite: Boolean,
+    cloudSynced: Boolean,
     followed: Boolean,
     showFollow: Boolean,
     followSending: Boolean,
@@ -254,6 +258,7 @@ private fun OverviewCard(
             stats = stats,
             onAuthorClick = onAuthorClick,
             isFavorite = isFavorite,
+            cloudSynced = cloudSynced,
             dark = dark,
             followed = followed,
             showFollow = showFollow,
@@ -327,11 +332,12 @@ private fun TitleLine(
     }
 }
 
-/** 收藏星标：点亮=金色实心，长按进收藏夹面板；放作者行右侧、不遮图 */
+/** 收藏星标：点亮=金色实心，长按进收藏夹面板；已同步 pixiv 时带角标。放作者行右侧、不遮图 */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun FavoriteStarButton(
     favorited: Boolean,
+    cloudSynced: Boolean,
     dark: Boolean,
     onToggle: () -> Unit,
     onLongPress: () -> Unit,
@@ -341,16 +347,29 @@ private fun FavoriteStarButton(
     } else {
         PikuColors.textSecondary
     }
-    Icon(
-        imageVector = if (favorited) Icons.Filled.Star else Icons.Outlined.StarBorder,
-        contentDescription = stringResource(R.string.detail_favorite),
-        tint = tint,
+    Box(
         modifier = Modifier
             .clip(CircleShape)
             .combinedClickable(onClick = onToggle, onLongClick = onLongPress)
-            .padding(8.dp)
-            .size(22.dp),
-    )
+            .padding(8.dp),
+    ) {
+        Icon(
+            imageVector = if (favorited) Icons.Filled.Star else Icons.Outlined.StarBorder,
+            contentDescription = stringResource(R.string.detail_favorite),
+            tint = tint,
+            modifier = Modifier.size(22.dp),
+        )
+        // 同步角标：只表示「本 App 已把这条收藏送上 pixiv」，pixiv 本家藏的不标（取消规则与此对齐）
+        if (favorited && cloudSynced) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .size(7.dp)
+                    .background(PikuColors.controlAccent, CircleShape)
+                    .border(1.dp, PikuColors.surface, CircleShape),
+            )
+        }
+    }
 }
 
 @Composable
@@ -359,6 +378,7 @@ internal fun AuthorLine(
     stats: WorkStats?,
     onAuthorClick: () -> Unit,
     isFavorite: Boolean,
+    cloudSynced: Boolean = false,
     dark: Boolean,
     followed: Boolean,
     showFollow: Boolean,
@@ -415,6 +435,7 @@ internal fun AuthorLine(
         // 收藏星标：对作品操作，点自己区域不触发整行跳作者页
         FavoriteStarButton(
             favorited = isFavorite,
+            cloudSynced = cloudSynced,
             dark = dark,
             onToggle = onBookmarkToggle,
             onLongPress = onBookmarkLongPress,

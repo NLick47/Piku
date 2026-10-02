@@ -46,6 +46,18 @@ interface FavoriteDao {
     @Query("SELECT * FROM favorites WHERE source = :source AND workId IN (:workIds)")
     suspend fun favoritesByIds(source: WorkSource, workIds: List<String>): List<FavoriteEntity>
 
+    /** 单个作品行；addToFolder 追加归属时要带着原 cloudSynced，整行 upsert 会把它抹掉 */
+    @Query("SELECT * FROM favorites WHERE source = :source AND workId = :workId LIMIT 1")
+    suspend fun favoriteById(source: WorkSource, workId: String): FavoriteEntity?
+
+    /** 云端镜像标记：pixiv 收藏的取消规则与批量同步都以它为准 */
+    @Query("UPDATE favorites SET cloudSynced = :synced WHERE source = :source AND workId = :workId")
+    suspend fun setCloudSynced(source: WorkSource, workId: String, synced: Boolean)
+
+    /** 已镜像到 pixiv 云端的收藏键集合；详情页角标与收藏页批量同步共用 */
+    @Query("SELECT source, workId FROM favorites WHERE cloudSynced = 1")
+    fun observeSyncedFavoriteIds(): Flow<List<FavoriteIdRow>>
+
     /** 批量清理失去全部归属的作品行（移出收藏夹后调用） */
     @Query(
         "DELETE FROM favorites WHERE source = :source AND workId IN (:workIds) " +

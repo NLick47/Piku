@@ -6,7 +6,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 /** schema 版本：动它就必须补一段迁移，单测会盯着"1..这里 不能断档" */
-internal const val DATABASE_SCHEMA_VERSION = 13
+internal const val DATABASE_SCHEMA_VERSION = 14
 
 @Database(
     entities = [
@@ -281,6 +281,15 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // 收藏行加云端镜像标记：pixiv 收藏同步/取消都以它为准；存量一律视为未同步
+                db.execSQL(
+                    "ALTER TABLE favorites ADD COLUMN cloudSynced INTEGER NOT NULL DEFAULT 0",
+                )
+            }
+        }
+
         /** 全部迁移，必须覆盖 1..version 且不断档（有单测盯着） */
         val ALL_MIGRATIONS: Array<Migration> = arrayOf(
             MIGRATION_1_2,
@@ -295,6 +304,7 @@ abstract class AppDatabase : RoomDatabase() {
             MIGRATION_10_11,
             MIGRATION_11_12,
             MIGRATION_12_13,
+            MIGRATION_13_14,
         )
     }
 }

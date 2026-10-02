@@ -4,6 +4,7 @@ import android.content.SharedPreferences
 import com.piku.client.data.repository.SyncResult
 import com.piku.client.data.repository.SyncState
 import com.piku.client.domain.model.FolderSort
+import com.piku.client.domain.model.PixivBookmarkMirror
 import com.piku.client.domain.model.WorkKey
 import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.model.ImageRouteMode
@@ -74,6 +75,14 @@ class SettingsRepository @Inject constructor(
             ?: FolderSort.ADDED,
     )
     val folderSort: StateFlow<FolderSort> = _folderSort.asStateFlow()
+
+    /** pixiv 收藏镜像档位：收藏时是否同时进 pixiv 个人收藏、以何种可见性进。默认同步公开（历史行为） */
+    private val _pixivBookmarkMirror = MutableStateFlow(
+        prefs.getString(KEY_PIXIV_BOOKMARK_MIRROR, null)
+            ?.let { name -> runCatching { PixivBookmarkMirror.valueOf(name) }.getOrNull() }
+            ?: PixivBookmarkMirror.PUBLIC,
+    )
+    val pixivBookmarkMirror: StateFlow<PixivBookmarkMirror> = _pixivBookmarkMirror.asStateFlow()
 
     /** 浏览记录保留天数，0 表示永久保留 */
     private val _historyRetentionDays = MutableStateFlow(
@@ -223,6 +232,11 @@ class SettingsRepository @Inject constructor(
     fun setFolderSort(sort: FolderSort) {
         prefs.edit().putString(KEY_FOLDER_SORT, sort.name).apply()
         _folderSort.value = sort
+    }
+
+    fun setPixivBookmarkMirror(mode: PixivBookmarkMirror) {
+        prefs.edit().putString(KEY_PIXIV_BOOKMARK_MIRROR, mode.name).apply()
+        _pixivBookmarkMirror.value = mode
     }
 
     fun setHistoryRetentionDays(days: Int) {
@@ -826,6 +840,7 @@ class SettingsRepository @Inject constructor(
         const val KEY_IMAGE_ROUTE_MODE = "image_route_mode"
         const val KEY_HOME_SOURCE = "home_source"
         const val KEY_FOLDER_SORT = "folder_sort"
+        const val KEY_PIXIV_BOOKMARK_MIRROR = "pixiv_bookmark_mirror"
         const val KEY_HISTORY_RETENTION_DAYS = "history_retention_days"
         const val KEY_AUTO_CHECK_ENABLED = "auto_check_update_enabled"
         const val KEY_LAST_UPDATE_CHECK_AT = "last_update_check_at"

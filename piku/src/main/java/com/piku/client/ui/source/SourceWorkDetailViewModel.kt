@@ -8,6 +8,7 @@ import com.piku.client.R
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.data.remote.ImageRouteController
 import com.piku.client.data.remote.ImageUpstream
+import com.piku.client.data.remote.pixiv.PixivAppConfig
 import com.piku.client.data.remote.translation.ImageTranslateEngine
 import com.piku.client.data.remote.translation.ImageTranslateResult
 import com.piku.client.data.remote.translation.ImageTranslationPrompts
@@ -20,6 +21,7 @@ import com.piku.client.data.repository.ThumbnailResolver
 import com.piku.client.domain.model.AppLanguage
 import com.piku.client.domain.model.AuthStatus
 import com.piku.client.domain.model.FavoriteFolder
+import com.piku.client.domain.model.PixivBookmarkMirror
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkDetail
 import com.piku.client.domain.model.WorkSource
@@ -117,6 +119,10 @@ class SourceWorkDetailViewModel @Inject constructor(
         val loggedIn: Boolean = false,
         /** 本地收藏（任一收藏夹）：星标回显 */
         val isFavorite: Boolean = false,
+        /** 本地收藏已镜像到 pixiv 云端：星标角标与面板「取消同步」的依据 */
+        val cloudSynced: Boolean = false,
+        /** 云端镜像请求在途：面板动作防连点，行尾转圈 */
+        val mirrorPending: Boolean = false,
         /** 本地收藏夹与当前作品的归属：长按星标的选择面板用 */
         val favoriteFolders: List<FavoriteFolder> = emptyList(),
         val workFavoriteFolderIds: Set<Long> = emptySet(),
@@ -174,6 +180,8 @@ class SourceWorkDetailViewModel @Inject constructor(
     private var pixivStateLoadedForWork: Long = -1
     /** 云端收藏镜像串行化：两次快速点击必须按先加后删落云端，乱序会让云端与本地相反 */
     private val cloudMirrorMutex = Mutex()
+    /** 在途镜像的方向：网慢时连点星标（先藏后取消）只看 DB 标记会漏掉还没落库的那次加 */
+    private var pendingMirrorAdd: Boolean? = null
     private val _shareRequest = MutableStateFlow<DetailViewModel.ImageShareRequest?>(null)
     val shareRequest: StateFlow<DetailViewModel.ImageShareRequest?> = _shareRequest.asStateFlow()
     /** 失败时收起面板的一次性事件。replay=0：依赖「面板打开期间 collector 必在」——失败只发生在点击后的下载流程里 */
@@ -582,6 +590,11 @@ class SourceWorkDetailViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
+            favoriteRepository.observeSyncedFavoriteIds().collect { ids ->
+                _ui.update { it.copy(cloudSynced = work.key in ids) }
+            }
+        }
+        viewModelScope.launch {
             favoriteRepository.observeWorkFolderIds(work.key).collect { folderIds ->
                 _ui.update { it.copy(workFavoriteFolderIds = folderIds) }
             }
@@ -607,13 +620,34 @@ class SourceWorkDetailViewModel @Inject constructor(
         }
     }
 
-    /** 星标单击：加入/移出默认收藏夹；pixiv 登录态下把结果镜像成云端收藏/取消收藏 */
+    /**
+     * 星标单击：加入/移出默认收藏夹；pixiv 登录态下按镜像档位把结果镜像到云端。
+     * 取消只回删本 App 自己同步上去的收藏——cloudSynced 为假（仅本地档存的、或
+     * pixiv 本家藏的）时绝不发 delete，不然用户在别处收藏的记录会被这里顺手删掉。
+     */
     fun toggleFavorite() {
         val work = currentWork ?: return
         viewModelScope.launch {
+            // 先读镜像标记再动本地：作品失去全部归属时收藏行即被删除，事后无从读起。
+            // 在途的那次加还没落库，也得算成已同步，否则连点会把云端加上的收藏漏删
+            val wasSynced = favoriteRepository.isCloudSynced(work.key) || pendingMirrorAdd == true
             val added = favoriteRepository.toggleFavorite(work)
-            feedback.show(if (added) R.string.detail_favorite_added else R.string.detail_favorite_removed)
-            mirrorCloudBookmark(work, added)
+            val cloudCapable = work.source == WorkSource.PIXIV &&
+                work.kind != WorkKind.NOVEL &&
+                _ui.value.loggedIn
+            if (added) {
+                val mode = settingsRepository.pixivBookmarkMirror.value
+                if (cloudCapable && mode != PixivBookmarkMirror.LOCAL_ONLY) {
+                    // 本地先应答（星标与角标是乐观置位），云端结果回来再补一句确认/报错
+                    feedback.show(R.string.detail_favorite_added)
+                    mirrorCloudBookmark(work, add = true, restrict = mode.restrict())
+                } else {
+                    feedback.show(R.string.detail_favorite_added)
+                }
+            } else {
+                feedback.show(R.string.detail_favorite_removed)
+                if (cloudCapable && wasSynced) mirrorCloudBookmark(work, add = false)
+            }
         }
     }
 
@@ -622,6 +656,57 @@ class SourceWorkDetailViewModel @Inject constructor(
         val work = currentWork ?: return
         viewModelScope.launch {
             favoriteRepository.toggleFolder(work, folderId)
+        }
+    }
+
+    /** 面板「同步收藏到 pixiv」：确保已落默认夹，再按当前档位的可见性送云端 */
+    fun favoriteToPixiv() {
+        val work = currentWork ?: return
+        viewModelScope.launch {
+            favoriteRepository.ensureFavorite(work)
+            val mode = settingsRepository.pixivBookmarkMirror.value
+            mirrorCloudBookmark(
+                work,
+                add = true,
+                restrict = mode.restrict(),
+                onSuccess = { feedback.show(R.string.detail_favorite_synced) },
+            )
+        }
+    }
+
+    /** 面板「仅收藏到本 App」：只落本地。新收藏才清镜像标记——对已同步的旧收藏点它绝不能洗掉「已同步」 */
+    fun favoriteLocalOnly() {
+        val work = currentWork ?: return
+        viewModelScope.launch {
+            val added = favoriteRepository.ensureFavorite(work)
+            if (added) favoriteRepository.setCloudSynced(work.key, false)
+            feedback.show(R.string.detail_favorite_added)
+        }
+    }
+
+    /** 面板「补同步到 pixiv」：本地已收藏、云端缺一条，按当前档位可见性补上 */
+    fun resyncToPixiv() {
+        val work = currentWork ?: return
+        viewModelScope.launch {
+            val mode = settingsRepository.pixivBookmarkMirror.value
+            mirrorCloudBookmark(
+                work,
+                add = true,
+                restrict = mode.restrict(),
+                onSuccess = { feedback.show(R.string.detail_mirror_synced) },
+            )
+        }
+    }
+
+    /** 面板「取消同步，保留本地」：只删云端那条，本地收藏与夹归属原样不动 */
+    fun unsyncKeepLocal() {
+        val work = currentWork ?: return
+        viewModelScope.launch {
+            mirrorCloudBookmark(
+                work,
+                add = false,
+                onSuccess = { feedback.show(R.string.detail_mirror_unsynced) },
+            )
         }
     }
 
@@ -638,14 +723,34 @@ class SourceWorkDetailViewModel @Inject constructor(
     /**
      * 云端镜像：加收藏 → pixiv 收藏 add；取消 → delete。失败只提示不回滚——
      * 本地收藏是主体，云端没同步上不该把用户刚点的星标弹回去。
+     * 角标是乐观置位的：点下去立刻亮/灭（网慢也有反应），成功才落库，失败回滚并报错。
      */
-    private fun mirrorCloudBookmark(work: Work, add: Boolean) {
+    private fun mirrorCloudBookmark(
+        work: Work,
+        add: Boolean,
+        restrict: String = PixivAppConfig.RESTRICT_PUBLIC,
+        onSuccess: suspend () -> Unit = {},
+    ) {
         if (work.source != WorkSource.PIXIV || !_ui.value.loggedIn) return
+        val previous = _ui.value.cloudSynced
+        _ui.update { it.copy(cloudSynced = add, mirrorPending = true) }
         viewModelScope.launch {
-            cloudMirrorMutex.withLock {
-                pixivRepository.bookmarkIllust(work.id, add = add)
-            }.fold(
+            // 方向标记与转圈的清点必须发生在锁内：排队的第二个请求靠它们判断在途状态，
+            // 锁外清会被第一个完成者抢先，把还在途的请求清没
+            val result = cloudMirrorMutex.withLock {
+                pendingMirrorAdd = add
+                _ui.update { it.copy(mirrorPending = true) }
+                try {
+                    pixivRepository.bookmarkIllust(work.id, add = add, restrict = restrict)
+                } finally {
+                    pendingMirrorAdd = null
+                    _ui.update { it.copy(mirrorPending = false) }
+                }
+            }
+            result.fold(
                 onSuccess = {
+                    favoriteRepository.setCloudSynced(work.key, add)
+                    onSuccess()
                     // 收藏数就地修正：云端操作成功才动计数
                     _ui.update { s ->
                         val stats = s.stats ?: return@update s
@@ -659,10 +764,19 @@ class SourceWorkDetailViewModel @Inject constructor(
                         "PikuDiag",
                         "pixiv bookmark mirror work=${work.id} add=$add: ${error::class.simpleName}",
                     )
+                    // 角标回滚到请求前的状态，用户看到的同步态始终是可信的
+                    _ui.update { it.copy(cloudSynced = previous) }
                     feedback.show(R.string.detail_cloud_bookmark_failed)
                 },
             )
         }
+    }
+
+    /** 档位 → pixiv restrict：仅本地档不会被镜像，落到这里的都是公开/私密两档 */
+    private fun PixivBookmarkMirror.restrict(): String = when (this) {
+        PixivBookmarkMirror.PUBLIC -> PixivAppConfig.RESTRICT_PUBLIC
+        PixivBookmarkMirror.PRIVATE -> PixivAppConfig.RESTRICT_PRIVATE
+        PixivBookmarkMirror.LOCAL_ONLY -> PixivAppConfig.RESTRICT_PUBLIC
     }
 
     /** 关注/取消关注。乐观翻转 + 失败回滚，与 poipiku 详情同语义 */

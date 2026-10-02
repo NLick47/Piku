@@ -418,6 +418,10 @@ class WebDavSyncRepository @Inject constructor(
             for (work in data.works) {
                 // 未知源（更新版本客户端写入的）本地写不进去，云端保留原样
                 val source = work.workSource ?: continue
+                // cloudSynced 是本机与 pixiv 账号之间的事实，favorites.json 不携带：
+                // 整行覆盖前必须留住本机已有的镜像标记，否则一次同步就把角标和取消规则洗掉
+                val existingCloudSynced =
+                    favoriteDao.favoriteById(source, work.workId)?.cloudSynced ?: false
                 favoriteDao.upsert(
                     FavoriteEntity(
                         source = source,
@@ -431,6 +435,7 @@ class WebDavSyncRepository @Inject constructor(
                         r18 = work.r18,
                         addedAt = work.addedAt,
                         contentBackedUp = work.contentBackedUp,
+                        cloudSynced = existingCloudSynced,
                     ),
                 )
             }

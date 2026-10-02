@@ -24,6 +24,7 @@ import com.piku.client.ui.home.sheets.CategorySheet
 import com.piku.client.ui.home.sheets.HomeSourceSheet
 import com.piku.client.ui.home.sheets.ImageRouteSheet
 import com.piku.client.ui.home.sheets.LanguageSheet
+import com.piku.client.ui.home.sheets.PixivMirrorSheet
 import com.piku.client.ui.home.sheets.NetworkDiagDialog
 import com.piku.client.ui.home.sheets.RetentionSheet
 import com.piku.client.ui.home.sheets.ThemeModeSheet
@@ -51,6 +52,7 @@ internal class HomeDialogsState internal constructor(
     private val themeSheet: MutableState<Boolean>,
     private val homeSourceSheet: MutableState<Boolean>,
     private val imageRouteSheet: MutableState<Boolean>,
+    private val pixivMirrorSheet: MutableState<Boolean>,
     private val retentionSheet: MutableState<Boolean>,
     private val languageSheet: MutableState<Boolean>,
     private val aiTranslateSheet: MutableState<Boolean>,
@@ -70,6 +72,9 @@ internal class HomeDialogsState internal constructor(
     var showImageRouteSheet: Boolean
         get() = imageRouteSheet.value
         set(value) { imageRouteSheet.value = value }
+    var showPixivMirrorSheet: Boolean
+        get() = pixivMirrorSheet.value
+        set(value) { pixivMirrorSheet.value = value }
     var showRetentionSheet: Boolean
         get() = retentionSheet.value
         set(value) { retentionSheet.value = value }
@@ -96,6 +101,7 @@ internal fun rememberHomeDialogsState(): HomeDialogsState {
     val themeSheet = rememberSaveable { mutableStateOf(false) }
     val homeSourceSheet = rememberSaveable { mutableStateOf(false) }
     val imageRouteSheet = rememberSaveable { mutableStateOf(false) }
+    val pixivMirrorSheet = rememberSaveable { mutableStateOf(false) }
     val retentionSheet = rememberSaveable { mutableStateOf(false) }
     val languageSheet = rememberSaveable { mutableStateOf(false) }
     val aiTranslateSheet = rememberSaveable { mutableStateOf(false) }
@@ -108,6 +114,7 @@ internal fun rememberHomeDialogsState(): HomeDialogsState {
             themeSheet = themeSheet,
             homeSourceSheet = homeSourceSheet,
             imageRouteSheet = imageRouteSheet,
+            pixivMirrorSheet = pixivMirrorSheet,
             retentionSheet = retentionSheet,
             languageSheet = languageSheet,
             aiTranslateSheet = aiTranslateSheet,
@@ -185,6 +192,18 @@ internal fun HomeDialogs(
                 dialogs.showImageRouteSheet = false
             },
             onDismiss = { dialogs.showImageRouteSheet = false },
+            dark = dark,
+        )
+    }
+
+    if (dialogs.showPixivMirrorSheet) {
+        PixivMirrorSheet(
+            selected = state.pixivBookmarkMirror,
+            onSelect = { mode ->
+                viewModel.setPixivBookmarkMirror(mode)
+                dialogs.showPixivMirrorSheet = false
+            },
+            onDismiss = { dialogs.showPixivMirrorSheet = false },
             dark = dark,
         )
     }

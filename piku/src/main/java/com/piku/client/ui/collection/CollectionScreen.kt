@@ -58,6 +58,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.BookmarkAdd
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Checklist
+import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.automirrored.outlined.DriveFileMove
 import androidx.compose.material.icons.outlined.Edit
@@ -67,6 +68,7 @@ import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -256,6 +258,11 @@ fun CollectionScreen(
                 viewModel.loadSelectedFolderIds()
                 pickMode = FolderPickMode.ADD
             },
+            syncing = state.syncingToPixiv,
+            syncLabel = state.syncProgress?.let { (done, total) ->
+                stringResource(R.string.collection_sync_progress, done, total)
+            } ?: stringResource(R.string.collection_sync_short),
+            onSync = viewModel::syncSelectedToPixiv,
             onMove = { pickMode = FolderPickMode.MOVE },
             onRemove = viewModel::removeSelected,
             modifier = Modifier
@@ -1256,7 +1263,7 @@ private fun SelectableWorkCard(
     }
 }
 
-/** 多选工具条：玻璃面板 + 三个动作，浮在网格之上；一件未选时三个动作都不可点 */
+/** 多选工具条：玻璃面板 + 四个动作，浮在网格之上；一件未选时动作都不可点 */
 @Composable
 private fun SelectionActionBar(
     visible: Boolean,
@@ -1264,6 +1271,10 @@ private fun SelectionActionBar(
     removeLabel: String,
     dark: Boolean,
     onAdd: () -> Unit,
+    /** 同步动作的标签与在途标记：进行中按钮转圈、文字换成进度，防连点 */
+    syncing: Boolean = false,
+    syncLabel: String = "",
+    onSync: () -> Unit,
     onMove: () -> Unit,
     onRemove: () -> Unit,
     modifier: Modifier = Modifier,
@@ -1291,6 +1302,16 @@ private fun SelectionActionBar(
                     dark = dark,
                     enabled = hasSelection,
                     onClick = onAdd,
+                    modifier = Modifier.weight(1f),
+                )
+                // 只同步 pixiv 源的未同步项：混选或重复点都安全，VM 里筛过一遍
+                BarAction(
+                    icon = Icons.Outlined.CloudUpload,
+                    label = syncLabel,
+                    dark = dark,
+                    enabled = hasSelection && !syncing,
+                    loading = syncing,
+                    onClick = onSync,
                     modifier = Modifier.weight(1f),
                 )
                 BarAction(
@@ -1338,6 +1359,7 @@ private fun BarAction(
     modifier: Modifier = Modifier,
     danger: Boolean = false,
     enabled: Boolean = true,
+    loading: Boolean = false,
 ) {
     val tint = when {
         !enabled -> PikuColors.textFaint
@@ -1365,12 +1387,20 @@ private fun BarAction(
             .padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = tint,
-            modifier = Modifier.size(19.dp),
-        )
+        if (loading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(19.dp),
+                color = PikuColors.textPrimary,
+                strokeWidth = 2.dp,
+            )
+        } else {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(19.dp),
+            )
+        }
         Spacer(Modifier.height(3.dp))
         Text(
             text = label,

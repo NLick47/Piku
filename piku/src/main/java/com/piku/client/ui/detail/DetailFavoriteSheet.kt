@@ -19,9 +19,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.CloudDone
+import androidx.compose.material.icons.outlined.CloudOff
+import androidx.compose.material.icons.outlined.CloudUpload
+import androidx.compose.material.icons.outlined.Smartphone
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
@@ -38,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -66,6 +72,24 @@ import com.piku.client.ui.theme.ShadowSpot
 internal val DefaultBadgeBgDark = Color(0x22FFFFFF)
 internal val DefaultBadgeBgLight = Color(0x142C2C2C)
 
+/**
+ * 收藏面板的 pixiv 镜像区块：动作项写的是「会发生什么」，用户不需要先理解档位概念。
+ * null = 该作品没有 pixiv 云端可操作（非 pixiv 源/未登录/小说），整个区块不出现。
+ */
+internal data class PixivMirrorActions(
+    val favorited: Boolean,
+    val cloudSynced: Boolean,
+    /** 云端请求在途：动作行禁用防连点，状态行尾转圈——网慢也有「正在做」的观感 */
+    val pending: Boolean,
+    /** 未收藏时的两个入口：同步收藏到 pixiv / 仅收藏到本 App */
+    val onSyncFavorite: () -> Unit,
+    val onLocalFavorite: () -> Unit,
+    /** 已收藏未同步：补同步到 pixiv */
+    val onResync: () -> Unit,
+    /** 已同步：取消同步，保留本地 */
+    val onUnsync: () -> Unit,
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun FavoriteSheet(
@@ -75,6 +99,7 @@ internal fun FavoriteSheet(
     onToggleFolder: (Long) -> Unit,
     onCreateFolder: (String) -> Unit,
     onDismiss: () -> Unit,
+    pixivMirror: PixivMirrorActions? = null,
 ) {
     var newFolderName by rememberSaveable { mutableStateOf("") }
     var creatingNew by rememberSaveable { mutableStateOf(false) }
@@ -87,6 +112,57 @@ internal fun FavoriteSheet(
             PikuSheetTitle(text = stringResource(R.string.detail_favorite_sheet_title))
             Spacer(Modifier.height(6.dp))
             PikuSheetSubtitle(text = stringResource(R.string.detail_favorite_sheet_hint))
+            if (pixivMirror != null) {
+                Spacer(Modifier.height(14.dp))
+                PikuSheetSubtitle(text = stringResource(R.string.detail_pixiv_mirror_section))
+                Spacer(Modifier.height(6.dp))
+                if (!pixivMirror.favorited) {
+                    PixivMirrorRow(
+                        icon = Icons.Outlined.CloudUpload,
+                        label = stringResource(R.string.detail_sync_favorite_pixiv),
+                        dark = dark,
+                        enabled = !pixivMirror.pending,
+                        onClick = pixivMirror.onSyncFavorite,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    PixivMirrorRow(
+                        icon = Icons.Outlined.Smartphone,
+                        label = stringResource(R.string.detail_favorite_app_only),
+                        dark = dark,
+                        enabled = !pixivMirror.pending,
+                        onClick = pixivMirror.onLocalFavorite,
+                    )
+                } else {
+                    PixivMirrorRow(
+                        icon = if (pixivMirror.cloudSynced) Icons.Outlined.CloudDone else Icons.Outlined.CloudOff,
+                        label = stringResource(
+                            if (pixivMirror.cloudSynced) {
+                                R.string.detail_mirror_state_synced
+                            } else {
+                                R.string.detail_mirror_state_local
+                            },
+                        ),
+                        dark = dark,
+                        onClick = {},
+                        enabled = false,
+                        pending = pixivMirror.pending,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    PixivMirrorRow(
+                        icon = if (pixivMirror.cloudSynced) Icons.Outlined.CloudOff else Icons.Outlined.CloudUpload,
+                        label = stringResource(
+                            if (pixivMirror.cloudSynced) {
+                                R.string.detail_unsync_keep_local
+                            } else {
+                                R.string.detail_resync_pixiv
+                            },
+                        ),
+                        dark = dark,
+                        enabled = !pixivMirror.pending,
+                        onClick = if (pixivMirror.cloudSynced) pixivMirror.onUnsync else pixivMirror.onResync,
+                    )
+                }
+            }
             Spacer(Modifier.height(14.dp))
             folders.forEach { folder ->
                 FavoriteFolderRow(
@@ -157,6 +233,53 @@ internal fun FavoriteSheet(
                     )
                 }
             }
+    }
+}
+
+/** pixiv 镜像区块的一行：动作项整行可点；状态行 [enabled] 为假只展示同步态，[pending] 时行尾转圈 */
+@Composable
+private fun PixivMirrorRow(
+    icon: ImageVector,
+    label: String,
+    dark: Boolean,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    pending: Boolean = false,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(
+                if (dark) ControlAccentDark.copy(alpha = 0.08f) else AccentDark.copy(alpha = 0.06f),
+            )
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = if (enabled) PikuColors.controlAccent else PikuColors.textFaint,
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(Modifier.width(10.dp))
+        Text(
+            text = label,
+            color = if (enabled) PikuColors.textPrimary else PikuColors.textSecondary,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Normal,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        if (pending) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(13.dp),
+                color = PikuColors.controlAccent,
+                strokeWidth = 1.5.dp,
+            )
+        }
     }
 }
 

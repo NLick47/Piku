@@ -216,6 +216,7 @@ fun HomeScreen(
         adultEnabled = state.adultEnabled,
         themeMode = state.themeMode,
         imageRouteMode = state.imageRouteMode,
+        pixivBookmarkMirror = state.pixivBookmarkMirror,
         customBackgroundPath = state.customBackgroundPath,
         language = state.language,
         currentVersion = displayVersionName(),
@@ -227,6 +228,7 @@ fun HomeScreen(
         homeSourceLabelRes = state.homeSource.labelRes(),
         onHomeSourceClick = { dialogs.showHomeSource = true },
         onImageRouteClick = { dialogs.showImageRouteSheet = true },
+        onPixivMirrorClick = { dialogs.showPixivMirrorSheet = true },
         onBackgroundClick = {
             scope.launch { drawerState.close() }
             edit.enterEdit(state)

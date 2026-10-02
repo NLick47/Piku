@@ -186,6 +186,12 @@
     <string name="collection_added_multiple">Added %1$d posts to “%2$s”</string>
     <string name="collection_already_added">Added</string>
     <string name="collection_move_short">Move</string>
+    <string name="collection_sync_short">Sync</string>
+    <string name="collection_sync_progress">Syncing %1$d/%2$d</string>
+    <string name="collection_sync_done">Synced %1$d favorites to pixiv</string>
+    <string name="collection_sync_partial">Synced %1$d, %2$d failed</string>
+    <string name="collection_sync_none">No syncable pixiv favorites in the selection</string>
+    <string name="collection_sync_login_hint">Sign in to pixiv to sync favorites</string>
     <string name="collection_move_subtitle">Pick a target folder; removed from the current one</string>
     <string name="collection_rename_subtitle">Change the collection name</string>
     <string name="collection_delete_subtitle">Posts inside will be removed from favorites</string>
@@ -365,6 +371,16 @@
     <string name="detail_favorite_sheet_hint">Tap the star below to favorite/unfavorite instantly (saved to the “Default” collection); long-press the star to reopen this panel</string>
     <string name="detail_favorite_added">Saved to default collection</string>
     <string name="detail_favorite_removed">Removed from default collection</string>
+    <string name="detail_favorite_synced">Saved and synced to pixiv</string>
+    <string name="detail_pixiv_mirror_section">pixiv bookmarks</string>
+    <string name="detail_sync_favorite_pixiv">Sync favorite to pixiv</string>
+    <string name="detail_favorite_app_only">Save to this app only</string>
+    <string name="detail_resync_pixiv">Sync to pixiv</string>
+    <string name="detail_unsync_keep_local">Remove pixiv bookmark, keep local</string>
+    <string name="detail_mirror_state_synced">In your pixiv bookmarks</string>
+    <string name="detail_mirror_state_local">Saved to this app only</string>
+    <string name="detail_mirror_synced">Synced to pixiv</string>
+    <string name="detail_mirror_unsynced">pixiv bookmark removed, kept locally</string>
     <string name="detail_favorite_new_folder">New collection</string>
     <string name="detail_save_saved">Saved to gallery</string>
     <string name="detail_save_failed">Save failed, please try again</string>
@@ -683,6 +699,15 @@
     <string name="image_route_auto">Automatic (recommended)</string>
     <string name="image_route_direct">Direct</string>
     <string name="image_route_relay">Relay</string>
+    <string name="menu_pixiv_mirror">pixiv bookmarks</string>
+    <string name="pixiv_mirror_select_title">pixiv bookmarks</string>
+    <string name="pixiv_mirror_select_hint">Whether favoriting also adds the work to your pixiv bookmarks</string>
+    <string name="pixiv_mirror_public">Sync as public bookmark</string>
+    <string name="pixiv_mirror_private">Sync as private bookmark</string>
+    <string name="pixiv_mirror_local">Save to this app only</string>
+    <string name="pixiv_mirror_public_short">Public</string>
+    <string name="pixiv_mirror_private_short">Private</string>
+    <string name="pixiv_mirror_local_short">Local</string>
 
     <string name="home_source_poipiku">Poipiku</string>
     <string name="home_source">Home source</string>

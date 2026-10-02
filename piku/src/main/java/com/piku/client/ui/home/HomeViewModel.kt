@@ -35,6 +35,7 @@ import com.piku.client.data.repository.SyncState
 import com.piku.client.domain.model.AppLanguage
 import com.piku.client.domain.model.AuthStatus
 import com.piku.client.domain.model.PoipikuCategory
+import com.piku.client.domain.model.PixivBookmarkMirror
 import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.model.ImageRouteMode
 import com.piku.client.domain.model.ThemeMode
@@ -118,6 +119,7 @@ data class HomeUiState(
     val adultEnabled: Boolean = false,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val imageRouteMode: ImageRouteMode = ImageRouteMode.AUTO,
+    val pixivBookmarkMirror: PixivBookmarkMirror = PixivBookmarkMirror.PUBLIC,
     val homeSource: WorkSource = WorkSource.POIPIKU,
     val historyRetentionDays: Int = 0,
     val language: AppLanguage = AppLanguage.SYSTEM,
@@ -291,6 +293,11 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             observeImageRouteModeUseCase().collect { mode ->
                 _uiState.update { it.copy(imageRouteMode = mode) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.pixivBookmarkMirror.collect { mode ->
+                _uiState.update { it.copy(pixivBookmarkMirror = mode) }
             }
         }
         viewModelScope.launch {
@@ -770,6 +777,10 @@ class HomeViewModel @Inject constructor(
 
     fun setImageRouteMode(mode: ImageRouteMode) {
         viewModelScope.launch { setImageRouteModeUseCase(mode) }
+    }
+
+    fun setPixivBookmarkMirror(mode: PixivBookmarkMirror) {
+        settingsRepository.setPixivBookmarkMirror(mode)
     }
 
     fun setHomeSource(value: WorkSource) {

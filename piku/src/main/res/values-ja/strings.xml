@@ -186,6 +186,12 @@
     <string name="collection_added_multiple">%1$d 件を「%2$s」に追加しました</string>
     <string name="collection_already_added">追加済み</string>
     <string name="collection_move_short">移動</string>
+    <string name="collection_sync_short">同期</string>
+    <string name="collection_sync_progress">同期中 %1$d/%2$d</string>
+    <string name="collection_sync_done">%1$d 件のお気に入りを pixiv に同期しました</string>
+    <string name="collection_sync_partial">%1$d 件同期、%2$d 件失敗</string>
+    <string name="collection_sync_none">選択した内容に同期できる pixiv お気に入りがありません</string>
+    <string name="collection_sync_login_hint">お気に入りを同期するには pixiv にログインしてください</string>
     <string name="collection_move_subtitle">移動先を選択、元のコレクションからは外れます</string>
     <string name="collection_rename_subtitle">コレクション名を変更</string>
     <string name="collection_delete_subtitle">中の投稿はお気に入りから削除されます</string>
@@ -365,6 +371,16 @@
     <string name="detail_favorite_sheet_hint">下のスターをタップでワンタップ保存/解除（「デフォルト」コレクションに保存）、長押しでこのパネルを再度開けます</string>
     <string name="detail_favorite_added">デフォルトコレクションに保存しました</string>
     <string name="detail_favorite_removed">デフォルトコレクションから外しました</string>
+    <string name="detail_favorite_synced">保存して pixiv にも同期しました</string>
+    <string name="detail_pixiv_mirror_section">pixiv ブックマーク</string>
+    <string name="detail_sync_favorite_pixiv">pixiv にもブックマーク</string>
+    <string name="detail_favorite_app_only">このアプリだけに保存</string>
+    <string name="detail_resync_pixiv">pixiv に同期</string>
+    <string name="detail_unsync_keep_local">pixiv のブックマークだけ解除（ローカルは保持）</string>
+    <string name="detail_mirror_state_synced">pixiv にブックマーク済み</string>
+    <string name="detail_mirror_state_local">このアプリだけに保存</string>
+    <string name="detail_mirror_synced">pixiv に同期しました</string>
+    <string name="detail_mirror_unsynced">pixiv のブックマークを解除しました（ローカルは保持）</string>
     <string name="detail_favorite_new_folder">新しいコレクション</string>
     <string name="detail_save_saved">アルバムに保存しました</string>
     <string name="detail_save_failed">保存に失敗しました。もう一度お試しください</string>
@@ -683,6 +699,15 @@
     <string name="image_route_auto">自動（推奨）</string>
     <string name="image_route_direct">直結</string>
     <string name="image_route_relay">中継</string>
+    <string name="menu_pixiv_mirror">pixiv ブックマーク</string>
+    <string name="pixiv_mirror_select_title">pixiv ブックマーク</string>
+    <string name="pixiv_mirror_select_hint">お気に入り時に pixiv のブックマークにも追加するかどうか</string>
+    <string name="pixiv_mirror_public">公開ブックマークとして同期</string>
+    <string name="pixiv_mirror_private">非公開ブックマークとして同期</string>
+    <string name="pixiv_mirror_local">このアプリだけに保存</string>
+    <string name="pixiv_mirror_public_short">公開</string>
+    <string name="pixiv_mirror_private_short">非公開</string>
+    <string name="pixiv_mirror_local_short">ローカル</string>
 
     <string name="home_source_poipiku">Poipiku</string>
     <string name="home_source">ホームのソース</string>

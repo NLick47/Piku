@@ -59,6 +59,7 @@ import com.piku.client.ui.detail.DetailSkeleton
 import com.piku.client.ui.detail.DetailTopBar
 import com.piku.client.ui.common.FeedbackHost
 import com.piku.client.ui.detail.FavoriteSheet
+import com.piku.client.ui.detail.PixivMirrorActions
 import com.piku.client.ui.detail.ViewerOverlay
 import com.piku.client.ui.detail.FullNovelViewer
 import com.piku.client.ui.detail.ImageActionSheet
@@ -366,6 +367,7 @@ internal fun SourceWorkDetailScreen(
                     onRelatedClick = onRelatedClick,
                     // 收藏与关注收进概览卡本体，不用悬浮条——相关作品网格完整可见
                     isFavorite = state.isFavorite,
+                    cloudSynced = state.cloudSynced,
                     followed = state.followed,
                     showFollow = state.loggedIn && work.source == WorkSource.PIXIV && work.authorId > 0,
                     followSending = state.followSending,
@@ -476,6 +478,23 @@ internal fun SourceWorkDetailScreen(
                 onToggleFolder = viewModel::toggleFavoriteFolder,
                 onCreateFolder = viewModel::createFavoriteFolder,
                 onDismiss = { favoriteSheetVisible = false },
+                // pixiv 云端区块：只有登录的 pixiv 插图作品有云端收藏可操作，其余作品整块不出现
+                pixivMirror = if (work.source == WorkSource.PIXIV &&
+                    work.kind != WorkKind.NOVEL &&
+                    state.loggedIn
+                ) {
+                    PixivMirrorActions(
+                        favorited = state.isFavorite,
+                        cloudSynced = state.cloudSynced,
+                        pending = state.mirrorPending,
+                        onSyncFavorite = viewModel::favoriteToPixiv,
+                        onLocalFavorite = viewModel::favoriteLocalOnly,
+                        onResync = viewModel::resyncToPixiv,
+                        onUnsync = viewModel::unsyncKeepLocal,
+                    )
+                } else {
+                    null
+                },
             )
         }
     }

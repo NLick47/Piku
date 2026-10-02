@@ -198,6 +198,12 @@
     <string name="collection_added_multiple">已添加 %1$d 个投稿到「%2$s」</string>
     <string name="collection_already_added">已添加</string>
     <string name="collection_move_short">移动</string>
+    <string name="collection_sync_short">同步</string>
+    <string name="collection_sync_progress">同步中 %1$d/%2$d</string>
+    <string name="collection_sync_done">已同步 %1$d 个收藏到 pixiv</string>
+    <string name="collection_sync_partial">已同步 %1$d 个，%2$d 个失败</string>
+    <string name="collection_sync_none">所选内容里没有可同步的 pixiv 收藏</string>
+    <string name="collection_sync_login_hint">登录 pixiv 后才能同步收藏</string>
     <string name="collection_move_subtitle">选择目标收藏夹，原位置不再保留</string>
     <string name="collection_rename_subtitle">修改收藏夹名称</string>
     <string name="collection_delete_subtitle">夹内投稿将从收藏中移除</string>
@@ -377,6 +383,16 @@
     <string name="detail_favorite_sheet_hint">点底部星标可一键收藏/取消（收藏进「默认」收藏夹），长按星标可再次打开此面板</string>
     <string name="detail_favorite_added">已收藏到默认收藏夹</string>
     <string name="detail_favorite_removed">已移出默认收藏夹</string>
+    <string name="detail_favorite_synced">已收藏，已同步到 pixiv</string>
+    <string name="detail_pixiv_mirror_section">pixiv 收藏</string>
+    <string name="detail_sync_favorite_pixiv">同步收藏到 pixiv</string>
+    <string name="detail_favorite_app_only">仅收藏到本 App</string>
+    <string name="detail_resync_pixiv">补同步到 pixiv</string>
+    <string name="detail_unsync_keep_local">取消同步，保留本地</string>
+    <string name="detail_mirror_state_synced">已在 pixiv 个人收藏</string>
+    <string name="detail_mirror_state_local">仅保存在本 App</string>
+    <string name="detail_mirror_synced">已同步到 pixiv</string>
+    <string name="detail_mirror_unsynced">已取消 pixiv 收藏，本地保留</string>
     <string name="detail_favorite_new_folder">新建收藏夹</string>
     <string name="detail_save_saved">已保存到相册</string>
     <string name="detail_save_failed">保存失败，请重试</string>
@@ -693,6 +709,15 @@
     <string name="image_route_auto">自动（推荐）</string>
     <string name="image_route_direct">直连</string>
     <string name="image_route_relay">中转</string>
+    <string name="menu_pixiv_mirror">pixiv 收藏</string>
+    <string name="pixiv_mirror_select_title">pixiv 收藏</string>
+    <string name="pixiv_mirror_select_hint">收藏作品时是否同时加入 pixiv 个人收藏</string>
+    <string name="pixiv_mirror_public">同步为公开收藏</string>
+    <string name="pixiv_mirror_private">同步为非公开收藏</string>
+    <string name="pixiv_mirror_local">仅保存在本 App</string>
+    <string name="pixiv_mirror_public_short">公开</string>
+    <string name="pixiv_mirror_private_short">私密</string>
+    <string name="pixiv_mirror_local_short">仅本地</string>
 
     <string name="home_source_poipiku">Poipiku</string>
     <string name="home_source">首页源</string>

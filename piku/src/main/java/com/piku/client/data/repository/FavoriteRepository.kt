@@ -165,6 +165,25 @@ class FavoriteRepository @Inject constructor(
     fun observeWorkFolderIds(key: WorkKey): Flow<Set<Long>> =
         favoriteFolderDao.observeFolderIdsForWork(key.source, key.workId).map { it.toSet() }
 
+    fun observeSyncedFavoriteIds(): Flow<Set<WorkKey>> =
+        favoriteDao.observeSyncedFavoriteIds()
+            .map { rows -> rows.mapTo(mutableSetOf()) { WorkKey(it.source, it.workId) } }
+            .shareIn(scope, SharingStarted.WhileSubscribed(FAVORITE_IDS_KEEP_ALIVE_MS), replay = 1)
+
+    suspend fun isCloudSynced(key: WorkKey): Boolean =
+        favoriteDao.favoriteById(key.source, key.workId)?.cloudSynced ?: false
+
+    suspend fun cloudSyncedKeys(keys: List<WorkKey>): Set<WorkKey> =
+        keys.groupBy { it.source }.flatMap { (source, ks) ->
+            ks.map { it.workId }.chunked(SQL_VAR_LIMIT)
+                .flatMap { favoriteDao.favoritesByIds(source, it) }
+        }.filter { it.cloudSynced }
+            .mapTo(mutableSetOf()) { WorkKey(it.source, it.workId) }
+
+    suspend fun setCloudSynced(key: WorkKey, synced: Boolean) {
+        favoriteDao.setCloudSynced(key.source, key.workId, synced)
+    }
+
     suspend fun toggleFavorite(work: Work): Boolean {
         val defaultFolderId = ensureDefaultFolder()
         // 判定与写入必须在同一个事务里：否则两次快速点击会各自读到旧状态，双双走同一条分支
@@ -178,6 +197,20 @@ class FavoriteRepository @Inject constructor(
             }
         }
         triggerAutoSync()
+        return added
+    }
+
+    suspend fun ensureFavorite(work: Work): Boolean {
+        val defaultFolderId = ensureDefaultFolder()
+        val added = database.withTransaction {
+            if (defaultFolderId in favoriteFolderDao.folderIdsForWork(work.source, work.id.toString())) {
+                false
+            } else {
+                addToFolder(work, defaultFolderId)
+                true
+            }
+        }
+        if (added) triggerAutoSync()
         return added
     }
 
@@ -242,7 +275,11 @@ class FavoriteRepository @Inject constructor(
     }
 
     private suspend fun addToFolder(work: Work, folderId: Long) {
-        favoriteDao.upsert(work.toFavoriteEntity())
+        val existing = favoriteDao.favoriteById(work.source, work.id.toString())
+        favoriteDao.upsert(
+            existing?.let { work.toFavoriteEntity().copy(cloudSynced = it.cloudSynced) }
+                ?: work.toFavoriteEntity(),
+        )
         favoriteFolderDao.upsertMembership(
             FavoriteMembershipEntity(
                 folderId = folderId,

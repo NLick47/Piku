@@ -1,6 +1,7 @@
 package com.piku.client.ui.home.sheets
 
 import com.piku.client.ui.home.drawer.labelRes
+import com.piku.client.ui.home.drawer.pixivMirrorOptionRes
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -48,6 +49,7 @@ import com.piku.client.domain.model.AppLanguage
 import com.piku.client.domain.model.CATEGORY_GROUPS
 import com.piku.client.domain.model.PoipikuCategory
 import com.piku.client.domain.model.ImageRouteMode
+import com.piku.client.domain.model.PixivBookmarkMirror
 import com.piku.client.domain.model.ThemeMode
 import com.piku.client.ui.common.PikuBottomSheet
 import com.piku.client.ui.common.PikuSheetSubtitle
@@ -227,6 +229,34 @@ internal fun ImageRouteSheet(
             onClick = { onSelect(ImageRouteMode.RELAY) },
             dark = dark,
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun PixivMirrorSheet(
+    selected: PixivBookmarkMirror,
+    onSelect: (PixivBookmarkMirror) -> Unit,
+    onDismiss: () -> Unit,
+    dark: Boolean,
+) {
+    PikuBottomSheet(
+        onDismissRequest = onDismiss,
+        dark = dark,
+    ) {
+        PikuSheetTitle(text = stringResource(R.string.pixiv_mirror_select_title))
+        Spacer(Modifier.height(4.dp))
+        PikuSheetSubtitle(text = stringResource(R.string.pixiv_mirror_select_hint))
+        Spacer(Modifier.height(16.dp))
+        PixivBookmarkMirror.entries.forEach { mode ->
+            SettingsOptionRow(
+                text = stringResource(mode.pixivMirrorOptionRes()),
+                selected = selected == mode,
+                onClick = { onSelect(mode) },
+                dark = dark,
+            )
+            Spacer(Modifier.height(8.dp))
+        }
     }
 }
 

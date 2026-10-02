@@ -34,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.AltRoute
+import androidx.compose.material.icons.outlined.BookmarkAdd
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.DarkMode
@@ -78,6 +79,7 @@ import androidx.compose.ui.unit.sp
 import com.piku.client.R
 import com.piku.client.domain.model.AppLanguage
 import com.piku.client.domain.model.ImageRouteMode
+import com.piku.client.domain.model.PixivBookmarkMirror
 import com.piku.client.domain.model.ThemeMode
 import com.piku.client.ui.common.UserAvatar
 import com.piku.client.ui.theme.AccentDark
@@ -96,6 +98,7 @@ fun UserDrawer(
     adultEnabled: Boolean,
     themeMode: ThemeMode,
     imageRouteMode: ImageRouteMode,
+    pixivBookmarkMirror: PixivBookmarkMirror = PixivBookmarkMirror.PUBLIC,
     customBackgroundPath: String?,
     language: AppLanguage,
     currentVersion: String,
@@ -105,6 +108,7 @@ fun UserDrawer(
     onAboutClick: () -> Unit,
     onThemeClick: () -> Unit,
     onImageRouteClick: () -> Unit,
+    onPixivMirrorClick: () -> Unit = {},
     onBackgroundClick: () -> Unit,
     onHistoryClick: () -> Unit,
     onCollectionClick: () -> Unit,
@@ -143,6 +147,7 @@ fun UserDrawer(
                 adultEnabled = adultEnabled,
                 themeMode = themeMode,
                 imageRouteMode = imageRouteMode,
+                pixivBookmarkMirror = pixivBookmarkMirror,
                 customBackgroundPath = customBackgroundPath,
                 language = language,
                 currentVersion = currentVersion,
@@ -155,6 +160,7 @@ fun UserDrawer(
                 onAboutClick = onAboutClick,
                 onThemeClick = onThemeClick,
                 onImageRouteClick = onImageRouteClick,
+                onPixivMirrorClick = onPixivMirrorClick,
                 onBackgroundClick = onBackgroundClick,
                 onHistoryClick = onHistoryClick,
                 onCollectionClick = onCollectionClick,
@@ -189,6 +195,7 @@ private fun DrawerPanel(
     adultEnabled: Boolean,
     themeMode: ThemeMode,
     imageRouteMode: ImageRouteMode,
+    pixivBookmarkMirror: PixivBookmarkMirror = PixivBookmarkMirror.PUBLIC,
     customBackgroundPath: String?,
     language: AppLanguage,
     currentVersion: String,
@@ -198,6 +205,7 @@ private fun DrawerPanel(
     onAboutClick: () -> Unit,
     onThemeClick: () -> Unit,
     onImageRouteClick: () -> Unit,
+    onPixivMirrorClick: () -> Unit = {},
     onBackgroundClick: () -> Unit,
     onHistoryClick: () -> Unit,
     onCollectionClick: () -> Unit,
@@ -469,6 +477,14 @@ private fun DrawerPanel(
                         label = stringResource(R.string.menu_image_route),
                         trailing = stringResource(imageRouteMode.labelRes()),
                         onClick = onImageRouteClick,
+                        dark = dark,
+                        accent = iconAccent,
+                    )
+                    DrawerMenuRow(
+                        icon = Icons.Outlined.BookmarkAdd,
+                        label = stringResource(R.string.menu_pixiv_mirror),
+                        trailing = stringResource(pixivBookmarkMirror.pixivMirrorLabelRes()),
+                        onClick = onPixivMirrorClick,
                         dark = dark,
                         accent = iconAccent,
                     )
@@ -826,6 +842,19 @@ private fun ImageRouteMode.labelRes(): Int = when (this) {
     ImageRouteMode.AUTO -> R.string.image_route_auto
     ImageRouteMode.DIRECT -> R.string.image_route_direct
     ImageRouteMode.RELAY -> R.string.image_route_relay
+}
+
+/** pixiv 收藏镜像档位的展示名，两份文案：抽屉行右侧用短词，弹层选项用完整描述 */
+internal fun PixivBookmarkMirror.pixivMirrorLabelRes(): Int = when (this) {
+    PixivBookmarkMirror.PUBLIC -> R.string.pixiv_mirror_public_short
+    PixivBookmarkMirror.PRIVATE -> R.string.pixiv_mirror_private_short
+    PixivBookmarkMirror.LOCAL_ONLY -> R.string.pixiv_mirror_local_short
+}
+
+internal fun PixivBookmarkMirror.pixivMirrorOptionRes(): Int = when (this) {
+    PixivBookmarkMirror.PUBLIC -> R.string.pixiv_mirror_public
+    PixivBookmarkMirror.PRIVATE -> R.string.pixiv_mirror_private
+    PixivBookmarkMirror.LOCAL_ONLY -> R.string.pixiv_mirror_local
 }
 
 fun AppLanguage.labelRes(): Int = when (this) {
