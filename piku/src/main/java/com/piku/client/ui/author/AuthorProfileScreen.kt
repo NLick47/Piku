@@ -2,12 +2,18 @@ package com.piku.client.ui.author
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -16,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -85,6 +92,9 @@ import com.piku.client.ui.common.MoreMenuAction
 import com.piku.client.ui.common.MoreMenuButton
 import com.piku.client.ui.common.quietFollowMenuActions
 import com.piku.client.ui.common.LoginPrompt
+import com.piku.client.ui.common.PikuSegmented
+import com.piku.client.ui.common.motionDuration
+import com.piku.client.ui.common.rememberReducedMotion
 import com.piku.client.ui.detail.TranslateChip
 import com.piku.client.domain.model.WorkKind
 import com.piku.client.ui.source.NovelWorkCard
@@ -95,7 +105,6 @@ import com.piku.client.ui.theme.HomeBgTopDark
 import com.piku.client.ui.theme.HomeBgTopLight
 import com.piku.client.ui.theme.LocalDarkTheme
 import com.piku.client.ui.theme.PikuColors
-import com.piku.client.ui.theme.onAccent
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
@@ -811,8 +820,24 @@ private fun AuthorTabRow(state: AuthorUiState, onSelect: (AuthorTab) -> Unit) {
         )
         add(TabItem(AuthorTab.NOVEL, labelNovel, state.novelCount))
     }
+    val selectedIndex = tabs.indexOfFirst { it.tab == state.tab }.coerceAtLeast(0)
+    val reduced = rememberReducedMotion()
 
-    Box(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+    BoxWithConstraints(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+        // 指示条随选中项滑到对应列下，弹性与分段控件同一套
+        val columnWidth = maxWidth / tabs.size
+        val indicatorX by animateDpAsState(
+            targetValue = columnWidth * selectedIndex + (columnWidth - 26.dp) / 2,
+            animationSpec = if (reduced) {
+                tween(0)
+            } else {
+                spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessMedium,
+                )
+            },
+            label = "authorTabIndicatorX",
+        )
         // 整行底线；选中指示条压在它上面，读起来是「贴在线上」而不是浮在半空
         Box(
             Modifier
@@ -820,6 +845,15 @@ private fun AuthorTabRow(state: AuthorUiState, onSelect: (AuthorTab) -> Unit) {
                 .fillMaxWidth()
                 .height(1.dp)
                 .background(PikuColors.border),
+        )
+        Box(
+            Modifier
+                .align(Alignment.BottomStart)
+                .offset(x = indicatorX)
+                .width(26.dp)
+                .height(2.5.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(PikuColors.accent),
         )
         Row(Modifier.fillMaxWidth()) {
             tabs.forEach { item ->
@@ -848,13 +882,8 @@ private fun AuthorTabRow(state: AuthorUiState, onSelect: (AuthorTab) -> Unit) {
                         }
                     }
                     Spacer(Modifier.height(7.dp))
-                    Box(
-                        Modifier
-                            .width(26.dp)
-                            .height(2.5.dp)
-                            .clip(RoundedCornerShape(2.dp))
-                            .background(if (selected) PikuColors.accent else Color.Transparent),
-                    )
+                    // 占住指示条的高度：指示条挪到行级之后，标签行高度靠它维持
+                    Spacer(Modifier.height(2.5.dp))
                 }
             }
         }
@@ -862,54 +891,27 @@ private fun AuthorTabRow(state: AuthorUiState, onSelect: (AuthorTab) -> Unit) {
 }
 
 /**
- * 收藏池子切换：公开 / 非公开。样式与投稿箱的筛选项同一套 chip 语言——
- * 这只是列表内的一次过滤，压不过上面那排真正的 Tab。
+ * 收藏池子切换：公开 / 非公开。与「我的关注」页的公开/悄悄关注同一套分段控件，
+ * 但压成紧凑居中的一颗——它只是列表内的一次过滤，压不过上面那排真正的 Tab。
  */
 @Composable
 private fun BookmarkPoolToggle(
     private: Boolean,
     onSelect: (Boolean) -> Unit,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 2.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        BookmarkPoolChip(
-            text = stringResource(R.string.pixiv_mirror_public_short),
-            selected = !private,
-            onClick = { onSelect(false) },
-        )
-        Spacer(Modifier.width(8.dp))
-        BookmarkPoolChip(
-            text = stringResource(R.string.pixiv_mirror_private_short),
-            selected = private,
-            onClick = { onSelect(true) },
-        )
-    }
-}
-
-@Composable
-private fun BookmarkPoolChip(
-    text: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
     Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(999.dp))
-            .background(
-                if (selected) PikuColors.accent
-                else PikuColors.textSecondary.copy(alpha = 0.08f),
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 13.dp, vertical = 6.dp),
+        modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 2.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = text,
-            color = if (selected) onAccent() else PikuColors.textSecondary,
-            fontSize = 12.sp,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+        PikuSegmented(
+            labels = listOf(
+                stringResource(R.string.pixiv_mirror_public_short),
+                stringResource(R.string.pixiv_mirror_private_short),
+            ),
+            selectedIndex = if (private) 1 else 0,
+            onSelect = { onSelect(it == 1) },
+            height = 32.dp,
+            modifier = Modifier.width(200.dp),
         )
     }
 }

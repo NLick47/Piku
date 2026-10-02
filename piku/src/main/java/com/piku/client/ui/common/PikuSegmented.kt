@@ -30,6 +30,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.piku.client.ui.theme.LocalDarkTheme
@@ -45,6 +46,7 @@ private val TrackHeight = 38.dp
 /**
  * 等分胶囊分段控件：玻璃轨道 + 滑动的 accent 指示器。
  * 供需要「横向切换一组互斥筛选项」的页面共用（搜索页 tab、浏览记录时间范围等）。
+ * [height] 默认 38dp，作为页面内的次级过滤时可压到 32dp（作者页收藏池）。
  * 需要父容器给出有限宽度，不支持放在横向滚动容器里。
  */
 @Composable
@@ -54,6 +56,7 @@ fun PikuSegmented(
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    height: Dp = TrackHeight,
 ) {
     if (labels.isEmpty()) return
     val index = selectedIndex.coerceIn(0, labels.lastIndex)
@@ -61,7 +64,7 @@ fun PikuSegmented(
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
-            .height(TrackHeight)
+            .height(height)
             .clip(TrackShape)
             .background(if (LocalDarkTheme.current) SegmentedTrackDark else SegmentedTrackLight)
             .border(BorderStroke(0.5.dp, PikuColors.border), TrackShape),
@@ -84,7 +87,7 @@ fun PikuSegmented(
             modifier = Modifier
                 .offset(x = indicatorX, y = TrackPadding)
                 .width(itemWidth)
-                .height(TrackHeight - TrackPadding * 2)
+                .height(height - TrackPadding * 2)
                 .clip(TrackShape)
                 .background(PikuColors.accent),
         )
