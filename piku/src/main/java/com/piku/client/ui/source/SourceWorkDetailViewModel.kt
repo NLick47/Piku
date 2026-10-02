@@ -20,6 +20,7 @@ import com.piku.client.data.repository.FavoriteRepository
 import com.piku.client.data.repository.PixivRepository
 import com.piku.client.data.repository.ThumbnailResolver
 import com.piku.client.domain.model.AppLanguage
+import com.piku.client.domain.model.AppError
 import com.piku.client.domain.model.AuthStatus
 import com.piku.client.domain.model.FavoriteFolder
 import com.piku.client.domain.model.PixivBookmarkMirror
@@ -91,6 +92,8 @@ class SourceWorkDetailViewModel @Inject constructor(
     data class UiState(
         val loading: Boolean = true,
         val failed: Boolean = false,
+        /** 失败原因是登录墙（登录限定作品 / 会话失效）：失败态改出「去登录」而不是重试 */
+        val loginRequired: Boolean = false,
         val detail: WorkDetail? = null,
         val translating: Boolean = false,
         val showTranslationAll: Boolean = false,
@@ -254,6 +257,10 @@ class SourceWorkDetailViewModel @Inject constructor(
                     val loggedIn = status == AuthStatus.LOGGED_IN
                     _ui.update { it.copy(loggedIn = loggedIn) }
                     if (loggedIn) refreshPixivSocialState()
+                    // 登录墙页面上完成登录：回来即重拉（未登录时被墙的作品此刻已可见）
+                    if (loggedIn && _ui.value.loginRequired) {
+                        currentWork?.let { load(it, force = true) }
+                    }
                 }
             }
         }
@@ -382,9 +389,16 @@ class SourceWorkDetailViewModel @Inject constructor(
                     // 与 poipiku 详情一致：开了 AI 翻译就自动译一次（失败静默）
                     if (settingsRepository.aiTranslateEnabled.value) translate()
                 },
-                onFailure = {
+                onFailure = { error ->
                     // 打底的预览一并撤掉：重进时「detail != null」守卫才会放行自动重拉
-                    _ui.update { it.copy(loading = false, failed = true, detail = null) }
+                    _ui.update {
+                        it.copy(
+                            loading = false,
+                            failed = true,
+                            detail = null,
+                            loginRequired = error is AppError.LoginRequired,
+                        )
+                    }
                 },
             )
         }

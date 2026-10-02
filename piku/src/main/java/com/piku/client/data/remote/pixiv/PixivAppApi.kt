@@ -99,6 +99,48 @@ data class PixivAppIllustDetailResponse(
     val illust: PixivAppIllustState = PixivAppIllustState(),
 )
 
+/** v1/illust/detail 全量模型：详情页的分页图址/简介/标签/统计都从这里出（登录态可用） */
+@Serializable
+data class PixivAppIllustFullResponse(
+    val illust: PixivAppIllustFull = PixivAppIllustFull(),
+    /** 200 但带 error 块的拒绝（受限作品等）：不能当成成功解析 */
+    val error: PixivAppErrorBody? = null,
+)
+
+@Serializable
+data class PixivAppIllustFull(
+    @Serializable(with = FlexibleStringSerializer::class) val id: String = "",
+    val title: String = "",
+    val caption: String = "",
+    @SerialName("image_urls") val imageUrls: PixivAppImageUrls = PixivAppImageUrls(),
+    val user: PixivAppUser = PixivAppUser(),
+    @SerialName("page_count") val pageCount: Int = 1,
+    val width: Int = 0,
+    val height: Int = 0,
+    val visible: Boolean = true,
+    @SerialName("meta_single_page") val metaSinglePage: PixivAppMetaSinglePage = PixivAppMetaSinglePage(),
+    @SerialName("meta_pages") val metaPages: List<PixivAppMetaPage> = emptyList(),
+    val tags: List<PixivAppIllustTag> = emptyList(),
+    @SerialName("total_view") val totalView: Int = 0,
+    @SerialName("total_bookmarks") val totalBookmarks: Int = 0,
+    @SerialName("create_date") val createDate: String = "",
+)
+
+/** 单页作品的原图在 meta_single_page（此时 meta_pages 为空） */
+@Serializable
+data class PixivAppMetaSinglePage(
+    @SerialName("original_image_url") val originalImageUrl: String = "",
+)
+
+@Serializable
+data class PixivAppMetaPage(
+    @SerialName("image_urls") val imageUrls: PixivAppImageUrls = PixivAppImageUrls(),
+    @SerialName("original_image_url") val originalImageUrl: String = "",
+)
+
+@Serializable
+data class PixivAppIllustTag(val tag: String = "")
+
 @Serializable
 data class PixivAppIllustState(
     @Serializable(with = FlexibleStringSerializer::class) val id: String = "",
@@ -366,6 +408,16 @@ interface PixivAppApi {
         @Header("X-Client-Hash") clientHash: String,
         @Query("illust_id") illustId: Long,
     ): PixivAppIllustDetailResponse
+
+    /** 作品全量详情：各页图址/简介/标签/统计；登录限定作品只有这条路拿得到。需登录 */
+    @GET("v1/illust/detail")
+    @Headers(HEADER_USER_AGENT, HEADER_APP_OS, HEADER_APP_OS_VERSION, HEADER_APP_VERSION)
+    suspend fun illustDetail(
+        @Header("X-Client-Time") clientTime: String,
+        @Header("X-Client-Hash") clientHash: String,
+        @Query("illust_id") illustId: Long,
+        @Query("filter") filter: String = PixivAppConfig.FILTER_ANDROID,
+    ): PixivAppIllustFullResponse
 
     /** 关注作者；restrict=private 即悄悄关注 */
     @POST("v1/user/follow/add")

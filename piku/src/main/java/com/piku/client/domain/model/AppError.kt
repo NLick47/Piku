@@ -18,4 +18,10 @@ sealed class AppError : Exception() {
      * 同样是终态（重试无意义），但 UI 提示应指向屏蔽列表而不是"作品已删除"。
      */
     data object BlockedAuthor : AppError()
+
+    /**
+     * 作品存在但需要 pixiv 会话才可见：登录限定作品（login_only）走匿名网页接口、
+     * 或 app-api 会话失效。同样是终态（重试无意义），UI 的出路是引导登录。
+     */
+    data object LoginRequired : AppError()
 }

@@ -552,12 +552,15 @@ private fun StatsRow(
                 label = stringResource(R.string.pixiv_stat_views),
                 modifier = Modifier.weight(1f),
             )
-            StatCell(
-                icon = Icons.Outlined.FavoriteBorder,
-                value = compactCount(stats.likes, language),
-                label = stringResource(R.string.pixiv_stat_likes),
-                modifier = Modifier.weight(1f),
-            )
+            // app-api 链路不带点赞数（likes=null）：不渲染该格，不当作 0
+            if (stats.likes != null) {
+                StatCell(
+                    icon = Icons.Outlined.FavoriteBorder,
+                    value = compactCount(stats.likes, language),
+                    label = stringResource(R.string.pixiv_stat_likes),
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
         Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
             BookmarkStatButton(

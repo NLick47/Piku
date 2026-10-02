@@ -108,6 +108,9 @@ class PixivAuthRepository @Inject constructor(
     /** 当前登录用户的数字 id（关注列表等按 user_id 查询的接口用）；未登录给 null */
     fun currentUserId(): Long? = store.current()?.userId?.toLongOrNull()
 
+    /** 本地存有 pixiv 令牌即可走登录态链路，不验活；失效在调用时以 401 暴露 */
+    fun hasSession(): Boolean = store.current() != null
+
     fun freshAccessToken(): String? {
         val token = store.current() ?: return null
         if (!token.isExpiring(runtime.now())) return token.accessToken

@@ -3,6 +3,7 @@ package com.piku.client.data.repository
 import android.util.Log
 import com.piku.client.data.remote.apiCall
 import com.piku.client.data.auth.PixivAuthEndpoints
+import com.piku.client.data.auth.PixivAuthRepository
 import com.piku.client.data.auth.PixivAuthRuntime
 import com.piku.client.data.local.QuietFollowStore
 import com.piku.client.domain.model.AppError
@@ -12,6 +13,7 @@ import com.piku.client.data.remote.pixiv.PixivApiConfig
 import com.piku.client.data.remote.pixiv.PixivAppApi
 import com.piku.client.data.remote.pixiv.PixivAppConfig
 import com.piku.client.data.remote.pixiv.PixivAppIllust
+import com.piku.client.data.remote.pixiv.PixivAppIllustFull
 import com.piku.client.data.remote.pixiv.PixivIllustBody
 import com.piku.client.data.remote.pixiv.PixivWorkCard
 import com.piku.client.data.remote.pixiv.PixivPageUrls
@@ -36,6 +38,7 @@ import com.piku.client.domain.source.SourceWorkPage
 import com.piku.client.domain.source.SourceWorkText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import retrofit2.HttpException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -46,22 +49,65 @@ class PixivRepository @Inject constructor(
     private val appApi: PixivAppApi,
     private val endpoints: PixivAuthEndpoints,
     private val runtime: PixivAuthRuntime,
+    // 会话判定决定详情走哪条链路
+    private val pixivAuth: PixivAuthRepository,
     private val quietFollowStore: QuietFollowStore,
 ) {
 
     /**
-     * 看图页列表，走网页端详情取页接口（每页 URL 由 pixiv 给，不再从缩略图猜）。
+     * 看图页列表。有会话走 app-api 全量详情（登录限定作品网页端 404，只有这条路拿得到）；
+     * 未登录走网页端详情取页接口（每页 URL 由 pixiv 给，不再从缩略图猜）。
      * regular 是 master1200 看图档；original 扩展名不定，仅作缺 regular 时的兜底。
      */
     suspend fun workPages(illustId: Long): Result<List<SourceWorkPage>> = apiCall {
-        val response = api.illustPages(illustId)
+        if (pixivAuth.hasSession()) {
+            appIllustDetail(illustId).toSourceWorkPages().filter { it.url.isNotBlank() }
+        } else {
+            webIllustPages(illustId)
+        }
+    }
+
+    private suspend fun webIllustPages(illustId: Long): List<SourceWorkPage> {
+        val response = try {
+            api.illustPages(illustId)
+        } catch (_: HttpException) {
+            // 404 与「不存在/已删除」同形，借详情接口分清
+            throw classifyWebWall(illustId)
+        }
         if (response.error) {
             // R-18 等登录墙：HTTP 200 但 error=true，重试无意义
-            throw AppError.NotFound
+            throw classifyWebWall(illustId)
         }
-        response.body
+        return response.body
             .map { page -> page.urls.toSourceWorkPage(page.width, page.height) }
             .filter { it.url.isNotBlank() }
+    }
+
+    /**
+     * 网页端分页被墙时判明性质：详情接口还认得这件作品 = 仅登录可见（引导登录），
+     * 详情同样拿不到 = 真不存在或已删除。探测本身失败时按不存在处理，与旧表现一致。
+     */
+    private suspend fun classifyWebWall(illustId: Long): AppError =
+        webWallError(runCatching { api.illustDetail(illustId) }.map { !it.error }.getOrDefault(false))
+
+    /** app-api 全量详情：会话失效给引导登录，受限作品与 404 给终态 */
+    private suspend fun appIllustDetail(illustId: Long): PixivAppIllustFull {
+        val signature = endpoints.clientSignature(runtime.now())
+        val response = try {
+            appApi.illustDetail(
+                clientTime = signature.time,
+                clientHash = signature.hash,
+                illustId = illustId,
+            )
+        } catch (e: HttpException) {
+            throw when (e.code()) {
+                401 -> AppError.LoginRequired
+                404 -> AppError.NotFound
+                else -> e
+            }
+        }
+        if (response.error != null || !response.illust.visible) throw AppError.NotFound
+        return response.illust
     }
 
     suspend fun ranking(mode: String, content: String, page: Int): Result<SourcePage> =
@@ -209,17 +255,37 @@ class PixivRepository @Inject constructor(
     }
 
     /**
-     * 详情补充文本与统计。简介是 HTML 片段：<br /> 换算行、其余标签剥掉（详情壳按纯文本展示）。
+     * 详情补充文本与统计。有会话走 app-api（登录限定/R-18 作品网页端匿名拿不到文本；
+     * app-api 不带点赞数，likes 置空让 UI 不渲染该格）。未登录走网页端：
+     * 简介是 HTML 片段：<br /> 换算行、其余标签剥掉（详情壳按纯文本展示）。
      * 计数与元信息同一个接口就带出来了，不再多打一次请求。
      */
     suspend fun workText(illustId: Long): Result<SourceWorkText?> = apiCall {
-        val response = api.illustDetail(illustId)
-        if (response.error) return@apiCall null
-        SourceWorkText(
-            description = cleanPixivDescription(response.body.description),
-            tags = response.body.tags.tags.map { it.tag }.filter { it.isNotBlank() },
-            stats = response.body.toWorkStats(),
-        )
+        if (pixivAuth.hasSession()) {
+            val illust = appIllustDetail(illustId)
+            SourceWorkText(
+                description = cleanPixivDescription(illust.caption),
+                tags = illust.tags.map { it.tag }.filter { it.isNotBlank() },
+                stats = WorkStats(
+                    views = illust.totalView,
+                    likes = null,
+                    bookmarks = illust.totalBookmarks,
+                    postedAt = illust.createDate,
+                    width = illust.width,
+                    height = illust.height,
+                    pageCount = illust.pageCount,
+                    authorAccount = illust.user.account,
+                ),
+            )
+        } else {
+            val response = api.illustDetail(illustId)
+            if (response.error) return@apiCall null
+            SourceWorkText(
+                description = cleanPixivDescription(response.body.description),
+                tags = response.body.tags.tags.map { it.tag }.filter { it.isNotBlank() },
+                stats = response.body.toWorkStats(),
+            )
+        }
     }
 
     /** 详情页底部的相关作品；取不到就当没有，详情页照常展示 */
@@ -528,6 +594,36 @@ internal fun PixivPageUrls.toSourceWorkPage(width: Int, height: Int): SourceWork
     width = width,
     height = height,
 )
+
+/** 网页端被墙后的定性：详情接口认得作品 = 仅登录可见，否则按不存在 */
+internal fun webWallError(detailVisible: Boolean): AppError =
+    if (detailVisible) AppError.LoginRequired else AppError.NotFound
+
+/**
+ * app-api 分页映射：medium 540px 打底、large 1200px 清晰档，原图 meta 单给。
+ * 多页在 meta_pages 逐页给；单页原图在 meta_single_page（此时 meta_pages 为空）。
+ * app-api 不带逐页尺寸，只有作品本体尺寸（= 首页），其余页留 0 由 UI 按图自适应。
+ */
+internal fun PixivAppIllustFull.toSourceWorkPages(): List<SourceWorkPage> = when {
+    metaPages.isNotEmpty() -> metaPages.mapIndexed { index, page ->
+        SourceWorkPage(
+            url = page.imageUrls.medium.ifBlank { page.imageUrls.large },
+            fullUrl = page.imageUrls.large.ifBlank { page.originalImageUrl },
+            originalUrl = page.originalImageUrl,
+            width = if (index == 0) width else 0,
+            height = if (index == 0) height else 0,
+        )
+    }
+    else -> listOf(
+        SourceWorkPage(
+            url = imageUrls.medium.ifBlank { imageUrls.large },
+            fullUrl = imageUrls.large.ifBlank { metaSinglePage.originalImageUrl },
+            originalUrl = metaSinglePage.originalImageUrl,
+            width = width,
+            height = height,
+        )
+    )
+}
 
 internal fun cleanPixivDescription(raw: String): String = raw
     .replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), "\n")

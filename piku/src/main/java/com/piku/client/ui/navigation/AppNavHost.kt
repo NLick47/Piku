@@ -608,6 +608,7 @@ fun AppNavHost(
                     onHomeClick = safePopToHome,
                     onOpenAuthor = openAuthorOfWork,
                     onRelatedClick = openRelatedSourceWork,
+                    onLoginClick = { navController.navigate(Routes.PIXIV_LOGIN) },
                 )
             }
         }

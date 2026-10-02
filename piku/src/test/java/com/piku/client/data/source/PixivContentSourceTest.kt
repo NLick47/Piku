@@ -1,9 +1,15 @@
 package com.piku.client.data.source
 
 import com.piku.client.data.auth.PixivAuthEndpoints
+import com.piku.client.data.auth.PixivAuthApi
+import com.piku.client.data.auth.PixivAuthRepository
+import com.piku.client.data.auth.PixivAuthRuntime
+import com.piku.client.data.auth.PixivAuthStore
+import com.piku.client.data.local.CredentialCipher
+import com.piku.client.data.local.CredentialStorage
 import com.piku.client.data.local.InMemorySharedPreferences
 import com.piku.client.data.local.QuietFollowStore
-import com.piku.client.data.auth.PixivAuthRuntime
+import com.piku.client.data.remote.PikuJson
 import com.piku.client.data.auth.pixivClientHash
 import com.piku.client.data.remote.pixiv.PixivApi
 import com.piku.client.data.remote.pixiv.PixivAppActionResponse
@@ -11,6 +17,7 @@ import com.piku.client.data.remote.pixiv.PixivAppApi
 import com.piku.client.data.remote.pixiv.PixivAppConfig
 import com.piku.client.data.remote.pixiv.PixivAppIllust
 import com.piku.client.data.remote.pixiv.PixivAppIllustDetailResponse
+import com.piku.client.data.remote.pixiv.PixivAppIllustFullResponse
 import com.piku.client.data.remote.pixiv.PixivAppImageUrls
 import com.piku.client.data.remote.pixiv.PixivAutoWordsResponse
 import com.piku.client.data.remote.pixiv.PixivContentType
@@ -129,6 +136,13 @@ class PixivContentSourceTest {
             clientHash: String,
             illustId: Long,
         ): PixivAppIllustDetailResponse = PixivAppIllustDetailResponse()
+
+        override suspend fun illustDetail(
+            clientTime: String,
+            clientHash: String,
+            illustId: Long,
+            filter: String,
+        ): PixivAppIllustFullResponse = PixivAppIllustFullResponse()
 
         override suspend fun followAdd(
             clientTime: String,
@@ -323,8 +337,42 @@ class PixivContentSourceTest {
             appApi = appApi,
             endpoints = PixivAuthEndpoints(),
             runtime = PixivAuthRuntime(dispatcher = Dispatchers.Unconfined, now = { FIXED_NOW }),
+            pixivAuth = loggedOutPixivAuth(),
             quietFollowStore = QuietFollowStore(InMemorySharedPreferences()),
         )
+
+    // 未登录会话：详情走网页端链路，与本测试改前的行为一致
+    private fun loggedOutPixivAuth(): PixivAuthRepository = PixivAuthRepository(
+        api = FakePixivAuthApi(),
+        store = PixivAuthStore(InMemoryStorage(), FakeCipher(), PikuJson),
+        endpoints = PixivAuthEndpoints(),
+        runtime = PixivAuthRuntime(dispatcher = Dispatchers.Unconfined, now = { FIXED_NOW }),
+    )
+
+    private class FakePixivAuthApi : PixivAuthApi {
+        override suspend fun token(
+            fields: Map<String, String>,
+            clientTime: String,
+            clientHash: String,
+        ) = throw UnsupportedOperationException()
+    }
+
+    private class FakeCipher : CredentialCipher {
+        override fun encrypt(plain: String): String = "ENC:$plain"
+        override fun decrypt(cipherText: String): String = cipherText.removePrefix("ENC:")
+    }
+
+    private class InMemoryStorage : CredentialStorage {
+        private val map = HashMap<String, String>()
+        override fun get(key: String): String? = map[key]
+        override fun put(key: String, value: String) {
+            map[key] = value
+        }
+
+        override fun remove(key: String) {
+            map.remove(key)
+        }
+    }
 
     private fun source(api: FakeApi, appApi: FakeAppApi = FakeAppApi()): PixivContentSource =
         PixivContentSource(repository(api, appApi))

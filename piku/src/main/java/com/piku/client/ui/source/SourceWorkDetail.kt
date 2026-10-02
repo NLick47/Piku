@@ -102,6 +102,8 @@ internal fun SourceWorkDetailScreen(
     onOpenAuthor: (Work) -> Unit,
     /** 点相关作品：压栈进新详情；栈深上限由导航层统一把关 */
     onRelatedClick: (Work) -> Unit,
+    /** 登录墙的「去登录」：进 pixiv 登录页；登录成功弹回本页后 VM 自动重拉 */
+    onLoginClick: () -> Unit,
     viewModel: SourceWorkDetailViewModel = hiltViewModel(key = "source-detail-${work.key}"),
 ) {
     val dark = LocalDarkTheme.current
@@ -289,21 +291,40 @@ internal fun SourceWorkDetailScreen(
                 Modifier.align(Alignment.Center),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text(
-                    text = stringResource(R.string.home_error_network),
-                    color = PikuColors.textSecondary,
-                    fontSize = 13.sp,
-                )
-                Text(
-                    text = stringResource(R.string.common_retry),
-                    color = PikuColors.accent,
-                    fontSize = 13.sp,
-                    modifier = Modifier
-                        .padding(top = 10.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable { viewModel.load(work, force = true) }
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                )
+                if (state.loginRequired) {
+                    // 登录墙：登录限定作品未登录打开 / 会话失效。文案与 poipiku 登录门同源
+                    Text(
+                        text = stringResource(R.string.detail_gate_login_title),
+                        color = PikuColors.textSecondary,
+                        fontSize = 13.sp,
+                    )
+                    Text(
+                        text = stringResource(R.string.detail_gate_login_action),
+                        color = PikuColors.accent,
+                        fontSize = 13.sp,
+                        modifier = Modifier
+                            .padding(top = 10.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(onClick = onLoginClick)
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                    )
+                } else {
+                    Text(
+                        text = stringResource(R.string.home_error_network),
+                        color = PikuColors.textSecondary,
+                        fontSize = 13.sp,
+                    )
+                    Text(
+                        text = stringResource(R.string.common_retry),
+                        color = PikuColors.accent,
+                        fontSize = 13.sp,
+                        modifier = Modifier
+                            .padding(top = 10.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { viewModel.load(work, force = true) }
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                    )
+                }
             }
             // 小说与插画是两套版式：小说没有图区，正文交给阅读器
             else -> if (work.kind == WorkKind.NOVEL) {
