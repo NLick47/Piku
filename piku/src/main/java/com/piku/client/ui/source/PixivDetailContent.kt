@@ -1,6 +1,9 @@
 package com.piku.client.ui.source
 
 import android.graphics.Bitmap
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.ScrollState
@@ -37,6 +40,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,7 +49,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -68,10 +74,18 @@ import com.piku.client.ui.detail.TagsTranslateChip
 import com.piku.client.ui.detail.linkify
 import com.piku.client.ui.detail.tagsTranslationShown
 import com.piku.client.ui.navigation.sharedWorkBounds
+import com.piku.client.ui.theme.GlassBarBgDark
+import com.piku.client.ui.theme.GlassBarBgLight
 import com.piku.client.ui.theme.OverlayScrimHeavy
 import com.piku.client.ui.theme.PikuColors
+import com.piku.client.ui.theme.ShadowAmbient
+import com.piku.client.ui.theme.ShadowSpot
+import com.piku.client.ui.theme.SoftBorderDark
+import com.piku.client.ui.theme.SoftBorderLight
 import com.piku.client.ui.theme.StarDark
 import com.piku.client.ui.theme.StarLight
+import com.piku.client.ui.theme.StarTintDark
+import com.piku.client.ui.theme.StarTintLight
 import java.util.Locale
 
 /** 信息区左右留白（与 poipiku 详情同一把尺子） */
@@ -271,26 +285,32 @@ private fun OverviewCard(
             onBookmarkToggle = onBookmarkToggle,
             onBookmarkLongPress = onBookmarkLongPress,
             onFollowClick = onFollowClick,
+            // 收藏开关挪进统计行（☆ 计数格），作者行回归 pixiv 本家版式：头像/名字/关注
+            showBookmark = false,
         )
         DescriptionBlock(
             detail = detail,
             dark = dark,
             showTranslation = showTranslation,
         )
-        if (stats?.hasCounts == true) {
-            Spacer(Modifier.height(12.dp))
-            Spacer(
-                Modifier
-                    .fillMaxWidth()
-                    .height(1.dp)
-                    .background(PikuColors.border),
-            )
-            Spacer(Modifier.height(10.dp))
-            StatsRow(
-                stats = stats,
-                language = language,
-            )
-        }
+        // 计数缺失（匿名限制、作品被限）时只藏两侧纯展示格，收藏开关恒在
+        Spacer(Modifier.height(12.dp))
+        Spacer(
+            Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(PikuColors.border),
+        )
+        Spacer(Modifier.height(10.dp))
+        StatsRow(
+            stats = stats,
+            language = language,
+            dark = dark,
+            isFavorite = isFavorite,
+            cloudSynced = cloudSynced,
+            onBookmarkToggle = onBookmarkToggle,
+            onBookmarkLongPress = onBookmarkLongPress,
+        )
         MetaLine(stats = stats)
         TagsBlock(
             detail = detail,
@@ -337,7 +357,7 @@ private fun TitleLine(
     }
 }
 
-/** 收藏星标：点亮=金色实心，长按进收藏夹面板；已同步 pixiv 时带角标。放作者行右侧、不遮图 */
+/** 收藏星标：点亮=金色实心，长按进收藏夹面板；已同步 pixiv 时带角标。放作者行右侧、不遮图（小说详情用；插画详情的开关是统计行里的 BookmarkStatButton） */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun FavoriteStarButton(
@@ -392,6 +412,7 @@ internal fun AuthorLine(
     onBookmarkToggle: () -> Unit,
     onBookmarkLongPress: () -> Unit,
     onFollowClick: () -> Unit,
+    showBookmark: Boolean = true,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -438,20 +459,23 @@ internal fun AuthorLine(
             tint = PikuColors.textFaint,
             modifier = Modifier.size(16.dp),
         )
-        // 收藏星标：对作品操作，点自己区域不触发整行跳作者页
-        FavoriteStarButton(
-            favorited = isFavorite,
-            cloudSynced = cloudSynced,
-            dark = dark,
-            onToggle = onBookmarkToggle,
-            onLongPress = onBookmarkLongPress,
-        )
+        // 收藏星标：对作品操作，点自己区域不触发整行跳作者页；pixiv 插画页改为统计行里的按钮
+        if (showBookmark) {
+            FavoriteStarButton(
+                favorited = isFavorite,
+                cloudSynced = cloudSynced,
+                dark = dark,
+                onToggle = onBookmarkToggle,
+                onLongPress = onBookmarkLongPress,
+            )
+        }
         // 关注按钮：与 pixiv 本家同位（作者行右侧）；未登录时整颗不出现
         if (showFollow) {
             Spacer(Modifier.width(10.dp))
             FollowPill(
                 followed = followed,
                 enabled = !followSending,
+                dark = dark,
                 quiet = followQuiet,
                 onClick = onFollowClick,
             )
@@ -459,11 +483,11 @@ internal fun AuthorLine(
     }
 }
 
-/** 关注小胶囊：未关注实心、已关注描边弱化；悄悄关注中加小锁（锁=私密，与 WorkPrivateBadge 同词汇，不套黑底） */
 @Composable
 internal fun FollowPill(
     followed: Boolean,
     enabled: Boolean,
+    dark: Boolean,
     quiet: Boolean = false,
     onClick: () -> Unit,
 ) {
@@ -471,21 +495,30 @@ internal fun FollowPill(
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
-            .clip(shape)
-            .background(if (followed) Color.Transparent else PikuColors.controlAccent)
             .then(
-                if (followed) {
-                    Modifier.border(BorderStroke(0.5.dp, PikuColors.border), shape)
+                if (!followed) {
+                    Modifier.shadow(6.dp, shape, ambientColor = ShadowAmbient, spotColor = ShadowSpot)
                 } else {
                     Modifier
                 },
+            )
+            .clip(shape)
+            .background(
+                if (followed) Color.Transparent else if (dark) GlassBarBgDark else GlassBarBgLight,
+            )
+            .border(
+                BorderStroke(
+                    0.5.dp,
+                    if (followed) PikuColors.border else if (dark) SoftBorderDark else SoftBorderLight,
+                ),
+                shape,
             )
             .clickable(enabled = enabled, onClick = onClick)
             .padding(start = 12.dp, end = if (quiet && followed) 9.dp else 12.dp, top = 5.dp, bottom = 5.dp),
     ) {
         Text(
             text = stringResource(if (followed) R.string.detail_followed else R.string.detail_follow),
-            color = if (followed) PikuColors.textSecondary else PikuColors.surface,
+            color = if (followed) PikuColors.textSecondary else PikuColors.textPrimary,
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
         )
@@ -501,32 +534,118 @@ internal fun FollowPill(
     }
 }
 
-/**
- * 三格数据：浏览 / 点赞 / 收藏，纯展示。
- */
 @Composable
 private fun StatsRow(
-    stats: WorkStats,
+    stats: WorkStats?,
     language: AppLanguage,
+    dark: Boolean,
+    isFavorite: Boolean,
+    cloudSynced: Boolean,
+    onBookmarkToggle: () -> Unit,
+    onBookmarkLongPress: () -> Unit,
 ) {
-    Row(Modifier.fillMaxWidth()) {
-        StatCell(
-            icon = Icons.Outlined.Visibility,
-            value = compactCount(stats.views, language),
-            label = stringResource(R.string.pixiv_stat_views),
-            modifier = Modifier.weight(1f),
-        )
-        StatCell(
-            icon = Icons.Outlined.FavoriteBorder,
-            value = compactCount(stats.likes, language),
-            label = stringResource(R.string.pixiv_stat_likes),
-            modifier = Modifier.weight(1f),
-        )
-        StatCell(
-            icon = Icons.Outlined.StarBorder,
-            value = compactCount(stats.bookmarks, language),
-            label = stringResource(R.string.pixiv_stat_bookmarks),
-            modifier = Modifier.weight(1f),
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        if (stats?.hasCounts == true) {
+            StatCell(
+                icon = Icons.Outlined.Visibility,
+                value = compactCount(stats.views, language),
+                label = stringResource(R.string.pixiv_stat_views),
+                modifier = Modifier.weight(1f),
+            )
+            StatCell(
+                icon = Icons.Outlined.FavoriteBorder,
+                value = compactCount(stats.likes, language),
+                label = stringResource(R.string.pixiv_stat_likes),
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+            BookmarkStatButton(
+                count = stats?.bookmarks ?: 0,
+                language = language,
+                favorited = isFavorite,
+                cloudSynced = cloudSynced,
+                dark = dark,
+                onToggle = onBookmarkToggle,
+                onLongPress = onBookmarkLongPress,
+            )
+        }
+    }
+}
+
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun BookmarkStatButton(
+    count: Int,
+    language: AppLanguage,
+    favorited: Boolean,
+    cloudSynced: Boolean,
+    dark: Boolean,
+    onToggle: () -> Unit,
+    onLongPress: () -> Unit,
+) {
+    val shape = RoundedCornerShape(12.dp)
+    // 星标弹跳，与详情底栏的收藏星同款
+    val starScale = remember { Animatable(1f) }
+    LaunchedEffect(favorited) {
+        if (favorited) {
+            starScale.snapTo(1.35f)
+            starScale.animateTo(
+                1f,
+                spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+            )
+        }
+    }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .shadow(4.dp, shape, ambientColor = ShadowAmbient, spotColor = ShadowSpot)
+            .clip(shape)
+            // 玻璃底与关注胶囊同族：未收藏白霜玻璃，收藏后换淡金玻璃
+            .background(
+                if (favorited) if (dark) StarTintDark else StarTintLight
+                else if (dark) GlassBarBgDark else GlassBarBgLight,
+            )
+            .border(
+                BorderStroke(
+                    0.5.dp,
+                    if (favorited) Color.Transparent else if (dark) SoftBorderDark else SoftBorderLight,
+                ),
+                shape,
+            )
+            .combinedClickable(onClick = onToggle, onLongClick = onLongPress)
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+    ) {
+        Box {
+            Icon(
+                imageVector = if (favorited) Icons.Filled.Star else Icons.Outlined.StarBorder,
+                contentDescription = stringResource(R.string.detail_favorite),
+                tint = if (favorited) if (dark) StarDark else StarLight else PikuColors.textSecondary,
+                modifier = Modifier
+                    .size(15.dp)
+                    .graphicsLayer {
+                        scaleX = starScale.value
+                        scaleY = starScale.value
+                    },
+            )
+            // 同步角标：只表示「本 App 已把这条收藏送上 pixiv」
+            if (favorited && cloudSynced) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(6.dp)
+                        .background(PikuColors.controlAccent, CircleShape)
+                        .border(1.dp, PikuColors.surface, CircleShape),
+                )
+            }
+        }
+        Spacer(Modifier.width(5.dp))
+        Text(
+            text = compactCount(count, language),
+            color = PikuColors.textPrimary,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
         )
     }
 }

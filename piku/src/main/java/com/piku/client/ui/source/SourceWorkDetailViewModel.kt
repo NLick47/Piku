@@ -123,6 +123,7 @@ class SourceWorkDetailViewModel @Inject constructor(
         val isFavorite: Boolean = false,
         /** 本地收藏已镜像到 pixiv 云端：星标角标与面板「取消同步」的依据 */
         val cloudSynced: Boolean = false,
+        val cloudBookmarked: Boolean = false,
         /** 云端镜像请求在途：面板动作防连点，行尾转圈 */
         val mirrorPending: Boolean = false,
         /** 本地收藏夹与当前作品的归属：长按星标的选择面板用 */
@@ -276,7 +277,11 @@ class SourceWorkDetailViewModel @Inject constructor(
 
     /** 打开作品时加载一次；[force] 供失败重试强制重拉 */
     fun load(work: Work, force: Boolean = false) {
-        if (!force && loadedWorkKey == work.key.toString() && _ui.value.detail != null) return
+        val sameWork = loadedWorkKey == work.key.toString()
+        if (!force && sameWork && _ui.value.detail != null) return
+        // 失败重试会整表重建 UiState：同作品的云端收藏态要带回去，
+        // 否则 is_bookmarked 探测被按作品去重跳过，下一次镜像 add 会把认领误当新增 +1
+        val cloudBookmarkedCarried = if (sameWork) _ui.value.cloudBookmarked else false
         loadedWorkKey = work.key.toString()
         currentWork = work
         translatedImages.clear()
@@ -292,6 +297,7 @@ class SourceWorkDetailViewModel @Inject constructor(
             autoTranslateTags = _ui.value.autoTranslateTags,
             // 整表重建不能冲掉登录态：登录/登出才推一次，这里丢了下一次要等状态变化
             loggedIn = _ui.value.loggedIn,
+            cloudBookmarked = cloudBookmarkedCarried,
             detail = WorkDetail(
                 title = work.title,
                 authorName = work.authorName,
@@ -620,6 +626,8 @@ class SourceWorkDetailViewModel @Inject constructor(
                     _ui.update {
                         it.copy(
                             followed = state.isFollowed,
+                            // 云端是否已藏（本家藏过/旧会话同步过都算）：镜像 add 成功时只有从无到有才 +1
+                            cloudBookmarked = state.isBookmarked,
                             followQuiet = state.isFollowed && quietFollowStore.contains(work.authorId),
                         )
                     }
@@ -762,12 +770,21 @@ class SourceWorkDetailViewModel @Inject constructor(
                 onSuccess = {
                     favoriteRepository.setCloudSynced(work.key, add)
                     onSuccess()
-                    // 收藏数就地修正：云端操作成功才动计数
                     _ui.update { s ->
-                        val stats = s.stats ?: return@update s
-                        if (!stats.hasCounts) return@update s
-                        val next = (stats.bookmarks + if (add) 1 else -1).coerceAtLeast(0)
-                        s.copy(stats = stats.copy(bookmarks = next))
+                        val had = s.cloudBookmarked
+                        var next = s.copy(cloudBookmarked = add)
+                        if (had != add) {
+                            val stats = s.stats
+                            if (stats != null && stats.hasCounts) {
+                                val delta = if (add) 1 else -1
+                                next = next.copy(
+                                    stats = stats.copy(
+                                        bookmarks = (stats.bookmarks + delta).coerceAtLeast(0),
+                                    ),
+                                )
+                            }
+                        }
+                        next
                     }
                 },
                 onFailure = { error ->
