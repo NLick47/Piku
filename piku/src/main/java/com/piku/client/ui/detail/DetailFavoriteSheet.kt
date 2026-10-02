@@ -1,10 +1,10 @@
 package com.piku.client.ui.detail
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -28,6 +28,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -41,7 +42,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
@@ -58,19 +58,20 @@ import com.piku.client.ui.theme.AccentDark
 import com.piku.client.ui.theme.AccentSolid
 import com.piku.client.ui.theme.ControlAccentDark
 import com.piku.client.ui.theme.LoginBackgroundDark
-import com.piku.client.ui.theme.LoginBackgroundLight
 import com.piku.client.ui.theme.LoginTextPrimaryDark
 import com.piku.client.ui.theme.LoginTextPrimaryLight
 import com.piku.client.ui.theme.LoginTextSecondaryDark
 import com.piku.client.ui.theme.PikuColors
 import com.piku.client.ui.theme.StarDark
 import com.piku.client.ui.theme.StarLight
-import com.piku.client.ui.theme.ShadowAmbient
-import com.piku.client.ui.theme.ShadowSpot
 
 /** 「默认」徽标底：玻璃上的弱化选中色 */
 internal val DefaultBadgeBgDark = Color(0x22FFFFFF)
 internal val DefaultBadgeBgLight = Color(0x142C2C2C)
+
+// 与 ImageActionSheet 同一套玻璃卡片：面板内的行按区块装进白玻璃卡，不再各画各的灰块
+private val CardShape = RoundedCornerShape(16.dp)
+private val IconBoxShape = RoundedCornerShape(12.dp)
 
 /**
  * 收藏面板的 pixiv 镜像区块：动作项写的是「会发生什么」，用户不需要先理解档位概念。
@@ -103,6 +104,8 @@ internal fun FavoriteSheet(
 ) {
     var newFolderName by rememberSaveable { mutableStateOf("") }
     var creatingNew by rememberSaveable { mutableStateOf(false) }
+    val cardBg = if (dark) Color.White.copy(alpha = 0.07f) else Color.White.copy(alpha = 0.65f)
+    val cardBorder = PikuColors.border.copy(alpha = 0.5f)
 
     PikuBottomSheet(
         onDismissRequest = onDismiss,
@@ -116,62 +119,76 @@ internal fun FavoriteSheet(
                 Spacer(Modifier.height(14.dp))
                 PikuSheetSubtitle(text = stringResource(R.string.detail_pixiv_mirror_section))
                 Spacer(Modifier.height(6.dp))
-                if (!pixivMirror.favorited) {
-                    PixivMirrorRow(
-                        icon = Icons.Outlined.CloudUpload,
-                        label = stringResource(R.string.detail_sync_favorite_pixiv),
-                        dark = dark,
-                        enabled = !pixivMirror.pending,
-                        onClick = pixivMirror.onSyncFavorite,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    PixivMirrorRow(
-                        icon = Icons.Outlined.Smartphone,
-                        label = stringResource(R.string.detail_favorite_app_only),
-                        dark = dark,
-                        enabled = !pixivMirror.pending,
-                        onClick = pixivMirror.onLocalFavorite,
-                    )
-                } else {
-                    PixivMirrorRow(
-                        icon = if (pixivMirror.cloudSynced) Icons.Outlined.CloudDone else Icons.Outlined.CloudOff,
-                        label = stringResource(
-                            if (pixivMirror.cloudSynced) {
-                                R.string.detail_mirror_state_synced
-                            } else {
-                                R.string.detail_mirror_state_local
-                            },
-                        ),
-                        dark = dark,
-                        onClick = {},
-                        enabled = false,
-                        pending = pixivMirror.pending,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    PixivMirrorRow(
-                        icon = if (pixivMirror.cloudSynced) Icons.Outlined.CloudOff else Icons.Outlined.CloudUpload,
-                        label = stringResource(
-                            if (pixivMirror.cloudSynced) {
-                                R.string.detail_unsync_keep_local
-                            } else {
-                                R.string.detail_resync_pixiv
-                            },
-                        ),
-                        dark = dark,
-                        enabled = !pixivMirror.pending,
-                        onClick = if (pixivMirror.cloudSynced) pixivMirror.onUnsync else pixivMirror.onResync,
-                    )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(CardShape)
+                        .background(cardBg)
+                        .border(0.5.dp, cardBorder, CardShape),
+                ) {
+                    if (!pixivMirror.favorited) {
+                        PixivMirrorRow(
+                            icon = Icons.Outlined.CloudUpload,
+                            label = stringResource(R.string.detail_sync_favorite_pixiv),
+                            enabled = !pixivMirror.pending,
+                            onClick = pixivMirror.onSyncFavorite,
+                        )
+                        CardDivider()
+                        PixivMirrorRow(
+                            icon = Icons.Outlined.Smartphone,
+                            label = stringResource(R.string.detail_favorite_app_only),
+                            enabled = !pixivMirror.pending,
+                            onClick = pixivMirror.onLocalFavorite,
+                        )
+                    } else {
+                        PixivMirrorRow(
+                            icon = if (pixivMirror.cloudSynced) Icons.Outlined.CloudDone else Icons.Outlined.CloudOff,
+                            label = stringResource(
+                                if (pixivMirror.cloudSynced) {
+                                    R.string.detail_mirror_state_synced
+                                } else {
+                                    R.string.detail_mirror_state_local
+                                },
+                            ),
+                            onClick = {},
+                            enabled = false,
+                            pending = pixivMirror.pending,
+                        )
+                        CardDivider()
+                        PixivMirrorRow(
+                            icon = if (pixivMirror.cloudSynced) Icons.Outlined.CloudOff else Icons.Outlined.CloudUpload,
+                            label = stringResource(
+                                if (pixivMirror.cloudSynced) {
+                                    R.string.detail_unsync_keep_local
+                                } else {
+                                    R.string.detail_resync_pixiv
+                                },
+                            ),
+                            enabled = !pixivMirror.pending,
+                            onClick = if (pixivMirror.cloudSynced) pixivMirror.onUnsync else pixivMirror.onResync,
+                        )
+                    }
                 }
             }
-            Spacer(Modifier.height(14.dp))
-            folders.forEach { folder ->
-                FavoriteFolderRow(
-                    folder = folder,
-                    selected = folder.id in selectedFolderIds,
-                    onClick = { onToggleFolder(folder.id) },
-                    dark = dark,
-                )
-                Spacer(Modifier.height(6.dp))
+            if (folders.isNotEmpty()) {
+                Spacer(Modifier.height(14.dp))
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(CardShape)
+                        .background(cardBg)
+                        .border(0.5.dp, cardBorder, CardShape),
+                ) {
+                    folders.forEachIndexed { index, folder ->
+                        if (index > 0) CardDivider()
+                        FavoriteFolderRow(
+                            folder = folder,
+                            selected = folder.id in selectedFolderIds,
+                            onClick = { onToggleFolder(folder.id) },
+                            dark = dark,
+                        )
+                    }
+                }
             }
             if (creatingNew) {
                 Spacer(Modifier.height(6.dp))
@@ -187,8 +204,8 @@ internal fun FavoriteSheet(
                     singleLine = true,
                     shape = RoundedCornerShape(14.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = PikuColors.surfaceMuted,
-                        unfocusedContainerColor = PikuColors.surfaceMuted,
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
                         focusedBorderColor = PikuColors.border,
                         unfocusedBorderColor = PikuColors.border,
                         cursorColor = PikuColors.controlAccent,
@@ -241,7 +258,6 @@ internal fun FavoriteSheet(
 private fun PixivMirrorRow(
     icon: ImageVector,
     label: String,
-    dark: Boolean,
     onClick: () -> Unit,
     enabled: Boolean = true,
     pending: Boolean = false,
@@ -249,26 +265,30 @@ private fun PixivMirrorRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(
-                if (dark) ControlAccentDark.copy(alpha = 0.08f) else AccentDark.copy(alpha = 0.06f),
-            )
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .padding(horizontal = 12.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = if (enabled) PikuColors.controlAccent else PikuColors.textFaint,
-            modifier = Modifier.size(18.dp),
-        )
+        Box(
+            modifier = Modifier
+                .size(30.dp)
+                .clip(IconBoxShape)
+                .background(PikuColors.accent.copy(alpha = 0.1f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (enabled) PikuColors.controlAccent else PikuColors.textFaint,
+                modifier = Modifier.size(16.dp),
+            )
+        }
         Spacer(Modifier.width(10.dp))
         Text(
             text = label,
             color = if (enabled) PikuColors.textPrimary else PikuColors.textSecondary,
             fontSize = 14.sp,
-            fontWeight = FontWeight.Normal,
+            fontWeight = FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
@@ -290,34 +310,15 @@ private fun FavoriteFolderRow(
     onClick: () -> Unit,
     dark: Boolean,
 ) {
-    val shape = RoundedCornerShape(14.dp)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .shadow(
-                if (selected && dark) 4.dp else 0.dp,
-                shape,
-                ambientColor = ShadowAmbient,
-                spotColor = ShadowSpot,
-            )
-            .clip(shape)
             .background(
                 when {
                     selected && dark -> ControlAccentDark.copy(alpha = 0.15f)
                     selected -> AccentDark.copy(alpha = 0.12f)
                     else -> Color.Transparent
                 },
-            )
-            .border(
-                BorderStroke(
-                    1.dp,
-                    if (selected) {
-                        PikuColors.controlAccent
-                    } else {
-                        Color.Transparent
-                    },
-                ),
-                shape,
             )
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 10.dp),
@@ -354,6 +355,16 @@ private fun FavoriteFolderRow(
             fontSize = 12.sp,
         )
     }
+}
+
+/** 玻璃卡内的行分隔线，与 ImageActionSheet 同款：细线且两端留出卡片内边距 */
+@Composable
+private fun CardDivider() {
+    HorizontalDivider(
+        thickness = 0.5.dp,
+        color = PikuColors.border.copy(alpha = 0.5f),
+        modifier = Modifier.padding(horizontal = 12.dp),
+    )
 }
 
 /** 「默认」小徽标：标识快速收藏的落点收藏夹。 */
