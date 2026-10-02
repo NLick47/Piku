@@ -19,6 +19,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Article
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.OpenInBrowser
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -40,8 +44,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -58,6 +64,8 @@ import com.piku.client.ui.detail.DETAIL_TOP_BAR_HEIGHT
 import com.piku.client.ui.detail.DetailSkeleton
 import com.piku.client.ui.detail.DetailTopBar
 import com.piku.client.ui.common.FeedbackHost
+import com.piku.client.ui.common.MoreMenuAction
+import com.piku.client.ui.common.quietFollowMenuActions
 import com.piku.client.ui.detail.FavoriteSheet
 import com.piku.client.ui.detail.PixivMirrorActions
 import com.piku.client.ui.detail.ViewerOverlay
@@ -106,6 +114,17 @@ internal fun SourceWorkDetailScreen(
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val savePermissionMessage = stringResource(R.string.detail_save_permission_denied)
+    val clipboard = LocalClipboardManager.current
+    val linkCopiedMessage = stringResource(R.string.detail_link_copied)
+    val descriptionCopiedMessage = stringResource(R.string.detail_description_copied)
+    // 作品链接：插画 /artworks/{id}、小说 /novel/show.php?id={id}；复制与浏览器打开共用
+    val workUrl = remember(work) {
+        if (work.kind == WorkKind.NOVEL) {
+            "https://www.pixiv.net/novel/show.php?id=${work.id}"
+        } else {
+            "https://www.pixiv.net/artworks/${work.id}"
+        }
+    }
 
     // 保存权限（Q 以下）：与 poipiku 详情同一套 launcher + 待办标记
     var pendingSavePage by remember { mutableStateOf(-1) }
@@ -433,13 +452,57 @@ internal fun SourceWorkDetailScreen(
                 ?.takeIf { state.showTranslationAll }
                 ?: detail?.title.orEmpty(),
             titleVisible = scrolled,
-            showFollowMenu = state.loggedIn && work.source == WorkSource.PIXIV && work.authorId > 0,
-            followed = state.followed,
-            followQuiet = state.followQuiet,
-            followSending = state.followSending,
-            onQuietFollow = { viewModel.setFollowQuiet(true) },
-            onMakePublic = { viewModel.setFollowQuiet(false) },
-            onUnfollow = viewModel::toggleFollow,
+            menuGroups = buildList {
+                val description = detail?.description.orEmpty()
+                add(
+                    buildList {
+                        add(
+                            MoreMenuAction(
+                                label = stringResource(R.string.detail_copy_link),
+                                icon = Icons.Outlined.ContentCopy,
+                            ) {
+                                clipboard.setText(AnnotatedString(workUrl))
+                                scope.launch { snackbarHostState.showSnackbar(linkCopiedMessage) }
+                            },
+                        )
+                        if (description.isNotBlank()) {
+                            add(
+                                MoreMenuAction(
+                                    label = stringResource(R.string.detail_copy_description),
+                                    icon = Icons.AutoMirrored.Outlined.Article,
+                                ) {
+                                    clipboard.setText(AnnotatedString(description))
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar(descriptionCopiedMessage)
+                                    }
+                                },
+                            )
+                        }
+                        add(
+                            MoreMenuAction(
+                                label = stringResource(R.string.detail_open_browser),
+                                icon = Icons.Outlined.OpenInBrowser,
+                            ) {
+                                runCatching {
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(workUrl)))
+                                }
+                            },
+                        )
+                    },
+                )
+                if (state.loggedIn && work.source == WorkSource.PIXIV && work.authorId > 0) {
+                    add(
+                        quietFollowMenuActions(
+                            followed = state.followed,
+                            followQuiet = state.followQuiet,
+                            followSending = state.followSending,
+                            onQuietFollow = { viewModel.setFollowQuiet(true) },
+                            onMakePublic = { viewModel.setFollowQuiet(false) },
+                            onUnfollow = viewModel::toggleFollow,
+                        ),
+                    )
+                }
+            },
         )
         ViewerOverlay(
             page = viewerPage.takeIf { it >= 0 },
