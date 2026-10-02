@@ -301,6 +301,7 @@ internal fun SourceWorkDetailScreen(
                     followed = state.followed,
                     showFollow = state.loggedIn && work.source == WorkSource.PIXIV && work.authorId > 0,
                     followSending = state.followSending,
+                    followQuiet = state.followQuiet,
                     onFollowClick = viewModel::toggleFollow,
                     showTranslation = state.showTranslationAll,
                     translating = state.translating,
@@ -371,6 +372,7 @@ internal fun SourceWorkDetailScreen(
                     followed = state.followed,
                     showFollow = state.loggedIn && work.source == WorkSource.PIXIV && work.authorId > 0,
                     followSending = state.followSending,
+                    followQuiet = state.followQuiet,
                     onBookmarkToggle = viewModel::toggleFavorite,
                     onBookmarkLongPress = { favoriteSheetVisible = true },
                     onFollowClick = viewModel::toggleFollow,
@@ -431,6 +433,13 @@ internal fun SourceWorkDetailScreen(
                 ?.takeIf { state.showTranslationAll }
                 ?: detail?.title.orEmpty(),
             titleVisible = scrolled,
+            showFollowMenu = state.loggedIn && work.source == WorkSource.PIXIV && work.authorId > 0,
+            followed = state.followed,
+            followQuiet = state.followQuiet,
+            followSending = state.followSending,
+            onQuietFollow = { viewModel.setFollowQuiet(true) },
+            onMakePublic = { viewModel.setFollowQuiet(false) },
+            onUnfollow = viewModel::toggleFollow,
         )
         ViewerOverlay(
             page = viewerPage.takeIf { it >= 0 },

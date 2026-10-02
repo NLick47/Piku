@@ -1,6 +1,8 @@
 package com.piku.client.data.source
 
 import com.piku.client.data.auth.PixivAuthEndpoints
+import com.piku.client.data.local.InMemorySharedPreferences
+import com.piku.client.data.local.QuietFollowStore
 import com.piku.client.data.auth.PixivAuthRuntime
 import com.piku.client.data.auth.pixivClientHash
 import com.piku.client.data.remote.pixiv.PixivApi
@@ -321,6 +323,7 @@ class PixivContentSourceTest {
             appApi = appApi,
             endpoints = PixivAuthEndpoints(),
             runtime = PixivAuthRuntime(dispatcher = Dispatchers.Unconfined, now = { FIXED_NOW }),
+            quietFollowStore = QuietFollowStore(InMemorySharedPreferences()),
         )
 
     private fun source(api: FakeApi, appApi: FakeAppApi = FakeAppApi()): PixivContentSource =

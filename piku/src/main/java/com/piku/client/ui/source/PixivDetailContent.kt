@@ -30,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.CircularProgressIndicator
@@ -128,6 +129,8 @@ internal fun PixivDetailContent(
     followed: Boolean = false,
     showFollow: Boolean = false,
     followSending: Boolean = false,
+    /** 当前关注是否为悄悄关注：胶囊文字旁带小锁 */
+    followQuiet: Boolean = false,
     onBookmarkToggle: () -> Unit = {},
     /** 长按收藏格：打开收藏夹面板 */
     onBookmarkLongPress: () -> Unit = {},
@@ -232,6 +235,7 @@ private fun OverviewCard(
     followed: Boolean,
     showFollow: Boolean,
     followSending: Boolean,
+    followQuiet: Boolean = false,
     onBookmarkToggle: () -> Unit,
     onBookmarkLongPress: () -> Unit,
     onFollowClick: () -> Unit,
@@ -263,6 +267,7 @@ private fun OverviewCard(
             followed = followed,
             showFollow = showFollow,
             followSending = followSending,
+            followQuiet = followQuiet,
             onBookmarkToggle = onBookmarkToggle,
             onBookmarkLongPress = onBookmarkLongPress,
             onFollowClick = onFollowClick,
@@ -383,6 +388,7 @@ internal fun AuthorLine(
     followed: Boolean,
     showFollow: Boolean,
     followSending: Boolean,
+    followQuiet: Boolean = false,
     onBookmarkToggle: () -> Unit,
     onBookmarkLongPress: () -> Unit,
     onFollowClick: () -> Unit,
@@ -446,21 +452,24 @@ internal fun AuthorLine(
             FollowPill(
                 followed = followed,
                 enabled = !followSending,
+                quiet = followQuiet,
                 onClick = onFollowClick,
             )
         }
     }
 }
 
-/** 关注小胶囊：未关注实心、已关注描边弱化；点自己区域不触发整行跳作者页 */
+/** 关注小胶囊：未关注实心、已关注描边弱化；悄悄关注中加小锁（锁=私密，与 WorkPrivateBadge 同词汇，不套黑底） */
 @Composable
-internal fun FollowPill(followed: Boolean, enabled: Boolean, onClick: () -> Unit) {
+internal fun FollowPill(
+    followed: Boolean,
+    enabled: Boolean,
+    quiet: Boolean = false,
+    onClick: () -> Unit,
+) {
     val shape = RoundedCornerShape(13.dp)
-    Text(
-        text = stringResource(if (followed) R.string.detail_followed else R.string.detail_follow),
-        color = if (followed) PikuColors.textSecondary else PikuColors.surface,
-        fontSize = 12.sp,
-        fontWeight = FontWeight.Medium,
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .clip(shape)
             .background(if (followed) Color.Transparent else PikuColors.controlAccent)
@@ -472,8 +481,24 @@ internal fun FollowPill(followed: Boolean, enabled: Boolean, onClick: () -> Unit
                 },
             )
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 5.dp),
-    )
+            .padding(start = 12.dp, end = if (quiet && followed) 9.dp else 12.dp, top = 5.dp, bottom = 5.dp),
+    ) {
+        Text(
+            text = stringResource(if (followed) R.string.detail_followed else R.string.detail_follow),
+            color = if (followed) PikuColors.textSecondary else PikuColors.surface,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+        )
+        if (quiet && followed) {
+            Spacer(Modifier.width(3.dp))
+            Icon(
+                imageVector = Icons.Outlined.Lock,
+                contentDescription = stringResource(R.string.detail_follow_quiet_state),
+                tint = PikuColors.textSecondary,
+                modifier = Modifier.size(10.dp),
+            )
+        }
+    }
 }
 
 /**

@@ -4,6 +4,7 @@ import android.util.Log
 import com.piku.client.data.remote.apiCall
 import com.piku.client.data.auth.PixivAuthEndpoints
 import com.piku.client.data.auth.PixivAuthRuntime
+import com.piku.client.data.local.QuietFollowStore
 import com.piku.client.domain.model.AppError
 import com.piku.client.data.remote.pixiv.PixivAppActionResponse
 import com.piku.client.data.remote.pixiv.PixivApi
@@ -45,6 +46,7 @@ class PixivRepository @Inject constructor(
     private val appApi: PixivAppApi,
     private val endpoints: PixivAuthEndpoints,
     private val runtime: PixivAuthRuntime,
+    private val quietFollowStore: QuietFollowStore,
 ) {
 
     /**
@@ -141,13 +143,18 @@ class PixivRepository @Inject constructor(
      * 我的关注列表。user_id 是**自己**的数字 id（调用方从登录令牌里取）；
      * offset 翻页，total 接口不保证给（null = 未知，翻页以空页为准）。
      */
-    suspend fun userFollowing(userId: Long, offset: Int): Result<FollowUserPage> = apiCall {
+    suspend fun userFollowing(
+        userId: Long,
+        offset: Int,
+        restrict: String = PixivAppConfig.RESTRICT_PUBLIC,
+    ): Result<FollowUserPage> = apiCall {
         val signature = endpoints.clientSignature(runtime.now())
         val response = appApi.userFollowing(
             clientTime = signature.time,
             clientHash = signature.hash,
             userId = userId,
             offset = offset.takeIf { it > 0 },
+            restrict = restrict,
         )
         FollowUserPage(
             users = response.userPreviews.mapNotNull { it.toFollowUser() },
@@ -305,14 +312,22 @@ class PixivRepository @Inject constructor(
         )
     }
 
-    /** 关注/取消关注作者。关注带可见性（默认公开），取关不需要 */
-    suspend fun followUser(userId: Long, follow: Boolean): Result<Unit> = apiCall {
+    /**
+     * 关注/取消关注作者。关注带可见性（默认公开），取关不需要；
+     * restrict=private 即悄悄关注，悄悄/公开互转直接换 restrict 重发 add，不用先取关。
+     */
+    suspend fun followUser(
+        userId: Long,
+        follow: Boolean,
+        restrict: String = PixivAppConfig.RESTRICT_PUBLIC,
+    ): Result<Unit> = apiCall {
         val signature = endpoints.clientSignature(runtime.now())
         val response = if (follow) {
             appApi.followAdd(
                 clientTime = signature.time,
                 clientHash = signature.hash,
                 userId = userId,
+                restrict = restrict,
             )
         } else {
             appApi.followDelete(
@@ -322,6 +337,14 @@ class PixivRepository @Inject constructor(
             )
         }
         requireNoActionError(response)
+    }.onSuccess {
+        // 悄悄关注态只有本 App 自己记账（接口分不出公开/私密）：动作成功即落账，
+        // 关注列表页拉到私密/公开两路名单时再校准网页端那边的转档
+        when {
+            !follow -> quietFollowStore.unmark(userId)
+            restrict == PixivAppConfig.RESTRICT_PRIVATE -> quietFollowStore.mark(userId)
+            else -> quietFollowStore.unmark(userId)
+        }
     }
 
     /**

@@ -129,6 +129,8 @@
     <string name="follow_users_login">Log in to see the users you follow</string>
     <string name="follow_users_count">%1$d followed</string>
     <string name="follow_user_unfollow">Unfollow</string>
+    <string name="follow_tab_public">Public</string>
+    <string name="follow_tab_quiet">Private</string>
     <string name="follow_user_refollow">Follow again</string>
     <string name="follow_user_follow">Follow</string>
     <string name="menu_block_users">Blocked users</string>
@@ -426,6 +428,12 @@
     <string name="detail_follow_sent">Now following</string>
     <string name="detail_unfollow_sent">Unfollowed</string>
     <string name="detail_follow_failed">Failed to update follow status</string>
+    <string name="detail_follow_quiet">Private follow</string>
+    <string name="detail_follow_quiet_state">Private follow</string>
+    <string name="detail_follow_to_quiet">Switch to private follow</string>
+    <string name="detail_follow_to_public">Switch to public follow</string>
+    <string name="detail_follow_quiet_sent">Switched to private follow</string>
+    <string name="detail_follow_public_sent">Switched to public follow</string>
     <string name="detail_cloud_bookmark_failed">Couldn\'t sync to your pixiv bookmarks</string>
     <string name="detail_block">Block this user</string>
     <string name="detail_unblock">Unblock</string>

@@ -52,7 +52,7 @@ class FollowUsersViewModelTest {
         val setFollowResults = mutableMapOf<Long, Result<Boolean>>()
         val setFollowCalls = mutableListOf<Pair<Long, Boolean>>()
 
-        override suspend fun follows(page: Int): Result<FollowUserPage> {
+        override suspend fun follows(page: Int, quiet: Boolean): Result<FollowUserPage> {
             followsCalls += page
             return pages.getValue(page)
         }

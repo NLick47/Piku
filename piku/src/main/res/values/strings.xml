@@ -129,6 +129,8 @@
     <string name="follow_users_login">登录后即可查看关注列表</string>
     <string name="follow_users_count">共 %1$d 位关注</string>
     <string name="follow_user_unfollow">取消关注</string>
+    <string name="follow_tab_public">公开关注</string>
+    <string name="follow_tab_quiet">悄悄关注</string>
     <string name="follow_user_refollow">重新关注</string>
     <string name="follow_user_follow">关注</string>
     <string name="menu_block_users">屏蔽列表</string>
@@ -438,6 +440,12 @@
     <string name="detail_follow_sent">已关注该用户</string>
     <string name="detail_unfollow_sent">已取消关注</string>
     <string name="detail_follow_failed">关注操作失败</string>
+    <string name="detail_follow_quiet">悄悄关注</string>
+    <string name="detail_follow_quiet_state">悄悄关注中</string>
+    <string name="detail_follow_to_quiet">转为悄悄关注</string>
+    <string name="detail_follow_to_public">转为公开关注</string>
+    <string name="detail_follow_quiet_sent">已设为悄悄关注</string>
+    <string name="detail_follow_public_sent">已设为公开关注</string>
     <string name="detail_cloud_bookmark_failed">同步到 pixiv 收藏失败</string>
     <string name="detail_block">屏蔽该用户</string>
     <string name="detail_unblock">解除屏蔽</string>

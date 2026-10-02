@@ -23,8 +23,14 @@ interface SourceFollows {
      */
     val sessionVersion: StateFlow<Long>
 
-    /** 一页已关注用户；page 从 0 起。total = null 表示源不给出总数，翻页以空页为准 */
-    suspend fun follows(page: Int): Result<FollowUserPage>
+    /** 本源是否支持悄悄关注（pixiv 非公開フォロー）：决定关注列表页出不出公开/悄悄双 tab */
+    val quietSupported: Boolean get() = false
+
+    /**
+     * 一页已关注用户；page 从 0 起。[quiet] = 悄悄关注段（restrict=private），
+     * 不支持悄悄关注的源忽略它。total = null 表示源不给出总数，翻页以空页为准
+     */
+    suspend fun follows(page: Int, quiet: Boolean = false): Result<FollowUserPage>
 
     /** 关注/取关一个用户；成功返回**动作完成后**的实际关注态 */
     suspend fun setFollowed(userId: Long, follow: Boolean): Result<Boolean>

@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.piku.client.R
 import com.piku.client.data.local.SettingsRepository
+import com.piku.client.data.local.QuietFollowStore
 import com.piku.client.data.remote.ImageRouteController
 import com.piku.client.data.remote.ImageUpstream
 import com.piku.client.data.remote.pixiv.PixivAppConfig
@@ -76,6 +77,7 @@ class SourceWorkDetailViewModel @Inject constructor(
     @Named("image") private val imageClient: OkHttpClient,
     private val imageRouteController: ImageRouteController,
     private val pixivRepository: PixivRepository,
+    private val quietFollowStore: QuietFollowStore,
     private val favoriteRepository: FavoriteRepository,
     private val sourceAuthRegistry: SourceAuthRegistry,
     private val observeCustomTagsUseCase: ObserveCustomTagsUseCase,
@@ -128,6 +130,8 @@ class SourceWorkDetailViewModel @Inject constructor(
         val workFavoriteFolderIds: Set<Long> = emptySet(),
         /** 已关注作者（pixiv 云端状态）；状态没回来前维持 false，add 幂等不产生误副作用 */
         val followed: Boolean = false,
+        /** 当前关注是否为悄悄关注（restrict=private）；接口只回布尔，以本地记账判定 */
+        val followQuiet: Boolean = false,
         /** 关注请求在途：防连点，与 poipiku 详情同语义 */
         val followSending: Boolean = false,
         /** 已加入个人标签的标签名（PIXIV 那一份） */
@@ -612,7 +616,14 @@ class SourceWorkDetailViewModel @Inject constructor(
         pixivStateLoadedForWork = work.id
         viewModelScope.launch {
             pixivRepository.illustState(work.id)
-                .onSuccess { state -> _ui.update { it.copy(followed = state.isFollowed) } }
+                .onSuccess { state ->
+                    _ui.update {
+                        it.copy(
+                            followed = state.isFollowed,
+                            followQuiet = state.isFollowed && quietFollowStore.contains(work.authorId),
+                        )
+                    }
+                }
                 .onFailure { error ->
                     Log.d("PikuDiag", "pixiv illustState work=${work.id}: ${error::class.simpleName}")
                     pixivStateLoadedForWork = -1
@@ -790,8 +801,9 @@ class SourceWorkDetailViewModel @Inject constructor(
         }
         if (work.authorId <= 0) return
         val target = !state.followed
+        val previousQuiet = state.followQuiet
         viewModelScope.launch {
-            _ui.update { it.copy(followSending = true, followed = target) }
+            _ui.update { it.copy(followSending = true, followed = target, followQuiet = false) }
             pixivRepository.followUser(work.authorId, follow = target).fold(
                 onSuccess = {
                     _ui.update { it.copy(followSending = false) }
@@ -802,7 +814,49 @@ class SourceWorkDetailViewModel @Inject constructor(
                         "PikuDiag",
                         "pixiv follow user=${work.authorId} follow=$target: ${error::class.simpleName}",
                     )
-                    _ui.update { it.copy(followSending = false, followed = !target) }
+                    _ui.update { it.copy(followSending = false, followed = !target, followQuiet = previousQuiet) }
+                    feedback.show(R.string.detail_follow_failed)
+                },
+            )
+        }
+    }
+
+    fun setFollowQuiet(quiet: Boolean) {
+        val work = currentWork ?: return
+        val state = _ui.value
+        if (state.followSending) return
+        if (!state.loggedIn) {
+            feedback.show(R.string.detail_follow_login_hint)
+            return
+        }
+        if (work.authorId <= 0) return
+        val previousFollowed = state.followed
+        val previousQuiet = state.followQuiet
+        viewModelScope.launch {
+            _ui.update { it.copy(followSending = true, followed = true, followQuiet = quiet) }
+            pixivRepository.followUser(
+                work.authorId,
+                follow = true,
+                restrict = if (quiet) PixivAppConfig.RESTRICT_PRIVATE else PixivAppConfig.RESTRICT_PUBLIC,
+            ).fold(
+                onSuccess = {
+                    _ui.update { it.copy(followSending = false) }
+                    feedback.show(
+                        if (quiet) R.string.detail_follow_quiet_sent else R.string.detail_follow_public_sent,
+                    )
+                },
+                onFailure = { error ->
+                    Log.d(
+                        "PikuDiag",
+                        "pixiv quiet follow user=${work.authorId} quiet=$quiet: ${error::class.simpleName}",
+                    )
+                    _ui.update {
+                        it.copy(
+                            followSending = false,
+                            followed = previousFollowed,
+                            followQuiet = previousQuiet,
+                        )
+                    }
                     feedback.show(R.string.detail_follow_failed)
                 },
             )

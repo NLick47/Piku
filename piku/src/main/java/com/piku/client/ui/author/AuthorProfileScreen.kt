@@ -31,11 +31,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.AlternateEmail
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Language
-import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.OpenInBrowser
 import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.SnackbarHost
@@ -81,6 +81,9 @@ import com.piku.client.domain.model.key
 import com.piku.client.ui.common.AvatarViewerDialog
 import com.piku.client.ui.common.FeedbackHost
 import com.piku.client.ui.common.LoaderDots
+import com.piku.client.ui.common.MoreMenuAction
+import com.piku.client.ui.common.MoreMenuButton
+import com.piku.client.ui.common.quietFollowMenuActions
 import com.piku.client.ui.common.LoginPrompt
 import com.piku.client.ui.detail.TranslateChip
 import com.piku.client.domain.model.WorkKind
@@ -178,6 +181,13 @@ fun AuthorProfileScreen(
                 userName = profile?.name?.ifBlank { state.userName } ?: state.userName,
                 titleAlpha = topBarTitleAlpha,
                 onBack = onBack,
+                showFollowMenu = state.loggedIn && !state.isSelf,
+                followed = profile?.followed == true,
+                followQuiet = state.followQuiet,
+                followSending = state.followSending,
+                onQuietFollow = { viewModel.setFollowQuiet(true) },
+                onMakePublic = { viewModel.setFollowQuiet(false) },
+                onUnfollow = viewModel::toggleFollow,
                 onCopyLink = {
                     clipboard.setText(AnnotatedString(viewModel.profileUrl))
                     scope.launch { snackbarHostState.showSnackbar(linkCopiedMessage) }
@@ -203,6 +213,7 @@ fun AuthorProfileScreen(
                         followed = profile?.followed == true,
                         showFollow = state.loggedIn && !state.isSelf,
                         followSending = state.followSending,
+                        followQuiet = state.followQuiet,
                         // 传 lambda 而不是当帧的值：视差的读写都落在 graphicsLayer 里，
                         // 滚动时只更新图层，不带着整个头部重组
                         collapseProgress = { collapseProgress },
@@ -348,17 +359,21 @@ fun AuthorProfileScreen(
     }
 }
 
-/** 顶栏：名字在头部卡片滚出后淡入；更多里放复制链接与出站 */
 @Composable
 private fun AuthorTopBar(
     userName: String,
     titleAlpha: Float,
     onBack: () -> Unit,
+    showFollowMenu: Boolean,
+    followed: Boolean,
+    followQuiet: Boolean,
+    followSending: Boolean,
+    onQuietFollow: () -> Unit,
+    onMakePublic: () -> Unit,
+    onUnfollow: () -> Unit,
     onCopyLink: () -> Unit,
     onOpenBrowser: () -> Unit,
 ) {
-    var menuOpen by remember { mutableStateOf(false) }
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -393,42 +408,36 @@ private fun AuthorTopBar(
                 .weight(1f)
                 .graphicsLayer { alpha = titleAlpha },
         )
-        Box {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .clickable { menuOpen = true },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.MoreVert,
-                    contentDescription = null,
-                    tint = PikuColors.textPrimary,
-                    modifier = Modifier.size(20.dp),
+        MoreMenuButton(
+            groups = buildList {
+                if (showFollowMenu) {
+                    add(
+                        quietFollowMenuActions(
+                            followed = followed,
+                            followQuiet = followQuiet,
+                            followSending = followSending,
+                            onQuietFollow = onQuietFollow,
+                            onMakePublic = onMakePublic,
+                            onUnfollow = onUnfollow,
+                        ),
+                    )
+                }
+                add(
+                    listOf(
+                        MoreMenuAction(
+                            label = stringResource(R.string.author_copy_link),
+                            icon = Icons.Outlined.ContentCopy,
+                            onClick = onCopyLink,
+                        ),
+                        MoreMenuAction(
+                            label = stringResource(R.string.detail_open_browser),
+                            icon = Icons.Outlined.OpenInBrowser,
+                            onClick = onOpenBrowser,
+                        ),
+                    ),
                 )
-            }
-            DropdownMenu(
-                expanded = menuOpen,
-                onDismissRequest = { menuOpen = false },
-                containerColor = PikuColors.surface,
-            ) {
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.author_copy_link), fontSize = 14.sp) },
-                    onClick = {
-                        menuOpen = false
-                        onCopyLink()
-                    },
-                )
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.detail_open_browser), fontSize = 14.sp) },
-                    onClick = {
-                        menuOpen = false
-                        onOpenBrowser()
-                    },
-                )
-            }
-        }
+            },
+        )
     }
 }
 
@@ -444,6 +453,7 @@ private fun AuthorHeaderCard(
     followed: Boolean,
     showFollow: Boolean,
     followSending: Boolean,
+    followQuiet: Boolean = false,
     collapseProgress: () -> Float,
     onAvatarClick: () -> Unit,
     onToggleFollow: () -> Unit,
@@ -601,6 +611,7 @@ private fun AuthorHeaderCard(
                 FollowOnBanner(
                     followed = followed,
                     sending = followSending,
+                    quiet = followQuiet,
                     onClick = onToggleFollow,
                 )
             }
@@ -609,21 +620,34 @@ private fun AuthorHeaderCard(
 }
 
 @Composable
-private fun FollowOnBanner(followed: Boolean, sending: Boolean, onClick: () -> Unit) {
+private fun FollowOnBanner(followed: Boolean, sending: Boolean, quiet: Boolean = false, onClick: () -> Unit) {
     val shape = RoundedCornerShape(50)
-    Text(
-        text = stringResource(if (followed) R.string.detail_followed else R.string.detail_follow),
-        color = if (followed) Color.White else PikuColors.accent,
-        fontSize = 12.5.sp,
-        fontWeight = FontWeight.Bold,
-        maxLines = 1,
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .clip(shape)
             .background(if (followed) Color(0x3DFFFFFF) else Color.White)
             .then(if (followed) Modifier.border(1.dp, Color(0x9EFFFFFF), shape) else Modifier)
             .clickable(enabled = !sending, onClick = onClick)
-            .padding(horizontal = 15.dp, vertical = 8.dp),
-    )
+            .padding(start = 15.dp, end = if (quiet && followed) 11.dp else 15.dp, top = 8.dp, bottom = 8.dp),
+    ) {
+        Text(
+            text = stringResource(if (followed) R.string.detail_followed else R.string.detail_follow),
+            color = if (followed) Color.White else PikuColors.accent,
+            fontSize = 12.5.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+        )
+        if (quiet && followed) {
+            Spacer(Modifier.width(4.dp))
+            Icon(
+                imageVector = Icons.Outlined.Lock,
+                contentDescription = stringResource(R.string.detail_follow_quiet_state),
+                tint = Color.White.copy(alpha = 0.85f),
+                modifier = Modifier.size(11.dp),
+            )
+        }
+    }
 }
 
 @Composable

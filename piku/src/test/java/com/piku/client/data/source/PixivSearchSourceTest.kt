@@ -3,6 +3,7 @@ package com.piku.client.data.source
 import com.piku.client.data.auth.PixivAuthEndpoints
 import com.piku.client.data.auth.PixivAuthRuntime
 import com.piku.client.data.local.InMemorySharedPreferences
+import com.piku.client.data.local.QuietFollowStore
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.data.remote.PikuJson
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -276,6 +277,7 @@ class PixivSearchSourceTest {
         appApi = appApi,
         endpoints = PixivAuthEndpoints(),
         runtime = PixivAuthRuntime(dispatcher = Dispatchers.Unconfined, now = { FIXED_NOW }),
+        quietFollowStore = QuietFollowStore(InMemorySharedPreferences()),
     )
 
     private fun source(appApi: FakeAppApi): PixivSearchSource =

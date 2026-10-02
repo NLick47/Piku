@@ -1,58 +1,32 @@
 package com.piku.client.ui.detail
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Article
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.OpenInBrowser
 import androidx.compose.material.icons.outlined.Translate
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
 import com.piku.client.R
 import com.piku.client.data.remote.translation.ModelEntry
 import com.piku.client.data.remote.translation.Role
-import com.piku.client.ui.theme.MenuPopupBgDark
-import com.piku.client.ui.theme.MenuPopupBgLight
+import com.piku.client.ui.common.MenuPopup
+import com.piku.client.ui.common.MenuPopupItem
 import com.piku.client.ui.theme.PikuColors
-import com.piku.client.ui.theme.ShadowSpot
-import com.piku.client.ui.theme.ShadowSpotHeavy
-import com.piku.client.ui.theme.SoftBorderDark
-import com.piku.client.ui.theme.SoftBorderLight
 
 internal fun retranslatePickableModels(models: List<ModelEntry>): List<ModelEntry> =
     models.filter { entry ->
@@ -88,7 +62,7 @@ internal fun ModelPickerRow(
     }
 }
 
-/** 更多操作：锚定在按钮上方的玻璃风格小弹窗，比系统菜单精致、比整页弹层省空间 */
+/** 更多操作：poipiku 详情底栏 ⋮ 的菜单，壳走 ui/common MenuPopup（贴按钮上方、带图标） */
 @Composable
 internal fun MoreMenuPopup(
     dark: Boolean,
@@ -108,102 +82,61 @@ internal fun MoreMenuPopup(
     onToggleBlock: (() -> Unit)? = null,
     blocked: Boolean = false,
 ) {
-    val density = LocalDensity.current
-    var offsetY by remember { mutableIntStateOf(0) }
-    val shape = RoundedCornerShape(18.dp)
-    Popup(
-        alignment = Alignment.TopEnd,
-        offset = IntOffset(0, offsetY),
-        onDismissRequest = onDismiss,
-        properties = PopupProperties(focusable = true),
-    ) {
-        Column(
-            modifier = Modifier
-                .widthIn(max = 200.dp)
-                .onSizeChanged { size ->
-                    offsetY = -size.height - with(density) { 8.dp.roundToPx() }
-                }
-                .shadow(14.dp, shape, ambientColor = ShadowSpot, spotColor = ShadowSpotHeavy)
-                .clip(shape)
-                .background(if (dark) MenuPopupBgDark else MenuPopupBgLight)
-                .border(
-                    BorderStroke(0.5.dp, if (dark) SoftBorderDark else SoftBorderLight),
-                    shape,
-                )
-                .padding(vertical = 6.dp),
-        ) {
-            MoreMenuRow(
-                iconVector = Icons.Outlined.ContentCopy,
-                label = stringResource(R.string.detail_copy_link),
-                dark = dark,
-                onClick = onCopyLink,
+    MenuPopup(
+        groups = buildList {
+            add(
+                buildList {
+                    add(
+                        MenuPopupItem(
+                            label = stringResource(R.string.detail_copy_link),
+                            icon = Icons.Outlined.ContentCopy,
+                            onClick = onCopyLink,
+                        ),
+                    )
+                    add(
+                        MenuPopupItem(
+                            label = stringResource(R.string.detail_copy_description),
+                            icon = Icons.AutoMirrored.Outlined.Article,
+                            onClick = onCopyDescription,
+                        ),
+                    )
+                    add(
+                        MenuPopupItem(
+                            label = stringResource(R.string.detail_open_browser),
+                            icon = Icons.Outlined.OpenInBrowser,
+                            onClick = onOpenBrowser,
+                        ),
+                    )
+                    if (onOpenModelPicker != null) {
+                        add(
+                            MenuPopupItem(
+                                label = stringResource(R.string.detail_menu_retry_with_model),
+                                icon = Icons.Outlined.Translate,
+                                onClick = onOpenModelPicker,
+                            ),
+                        )
+                    }
+                },
             )
-            MoreMenuRow(
-                // 与上面的"复制链接"区分开：同为复制动作，图标必须不同
-                iconVector = Icons.AutoMirrored.Outlined.Article,
-                label = stringResource(R.string.detail_copy_description),
-                dark = dark,
-                onClick = onCopyDescription,
-            )
-            MoreMenuRow(
-                iconVector = Icons.Outlined.OpenInBrowser,
-                label = stringResource(R.string.detail_open_browser),
-                dark = dark,
-                onClick = onOpenBrowser,
-            )
-            if (onOpenModelPicker != null) {
-                MoreMenuRow(
-                    iconVector = Icons.Outlined.Translate,
-                    label = stringResource(R.string.detail_menu_retry_with_model),
-                    dark = dark,
-                    onClick = onOpenModelPicker,
-                )
-            }
             if (onToggleBlock != null) {
-                // 破坏性操作与上方的复制/打开项用细线隔开，避免误触
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                    thickness = 0.5.dp,
-                    color = if (dark) SoftBorderDark else SoftBorderLight,
-                )
-                MoreMenuRow(
-                    iconVector = Icons.Outlined.Block,
-                    label = stringResource(
-                        if (blocked) R.string.detail_unblock else R.string.detail_block,
+                // 破坏性操作单独成组，借组间分隔线与上方的复制/打开项隔开，避免误触
+                add(
+                    listOf(
+                        MenuPopupItem(
+                            label = stringResource(
+                                if (blocked) R.string.detail_unblock else R.string.detail_block,
+                            ),
+                            icon = Icons.Outlined.Block,
+                            onClick = onToggleBlock,
+                        ),
                     ),
-                    dark = dark,
-                    onClick = onToggleBlock,
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun MoreMenuRow(
-    iconVector: ImageVector,
-    label: String,
-    dark: Boolean,
-    onClick: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 9.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Icon(
-            imageVector = iconVector,
-            contentDescription = null,
-            tint = PikuColors.accent,
-            modifier = Modifier.size(16.dp),
-        )
-        Text(
-            text = label,
-            color = PikuColors.textPrimary,
-            fontSize = 13.sp,
-        )
-    }
+        },
+        dark = dark,
+        anchorHeightPx = 0,
+        onDismiss = onDismiss,
+        width = 200.dp,
+        belowAnchor = false,
+    )
 }

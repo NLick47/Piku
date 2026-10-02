@@ -129,6 +129,8 @@
     <string name="follow_users_login">ログインするとフォロー中のユーザーを確認できます</string>
     <string name="follow_users_count">フォロー %1$d 人</string>
     <string name="follow_user_unfollow">フォロー解除</string>
+    <string name="follow_tab_public">公開フォロー</string>
+    <string name="follow_tab_quiet">非公開フォロー</string>
     <string name="follow_user_refollow">再フォロー</string>
     <string name="follow_user_follow">フォロー</string>
     <string name="menu_block_users">ブロックリスト</string>
@@ -426,6 +428,12 @@
     <string name="detail_follow_sent">フォローしました</string>
     <string name="detail_unfollow_sent">フォローを解除しました</string>
     <string name="detail_follow_failed">フォローに失敗しました</string>
+    <string name="detail_follow_quiet">非公開フォロー</string>
+    <string name="detail_follow_quiet_state">非公開フォロー中</string>
+    <string name="detail_follow_to_quiet">非公開フォローに切り替え</string>
+    <string name="detail_follow_to_public">公開フォローに切り替え</string>
+    <string name="detail_follow_quiet_sent">非公開フォローにしました</string>
+    <string name="detail_follow_public_sent">公開フォローにしました</string>
     <string name="detail_cloud_bookmark_failed">pixivのブックマークへの同期に失敗しました</string>
     <string name="detail_block">このユーザーをブロック</string>
     <string name="detail_unblock">ブロック解除</string>

@@ -36,7 +36,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.piku.client.R
+import com.piku.client.ui.common.MoreMenuButton
 import com.piku.client.ui.common.PikuBackButton
+import com.piku.client.ui.common.quietFollowMenuActions
 import com.piku.client.ui.theme.DetailHeaderSurfaceLight
 import com.piku.client.ui.theme.GlassHeaderTintDark
 import com.piku.client.ui.theme.HomeFrameIcon
@@ -66,6 +68,13 @@ internal fun DetailTopBar(
     /** 文本通道可用就常驻显示：未翻译时点击即翻短字段 */
     /** 顶栏翻译按钮：切换原文/译文 */
     /** 顶栏翻译按钮：打开"换模型重翻"选择器 */
+    showFollowMenu: Boolean = false,
+    followed: Boolean = false,
+    followQuiet: Boolean = false,
+    followSending: Boolean = false,
+    onQuietFollow: () -> Unit = {},
+    onMakePublic: () -> Unit = {},
+    onUnfollow: () -> Unit = {},
 ) {
     // 用透明度做淡入淡出而不是 AnimatedVisibility：
     // 后者在 Row 作用域内会和 RowScope 的同名扩展产生接收者歧义
@@ -118,6 +127,20 @@ internal fun DetailTopBar(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.graphicsLayer { alpha = titleAlpha },
+            )
+        }
+        if (showFollowMenu) {
+            MoreMenuButton(
+                groups = listOf(
+                    quietFollowMenuActions(
+                        followed = followed,
+                        followQuiet = followQuiet,
+                        followSending = followSending,
+                        onQuietFollow = onQuietFollow,
+                        onMakePublic = onMakePublic,
+                        onUnfollow = onUnfollow,
+                    ),
+                ),
             )
         }
     }

@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.piku.client.R
 import com.piku.client.data.auth.PixivAuthRepository
+import com.piku.client.data.local.QuietFollowStore
 import com.piku.client.data.local.ImageSaver
 import com.piku.client.data.remote.pixiv.PixivAppConfig
 import com.piku.client.data.remote.translation.TranslationRepository
@@ -54,6 +55,8 @@ data class AuthorUiState(
     val loggedIn: Boolean = false,
     val isSelf: Boolean = false,
     val followSending: Boolean = false,
+    /** 当前关注是否为悄悄关注；接口只回布尔，以本地记账判定，菜单动作乐观翻转 */
+    val followQuiet: Boolean = false,
     /** 当前 tab 第一页失败：内容区给错误态，头部与 tab 行照常 */
     val tabLoadFailed: Boolean = false,
     /** 简介译文；null = 还没翻出来 */
@@ -77,6 +80,7 @@ class AuthorProfileViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val repository: PixivRepository,
     private val authRepository: PixivAuthRepository,
+    private val quietFollowStore: QuietFollowStore,
     private val translationRepository: TranslationRepository,
     private val observeLanguageUseCase: ObserveLanguageUseCase,
     private val observeFavoriteIdsUseCase: ObserveFavoriteIdsUseCase,
@@ -285,6 +289,7 @@ class AuthorProfileViewModel @Inject constructor(
             _uiState.update { s ->
                 s.copy(
                     followSending = false,
+                    followQuiet = if (result.isSuccess) false else s.followQuiet,
                     profile = if (result.isSuccess) s.profile?.copy(followed = target) else s.profile,
                 )
             }
@@ -293,6 +298,48 @@ class AuthorProfileViewModel @Inject constructor(
                     result.isFailure -> R.string.detail_follow_failed
                     target -> R.string.detail_follow_sent
                     else -> R.string.detail_unfollow_sent
+                },
+            )
+        }
+    }
+
+    fun setFollowQuiet(quiet: Boolean) {
+        val state = _uiState.value
+        if (state.isSelf || state.followSending) return
+        if (!state.loggedIn) {
+            feedback.show(R.string.detail_follow_login_hint)
+            return
+        }
+        val previousFollowed = state.profile?.followed ?: false
+        val previousQuiet = state.followQuiet
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    followSending = true,
+                    followQuiet = quiet,
+                    profile = it.profile?.copy(followed = true),
+                )
+            }
+            repository.followUser(
+                userId,
+                follow = true,
+                restrict = if (quiet) PixivAppConfig.RESTRICT_PRIVATE else PixivAppConfig.RESTRICT_PUBLIC,
+            ).fold(
+                onSuccess = {
+                    _uiState.update { s -> s.copy(followSending = false) }
+                    feedback.show(
+                        if (quiet) R.string.detail_follow_quiet_sent else R.string.detail_follow_public_sent,
+                    )
+                },
+                onFailure = {
+                    _uiState.update { s ->
+                        s.copy(
+                            followSending = false,
+                            followQuiet = previousQuiet,
+                            profile = s.profile?.copy(followed = previousFollowed),
+                        )
+                    }
+                    feedback.show(R.string.detail_follow_failed)
                 },
             )
         }
@@ -395,6 +442,7 @@ class AuthorProfileViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         profile = profile,
+                        followQuiet = profile.followed && quietFollowStore.contains(userId),
                         userName = profile.name.ifBlank { it.userName },
                         illustCount = profile.illustCount,
                         mangaCount = profile.mangaCount,

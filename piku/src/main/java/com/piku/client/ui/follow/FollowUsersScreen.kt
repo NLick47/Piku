@@ -52,6 +52,7 @@ import com.piku.client.ui.common.GlassCard
 import com.piku.client.ui.common.LoaderDots
 import com.piku.client.ui.common.LoginPrompt
 import com.piku.client.ui.common.PikuBackButton
+import com.piku.client.ui.common.PikuSegmented
 import com.piku.client.ui.common.UserAvatar
 import com.piku.client.ui.theme.GlassHeaderTintDark
 import com.piku.client.ui.theme.GlassHeaderTintLight
@@ -98,6 +99,13 @@ fun FollowUsersScreen(
                 onBack = onBack,
                 dark = dark,
             )
+
+            if (state.quietSupported) {
+                FollowTabRow(
+                    selected = state.tab,
+                    onSelect = viewModel::selectTab,
+                )
+            }
             when {
                 state.followNeedLogin -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -322,6 +330,23 @@ private fun FollowUserRow(
             )
         }
     }
+}
+
+@Composable
+private fun FollowTabRow(
+    selected: FollowTab,
+    onSelect: (FollowTab) -> Unit,
+) {
+    val tabs = FollowTab.entries
+    PikuSegmented(
+        labels = listOf(
+            stringResource(R.string.follow_tab_public),
+            stringResource(R.string.follow_tab_quiet),
+        ),
+        selectedIndex = tabs.indexOf(selected),
+        onSelect = { onSelect(tabs[it]) },
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 6.dp),
+    )
 }
 
 @Composable

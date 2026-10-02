@@ -31,7 +31,7 @@ class PoipikuFollowsSource @Inject constructor(
 
     override val sessionVersion: StateFlow<Long> = authRepository.sessionVersion
 
-    override suspend fun follows(page: Int): Result<FollowUserPage> =
+    override suspend fun follows(page: Int, quiet: Boolean): Result<FollowUserPage> =
         feedRepository.getFollowUsers(page)
 
     override suspend fun setFollowed(userId: Long, follow: Boolean): Result<Boolean> {
