@@ -778,6 +778,8 @@
     <string name="author_bio_collapse">收起</string>
     <string name="author_login_hint">登录 pixiv 后可见 TA 的主页</string>
     <string name="author_empty_bookmarks">TA 没有公开收藏</string>
+    <string name="author_empty_bookmarks_self">没有公开收藏</string>
+    <string name="author_empty_bookmarks_private">没有非公开收藏</string>
     <string name="author_empty_novel">TA 还没有小说</string>
     <string name="author_copy_link">复制主页链接</string>
 </resources>

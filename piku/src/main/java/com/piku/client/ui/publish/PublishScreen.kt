@@ -129,6 +129,7 @@ import com.piku.client.ui.theme.GlassHeaderTintLight
 import com.piku.client.ui.theme.HomeBgBottomDark
 import com.piku.client.ui.theme.HomeBgBottomLight
 import com.piku.client.ui.theme.HomeBgTopDark
+import com.piku.client.ui.theme.onAccent
 import com.piku.client.ui.theme.HomeBgTopLight
 import com.piku.client.ui.theme.LocalDarkTheme
 import com.piku.client.ui.theme.LoginBackgroundDark
@@ -146,10 +147,6 @@ import java.util.Locale
 
 /** 分类卡上的"常用"快捷集（其余走"全部分类"） */
 private val CURATED_CATEGORY_CDS = listOf(4, 6, 15, 9)
-
-/** accent 按钮上的文字色：暗色主题 accent 是浅色，需深色文字 */
-@Composable
-internal fun onAccent(): Color = if (LocalDarkTheme.current) LoginBackgroundDark else Color.White
 
 @Composable
 fun PublishScreen(

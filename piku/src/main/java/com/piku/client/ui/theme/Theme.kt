@@ -30,6 +30,10 @@ fun themedSwitchColors(dark: Boolean): SwitchColors = SwitchDefaults.colors(
     uncheckedBorderColor = if (dark) SwitchUncheckedTrackDark else SwitchUncheckedTrackLight,
 )
 
+/** accent 按钮上的文字色：暗色主题 accent 是浅色，需深色文字 */
+@Composable
+fun onAccent(): Color = if (LocalDarkTheme.current) LoginBackgroundDark else Color.White
+
 private val DarkColorScheme = darkColorScheme(
     primary = ControlAccentDark,
     onPrimary = Color(0xFF1A1A1A),

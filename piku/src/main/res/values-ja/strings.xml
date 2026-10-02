@@ -768,6 +768,8 @@
     <string name="author_bio_collapse">閉じる</string>
     <string name="author_login_hint">pixiv にログインするとプロフィールを表示できます</string>
     <string name="author_empty_bookmarks">公開ブックマークはありません</string>
+    <string name="author_empty_bookmarks_self">公開ブックマークはありません</string>
+    <string name="author_empty_bookmarks_private">非公開ブックマークはありません</string>
     <string name="author_empty_novel">まだ小説はありません</string>
     <string name="author_copy_link">プロフィールのリンクをコピー</string>
 </resources>

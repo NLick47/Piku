@@ -37,6 +37,8 @@ data class AuthorUiState(
     val userName: String = "",
     val profile: AuthorProfile? = null,
     val tab: AuthorTab = AuthorTab.ILLUST,
+    /** 收藏 tab 的池子：false = 公开，true = 非公开；只有本人的主页才允许切到非公开 */
+    val bookmarkPrivate: Boolean = false,
     val works: List<Work> = emptyList(),
     val favoriteIds: Set<WorkKey> = emptySet(),
     val illustCount: Int? = null,
@@ -99,9 +101,18 @@ class AuthorProfileViewModel @Inject constructor(
         var loaded = false
     }
 
-    private val paging = mutableMapOf<AuthorTab, Paging>()
-    private val loadedWorks = mutableMapOf<AuthorTab, List<Work>>()
+    private val paging = mutableMapOf<TabKey, Paging>()
+    private val loadedWorks = mutableMapOf<TabKey, List<Work>>()
     private var generation = 0
+
+    /**
+     * tab 缓存的键。收藏 tab 有公开/非公开两个池子，各自记翻页位置；其余 tab 恒为公开，
+     * 直接以 [AuthorTab] 为键。回填字段只在 BOOKMARKS 上生效，别的 tab 拿到同一个键。
+     */
+    private data class TabKey(val tab: AuthorTab, val bookmarkPrivate: Boolean = false)
+
+    private fun cacheKey(tab: AuthorTab): TabKey =
+        TabKey(tab, tab == AuthorTab.BOOKMARKS && _uiState.value.bookmarkPrivate)
 
     init {
         viewModelScope.launch {
@@ -136,6 +147,7 @@ class AuthorProfileViewModel @Inject constructor(
                 mangaCount = null,
                 bookmarkCount = null,
                 tab = AuthorTab.ILLUST,
+                bookmarkPrivate = false,
                 works = emptyList(),
                 bioTranslated = null,
                 showTranslatedBio = false,
@@ -180,7 +192,30 @@ class AuthorProfileViewModel @Inject constructor(
         }
         val gen = generation
         viewModelScope.launch {
-            if (paging[tab]?.loaded == true) restoreTab(tab) else loadTab(tab, gen)
+            val key = cacheKey(tab)
+            if (paging[key]?.loaded == true) restoreTab(key) else loadTab(tab, gen)
+        }
+    }
+
+    /**
+     * 收藏 tab 内切换公开/非公开池子。与 selectTab 同一套语义：切换只换列表，
+     * 两个池子各自记翻页位置，来回切不回顶、不重拉。
+     */
+    fun selectBookmarkPool(private: Boolean) {
+        if (_uiState.value.bookmarkPrivate == private) return
+        _uiState.update {
+            it.copy(
+                bookmarkPrivate = private,
+                works = emptyList(),
+                endReached = false,
+                loadMoreErrorRes = null,
+                tabLoadFailed = false,
+            )
+        }
+        val gen = generation
+        viewModelScope.launch {
+            val key = cacheKey(AuthorTab.BOOKMARKS)
+            if (paging[key]?.loaded == true) restoreTab(key) else loadTab(AuthorTab.BOOKMARKS, gen)
         }
     }
 
@@ -268,19 +303,20 @@ class AuthorProfileViewModel @Inject constructor(
         return runCatching { imageSaver.save(url, "Piku_avatar") }.isSuccess
     }
 
-    /** 切回已加载过的 tab：把数据摆回来，不重新请求 */
-    private fun restoreTab(tab: AuthorTab) {
-        val state = paging[tab]
+    /** 切回已加载过的池子：把数据摆回来，不重新请求 */
+    private fun restoreTab(key: TabKey) {
+        val state = paging[key]
         _uiState.update {
             it.copy(
-                works = loadedWorks[tab].orEmpty(),
+                works = loadedWorks[key].orEmpty(),
                 endReached = state?.endReached ?: true,
             )
         }
     }
 
     private suspend fun loadTab(tab: AuthorTab, gen: Int, append: Boolean = false) {
-        val page = paging.getOrPut(tab) { Paging() }
+        val key = cacheKey(tab)
+        val page = paging.getOrPut(key) { Paging() }
         if (!append) {
             page.page = 0
             page.cursor = null
@@ -301,7 +337,15 @@ class AuthorProfileViewModel @Inject constructor(
                 .map { TabPage(it.items, it.nextCursor) }
 
             AuthorTab.BOOKMARKS -> repository
-                .authorBookmarks(userId, page.cursor)
+                .authorBookmarks(
+                    userId,
+                    page.cursor,
+                    restrict = if (_uiState.value.bookmarkPrivate) {
+                        PixivAppConfig.RESTRICT_PRIVATE
+                    } else {
+                        PixivAppConfig.RESTRICT_PUBLIC
+                    },
+                )
                 .map { TabPage(it.items, it.nextCursor) }
 
             AuthorTab.NOVEL -> repository
@@ -317,8 +361,8 @@ class AuthorProfileViewModel @Inject constructor(
                 // 两种分页都看「接口还给不给下一页令牌」：offset 型是 next_url、游标型是
                 // max_bookmark_id。按这一页的条目数猜到底会被丢掉的条目骗到（占位/无图的作品）
                 page.endReached = loaded.cursor == null
-                val merged = if (append) loadedWorks[tab].orEmpty() + loaded.items else loaded.items
-                loadedWorks[tab] = merged
+                val merged = if (append) loadedWorks[key].orEmpty() + loaded.items else loaded.items
+                loadedWorks[key] = merged
                 _uiState.update {
                     it.copy(
                         loading = false,

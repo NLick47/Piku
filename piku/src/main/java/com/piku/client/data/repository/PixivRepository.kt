@@ -407,13 +407,22 @@ class PixivRepository @Inject constructor(
         )
     }
 
-    /** 画师的公开收藏；翻页靠响应里的 max_bookmark_id 游标，不是 offset */
-    suspend fun authorBookmarks(userId: Long, cursor: Long?): Result<SourcePage> = apiCall {
+    /**
+     * 画师的收藏；翻页靠响应里的 max_bookmark_id 游标，不是 offset。
+     * [restrict] 传 private 才能看非公开池，但只有 user_id 是登录者本人时服务端才认——
+     * 看别人的主页恒走 public。
+     */
+    suspend fun authorBookmarks(
+        userId: Long,
+        cursor: Long?,
+        restrict: String = PixivAppConfig.RESTRICT_PUBLIC,
+    ): Result<SourcePage> = apiCall {
         val signature = endpoints.clientSignature(runtime.now())
         val response = appApi.userBookmarks(
             clientTime = signature.time,
             clientHash = signature.hash,
             userId = userId,
+            restrict = restrict,
             maxBookmarkId = cursor,
         )
         SourcePage(

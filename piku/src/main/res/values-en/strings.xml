@@ -768,6 +768,8 @@
     <string name="author_bio_collapse">Less</string>
     <string name="author_login_hint">Sign in to pixiv to view this profile</string>
     <string name="author_empty_bookmarks">No public bookmarks</string>
+    <string name="author_empty_bookmarks_self">No public bookmarks</string>
+    <string name="author_empty_bookmarks_private">No private bookmarks</string>
     <string name="author_empty_novel">No novels yet</string>
     <string name="author_copy_link">Copy profile link</string>
 </resources>

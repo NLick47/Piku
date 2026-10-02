@@ -92,6 +92,7 @@ import com.piku.client.ui.theme.HomeBgTopDark
 import com.piku.client.ui.theme.HomeBgTopLight
 import com.piku.client.ui.theme.LocalDarkTheme
 import com.piku.client.ui.theme.PikuColors
+import com.piku.client.ui.theme.onAccent
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
@@ -238,6 +239,15 @@ fun AuthorProfileScreen(
                     item(span = StaggeredGridItemSpan.FullLine) {
                         AuthorTabRow(state = state, onSelect = viewModel::selectTab)
                     }
+                    // 非公开收藏只有本人可见，切换只长在自己的主页上
+                    if (state.tab == AuthorTab.BOOKMARKS && state.isSelf) {
+                        item(span = StaggeredGridItemSpan.FullLine) {
+                            BookmarkPoolToggle(
+                                private = state.bookmarkPrivate,
+                                onSelect = viewModel::selectBookmarkPool,
+                            )
+                        }
+                    }
                 }
 
                 when {
@@ -275,7 +285,11 @@ fun AuthorProfileScreen(
                                 AuthorNotice(
                                     text = stringResource(
                                         when (state.tab) {
-                                            AuthorTab.BOOKMARKS -> R.string.author_empty_bookmarks
+                                            AuthorTab.BOOKMARKS -> when {
+                                                state.bookmarkPrivate -> R.string.author_empty_bookmarks_private
+                                                state.isSelf -> R.string.author_empty_bookmarks_self
+                                                else -> R.string.author_empty_bookmarks
+                                            }
                                             AuthorTab.NOVEL -> R.string.author_empty_novel
                                             else -> R.string.user_works_empty
                                         },
@@ -763,7 +777,14 @@ private fun AuthorTabRow(state: AuthorUiState, onSelect: (AuthorTab) -> Unit) {
     val tabs = buildList {
         add(TabItem(AuthorTab.ILLUST, labelIllust, state.illustCount))
         add(TabItem(AuthorTab.MANGA, labelManga, state.mangaCount))
-        add(TabItem(AuthorTab.BOOKMARKS, labelBookmarks, state.bookmarkCount))
+        // 计数来自资料的公开收藏数，非公开池子上不显示——接口不给非公开计数，别拿公开数冒充
+        add(
+            TabItem(
+                AuthorTab.BOOKMARKS,
+                labelBookmarks,
+                if (state.bookmarkPrivate) null else state.bookmarkCount,
+            ),
+        )
         add(TabItem(AuthorTab.NOVEL, labelNovel, state.novelCount))
     }
 
@@ -813,6 +834,59 @@ private fun AuthorTabRow(state: AuthorUiState, onSelect: (AuthorTab) -> Unit) {
                 }
             }
         }
+    }
+}
+
+/**
+ * 收藏池子切换：公开 / 非公开。样式与投稿箱的筛选项同一套 chip 语言——
+ * 这只是列表内的一次过滤，压不过上面那排真正的 Tab。
+ */
+@Composable
+private fun BookmarkPoolToggle(
+    private: Boolean,
+    onSelect: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 2.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BookmarkPoolChip(
+            text = stringResource(R.string.pixiv_mirror_public_short),
+            selected = !private,
+            onClick = { onSelect(false) },
+        )
+        Spacer(Modifier.width(8.dp))
+        BookmarkPoolChip(
+            text = stringResource(R.string.pixiv_mirror_private_short),
+            selected = private,
+            onClick = { onSelect(true) },
+        )
+    }
+}
+
+@Composable
+private fun BookmarkPoolChip(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(
+                if (selected) PikuColors.accent
+                else PikuColors.textSecondary.copy(alpha = 0.08f),
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 13.dp, vertical = 6.dp),
+    ) {
+        Text(
+            text = text,
+            color = if (selected) onAccent() else PikuColors.textSecondary,
+            fontSize = 12.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+        )
     }
 }
 
