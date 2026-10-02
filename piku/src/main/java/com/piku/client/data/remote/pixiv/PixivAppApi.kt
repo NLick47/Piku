@@ -128,7 +128,6 @@ data class PixivAppErrorBody(
     val reason: String = "",
 )
 
-/** v2/search/autocomplete 的标签联想（字段经 PixEz 参考实现核对） */
 @Serializable
 data class PixivAutoWordsResponse(val tags: List<PixivAutoTag> = emptyList())
 

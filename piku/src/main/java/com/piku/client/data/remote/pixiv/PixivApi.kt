@@ -12,8 +12,8 @@ object PixivApiConfig {
 
     const val PAGE_SIZE = 50
 
-    /** 相关作品一次取多少：够铺两屏，再多就是白拉流量 */
-    const val RECOMMEND_LIMIT = 18
+    /** 相关作品一次取多少：详情页末尾一长串可逛，再多加载压力就压过主图了 */
+    const val RECOMMEND_LIMIT = 60
 
     val DEBUG_PROXY: String? = null
 }
@@ -148,8 +148,10 @@ interface PixivApi {
 
 
     /**
-     * 作品页底部的相关作品。实测匿名可用（2026-09：HTTP 200、error=false、18 条），
-     * 接口文档标注需要登录，但匿名照样返回。nextIds 供翻页，这里只取首屏。
+     * 作品页底部的相关作品。匿名可用（接口文档标注需要登录，但匿名照样返回）。
+     * limit 服务端照单全收（2026-10 实测 180 也全量返回），实际条数 = limit 与该作品
+     * 推荐池取小；nextIds 只是没拿完的 id 余量，并无对应翻页端点（recommend?page=1 404），
+     * 想多看就一次把 limit 给足
      */
     @GET("ajax/illust/{illustId}/recommend/init")
     suspend fun recommend(

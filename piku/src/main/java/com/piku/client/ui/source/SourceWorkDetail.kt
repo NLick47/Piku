@@ -37,6 +37,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -46,6 +47,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
@@ -66,6 +68,8 @@ import com.piku.client.ui.detail.DetailTopBar
 import com.piku.client.ui.common.FeedbackHost
 import com.piku.client.ui.common.MoreMenuAction
 import com.piku.client.ui.common.quietFollowMenuActions
+import com.piku.client.ui.home.BackToTopFab
+import com.piku.client.ui.home.scrollToTopSmart
 import com.piku.client.ui.detail.FavoriteSheet
 import com.piku.client.ui.detail.PixivMirrorActions
 import com.piku.client.ui.detail.ViewerOverlay
@@ -85,6 +89,9 @@ import com.piku.client.ui.theme.HomeBgTopLight
 import com.piku.client.ui.theme.LocalDarkTheme
 import com.piku.client.ui.theme.PikuColors
 import kotlinx.coroutines.launch
+
+/** 滚过这个距离（约半屏）显示回顶悬浮按钮；直跳阈值走首页同款语义（HomeContent.scrollToTopSmart） */
+private val DETAIL_BACK_TO_TOP_AFTER = 300.dp
 
 @Composable
 internal fun SourceWorkDetailScreen(
@@ -264,6 +271,15 @@ internal fun SourceWorkDetailScreen(
         // 顶栏是浮层，所有状态下常驻（与 poipiku 详情同构）；内容顶部按顶栏高度让位
         val scrollState = rememberScrollState()
         val scrolled by remember { derivedStateOf { scrollState.value > 0 } }
+        // 回顶 FAB：滚过约半屏出现、滚动进行中隐藏（与首页同款），看图器/阅读器盖过它
+        val isScrolling = remember { mutableStateOf(false) }
+        LaunchedEffect(scrollState) {
+            snapshotFlow { scrollState.isScrollInProgress }.collect { isScrolling.value = it }
+        }
+        val backToTopAfterPx = with(LocalDensity.current) { DETAIL_BACK_TO_TOP_AFTER.toPx() }
+        val showBackToTop = remember(backToTopAfterPx) {
+            derivedStateOf { scrollState.value > backToTopAfterPx }
+        }
         val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() +
             DETAIL_TOP_BAR_HEIGHT + 12.dp
 
@@ -298,6 +314,7 @@ internal fun SourceWorkDetailScreen(
                     dark = dark,
                     language = state.language,
                     topInset = topInset,
+                    scrollState = scrollState,
                     sharedKey = workSharedKey(work.authorId, work.id),
                     customTags = state.customTags.toSet(),
                     novelBodyLoading = state.novelBodyLoading,
@@ -442,6 +459,12 @@ internal fun SourceWorkDetailScreen(
         // 相关作品点开 = 导航层压栈新的 SOURCE_DETAIL（每层独立 VM），本层不再自己叠浮层
 
         // 层级与 poipiku 详情一致：顶栏先渲染，看图器盖过它，Snackbar 盖过看图器
+        BackToTopFab(
+            showFab = showBackToTop,
+            isScrolling = isScrolling,
+            onGoTop = { scrollState.scrollToTopSmart(scope) },
+            dark = dark,
+        )
         DetailTopBar(
             onBack = onBack,
             onHomeClick = onHomeClick,

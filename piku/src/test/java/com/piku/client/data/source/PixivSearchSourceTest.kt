@@ -483,8 +483,6 @@ class PixivSearchSourceTest {
         assertEquals(SourceAuthorOpen.NativeProfile, impl.userPage(FollowUser(77, "n", null)))
     }
 
-    // ---------------- 响应格式钉线（字段经 PixEz / pixivpy 核对） ----------------
-
     @Test
     fun autocompleteWireFormat() {
         val json = """

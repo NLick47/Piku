@@ -1,5 +1,6 @@
 package com.piku.client.ui.source
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -52,6 +53,8 @@ internal fun NovelDetailContent(
     dark: Boolean,
     language: AppLanguage,
     topInset: Dp,
+    /** 由页面持有的滚动状态：回顶悬浮按钮据此显隐，与插画分支共用同一个 */
+    scrollState: ScrollState = rememberScrollState(),
     /** 封面共享元素 key：与 NovelWorkCard 封面配对做 hero 形变；空串 = 不参与过渡 */
     sharedKey: String = "",
     customTags: Set<String>,
@@ -79,7 +82,7 @@ internal fun NovelDetailContent(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
             .padding(
                 start = PikuLayout.ScreenInset,
                 end = PikuLayout.ScreenInset,

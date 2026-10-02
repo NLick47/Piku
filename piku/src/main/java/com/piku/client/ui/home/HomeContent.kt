@@ -13,6 +13,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -114,6 +115,9 @@ internal const val PREFETCH_IMAGE_COUNT = 12
 
 internal const val GO_TOP_ANIMATE_MAX_ITEMS = 50
 
+/** 详情页回顶阈值：滚过这个像素数（约两屏）就直跳，否则保留下滑动画 */
+internal const val GO_TOP_ANIMATE_MAX_PX = 6000
+
 /** 回顶：深位置直跳、近距离保留下滑动画 */
 internal fun LazyStaggeredGridState.scrollToTopSmart(scope: CoroutineScope) {
     scope.launch {
@@ -121,6 +125,17 @@ internal fun LazyStaggeredGridState.scrollToTopSmart(scope: CoroutineScope) {
             scrollToItem(0)
         } else {
             animateScrollToItem(0)
+        }
+    }
+}
+
+/** 回顶（ScrollState 版，作品详情页用）：与网格版同语义 */
+internal fun ScrollState.scrollToTopSmart(scope: CoroutineScope) {
+    scope.launch {
+        if (value > GO_TOP_ANIMATE_MAX_PX) {
+            scrollTo(0)
+        } else {
+            animateScrollTo(0)
         }
     }
 }
