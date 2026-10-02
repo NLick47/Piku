@@ -500,6 +500,7 @@ internal fun PixivAppIllust.toWork(): Work? {
         thumbHeight = height,
         imageCount = pageCount,
         r18 = xRestrict > 0,
+        ai = illustAiType == 2,
         source = WorkSource.PIXIV,
     )
 }

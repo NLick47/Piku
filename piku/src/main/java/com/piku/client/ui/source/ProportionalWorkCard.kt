@@ -45,6 +45,7 @@ import coil3.compose.AsyncImage
 import androidx.compose.ui.res.stringResource
 import com.piku.client.R
 import com.piku.client.domain.model.Work
+import com.piku.client.ui.common.WorkAiBadge
 import com.piku.client.ui.common.feedThumbUrl
 import com.piku.client.ui.navigation.sharedWorkBounds
 import com.piku.client.ui.navigation.workSharedKey
@@ -123,6 +124,13 @@ internal fun ProportionalWorkCard(
                     .background(if (dark) WorkCardPlaceholderDark else Color(0xFFF1EFEA)),
                 contentScale = ContentScale.Crop,
             )
+            if (work.ai) {
+                WorkAiBadge(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(8.dp),
+                )
+            }
             if (heartVisible) {
                 Icon(
                     imageVector = Icons.Filled.Favorite,

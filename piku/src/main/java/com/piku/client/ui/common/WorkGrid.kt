@@ -169,7 +169,7 @@ fun WorkCard(
             }
             // 动图角标：网格不播放动画（几十张同时逐帧解码会拖垮滚动），
             // 只标出这是动图，点进详情页才播。
-            if (work.isPrivate || isAnimatedImage(work.thumbnailUrl)) {
+            if (work.isPrivate || work.ai || isAnimatedImage(work.thumbnailUrl)) {
                 Row(
                     modifier = Modifier
                         .align(Alignment.TopStart)
@@ -192,6 +192,9 @@ fun WorkCard(
                                 .background(Color(0x99000000))
                                 .padding(horizontal = 7.dp, vertical = 3.dp),
                         )
+                    }
+                    if (work.ai) {
+                        WorkAiBadge()
                     }
                 }
             }
@@ -342,6 +345,25 @@ fun WorkCard(
     }
 }
 
+
+/**
+ * AI 生成角标：pixiv 官方申报口径，部分 AI 加工不标。官方缩略图位也是左上角，
+ * 文案各语言写法一致，不走 i18n
+ */
+@Composable
+fun WorkAiBadge(modifier: Modifier = Modifier) {
+    Text(
+        text = "AI",
+        color = Color.White,
+        fontSize = 10.sp,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = 0.5.sp,
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color(0x99000000))
+            .padding(horizontal = 7.dp, vertical = 3.dp),
+    )
+}
 
 @Composable
 fun WorkPrivateBadge(modifier: Modifier = Modifier) {

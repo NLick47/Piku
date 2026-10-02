@@ -22,6 +22,7 @@ class PixivRecommendedMappingTest {
         width: Int = 1200,
         height: Int = 1800,
         xRestrict: Int = 0,
+        illustAiType: Int = 0,
         pageCount: Int = 1,
     ) = PixivAppIllust(
         id = id,
@@ -32,6 +33,7 @@ class PixivRecommendedMappingTest {
         width = width,
         height = height,
         xRestrict = xRestrict,
+        illustAiType = illustAiType,
     )
 
     @Test
@@ -68,6 +70,14 @@ class PixivRecommendedMappingTest {
         assertEquals(false, illust(xRestrict = 0).toWork()?.r18)
         assertEquals(true, illust(xRestrict = 1).toWork()?.r18)
         assertEquals(true, illust(xRestrict = 2).toWork()?.r18)
+    }
+
+    @Test
+    fun onlyFullyAiGeneratedCountsAsAi() {
+        // 官方口径：0=未申报 1=AI加工 2=AI生成，角标只认 2
+        assertEquals(false, illust(illustAiType = 0).toWork()?.ai)
+        assertEquals(false, illust(illustAiType = 1).toWork()?.ai)
+        assertEquals(true, illust(illustAiType = 2).toWork()?.ai)
     }
 
     @Test

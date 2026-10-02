@@ -16,6 +16,7 @@ data class Work(
     /** 小说字数；插画恒 0，卡片据此显示篇幅 */
     val textLength: Int = 0,
     val r18: Boolean,
+    val ai: Boolean = false,
     val warning: Boolean = false,
     val loginRequired: Boolean = false,
     val isPrivate: Boolean = false,

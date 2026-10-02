@@ -61,6 +61,7 @@ data class PixivAppIllust(
     val height: Int = 0,
     /** 0=全年龄 1=R-18 2=R-18G */
     @SerialName("x_restrict") val xRestrict: Int = 0,
+    @SerialName("illust_ai_type") val illustAiType: Int = 0,
 ) {
     val illustId: Long get() = id.toLongOrNull() ?: 0
 }
