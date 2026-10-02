@@ -70,6 +70,7 @@ import com.piku.client.domain.source.SourceAuthorOpen
 import com.piku.client.domain.source.SourceLink
 import com.piku.client.ui.common.FeedbackHost
 import com.piku.client.ui.common.PikuBackButton
+import com.piku.client.ui.home.sheets.HomeSourceSheet
 import com.piku.client.ui.theme.GlassHeaderTintDark
 import com.piku.client.ui.theme.GlassHeaderTintLight
 import com.piku.client.ui.theme.HomeBgBottomDark
@@ -113,6 +114,7 @@ fun SearchScreen(
     val focusRequester = remember { FocusRequester() }
     var inputFocused by remember { mutableStateOf(false) }
     var showFilterSheet by rememberSaveable { mutableStateOf(false) }
+    var showSourceSheet by rememberSaveable { mutableStateOf(false) }
 
     // 去除 #/@ 前缀后的真实搜索词（# 可叠加，如站点分类标签 "##東方"）；空串表示待机态
     val searchTerm = state.keyword.trimStart('#').removePrefix("@").trim()
@@ -138,7 +140,7 @@ fun SearchScreen(
         when (val open = viewModel.userOpen(user)) {
             is SourceAuthorOpen.External -> onOpenExternal(open.url)
             SourceAuthorOpen.NativeDetail, SourceAuthorOpen.NativeProfile, null ->
-                onUserClick(viewModel.sourceId, user)
+                onUserClick(state.source, user)
         }
     }
 
@@ -244,27 +246,30 @@ fun SearchScreen(
                             selected = state.tab,
                             onSelect = viewModel::selectTab,
                         )
-                        // 面板与摘要行都只看可见组：小说档下期间/对象组整体退场
+                        // 换源是整页动作：源 chip 三个 tab 常驻居首；筛选摘要只在作品 tab
+                        // 且插件声明了条件时出现（面板与摘要行都只看可见组，小说档下期间/对象组退场）
                         val hasFilterSpec = state.visibleFilterGroups.isNotEmpty() || state.filterToggles.isNotEmpty()
-                        if (state.tab == SearchTab.WORKS && state.pluginActive && hasFilterSpec) {
-                            SearchFilterBar(
-                                groups = state.visibleFilterGroups,
-                                toggles = state.filterToggles,
-                                selected = state.selectedFilters,
-                                onResetGroup = { groupId ->
-                                    val defaultId = state.visibleFilterGroups
-                                        .firstOrNull { it.id == groupId }
-                                        ?.options?.firstOrNull { it.default }?.id
-                                    if (defaultId != null) {
-                                        viewModel.applyFilters(state.selectedFilters + (groupId to defaultId))
-                                    }
-                                },
-                                onResetToggle = { toggleId ->
-                                    viewModel.applyFilters(state.selectedFilters - toggleId)
-                                },
-                                onOpenSheet = { showFilterSheet = true },
-                            )
-                        }
+                        val sourceLabel = stringResource(viewModel.homeSourceLabelRes(state.source))
+                        SearchFilterBar(
+                            sourceLabel = sourceLabel,
+                            showFilters = state.tab == SearchTab.WORKS && state.pluginActive && hasFilterSpec,
+                            groups = state.visibleFilterGroups,
+                            toggles = state.filterToggles,
+                            selected = state.selectedFilters,
+                            onSourceClick = { showSourceSheet = true },
+                            onResetGroup = { groupId ->
+                                val defaultId = state.visibleFilterGroups
+                                    .firstOrNull { it.id == groupId }
+                                    ?.options?.firstOrNull { it.default }?.id
+                                if (defaultId != null) {
+                                    viewModel.applyFilters(state.selectedFilters + (groupId to defaultId))
+                                }
+                            },
+                            onResetToggle = { toggleId ->
+                                viewModel.applyFilters(state.selectedFilters - toggleId)
+                            },
+                            onOpenSheet = { showFilterSheet = true },
+                        )
                         when (state.tab) {
                             SearchTab.WORKS -> WorksTabContent(
                                 state = state,
@@ -325,6 +330,20 @@ fun SearchScreen(
                     showFilterSheet = false
                 },
                 onDismiss = { showFilterSheet = false },
+                dark = dark,
+            )
+        }
+        if (showSourceSheet) {
+            // 与首页换源面板同一个组件：写回全局 homeSource，本页与首页一起跟随
+            HomeSourceSheet(
+                selected = state.source,
+                options = viewModel.sourceOptions,
+                labelRes = viewModel::homeSourceLabelRes,
+                onSelect = { source ->
+                    viewModel.setHomeSource(source)
+                    showSourceSheet = false
+                },
+                onDismiss = { showSourceSheet = false },
                 dark = dark,
             )
         }

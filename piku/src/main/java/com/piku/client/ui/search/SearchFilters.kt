@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -77,12 +78,19 @@ private fun nonDefaultFilterCount(
     return count
 }
 
-/** 结果页上方的筛选摘要：已生效条件高亮可单独移除，末尾是带角标的"筛选"入口 */
+/**
+ * 结果页上方的换源入口 + 筛选摘要：源 chip 常驻居首（页面级模式项，无 ✕ 不可移除），
+ * 后面是已生效条件高亮可单独移除的 chips，末尾是带角标的"筛选"入口。
+ * [showFilters] 为 false 时整行只剩源 chip（poipiku 无筛选声明，或非作品 tab）。
+ */
 @Composable
 internal fun SearchFilterBar(
+    sourceLabel: String,
+    showFilters: Boolean,
     groups: List<SearchFilterGroupSpec>,
     toggles: List<SearchFilterToggleSpec>,
     selected: Map<String, String>,
+    onSourceClick: () -> Unit,
     onResetGroup: (String) -> Unit,
     onResetToggle: (String) -> Unit,
     onOpenSheet: () -> Unit,
@@ -91,39 +99,75 @@ internal fun SearchFilterBar(
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 2.dp, bottom = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        groups.forEach { group ->
-            val current = selected[group.id]
-            val defaultId = group.options.firstOrNull { it.default }?.id
-            if (current != null && current != defaultId) {
-                val labelRes = group.options.firstOrNull { it.id == current }?.labelRes
-                if (labelRes != null) {
-                    item(key = group.id) {
+        item(key = "source") {
+            SourceChip(label = sourceLabel, onClick = onSourceClick)
+        }
+        if (showFilters) {
+            groups.forEach { group ->
+                val current = selected[group.id]
+                val defaultId = group.options.firstOrNull { it.default }?.id
+                if (current != null && current != defaultId) {
+                    val labelRes = group.options.firstOrNull { it.id == current }?.labelRes
+                    if (labelRes != null) {
+                        item(key = group.id) {
+                            ActiveFilterChip(
+                                text = stringResource(labelRes),
+                                onRemove = { onResetGroup(group.id) },
+                                onOpen = onOpenSheet,
+                            )
+                        }
+                    }
+                }
+            }
+            toggles.forEach { toggle ->
+                if (selected[toggle.id] == FILTER_TOGGLE_ON) {
+                    item(key = toggle.id) {
                         ActiveFilterChip(
-                            text = stringResource(labelRes),
-                            onRemove = { onResetGroup(group.id) },
+                            text = stringResource(toggle.labelRes),
+                            onRemove = { onResetToggle(toggle.id) },
                             onOpen = onOpenSheet,
                         )
                     }
                 }
             }
-        }
-        toggles.forEach { toggle ->
-            if (selected[toggle.id] == FILTER_TOGGLE_ON) {
-                item(key = toggle.id) {
-                    ActiveFilterChip(
-                        text = stringResource(toggle.labelRes),
-                        onRemove = { onResetToggle(toggle.id) },
-                        onOpen = onOpenSheet,
-                    )
-                }
+            item(key = "filter_open") {
+                FilterOpenChip(
+                    count = nonDefaultFilterCount(groups, toggles, selected),
+                    onOpen = onOpenSheet,
+                )
             }
         }
-        item(key = "filter_open") {
-            FilterOpenChip(
-                count = nonDefaultFilterCount(groups, toggles, selected),
-                onOpen = onOpenSheet,
-            )
-        }
+    }
+}
+
+/** 换源入口：源名 + ›，点开换源面板；文案与首页换源面板、结果卡角标同一套 */
+@Composable
+private fun SourceChip(
+    label: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(if (LocalDarkTheme.current) Color(0x40FFFFFF) else Color(0xE6FFFFFF))
+            .border(BorderStroke(0.5.dp, PikuColors.border), RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .padding(start = 12.dp, end = 8.dp, top = 7.dp, bottom = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            color = PikuColors.textPrimary,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+        )
+        Icon(
+            imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+            contentDescription = null,
+            tint = PikuColors.textSecondary,
+            modifier = Modifier.size(12.dp),
+        )
     }
 }
 

@@ -24,6 +24,7 @@ import com.piku.client.domain.source.SourceSearchRegistry
 import com.piku.client.domain.source.SourceAuthRegistry
 import com.piku.client.domain.source.SourceLink
 import com.piku.client.domain.source.SourceLinkResolver
+import com.piku.client.domain.source.SourceRegistry
 import com.piku.client.domain.source.SourceSuggestion
 import com.piku.client.domain.source.SourceTrendingTag
 import com.piku.client.domain.usecase.ClearSearchHistoryUseCase
@@ -37,6 +38,7 @@ import com.piku.client.domain.usecase.ObserveFavoriteIdsUseCase
 import com.piku.client.domain.usecase.ObserveSearchHistoryUseCase
 import com.piku.client.domain.usecase.RecordSearchKeywordUseCase
 import com.piku.client.domain.usecase.RemoveSearchKeywordUseCase
+import com.piku.client.domain.usecase.SetHomeSourceUseCase
 import com.piku.client.domain.usecase.ToggleFavoriteUseCase
 import com.piku.client.domain.usecase.TranslateSearchKeywordUseCase
 import com.piku.client.ui.common.toFeedErrorRes
@@ -112,6 +114,8 @@ data class SearchUiState(
     /** 本地乐观覆盖：userId -> 目标关注态，服务端确认后以服务端结果为准 */
     val followOverrides: Map<Long, Boolean> = emptyMap(),
     // ---- 检索插件（pixiv 等）声明的能力区；未声明时全部保持默认，外壳走原链路 ----
+    /** 本页生效的源，跟随全局首页源；换源面板写回后由 onHomeSourceChanged 更新 */
+    val source: WorkSource = WorkSource.POIPIKU,
     val pluginActive: Boolean = false,
     /** 结果卡片按原图比例排版 */
     val proportional: Boolean = false,
@@ -132,6 +136,8 @@ class SearchViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val settingsRepository: SettingsRepository,
     private val sourceSearchRegistry: SourceSearchRegistry,
+    private val sourceRegistry: SourceRegistry,
+    private val setHomeSourceUseCase: SetHomeSourceUseCase,
     private val sourceAuthRegistry: SourceAuthRegistry,
     private val observeSearchHistoryUseCase: ObserveSearchHistoryUseCase,
     private val recordSearchKeywordUseCase: RecordSearchKeywordUseCase,
@@ -176,9 +182,13 @@ class SearchViewModel @Inject constructor(
         else -> SearchTab.WORKS
     }
 
-    // 当前首页源与其检索插件；搜索页内不换源，进入时锁定即可
-    private val source: WorkSource = settingsRepository.homeSource.value
-    private val searchPlugin: SourceSearch? = sourceSearchRegistry.byIdOrNull(source)
+    // 当前首页源与其检索插件。跟随全局 homeSource：本页换源面板与首页抽屉写的是同一个设置，
+    // 变化由 onHomeSourceChanged 统一重置并乐观重搜
+    private var source: WorkSource = settingsRepository.homeSource.value
+    private var searchPlugin: SourceSearch? = sourceSearchRegistry.byIdOrNull(source)
+
+    /** 换源代数：每次换源自增；load 协程持旧代数返回的结果直接丢弃，防止旧源内容写进新源列表 */
+    private var sourceGeneration = 0
 
     /** 各筛选组的默认选中项；开关默认不选 */
     private fun defaultFilters(plugin: SourceSearch): Map<String, String> = buildMap {
@@ -196,6 +206,7 @@ class SearchViewModel @Inject constructor(
         SearchUiState(
             keyword = keyword,
             tab = initialTab,
+            source = source,
             pluginActive = searchPlugin != null,
             proportional = searchPlugin?.proportional == true,
             filterGroups = searchPlugin?.filterGroups ?: emptyList(),
@@ -214,6 +225,7 @@ class SearchViewModel @Inject constructor(
     private var tagSuggestionsPage = 0
     private var tagWorksPage = 0
     private var suggestJob: Job? = null
+    private var customTagsJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -226,25 +238,11 @@ class SearchViewModel @Inject constructor(
                 _uiState.update { it.copy(favoriteIds = ids) }
             }
         }
+        observeCustomTags()
+        loadIdleContent()
+        // 首页抽屉与本页源面板写的是同一个全局 homeSource；StateFlow 同值去重，不会重复重置
         viewModelScope.launch {
-            observeCustomTagsUseCase(source).collect { tags ->
-                _uiState.update { it.copy(customTags = tags) }
-            }
-        }
-        if (searchPlugin == null) {
-            // poipiku 的热门标签；声明了检索插件的源有自己的热门区，不混用
-            viewModelScope.launch {
-                loadPopularTagsUseCase().onSuccess { tags ->
-                    val names = tags.map(PopularTag::name)
-                    _uiState.update { it.copy(popularTagNames = names) }
-                }
-            }
-        } else {
-            viewModelScope.launch {
-                searchPlugin.trendingTags().onSuccess { list ->
-                    _uiState.update { it.copy(trending = list) }
-                }
-            }
+            settingsRepository.homeSource.collect { onHomeSourceChanged(it) }
         }
         // 登录成功（含从登录引导回来）、自动重登、登出都要重载三个 tab：
         // 搜索结果与身份相关，登出后不能继续显示上一个账号才看得见的内容
@@ -266,6 +264,112 @@ class SearchViewModel @Inject constructor(
                 initialTab == SearchTab.USERS -> loadUsers(append = false)
                 // 已登录用户直接预载作者列表，切到用户 tab 时无需等待
                 else -> if (isLoggedInForSearch()) loadUsers(append = false)
+            }
+        }
+    }
+
+    /** 自定义标签按源隔离：换源后取消旧订阅，重新收集新源的标签流 */
+    private fun observeCustomTags() {
+        customTagsJob?.cancel()
+        customTagsJob = viewModelScope.launch {
+            observeCustomTagsUseCase(source).collect { tags ->
+                _uiState.update { it.copy(customTags = tags) }
+            }
+        }
+    }
+
+    /** 待机态热门区：poipiku 走热门标签，声明检索插件的源用自己的 trendingTags，互不混用 */
+    private fun loadIdleContent() {
+        val generation = sourceGeneration
+        val plugin = searchPlugin
+        if (plugin == null) {
+            viewModelScope.launch {
+                loadPopularTagsUseCase().onSuccess { tags ->
+                    if (generation == sourceGeneration) {
+                        val names = tags.map(PopularTag::name)
+                        _uiState.update { it.copy(popularTagNames = names) }
+                    }
+                }
+            }
+        } else {
+            viewModelScope.launch {
+                plugin.trendingTags().onSuccess { list ->
+                    if (generation == sourceGeneration) {
+                        _uiState.update { it.copy(trending = list) }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * 换源（本页源面板与首页抽屉写的是同一个全局 homeSource）：整页重置——
+     * 四组分页归零、三个 tab 列表清空、筛选按新源声明回到默认，然后已搜词乐观重搜
+     * （作品 tab 始终预载，当前 tab 立即重搜，其余 tab 留空由 selectTab 兜底加载）、
+     * 待机态热门区重载、自定义标签重新订阅。关注覆盖的 key 是各源自己的 userId
+     * 命名空间，不能跨源残留，一并清掉。
+     */
+    private fun onHomeSourceChanged(newSource: WorkSource) {
+        if (newSource == source) return
+        source = newSource
+        searchPlugin = sourceSearchRegistry.byIdOrNull(newSource)
+        sourceGeneration++
+        suggestJob?.cancel()
+        worksPage = 0
+        usersPage = 0
+        tagSuggestionsPage = 0
+        tagWorksPage = 0
+        _uiState.update {
+            it.copy(
+                source = newSource,
+                pluginActive = searchPlugin != null,
+                proportional = searchPlugin?.proportional == true,
+                filterGroups = searchPlugin?.filterGroups ?: emptyList(),
+                filterToggles = searchPlugin?.filterToggles ?: emptyList(),
+                visibleFilterGroups = searchPlugin?.filterGroups ?: emptyList(),
+                selectedFilters = searchPlugin?.let(::defaultFilters) ?: emptyMap(),
+                suggestions = emptyList(),
+                popularTagNames = emptyList(),
+                trending = emptyList(),
+                followPendingIds = emptySet(),
+                followOverrides = emptyMap(),
+                works = emptyList(),
+                worksLoading = false,
+                worksLoadingMore = false,
+                worksErrorRes = null,
+                worksLoadMoreErrorRes = null,
+                worksEndReached = false,
+                worksNeedLogin = false,
+                users = emptyList(),
+                usersLoading = false,
+                usersLoadingMore = false,
+                usersErrorRes = null,
+                usersLoadMoreErrorRes = null,
+                usersEndReached = false,
+                usersNeedLogin = false,
+                tagSuggestions = emptyList(),
+                tagSuggestionsLoading = false,
+                tagSuggestionsLoadingMore = false,
+                tagSuggestionsErrorRes = null,
+                tagSuggestionsLoadMoreErrorRes = null,
+                tagSuggestionsEndReached = false,
+                tagWorks = emptyList(),
+                tagWorksLoading = false,
+                tagWorksLoadingMore = false,
+                tagWorksErrorRes = null,
+                tagWorksLoadMoreErrorRes = null,
+                tagWorksEndReached = false,
+                tagNeedLogin = false,
+            )
+        }
+        observeCustomTags()
+        loadIdleContent()
+        if (base.isNotEmpty() || presetTag.isNotEmpty()) {
+            loadWorks(append = false)
+            when (_uiState.value.tab) {
+                SearchTab.TAGS -> loadTagsByMode(append = false)
+                SearchTab.USERS -> loadUsers(append = false)
+                SearchTab.WORKS -> Unit
             }
         }
     }
@@ -441,12 +545,12 @@ class SearchViewModel @Inject constructor(
 
     /** 应用筛选：记下选中值，作品与选中的标签作品全量重载 */
     fun applyFilters(selected: Map<String, String>) {
-        if (searchPlugin == null) return
+        val plugin = searchPlugin ?: return
         _uiState.update {
             it.copy(
                 selectedFilters = selected,
-                visibleFilterGroups = searchPlugin.filterGroups.filterNot { group ->
-                    group.id in searchPlugin.hiddenFilterGroups(selected)
+                visibleFilterGroups = plugin.filterGroups.filterNot { group ->
+                    group.id in plugin.hiddenFilterGroups(selected)
                 },
             )
         }
@@ -468,8 +572,15 @@ class SearchViewModel @Inject constructor(
      */
     fun resolveLink(raw: String): SourceLink? = linkResolver.parse(raw)
 
-    /** 本页生效的源：用户行的作者页要按它挑形态 */
-    val sourceId: WorkSource get() = source
+    /** 换源面板的可选源与文案：与首页换源面板完全同一套（声明序即展示序） */
+    val sourceOptions: List<WorkSource> get() = sourceRegistry.all.sortedBy { it.id.ordinal }.map { it.id }
+
+    fun homeSourceLabelRes(id: WorkSource): Int = sourceRegistry.byId(id).labelRes
+
+    /** 本页换源 = 写回全局首页源，整页重置与重搜由 homeSource 响应完成 */
+    fun setHomeSource(source: WorkSource) {
+        viewModelScope.launch { setHomeSourceUseCase(source) }
+    }
 
     fun toggleFollow(userId: Long) {
         val plugin = searchPlugin
@@ -570,6 +681,7 @@ class SearchViewModel @Inject constructor(
     private fun loadWorks(append: Boolean) {
         if (base.isEmpty()) return
         val plugin = searchPlugin
+        val generation = sourceGeneration
         if (plugin != null) {
             loadWorksViaPlugin(plugin, append)
             return
@@ -596,6 +708,7 @@ class SearchViewModel @Inject constructor(
         viewModelScope.launch {
             loadKeywordFeedUseCase(base, targetPage)
                 .onSuccess { list ->
+                    if (generation != sourceGeneration) return@onSuccess
                     worksPage = targetPage
                     _uiState.update {
                         it.copy(
@@ -608,6 +721,7 @@ class SearchViewModel @Inject constructor(
                     }
                 }
                 .onFailure { error ->
+                    if (generation != sourceGeneration) return@onFailure
                     android.util.Log.d(
                         "PikuDiag",
                         "search works load fail keyword=$base append=$append page=$targetPage " +
@@ -634,6 +748,7 @@ class SearchViewModel @Inject constructor(
     }
 
     private fun loadWorksViaPlugin(plugin: SourceSearch, append: Boolean) {
+        val generation = sourceGeneration
         val targetPage = if (append) worksPage + 1 else 0
         if (!isLoggedInForSearch()) {
             _uiState.update {
@@ -664,6 +779,7 @@ class SearchViewModel @Inject constructor(
                 plugin.searchWorks(base, filters, targetPage)
             }
             request.onSuccess { page ->
+                    if (generation != sourceGeneration) return@onSuccess
                     worksPage = targetPage
                     _uiState.update {
                         it.copy(
@@ -676,6 +792,7 @@ class SearchViewModel @Inject constructor(
                     }
                 }
                 .onFailure { error ->
+                    if (generation != sourceGeneration) return@onFailure
                     android.util.Log.d(
                         "PikuDiag",
                         "pixiv search works fail keyword=$base filters=${_uiState.value.selectedFilters} " +
@@ -704,6 +821,7 @@ class SearchViewModel @Inject constructor(
     private fun loadUsers(append: Boolean) {
         if (base.isEmpty()) return
         val plugin = searchPlugin
+        val generation = sourceGeneration
         if (plugin != null) {
             if (plugin.supportsUsers) {
                 loadUsersViaPlugin(plugin, append)
@@ -736,6 +854,7 @@ class SearchViewModel @Inject constructor(
         viewModelScope.launch {
             loadUserSearchUseCase(base, targetPage)
                 .onSuccess { list ->
+                    if (generation != sourceGeneration) return@onSuccess
                     usersPage = targetPage
                     _uiState.update {
                         val merged = if (append) mergeUsers(it.users, list) else list.distinctBy { u -> u.userId }
@@ -749,6 +868,7 @@ class SearchViewModel @Inject constructor(
                     }
                 }
                 .onFailure { error ->
+                    if (generation != sourceGeneration) return@onFailure
                     android.util.Log.d(
                         "PikuDiag",
                         "search users load fail keyword=$base append=$append page=$targetPage " +
@@ -775,6 +895,7 @@ class SearchViewModel @Inject constructor(
     }
 
     private fun loadUsersViaPlugin(plugin: SourceSearch, append: Boolean) {
+        val generation = sourceGeneration
         val targetPage = if (append) usersPage + 1 else 0
         if (!isLoggedInForSearch()) {
             _uiState.update {
@@ -797,6 +918,7 @@ class SearchViewModel @Inject constructor(
         viewModelScope.launch {
             plugin.searchUsers(base, targetPage)
                 .onSuccess { list ->
+                    if (generation != sourceGeneration) return@onSuccess
                     usersPage = targetPage
                     _uiState.update {
                         val merged = if (append) mergeUsers(it.users, list) else list.distinctBy { u -> u.userId }
@@ -810,6 +932,7 @@ class SearchViewModel @Inject constructor(
                     }
                 }
                 .onFailure { error ->
+                    if (generation != sourceGeneration) return@onFailure
                     android.util.Log.d(
                         "PikuDiag",
                         "pixiv search users fail keyword=$base append=$append page=$targetPage " +
@@ -842,6 +965,7 @@ class SearchViewModel @Inject constructor(
     private fun loadTagSuggestions(append: Boolean) {
         if (base.isEmpty()) return
         val plugin = searchPlugin
+        val generation = sourceGeneration
         if (plugin != null) {
             loadTagSuggestionsViaPlugin(plugin)
             return
@@ -873,6 +997,7 @@ class SearchViewModel @Inject constructor(
         viewModelScope.launch {
             loadTagSuggestionsUseCase(base, targetPage)
                 .onSuccess { list ->
+                    if (generation != sourceGeneration) return@onSuccess
                     tagSuggestionsPage = targetPage
                     _uiState.update {
                         it.copy(
@@ -885,6 +1010,7 @@ class SearchViewModel @Inject constructor(
                     }
                 }
                 .onFailure { error ->
+                    if (generation != sourceGeneration) return@onFailure
                     android.util.Log.d(
                         "PikuDiag",
                         "search tags load fail keyword=$base append=$append page=$targetPage " +
@@ -912,6 +1038,7 @@ class SearchViewModel @Inject constructor(
 
     /** 插件源的标签建议：取自联想接口，一次取完即到底（无翻页） */
     private fun loadTagSuggestionsViaPlugin(plugin: SourceSearch) {
+        val generation = sourceGeneration
         if (!isLoggedInForSearch()) {
             _uiState.update {
                 it.copy(
@@ -937,6 +1064,7 @@ class SearchViewModel @Inject constructor(
         viewModelScope.launch {
             plugin.suggest(base)
                 .onSuccess { list ->
+                    if (generation != sourceGeneration) return@onSuccess
                     _uiState.update {
                         it.copy(
                             tagSuggestionsLoading = false,
@@ -946,6 +1074,7 @@ class SearchViewModel @Inject constructor(
                     }
                 }
                 .onFailure { error ->
+                    if (generation != sourceGeneration) return@onFailure
                     _uiState.update {
                         it.copy(
                             tagSuggestionsLoading = false,
@@ -959,6 +1088,7 @@ class SearchViewModel @Inject constructor(
     private fun loadTagWorks(append: Boolean) {
         val tag = _uiState.value.selectedTagName ?: return
         val plugin = searchPlugin
+        val generation = sourceGeneration
         if (plugin != null) {
             loadTagWorksViaPlugin(plugin, tag, append)
             return
@@ -980,7 +1110,7 @@ class SearchViewModel @Inject constructor(
         viewModelScope.launch {
             loadTagFeedUseCase(tag, targetPage)
                 .onSuccess { list ->
-                    if (_uiState.value.selectedTagName != tag) return@launch
+                    if (generation != sourceGeneration || _uiState.value.selectedTagName != tag) return@onSuccess
                     tagWorksPage = targetPage
                     _uiState.update {
                         it.copy(
@@ -993,7 +1123,7 @@ class SearchViewModel @Inject constructor(
                     }
                 }
                 .onFailure { error ->
-                    if (_uiState.value.selectedTagName != tag) return@launch
+                    if (generation != sourceGeneration || _uiState.value.selectedTagName != tag) return@onFailure
                     android.util.Log.d(
                         "PikuDiag",
                         "search tag works load fail tag=$tag append=$append page=$targetPage " +
@@ -1021,6 +1151,7 @@ class SearchViewModel @Inject constructor(
 
     /** 插件源的标签作品：按完全一致检索该标签，其余筛选照常生效 */
     private fun loadTagWorksViaPlugin(plugin: SourceSearch, tag: String, append: Boolean) {
+        val generation = sourceGeneration
         val targetPage = if (append) tagWorksPage + 1 else 0
         _uiState.update {
             if (append) it.copy(tagWorksLoadingMore = true, tagWorksLoadMoreErrorRes = null)
@@ -1034,7 +1165,7 @@ class SearchViewModel @Inject constructor(
         viewModelScope.launch {
             plugin.searchTagWorks(tag, _uiState.value.selectedFilters, targetPage)
                 .onSuccess { page ->
-                    if (_uiState.value.selectedTagName != tag) return@launch
+                    if (generation != sourceGeneration || _uiState.value.selectedTagName != tag) return@onSuccess
                     tagWorksPage = targetPage
                     _uiState.update {
                         it.copy(
@@ -1047,7 +1178,7 @@ class SearchViewModel @Inject constructor(
                     }
                 }
                 .onFailure { error ->
-                    if (_uiState.value.selectedTagName != tag) return@launch
+                    if (generation != sourceGeneration || _uiState.value.selectedTagName != tag) return@onFailure
                     android.util.Log.d(
                         "PikuDiag",
                         "pixiv search tag works fail tag=$tag append=$append page=$targetPage " +
