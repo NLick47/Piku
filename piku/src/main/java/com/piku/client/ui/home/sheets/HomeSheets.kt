@@ -178,8 +178,6 @@ internal fun HomeSourceSheet(
         dark = dark,
     ) {
         PikuSheetTitle(text = stringResource(R.string.home_source_select_title))
-        Spacer(Modifier.height(4.dp))
-        PikuSheetSubtitle(text = stringResource(R.string.home_source_select_hint))
         Spacer(Modifier.height(16.dp))
         options.forEach { option ->
             SettingsOptionRow(

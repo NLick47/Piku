@@ -23,6 +23,8 @@ class PixivDrawerPlugin @Inject constructor(
 
     override val ownsAdultRow: Boolean = true
 
+    override val ownsBookmarkMirrorRow: Boolean = true
+
     @Composable
     override fun contributions(scope: DrawerScope): List<DrawerContribution> {
         if (scope.account?.loggedIn != true) return emptyList()

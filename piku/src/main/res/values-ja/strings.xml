@@ -710,9 +710,8 @@
     <string name="pixiv_mirror_local_short">ローカル</string>
 
     <string name="home_source_poipiku">Poipiku</string>
-    <string name="home_source">ホームのソース</string>
-    <string name="home_source_select_title">ホームのソースを選択</string>
-    <string name="home_source_select_hint">ホームフィードのみに適用。検索・お気に入り・履歴には影響しません。</string>
+    <string name="home_source">コンテンツソース</string>
+    <string name="home_source_select_title">コンテンツソースを選択</string>
     <string name="home_source_pixiv">Pixiv</string>
     <string name="pixiv_hint_daily">毎日更新</string>
     <string name="pixiv_hint_weekly">毎週月曜更新</string>

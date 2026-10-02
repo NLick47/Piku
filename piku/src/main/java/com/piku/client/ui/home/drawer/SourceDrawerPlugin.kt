@@ -18,6 +18,12 @@ interface SourceDrawerPlugin {
     val ownsAdultRow: Boolean get() = false
 
     /**
+     * 本源接管外壳设置区的「pixiv 收藏镜像」行：true 时外壳才在设置展开区渲染它。
+     * 镜像档位只作用于 pixiv 收藏，没接管的源（如 poipiku）抽屉里不出现。
+     */
+    val ownsBookmarkMirrorRow: Boolean get() = false
+
+    /**
      * 组合期声明本源的抽屉贡献。在这里读本源的登录态/资料流，决定给哪些条目；
      * 没有独有功能就不覆写。条目会由外壳按 [DrawerContribution.slot] 插进固定排版。
      */

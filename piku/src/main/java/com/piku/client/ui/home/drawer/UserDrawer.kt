@@ -458,21 +458,6 @@ private fun DrawerPanel(
                         accent = iconAccent,
                     )
                     DrawerMenuRow(
-                        icon = Icons.Outlined.CloudSync,
-                        label = stringResource(R.string.menu_webdav_sync),
-                        onClick = onWebDavClick,
-                        dark = dark,
-                        accent = iconAccent,
-                    )
-                    DrawerMenuRow(
-                        icon = Icons.Outlined.DeleteSweep,
-                        label = stringResource(R.string.menu_history_retention),
-                        trailing = retentionLabel(historyRetentionDays),
-                        onClick = onRetentionClick,
-                        dark = dark,
-                        accent = iconAccent,
-                    )
-                    DrawerMenuRow(
                         icon = Icons.Outlined.AltRoute,
                         label = stringResource(R.string.menu_image_route),
                         trailing = stringResource(imageRouteMode.labelRes()),
@@ -480,11 +465,30 @@ private fun DrawerPanel(
                         dark = dark,
                         accent = iconAccent,
                     )
+                    // 收藏镜像行由本源声明接管才渲染（pixiv）：poipiku 抽屉不出现
+                    if (sourceDrawer?.ownsBookmarkMirrorRow == true) {
+                        DrawerMenuRow(
+                            icon = Icons.Outlined.BookmarkAdd,
+                            label = stringResource(R.string.menu_pixiv_mirror),
+                            trailing = stringResource(pixivBookmarkMirror.pixivMirrorLabelRes()),
+                            onClick = onPixivMirrorClick,
+                            dark = dark,
+                            accent = iconAccent,
+                        )
+                    }
                     DrawerMenuRow(
-                        icon = Icons.Outlined.BookmarkAdd,
-                        label = stringResource(R.string.menu_pixiv_mirror),
-                        trailing = stringResource(pixivBookmarkMirror.pixivMirrorLabelRes()),
-                        onClick = onPixivMirrorClick,
+                        icon = Icons.Outlined.CloudSync,
+                        label = stringResource(R.string.menu_webdav_sync),
+                        onClick = onWebDavClick,
+                        dark = dark,
+                        accent = iconAccent,
+                    )
+                    // 数据清理语义的行放展开区末尾：同步在前、保留在最后
+                    DrawerMenuRow(
+                        icon = Icons.Outlined.DeleteSweep,
+                        label = stringResource(R.string.menu_history_retention),
+                        trailing = retentionLabel(historyRetentionDays),
+                        onClick = onRetentionClick,
                         dark = dark,
                         accent = iconAccent,
                     )
