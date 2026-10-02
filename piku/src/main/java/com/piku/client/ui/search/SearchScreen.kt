@@ -101,7 +101,7 @@ fun SearchScreen(
     onUserClick: (WorkSource, FollowUser) -> Unit,
     onOpenLink: (SourceLink) -> Unit,
     onOpenExternal: (String) -> Unit,
-    onLoginClick: () -> Unit,
+    onLoginClick: (WorkSource) -> Unit,
     onManageTags: () -> Unit,
     dark: Boolean = LocalDarkTheme.current,
 ) {
@@ -143,6 +143,9 @@ fun SearchScreen(
                 onUserClick(state.source, user)
         }
     }
+
+    // 三个 tab 的登录引导共用：点击瞬间按当前源上抛，路由由导航层按该源登录插件解析
+    val handleLoginClick: () -> Unit = { onLoginClick(state.source) }
 
     LaunchedEffect(Unit) {
         if (!hasQuery) {
@@ -274,7 +277,7 @@ fun SearchScreen(
                             SearchTab.WORKS -> WorksTabContent(
                                 state = state,
                                 isTablet = isTablet,
-                                onLoginClick = onLoginClick,
+                                onLoginClick = handleLoginClick,
                                 onRetry = viewModel::retryWorks,
                                 onLoadMore = viewModel::loadMoreWorks,
                                 onRetryLoadMore = viewModel::retryLoadMoreWorks,
@@ -285,7 +288,7 @@ fun SearchScreen(
                             SearchTab.USERS -> UsersTabContent(
                                 state = state,
                                 dark = dark,
-                                onLoginClick = onLoginClick,
+                                onLoginClick = handleLoginClick,
                                 onRetry = viewModel::retryUsers,
                                 onLoadMore = viewModel::loadMoreUsers,
                                 onRetryLoadMore = viewModel::retryLoadMoreUsers,
@@ -295,7 +298,7 @@ fun SearchScreen(
                             SearchTab.TAGS -> TagsTabContent(
                                 state = state,
                                 isTablet = isTablet,
-                                onLoginClick = onLoginClick,
+                                onLoginClick = handleLoginClick,
                                 onRetry = viewModel::retryTags,
                                 onLoadMore = viewModel::loadMoreTags,
                                 onRetryLoadMore = viewModel::retryLoadMoreTags,

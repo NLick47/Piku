@@ -384,7 +384,9 @@ fun AppNavHost(
             ProvideNavSharedScope(sharedScope, this) {
                 SearchScreen(
                     onBack = safePopBack,
-                    onLoginClick = { navController.navigate(Routes.LOGIN) },
+                    onLoginClick = { source ->
+                        navController.navigate(sourceOpen.loginRoute(source) ?: Routes.LOGIN)
+                    },
                     onManageTags = { navController.navigate(Routes.TAGS) },
                     onSearch = { keyword ->
                         navController.navigate(Routes.search(keyword)) {
