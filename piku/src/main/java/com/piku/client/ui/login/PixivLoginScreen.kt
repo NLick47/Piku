@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.delay
 import com.piku.client.R
 import com.piku.client.ui.common.PikuBackButton
 import com.piku.client.ui.theme.HomeBgBottomDark
@@ -68,6 +69,16 @@ fun PixivLoginScreen(
 
     LaunchedEffect(uiState) {
         if (uiState is PixivLoginUiState.Success) onSuccess()
+    }
+
+    LaunchedEffect(pageLoading) {
+        if (!pageLoading) return@LaunchedEffect
+        delay(PAGE_LOAD_TIMEOUT_MS)
+        if (uiState is PixivLoginUiState.Browsing) {
+            web.view?.stopLoading()
+            pageLoading = false
+            pageFailed = true
+        }
     }
 
     DisposableEffect(Unit) {
@@ -282,3 +293,5 @@ private class WebViewHandle {
 private const val PIXIV_WEB_VIEW_USER_AGENT =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
         "(KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+
+private const val PAGE_LOAD_TIMEOUT_MS = 4_000L
