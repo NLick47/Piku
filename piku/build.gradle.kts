@@ -79,7 +79,7 @@ android {
         buildConfigField("String", "CATALOG_ENC_KEY", "\"${resolveCatalogEncKey()}\"")
 
         ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+            abiFilters += listOf("arm64-v8a")
         }
     }
 
@@ -226,7 +226,7 @@ val buildNativeEch by tasks.registering(Exec::class) {
     workingDir(nativeEchDir)
     commandLine(
         "cargo", "ndk",
-        "-t", "arm64-v8a", "-t", "armeabi-v7a",
+        "-t", "arm64-v8a",
         "-o", nativeEchJniLibs.asFile.absolutePath,
         "build", "--release",
     )
