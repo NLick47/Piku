@@ -103,7 +103,7 @@ class SourceWorkDetailInlineTierTest {
     fun upgradeIsPerUpstream() {
         measureFast()
 
-        val poipikuPage = page(fullUrl = "https://cdn.poipoiku.com/013955571/013349459_EsuN6ithm.png")
+        val poipikuPage = page(fullUrl = "https://cdn.poipiku.com/013955571/013349459_EsuN6ithm.png")
 
         assertFalse("另一个上游没样本，不该跟着 pixiv 的读数升档", worthUpgradingInline(listOf(poipikuPage), controller))
     }

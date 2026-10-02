@@ -12,7 +12,7 @@ enum class ImageUpstream(
     /** 探测要不要真读 body：pixiv 的结论取决于大图传不传得完，只看响应头会永远判"可用" */
     val probeWithBody: Boolean = false,
 ) {
-    POIPIKU("cdn.poipoiku.com", "", "/assets/img/poipiku_icon_512x512_2.png"),
+    POIPIKU("cdn.poipiku.com", "", "/assets/img/poipiku_icon_512x512_2.png"),
     PIXIV(
         "i.pximg.net",
         "/pximg",

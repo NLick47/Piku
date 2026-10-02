@@ -146,7 +146,6 @@ class ImageRelayInterceptor(
 
     companion object {
         const val BYPASS_HEADER = "X-Piku-Direct"
-        const val PROBE_URL = "https://cdn.poipoiku.com/assets/img/poipiku_icon_512x512_2.png"
 
         val RELAY_HOSTS = listOf(
             "pic-relay.cyou",

@@ -7,7 +7,7 @@ import com.piku.client.domain.model.ImageRouteMode
 /**
  * 图片线路决策：直连还是中继。
  *
- * poipiku 与 pixiv 各有一套状态——同一条线路上直连 `cdn.poipoiku.com` 是好的，
+ * poipiku 与 pixiv 各有一套状态——同一条线路上直连 `cdn.poipiku.com` 是好的，
  * 而直连 `i.pximg.net` 只有几十 KB/s（大图必然撞超时），默认值本来就该不同；
  * 中继回源失败也不该把另一条上游一起带偏。
  */
