@@ -84,7 +84,9 @@ import com.piku.client.domain.model.Work
 import com.piku.client.ui.source.SourceOpenViewModel
 import com.piku.client.ui.source.SourceWorkOpenHost
 import com.piku.client.domain.model.WorkKey
+import com.piku.client.domain.model.WorkSource
 import com.piku.client.ui.common.LoaderDots
+import com.piku.client.ui.common.labelRes
 import com.piku.client.ui.common.PikuBackButton
 import com.piku.client.ui.common.PikuBottomSheet
 import com.piku.client.ui.common.PikuSegmented
@@ -132,7 +134,7 @@ fun HistoryScreen(
     var openHostWork by remember { mutableStateOf<Work?>(null) }
     var armedWorkId by remember { mutableStateOf<WorkKey?>(null) }
     val today = remember { LocalDate.now() }
-    val filtered = state.selectedRange != HistoryTimeRange.ALL
+    val filtered = state.selectedRange != HistoryTimeRange.ALL || state.selectedSource != null
     // 一滚动就收起待操作态，避免删除按钮赖在屏幕上
     LaunchedEffect(gridState.isScrollInProgress) {
         if (gridState.isScrollInProgress) armedWorkId = null
@@ -177,8 +179,18 @@ fun HistoryScreen(
                 state.sections.isEmpty() -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         HistoryEmptyState(
-                            filtered = filtered,
-                            onShowAll = { viewModel.selectRange(HistoryTimeRange.ALL) },
+                            // 空态文案要区分"时间段里没有"和"来源里没有"：两者并存时说筛选条件
+                            emptyText = stringResource(
+                                when {
+                                    state.selectedSource != null &&
+                                        state.selectedRange != HistoryTimeRange.ALL ->
+                                        R.string.history_empty_filtered
+                                    state.selectedSource != null -> R.string.history_empty_source
+                                    else -> R.string.history_empty_range
+                                },
+                            ),
+                            showAction = filtered,
+                            onShowAll = viewModel::resetFilters,
                         )
                     }
                 }
@@ -286,11 +298,16 @@ fun HistoryScreen(
     if (showFilterSheet) {
         HistoryFilterSheet(
             selected = state.selectedRange,
+            selectedSource = state.selectedSource,
             count = state.count,
             dark = dark,
             onSelect = { range ->
                 armedWorkId = null
                 viewModel.selectRange(range)
+            },
+            onSelectSource = { source ->
+                armedWorkId = null
+                viewModel.selectSource(source)
             },
             onClear = {
                 showFilterSheet = false
@@ -721,7 +738,8 @@ private fun dateLabel(date: LocalDate, today: LocalDate): String = when (date) {
 
 @Composable
 private fun HistoryEmptyState(
-    filtered: Boolean,
+    emptyText: String,
+    showAction: Boolean,
     onShowAll: () -> Unit,
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -733,14 +751,12 @@ private fun HistoryEmptyState(
         )
         Spacer(Modifier.height(12.dp))
         Text(
-            text = stringResource(
-                if (filtered) R.string.history_empty_range else R.string.history_empty,
-            ),
+            text = emptyText,
             color = PikuColors.textSecondary,
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
         )
-        if (filtered) {
+        if (showAction) {
             Spacer(Modifier.height(14.dp))
             Box(
                 modifier = Modifier
@@ -760,26 +776,53 @@ private fun HistoryEmptyState(
     }
 }
 
+/** 弹层里分段控件的分组标签：两行分段控件并排后靠它区分哪行管什么 */
+@Composable
+private fun SheetSectionLabel(text: String) {
+    Text(
+        text = text,
+        color = PikuColors.textFaint,
+        fontSize = 11.sp,
+    )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun HistoryFilterSheet(
     selected: HistoryTimeRange,
+    selectedSource: WorkSource?,
     count: Int,
     dark: Boolean,
     onSelect: (HistoryTimeRange) -> Unit,
+    onSelectSource: (WorkSource?) -> Unit,
     onClear: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    PikuBottomSheet(onDismissRequest = onDismiss, dark = dark) {
+    PikuBottomSheet(onDismissRequest = onDismiss, dark = dark, scrollable = true) {
         PikuSheetTitle(text = stringResource(R.string.history_filter_title))
         Spacer(Modifier.height(4.dp))
         PikuSheetSubtitle(text = stringResource(R.string.history_count, count))
         Spacer(Modifier.height(16.dp))
+        SheetSectionLabel(text = stringResource(R.string.history_filter_range))
+        Spacer(Modifier.height(8.dp))
         val ranges = HistoryTimeRange.entries
         PikuSegmented(
             labels = ranges.map { stringResource(it.labelRes()) },
             selectedIndex = ranges.indexOf(selected),
             onSelect = { onSelect(ranges[it]) },
+        )
+        Spacer(Modifier.height(14.dp))
+        SheetSectionLabel(text = stringResource(R.string.history_filter_source))
+        Spacer(Modifier.height(8.dp))
+        // 从枚举生成，全部打头：将来接新源这里自动多一段
+        val sources: List<WorkSource?> = listOf(null) + WorkSource.entries
+        PikuSegmented(
+            labels = sources.map { source ->
+                if (source == null) stringResource(R.string.history_source_all)
+                else stringResource(source.labelRes())
+            },
+            selectedIndex = sources.indexOf(selectedSource),
+            onSelect = { onSelectSource(sources[it]) },
         )
         Spacer(Modifier.height(14.dp))
         Text(

@@ -6,6 +6,7 @@ import com.piku.client.domain.model.HistoryItem
 import com.piku.client.domain.model.HistoryTimeRange
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkKey
+import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.usecase.ClearHistoryUseCase
 import com.piku.client.domain.usecase.ObserveFavoriteIdsUseCase
 import com.piku.client.domain.usecase.ObserveHistoryUseCase
@@ -32,10 +33,17 @@ data class HistorySection(
     val items: List<HistoryItem>,
 )
 
+/** 列表订阅的键：时间范围走 SQL，来源在内存里过滤 */
+private data class HistoryFilterKey(
+    val range: HistoryTimeRange,
+    val source: WorkSource?,
+)
+
 data class HistoryUiState(
     val sections: List<HistorySection> = emptyList(),
     val favoriteIds: Set<WorkKey> = emptySet(),
     val selectedRange: HistoryTimeRange = HistoryTimeRange.ALL,
+    val selectedSource: WorkSource? = null,
     val loaded: Boolean = false,
     /** 待恢复的删除条数：>0 时页面底部常驻撤销条，不自动消失 */
     val pendingRemovedCount: Int = 0,
@@ -62,9 +70,17 @@ class HistoryViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             _uiState
-                .map { it.selectedRange }
+                .map { HistoryFilterKey(it.selectedRange, it.selectedSource) }
                 .distinctUntilChanged()
-                .flatMapLatest { range -> observeHistoryUseCase(range) }
+                .flatMapLatest { filter ->
+                    observeHistoryUseCase(filter.range).map { items ->
+                        if (filter.source == null) {
+                            items
+                        } else {
+                            items.filter { it.work.source == filter.source }
+                        }
+                    }
+                }
                 .map(::groupByDate)
                 .collect { sections ->
                     _uiState.update { it.copy(sections = sections, loaded = true) }
@@ -79,6 +95,14 @@ class HistoryViewModel @Inject constructor(
 
     fun selectRange(range: HistoryTimeRange) {
         _uiState.update { it.copy(selectedRange = range) }
+    }
+
+    fun selectSource(source: WorkSource?) {
+        _uiState.update { it.copy(selectedSource = source) }
+    }
+
+    fun resetFilters() {
+        _uiState.update { it.copy(selectedRange = HistoryTimeRange.ALL, selectedSource = null) }
     }
 
     fun clear() {

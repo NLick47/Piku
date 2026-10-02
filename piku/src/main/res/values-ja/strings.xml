@@ -159,6 +159,11 @@
     <string name="history_clear_confirm_message">すべての閲覧履歴をクリアしますか？</string>
     <string name="history_empty">閲覧履歴はありません</string>
     <string name="history_empty_range">この期間の閲覧履歴はありません</string>
+    <string name="history_empty_source">このソースの閲覧履歴はありません</string>
+    <string name="history_empty_filtered">条件に一致する閲覧履歴はありません</string>
+    <string name="history_filter_range">期間</string>
+    <string name="history_filter_source">ソース</string>
+    <string name="history_source_all">すべて</string>
     <string name="history_range_all">すべて</string>
     <string name="history_range_today">今日</string>
     <string name="history_range_3d">3日以内</string>

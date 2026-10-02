@@ -159,6 +159,11 @@
     <string name="history_clear_confirm_message">Clear all browsing history?</string>
     <string name="history_empty">No browsing history</string>
     <string name="history_empty_range">No browsing history in this period</string>
+    <string name="history_empty_source">No browsing history from this source</string>
+    <string name="history_empty_filtered">No browsing history matching the current filters</string>
+    <string name="history_filter_range">Time</string>
+    <string name="history_filter_source">Source</string>
+    <string name="history_source_all">All</string>
     <string name="history_range_all">All</string>
     <string name="history_range_today">Today</string>
     <string name="history_range_3d">3 days</string>

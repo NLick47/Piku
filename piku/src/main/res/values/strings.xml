@@ -160,7 +160,12 @@
     <string name="history_clear_confirm_message">确定要清空所有浏览记录吗？</string>
     <string name="history_empty">暂无浏览记录</string>
     <string name="history_empty_range">该时间段暂无浏览记录</string>
+    <string name="history_empty_source">该来源暂无浏览记录</string>
+    <string name="history_empty_filtered">该筛选条件下暂无浏览记录</string>
     <string name="history_filter_title">筛选</string>
+    <string name="history_filter_range">时间</string>
+    <string name="history_filter_source">来源</string>
+    <string name="history_source_all">全部</string>
     <string name="history_filter_clear">清空浏览记录</string>
     <string name="history_empty_range_action">查看全部</string>
     <string name="history_remove_action">删除</string>
