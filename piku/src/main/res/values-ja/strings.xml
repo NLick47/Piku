@@ -207,7 +207,10 @@
     <string name="collection_search_empty">一致する投稿がありません</string>
     <string name="collection_search_clear">クリア</string>
     <string name="collection_count_ratio">%1$d/%2$d</string>
-    <string name="collection_sort_title">並び替え</string>
+    <string name="collection_sort_source_title">並び替えとソース</string>
+    <string name="collection_filter_source">ソース</string>
+    <string name="collection_source_all">すべて</string>
+    <string name="collection_source_empty">このソースのお気に入りはありません</string>
     <string name="collection_sort_added">追加日時</string>
     <string name="collection_sort_added_sub">新しく追加した順</string>
     <string name="collection_sort_title_name">タイトル</string>

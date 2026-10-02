@@ -207,7 +207,10 @@
     <string name="collection_search_empty">No matching posts</string>
     <string name="collection_search_clear">Clear</string>
     <string name="collection_count_ratio">%1$d/%2$d</string>
-    <string name="collection_sort_title">Sort by</string>
+    <string name="collection_sort_source_title">Sort &amp; source</string>
+    <string name="collection_filter_source">Source</string>
+    <string name="collection_source_all">All</string>
+    <string name="collection_source_empty">No favorites from this source</string>
     <string name="collection_sort_added">Date added</string>
     <string name="collection_sort_added_sub">Newest additions first</string>
     <string name="collection_sort_title_name">Title</string>

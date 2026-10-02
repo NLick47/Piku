@@ -79,13 +79,17 @@ data class CollectionUiState(
     val view: CollectionView = CollectionView.Folders,
     /** 当前显示的列表（已按检索词过滤；排序由 SQL 完成） */
     val works: List<Work> = emptyList(),
-    /** 过滤前的作品数：检索时需要把「匹配数 / 总数」一起显示出来 */
+    /** 过滤前的作品数：区分"这个夹是空的"和"只是筛选后没剩几条"，也是工具栏显隐的依据 */
     val worksTotal: Int = 0,
+    /** 按源筛过之后、检索之前的数量：头部计数与检索匹配比的分母都用它 */
+    val sourceTotal: Int = 0,
     /** 当前视图的列表是否还在等数据源：用来区分"这个夹是空的"和"还没读出来" */
     val listLoading: Boolean = false,
     /** 渲染用的分段列表；按作者排序时一段一个作者 */
     val groups: List<CollectionGroup> = emptyList(),
     val sort: FolderSort = FolderSort.ADDED,
+    /** 按源筛选：null 表示不筛。会话内有效，换视图就重置，与检索词同款语义 */
+    val sourceFilter: WorkSource? = null,
     val query: String = "",
     val loaded: Boolean = false,
     /** 多选模式：仅在收藏夹详情内有效 */
@@ -191,16 +195,18 @@ class CollectionViewModel @Inject constructor(
         }
     }
 
-    /** 用当前的检索词与排序，把原始列表推导成 UI 直接渲染的形态 */
+    /** 用当前的来源筛选、检索词与排序，把原始列表推导成 UI 直接渲染的形态 */
     private fun publish() {
         val state = _uiState.value
+        val source = state.sourceFilter
+        val bySource = if (source == null) rawWorks else rawWorks.filter { it.source == source }
         val keyword = state.query.trim()
         val visible = if (keyword.isEmpty()) {
-            rawWorks
+            bySource
         } else {
             // 内存里过滤而不是走 SQL：中日文标题没有词边界，FTS 的分词器切不出子串，
             // LIKE '%kw%' 又用不上索引；列表本来就在内存里，直接 contains 最稳也最快
-            rawWorks.filter {
+            bySource.filter {
                 it.title.contains(keyword, ignoreCase = true) ||
                     it.authorName.contains(keyword, ignoreCase = true)
             }
@@ -210,6 +216,7 @@ class CollectionViewModel @Inject constructor(
             it.copy(
                 works = visible,
                 worksTotal = rawWorks.size,
+                sourceTotal = bySource.size,
                 listLoading = false,
                 groups = buildGroups(visible, it.sort),
                 // 列表一变就把看不见的选中项丢掉：否则「已选 N 个」会虚高，
@@ -261,6 +268,12 @@ class CollectionViewModel @Inject constructor(
         publish()
     }
 
+    fun setSourceFilter(source: WorkSource?) {
+        if (_uiState.value.sourceFilter == source) return
+        _uiState.update { it.copy(sourceFilter = source) }
+        publish()
+    }
+
     fun selectFolder(folder: FavoriteFolder) {
         switchView(CollectionView.InFolder(folder.id, folder.name))
     }
@@ -288,8 +301,10 @@ class CollectionViewModel @Inject constructor(
                 works = emptyList(),
                 groups = emptyList(),
                 worksTotal = 0,
+                sourceTotal = 0,
                 listLoading = true,
                 query = "",
+                sourceFilter = null,
                 selectionMode = false,
                 selectedIds = emptySet(),
                 actionWorkFolderIds = emptySet(),

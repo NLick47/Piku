@@ -219,7 +219,10 @@
     <string name="collection_search_empty">没有匹配的投稿</string>
     <string name="collection_search_clear">清除</string>
     <string name="collection_count_ratio">%1$d/%2$d</string>
-    <string name="collection_sort_title">排序方式</string>
+    <string name="collection_sort_source_title">排序与来源</string>
+    <string name="collection_filter_source">来源</string>
+    <string name="collection_source_all">全部</string>
+    <string name="collection_source_empty">该来源还没有收藏</string>
     <string name="collection_sort_added">加入时间</string>
     <string name="collection_sort_added_sub">新收藏的排在最前</string>
     <string name="collection_sort_title_name">标题</string>

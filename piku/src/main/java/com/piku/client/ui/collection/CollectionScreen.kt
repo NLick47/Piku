@@ -129,7 +129,9 @@ import com.piku.client.ui.source.SourceOpenViewModel
 import com.piku.client.ui.source.SourceWorkOpenHost
 import com.piku.client.domain.model.key
 import com.piku.client.domain.model.WorkKey
+import com.piku.client.domain.model.WorkSource
 import com.piku.client.ui.common.LoaderDots
+import com.piku.client.ui.common.labelRes
 import com.piku.client.ui.common.PikuBackButton
 import com.piku.client.ui.common.UserAvatar
 import com.piku.client.ui.common.WorkCard
@@ -231,6 +233,7 @@ fun CollectionScreen(
                 onQueryChange = viewModel::setQuery,
                 onClearQuery = viewModel::clearQuery,
                 onSortChange = viewModel::setSort,
+                onSourceFilterChange = viewModel::setSourceFilter,
                 onSearchFocusConsumed = viewModel::consumeSearchFocus,
             )
         }
@@ -906,6 +909,7 @@ private fun FolderDetailContent(
     onQueryChange: (String) -> Unit,
     onClearQuery: () -> Unit,
     onSortChange: (FolderSort) -> Unit,
+    onSourceFilterChange: (WorkSource?) -> Unit,
     onSearchFocusConsumed: () -> Unit,
 ) {
     var sortSheetOpen by remember { mutableStateOf(false) }
@@ -917,8 +921,8 @@ private fun FolderDetailContent(
     // 点圆钮展开时要顺手拉起键盘，和顶栏放大镜进来是同一件事，共用一个 autoFocus 通道
     var focusOnExpand by remember { mutableStateOf(false) }
     val gridState = rememberLazyStaggeredGridState()
-    // 换收藏夹、换排序、改检索词都要回到顶部：否则列表一收缩，滚动位置会停在旧位置上
-    LaunchedEffect(state.currentFolderId, state.allScope, state.sort, state.query) {
+    // 换收藏夹、换排序、换来源筛选、改检索词都要回到顶部：否则列表一收缩，滚动位置会停在旧位置上
+    LaunchedEffect(state.currentFolderId, state.allScope, state.sort, state.sourceFilter, state.query) {
         gridState.scrollToItem(0)
     }
     Column(Modifier.fillMaxSize()) {
@@ -989,7 +993,8 @@ private fun FolderDetailContent(
                             stringResource(
                                 R.string.collection_count_ratio,
                                 state.works.size,
-                                state.worksTotal,
+                                // 分母是按源筛过的数量：否则筛掉一半之后比例会对不上可见列表
+                                state.sourceTotal,
                             )
                         } else {
                             null
@@ -1022,10 +1027,10 @@ private fun FolderDetailContent(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        // 读列表期间不报数：那会儿 worksTotal 还是 0，先亮一个"0 个投稿"是假信息
+                        // 读列表期间不报数：那会儿 sourceTotal 还是 0，先亮一个"0 个投稿"是假信息
                         if (!state.listLoading) {
                             Text(
-                                text = stringResource(R.string.collection_work_count, state.worksTotal),
+                                text = stringResource(R.string.collection_work_count, state.sourceTotal),
                                 color = PikuColors.textFaint,
                                 fontSize = 12.sp,
                             )
@@ -1046,12 +1051,12 @@ private fun FolderDetailContent(
                             )
                         }
                     }
-                    // 排序圆钮：非默认排序时染 accent，不用多叠小圆点也能一眼看出来
+                    // 排序圆钮：排序或来源筛选偏离默认时染 accent，不用多叠小圆点也能一眼看出来
                     IconButton(onClick = { sortSheetOpen = true }) {
                         Icon(
                             imageVector = Icons.Outlined.SwapVert,
                             contentDescription = sortLabel(state.sort),
-                            tint = if (state.sort == FolderSort.ADDED) {
+                            tint = if (state.sort == FolderSort.ADDED && state.sourceFilter == null) {
                                 PikuColors.textPrimary
                             } else {
                                 PikuColors.accent
@@ -1088,6 +1093,16 @@ private fun FolderDetailContent(
                             R.string.collection_folder_empty
                         },
                     ),
+                    color = PikuColors.textSecondary,
+                    fontSize = 13.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 32.dp),
+                )
+            }
+            state.sourceTotal == 0 -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                // 有投稿但该来源一条没有：空态要说清是"这个来源里没有"而不是"夹是空的"
+                Text(
+                    text = stringResource(R.string.collection_source_empty),
                     color = PikuColors.textSecondary,
                     fontSize = 13.sp,
                     textAlign = TextAlign.Center,
@@ -1167,10 +1182,15 @@ private fun FolderDetailContent(
         if (sortSheetOpen) {
             SortSheet(
                 current = state.sort,
+                sourceFilter = state.sourceFilter,
                 dark = dark,
                 onSelect = {
                     sortSheetOpen = false
                     onSortChange(it)
+                },
+                onSelectSource = {
+                    sortSheetOpen = false
+                    onSourceFilterChange(it)
                 },
                 onDismiss = { sortSheetOpen = false },
             )
@@ -1832,20 +1852,27 @@ private fun CollectionSearchPill(
     }
 }
 
-/** 排序选择面板：单选列表，当前项打勾 */
+/**
+ * 排序与来源筛选面板：两段单选列表，当前项打勾。
+ * 任一段选中即关面板——列表在面板合上时立刻见效，两次打开也能各调一段。
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SortSheet(
     current: FolderSort,
+    sourceFilter: WorkSource?,
     dark: Boolean,
     onSelect: (FolderSort) -> Unit,
+    onSelectSource: (WorkSource?) -> Unit,
     onDismiss: () -> Unit,
 ) {
     PikuBottomSheet(
         onDismissRequest = onDismiss,
         dark = dark,
+        // 来源段把行数翻了一倍，小屏放不下
+        scrollable = true,
     ) {
-        PikuSheetTitle(text = stringResource(R.string.collection_sort_title))
+        PikuSheetTitle(text = stringResource(R.string.collection_sort_source_title))
         Spacer(Modifier.height(12.dp))
         FolderSort.entries.forEachIndexed { index, sort ->
             if (index > 0) Spacer(Modifier.height(6.dp))
@@ -1855,6 +1882,27 @@ private fun SortSheet(
                 selected = sort == current,
                 dark = dark,
                 onClick = { onSelect(sort) },
+            )
+        }
+        Spacer(Modifier.height(16.dp))
+        PikuSheetSubtitle(text = stringResource(R.string.collection_filter_source))
+        Spacer(Modifier.height(8.dp))
+        SortRow(
+            label = stringResource(R.string.collection_source_all),
+            subtitle = null,
+            selected = sourceFilter == null,
+            dark = dark,
+            onClick = { onSelectSource(null) },
+        )
+        // 从枚举生成：将来接新源，这里自动多出一行
+        WorkSource.entries.forEach { source ->
+            Spacer(Modifier.height(6.dp))
+            SortRow(
+                label = stringResource(source.labelRes()),
+                subtitle = null,
+                selected = sourceFilter == source,
+                dark = dark,
+                onClick = { onSelectSource(source) },
             )
         }
     }
