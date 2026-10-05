@@ -5,7 +5,10 @@ import com.piku.client.data.remote.apiCall
 import com.piku.client.data.auth.PixivAuthEndpoints
 import com.piku.client.data.auth.PixivAuthRepository
 import com.piku.client.data.auth.PixivAuthRuntime
+import com.piku.client.data.remote.ImageRouteController
+import com.piku.client.data.remote.ImageUpstream
 import com.piku.client.data.local.QuietFollowStore
+import com.piku.client.data.source.PixivSearchSource
 import com.piku.client.domain.model.AppError
 import com.piku.client.data.remote.pixiv.PixivAppActionResponse
 import com.piku.client.data.remote.pixiv.PixivApi
@@ -18,6 +21,7 @@ import com.piku.client.data.remote.pixiv.PixivIllustBody
 import com.piku.client.data.remote.pixiv.PixivWorkCard
 import com.piku.client.data.remote.pixiv.PixivPageUrls
 import com.piku.client.data.remote.pixiv.PixivRankingItem
+import com.piku.client.data.remote.pixiv.PixivSearchItem
 import com.piku.client.data.remote.pixiv.PixivUserPreview
 import com.piku.client.data.remote.pixiv.PixivUserDetailResponse
 import com.piku.client.data.remote.pixiv.PixivTrendTag
@@ -51,6 +55,8 @@ class PixivRepository @Inject constructor(
     private val runtime: PixivAuthRuntime,
     // 会话判定决定详情走哪条链路
     private val pixivAuth: PixivAuthRepository,
+    // 卡片取哪档缩略图由图片线路实测速率决定（速度优先，够快才升未裁切档）
+    private val imageRoute: ImageRouteController,
     private val quietFollowStore: QuietFollowStore,
 ) {
 
@@ -134,26 +140,81 @@ class PixivRepository @Inject constructor(
         response.illusts.mapNotNull { it.toWork() }
     }
 
+    /**
+     * 搜作品。有会话走 app-api（登录限定/R-18 只有这条路拿得到，参数全量生效）；
+     * 未登录或会话失效（自动重登恢复前的窗口期）回落网页端匿名搜索——详情页登录墙
+     * 同款分链路，别让未登录的搜索卡在错误墙上。
+     *
+     * 缩略图档位按图片线路实测速率定：速度优先取方裁小图（与主页同速），
+     * 线路够快（预算内落得了地）才升未裁切档。详情页看图器的升档判断同一套。
+     */
     suspend fun searchWorks(
         word: String,
         searchTarget: String?,
         sort: String?,
         duration: String?,
         hideAi: Boolean,
-        offset: Int,
+        page: Int,
+    ): Result<SourcePage> {
+        val hdThumb = imageRoute.worthFullImageInline(ImageUpstream.PIXIV)
+        if (pixivAuth.hasSession()) {
+            val appResult = apiCall {
+                val signature = endpoints.clientSignature(runtime.now())
+                val response = try {
+                    appApi.searchIllust(
+                        clientTime = signature.time,
+                        clientHash = signature.hash,
+                        word = word,
+                        searchTarget = searchTarget,
+                        sort = sort,
+                        duration = duration,
+                        searchAiType = if (hideAi) 0 else null,
+                        offset = page * PixivAppConfig.PAGE_SIZE,
+                    )
+                } catch (e: HttpException) {
+                    throw when (e.code()) {
+                        401 -> AppError.LoginRequired
+                        else -> e
+                    }
+                }
+                SourcePage(items = response.illusts.mapNotNull { it.toWork(hdThumb) })
+            }
+            val error = appResult.exceptionOrNull()
+            if (error == null || error !is AppError.LoginRequired) return appResult
+        }
+        return webSearchWorks(word, searchTarget, sort, page, hdThumb)
+    }
+
+    /**
+     * 网页端匿名搜索。期间与 AI 过滤不支持（匿名请求被服务端忽略），人気順也不生效，
+     * 一律映射回新着；target/sort 由 app-api 枚举翻译成网页端参数，插件契约不变。
+     * 匿名翻页钳在 lastPage，越界请求返回的数据与末页相同，这里直接判空让 UI 落到尽头。
+     */
+    private suspend fun webSearchWorks(
+        word: String,
+        searchTarget: String?,
+        sort: String?,
+        page: Int,
+        hdThumb: Boolean,
     ): Result<SourcePage> = apiCall {
-        val signature = endpoints.clientSignature(runtime.now())
-        val response = appApi.searchIllust(
-            clientTime = signature.time,
-            clientHash = signature.hash,
+        val response = api.searchArtworks(
             word = word,
-            searchTarget = searchTarget,
-            sort = sort,
-            duration = duration,
-            searchAiType = if (hideAi) 0 else null,
-            offset = offset,
+            page = page + 1,
+            sMode = when (searchTarget) {
+                PixivSearchSource.TARGET_EXACT -> WEB_S_MODE_TAG_EXACT
+                PixivSearchSource.TARGET_TITLE -> WEB_S_MODE_TC
+                else -> WEB_S_MODE_TAG
+            },
+            order = if (sort == PixivSearchSource.SORT_OLD) WEB_ORDER_OLD else WEB_ORDER_NEW,
         )
-        SourcePage(items = response.illusts.mapNotNull { it.toWork() })
+        // 网页端信封 error=true 时 body 为空壳：不查标志会把失败静默渲染成"无结果"
+        if (response.error) throw AppError.Unknown
+        val result = response.body.illustManga
+        val inRange = result.lastPage <= 0 || page + 1 <= result.lastPage
+        SourcePage(
+            items = if (inRange) result.data.mapNotNull { it.toWork(hdThumb) } else emptyList(),
+            totalPages = result.lastPage.takeIf { it > 0 },
+        )
     }
 
     /** 搜小说：与搜作品同构，参数只有排序与 AI 过滤（对象/期间组外壳在小说档不展示） */
@@ -164,14 +225,22 @@ class PixivRepository @Inject constructor(
         offset: Int,
     ): Result<SourcePage> = apiCall {
         val signature = endpoints.clientSignature(runtime.now())
-        val response = appApi.searchNovel(
-            clientTime = signature.time,
-            clientHash = signature.hash,
-            word = word,
-            sort = sort,
-            searchAiType = if (hideAi) 0 else null,
-            offset = offset,
-        )
+        // 小说检索没有网页端匿名链路，401 归类成 LoginRequired 让外壳弹登录引导
+        val response = try {
+            appApi.searchNovel(
+                clientTime = signature.time,
+                clientHash = signature.hash,
+                word = word,
+                sort = sort,
+                searchAiType = if (hideAi) 0 else null,
+                offset = offset,
+            )
+        } catch (e: HttpException) {
+            throw when (e.code()) {
+                401 -> AppError.LoginRequired
+                else -> e
+            }
+        }
         SourcePage(items = response.novels.mapNotNull { it.toWork() })
     }
 
@@ -529,6 +598,58 @@ data class PixivIllustState(
 
 private const val TAG = "PikuDiag"
 
+private const val WEB_S_MODE_TAG = "s_tag"
+private const val WEB_S_MODE_TAG_EXACT = "s_tag_exact"
+private const val WEB_S_MODE_TC = "s_tc"
+private const val WEB_ORDER_NEW = "date_d"
+private const val WEB_ORDER_OLD = "date_asc"
+
+private val WEB_CROPPED_THUMB_SUFFIX = Regex("_(square|custom)1200\\.jpg$")
+
+private val WEB_SQUARE_THUMB_SUFFIX = Regex("_square1200\\.jpg$")
+
+/**
+ * 速度档缩略图：网页接口给的是 250 方裁小图。img-master 路径改写成详情首图同款
+ * `c/540x540_70/` + master1200 文件（实测 200）——更清晰一档，且与详情首图同名同文件，
+ * 详情页低清垫底（fileKey 比对）与共享转场得以命中；custom-thumb 路径实测不吃 540 前缀
+ * （404），保持接口原样。HD 档的升级见 [pixivProportionalThumb]。
+ */
+internal fun pixivSpeedTierThumb(url: String): String {
+    if (!url.startsWith("https://i.pximg.net/c/")) return url
+    if (!url.contains("/img-master/") || !WEB_SQUARE_THUMB_SUFFIX.containsMatchIn(url)) return url
+    val path = url.removePrefix("https://i.pximg.net/c/").substringAfter('/')
+    return "https://i.pximg.net/c/540x540_70/" + WEB_SQUARE_THUMB_SUFFIX.replace(path, "_master1200.jpg")
+}
+
+internal fun pixivProportionalThumb(url: String): String {
+    if (!url.startsWith("https://i.pximg.net/c/")) return url
+    if (!WEB_CROPPED_THUMB_SUFFIX.containsMatchIn(url)) return url
+    val path = url.removePrefix("https://i.pximg.net/c/").substringAfter('/')
+    return "https://i.pximg.net/" + WEB_CROPPED_THUMB_SUFFIX.replace(path, "_master1200.jpg")
+}
+
+internal fun PixivSearchItem.toWork(hdThumb: Boolean): Work? {
+    val illustId = id.toLongOrNull() ?: return null
+    if (illustId <= 0 || url.isBlank()) return null
+    return Work(
+        id = illustId,
+        authorId = userId.toLongOrNull() ?: 0,
+        authorName = userName,
+        authorAvatarUrl = profileImageUrl.ifBlank { null },
+        categoryCd = -1,
+        categoryName = "",
+        title = title,
+        // 速度优先按线路取小图（见 searchWorks 的档位决策），够快才换未裁切 master1200
+        thumbnailUrl = if (hdThumb) pixivProportionalThumb(url) else pixivSpeedTierThumb(url),
+        thumbWidth = width,
+        thumbHeight = height,
+        imageCount = pageCount,
+        r18 = xRestrict > 0,
+        ai = aiType == 2,
+        source = WorkSource.PIXIV,
+    )
+}
+
 /** 相关作品卡片只需要 id/标题/缩略图/作者/页数；id 解析不出来的是占位条目，直接丢掉 */
 internal fun PixivWorkCard.toWork(): Work? {
     val illustId = illustId
@@ -548,10 +669,13 @@ internal fun PixivWorkCard.toWork(): Work? {
     )
 }
 
-// 缩略图取 large medium/square_medium 是居中方裁 按比例卡片须用未裁的那档
-internal fun PixivAppIllust.toWork(): Work? {
+internal fun PixivAppIllust.toWork(hdThumb: Boolean = true): Work? {
     val illustId = illustId
-    val thumb = imageUrls.large.ifBlank { imageUrls.medium }.ifBlank { imageUrls.squareMedium }
+    val thumb = if (hdThumb) {
+        imageUrls.large.ifBlank { imageUrls.medium }.ifBlank { imageUrls.squareMedium }
+    } else {
+        imageUrls.medium.ifBlank { imageUrls.squareMedium }.ifBlank { imageUrls.large }
+    }
     if (illustId <= 0 || thumb.isBlank()) return null
     return Work(
         id = illustId,

@@ -61,7 +61,7 @@ class PixivSearchSource @Inject constructor(
             sort = filters[GROUP_SORT]?.ifBlank { null } ?: SORT_NEW,
             duration = filters[GROUP_DURATION]?.ifBlank { null },
             hideAi = filters[TOGGLE_HIDE_AI] == FILTER_TOGGLE_ON,
-            offset = page * PixivAppConfig.PAGE_SIZE,
+            page = page,
         )
     }
 

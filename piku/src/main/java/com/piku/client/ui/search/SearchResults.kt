@@ -92,7 +92,7 @@ internal fun SearchTabRow(
         ),
         selectedIndex = tabs.indexOf(selected),
         onSelect = { onSelect(tabs[it]) },
-        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 6.dp),
+        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 4.dp),
     )
 }
 @Composable
@@ -168,6 +168,8 @@ internal fun WorksTabContent(
 internal fun TagsTabContent(
     state: SearchUiState,
     isTablet: Boolean,
+    sourceLabel: String,
+    onSourceClick: () -> Unit,
     onLoginClick: () -> Unit,
     onRetry: () -> Unit,
     onLoadMore: () -> Unit,
@@ -185,7 +187,9 @@ internal fun TagsTabContent(
         if (selectedTag != null) {
             TagWorksHeader(
                 tag = selectedTag,
+                sourceLabel = sourceLabel,
                 onBack = onBackToSuggestions,
+                onSourceClick = onSourceClick,
                 showBack = canBackToSuggestions,
                 dark = dark,
             )
@@ -296,11 +300,17 @@ internal fun TagsTabContent(
     }
 }
 
-/** 作品模式顶栏：返回标签建议（不可用时只留标签名）+ 当前精确标签名 */
+/**
+ * 作品模式头部：一行装下返回标签建议 + 当前精确标签名 + 源 chip。
+ * 标签名与搜索框内容同源，仅作结果区上下文；源 chip 在本模式顶替筛选行
+ * （该行整行让给卡片），换源入口不缺席——种子源页面它就是"当前在哪个源"的可见凭据。
+ */
 @Composable
 private fun TagWorksHeader(
     tag: String,
+    sourceLabel: String,
     onBack: () -> Unit,
+    onSourceClick: () -> Unit,
     dark: Boolean,
     showBack: Boolean = true,
 ) {
@@ -308,7 +318,7 @@ private fun TagWorksHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 4.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+            .padding(start = 4.dp, end = 20.dp, top = 2.dp, bottom = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (showBack) {
@@ -325,8 +335,12 @@ private fun TagWorksHeader(
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
+            // 无返回按钮时（poipiku 匿名标签作品模式）补齐到 tab 行的 20dp 起始位
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = if (showBack) 4.dp else 16.dp),
         )
+        SourceChip(label = sourceLabel, onClick = onSourceClick)
     }
 }
 

@@ -74,7 +74,7 @@ object Routes {
 
     const val AUTHOR_PROFILE = "author/{source}/{userId}?userName={userName}"
     const val EDIT_POST = "edit_post/{workId}"
-    const val SEARCH = "search/{keyword}?tag={tag}"
+    const val SEARCH = "search/{keyword}?tag={tag}&source={source}"
     const val MAX_DETAIL_DEPTH = 3
 
     fun home() = "home"
@@ -84,9 +84,11 @@ object Routes {
      * # 前缀直达标签 tab，@ 前缀直达用户 tab。
      * [tag] 非空 = 精确标签名，落地即该标签的作品列表（详情页点标签进来，跳过标签建议）；
      * 需与带 # 前缀的 keyword 搭配使用（keyword 决定 tab 与分页可用性）。
+     * [source] 非空 = 作品所在源（详情页点标签进来）：本次搜索固定在该源（源 chip 可见可切），
+     * 不写回全局首页源——点标签是隐式动作，不替用户改首页设置；null = 跟随全局首页源。
      */
-    fun search(keyword: String = "", tag: String = "") =
-        "search/${Uri.encode(keyword)}" + if (tag.isEmpty()) "" else "?tag=${Uri.encode(tag)}"
+    fun search(keyword: String = "", tag: String = "", source: WorkSource? = null) =
+        "search/${Uri.encode(keyword)}?tag=${Uri.encode(tag)}&source=${source?.name.orEmpty()}"
 
     fun userWorks(userId: Long, userName: String = "") =
         "user_works/$userId?userName=${Uri.encode(userName)}"
@@ -379,6 +381,7 @@ fun AppNavHost(
             arguments = listOf(
                 navArgument("keyword") { type = NavType.StringType; defaultValue = "" },
                 navArgument("tag") { type = NavType.StringType; defaultValue = "" },
+                navArgument("source") { type = NavType.StringType; defaultValue = "" },
             ),
         ) {
             ProvideNavSharedScope(sharedScope, this) {
@@ -388,8 +391,9 @@ fun AppNavHost(
                         navController.navigate(sourceOpen.loginRoute(source) ?: Routes.LOGIN)
                     },
                     onManageTags = { navController.navigate(Routes.TAGS) },
-                    onSearch = { keyword ->
-                        navController.navigate(Routes.search(keyword)) {
+                    // 换词重搜另起一页：把当前页生效的源带过去，种子源不因重搜悄悄回落全局源
+                    onSearch = { keyword, source ->
+                        navController.navigate(Routes.search(keyword, source = source)) {
                             popUpTo(Routes.SEARCH) { inclusive = true }
                         }
                     },
@@ -534,9 +538,12 @@ fun AppNavHost(
                     onBack = safePopBack,
                     onHomeClick = safePopToHome,
                     // 点标签：压栈进统一搜索页并直达该标签的作品列表。详情页留在返回栈里
-                    // （回退即回到作品，不用重新找），关键词带 # 前缀让搜索页落在标签 tab
+                    // （回退即回到作品，不用重新找），关键词带 # 前缀让搜索页落在标签 tab；
+                    // 源固定在本作品源，pixiv 标签不落到 poipiku 源去搜
                     onTagClick = { tag ->
-                        navController.navigate(Routes.search("#$tag", tag = tag))
+                        navController.navigate(
+                            Routes.search("#$tag", tag = tag, source = WorkSource.POIPIKU),
+                        )
                     },
                     onRelatedWorkClick = { authorId, workId, thumbnailUrl ->
                         // 相关作品同样预热首图
@@ -608,6 +615,11 @@ fun AppNavHost(
                     onHomeClick = safePopToHome,
                     onOpenAuthor = openAuthorOfWork,
                     onRelatedClick = openRelatedSourceWork,
+                    onTagClick = { tag ->
+                        navController.navigate(
+                            Routes.search("#$tag", tag = tag, source = work.source),
+                        )
+                    },
                     onLoginClick = { navController.navigate(Routes.PIXIV_LOGIN) },
                 )
             }

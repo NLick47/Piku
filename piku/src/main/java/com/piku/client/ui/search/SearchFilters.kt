@@ -142,7 +142,7 @@ internal fun SearchFilterBar(
 
 /** 换源入口：源名 + ›，点开换源面板；文案与首页换源面板、结果卡角标同一套 */
 @Composable
-private fun SourceChip(
+internal fun SourceChip(
     label: String,
     onClick: () -> Unit,
 ) {

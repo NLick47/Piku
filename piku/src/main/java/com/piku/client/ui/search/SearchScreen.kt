@@ -96,7 +96,7 @@ private const val FOCUS_DELAY_MS = 300L
 @Composable
 fun SearchScreen(
     onBack: () -> Unit,
-    onSearch: (String) -> Unit,
+    onSearch: (String, WorkSource) -> Unit,
     onWorkClick: (Work) -> Unit,
     onUserClick: (WorkSource, FollowUser) -> Unit,
     onOpenLink: (SourceLink) -> Unit,
@@ -168,7 +168,7 @@ fun SearchScreen(
             return
         }
         viewModel.record(keyword)
-        onSearch(keyword.take(MAX_KEYWORD_LENGTH))
+        onSearch(keyword.take(MAX_KEYWORD_LENGTH), state.source)
     }
 
     fun submit(raw: String) {
@@ -250,29 +250,33 @@ fun SearchScreen(
                             onSelect = viewModel::selectTab,
                         )
                         // 换源是整页动作：源 chip 三个 tab 常驻居首；筛选摘要只在作品 tab
-                        // 且插件声明了条件时出现（面板与摘要行都只看可见组，小说档下期间/对象组退场）
+                        // 且插件声明了条件时出现（面板与摘要行都只看可见组，小说档下期间/对象组退场）。
+                        // 标签作品模式例外：源 chip 挪进标签头行，筛选行整行让给卡片
+                        val tagWorksMode = state.tab == SearchTab.TAGS && state.selectedTagName != null
                         val hasFilterSpec = state.visibleFilterGroups.isNotEmpty() || state.filterToggles.isNotEmpty()
                         val sourceLabel = stringResource(viewModel.homeSourceLabelRes(state.source))
-                        SearchFilterBar(
-                            sourceLabel = sourceLabel,
-                            showFilters = state.tab == SearchTab.WORKS && state.pluginActive && hasFilterSpec,
-                            groups = state.visibleFilterGroups,
-                            toggles = state.filterToggles,
-                            selected = state.selectedFilters,
-                            onSourceClick = { showSourceSheet = true },
-                            onResetGroup = { groupId ->
-                                val defaultId = state.visibleFilterGroups
-                                    .firstOrNull { it.id == groupId }
-                                    ?.options?.firstOrNull { it.default }?.id
-                                if (defaultId != null) {
-                                    viewModel.applyFilters(state.selectedFilters + (groupId to defaultId))
-                                }
-                            },
-                            onResetToggle = { toggleId ->
-                                viewModel.applyFilters(state.selectedFilters - toggleId)
-                            },
-                            onOpenSheet = { showFilterSheet = true },
-                        )
+                        if (!tagWorksMode) {
+                            SearchFilterBar(
+                                sourceLabel = sourceLabel,
+                                showFilters = state.tab == SearchTab.WORKS && state.pluginActive && hasFilterSpec,
+                                groups = state.visibleFilterGroups,
+                                toggles = state.filterToggles,
+                                selected = state.selectedFilters,
+                                onSourceClick = { showSourceSheet = true },
+                                onResetGroup = { groupId ->
+                                    val defaultId = state.visibleFilterGroups
+                                        .firstOrNull { it.id == groupId }
+                                        ?.options?.firstOrNull { it.default }?.id
+                                    if (defaultId != null) {
+                                        viewModel.applyFilters(state.selectedFilters + (groupId to defaultId))
+                                    }
+                                },
+                                onResetToggle = { toggleId ->
+                                    viewModel.applyFilters(state.selectedFilters - toggleId)
+                                },
+                                onOpenSheet = { showFilterSheet = true },
+                            )
+                        }
                         when (state.tab) {
                             SearchTab.WORKS -> WorksTabContent(
                                 state = state,
@@ -298,6 +302,8 @@ fun SearchScreen(
                             SearchTab.TAGS -> TagsTabContent(
                                 state = state,
                                 isTablet = isTablet,
+                                sourceLabel = sourceLabel,
+                                onSourceClick = { showSourceSheet = true },
                                 onLoginClick = handleLoginClick,
                                 onRetry = viewModel::retryTags,
                                 onLoadMore = viewModel::loadMoreTags,
@@ -383,7 +389,7 @@ private fun SearchTopBar(
             .fillMaxWidth()
             .background(if (dark) GlassHeaderTintDark else GlassHeaderTintLight)
             .statusBarsPadding()
-            .padding(start = 4.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+            .padding(start = 4.dp, end = 16.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         PikuBackButton(

@@ -136,6 +136,42 @@ data class PixivIllustTags(
 @Serializable
 data class PixivTag(val tag: String = "")
 
+@Serializable
+data class PixivSearchResponse(
+    val error: Boolean = false,
+    val body: PixivSearchBody = PixivSearchBody(),
+)
+
+@Serializable
+data class PixivSearchBody(
+    val illustManga: PixivSearchResult = PixivSearchResult(),
+)
+
+@Serializable
+data class PixivSearchResult(
+    val data: List<PixivSearchItem> = emptyList(),
+    val total: Int = 0,
+    /** 翻页上限（1 基页码）。匿名实测钳在 10 页，越界请求返回的数据与末页相同 */
+    @SerialName("lastPage") val lastPage: Int = 0,
+)
+
+/** 网页端搜索条目；url 是方裁缩略图（/c/250x250_80_a2/ 前缀），升清档时改写为未裁切 master1200 */
+@Serializable
+data class PixivSearchItem(
+    @Serializable(with = FlexibleStringSerializer::class) val id: String = "",
+    val title: String = "",
+    val url: String = "",
+    @SerialName("userId") val userId: String = "",
+    @SerialName("userName") val userName: String = "",
+    @SerialName("profileImageUrl") val profileImageUrl: String = "",
+    @SerialName("pageCount") val pageCount: Int = 1,
+    @SerialName("xRestrict") val xRestrict: Int = 0,
+    /** 1=非 AI 生成 2=AI 生成（app-api 同义字段叫 illustAiType） */
+    @SerialName("aiType") val aiType: Int = 1,
+    val width: Int = 0,
+    val height: Int = 0,
+)
+
 interface PixivApi {
 
     /** 单个作品的全部分页。匿名可看的作品直接返回；登录墙作品 error=true */
@@ -158,6 +194,17 @@ interface PixivApi {
         @Path("illustId") illustId: Long,
         @Query("limit") limit: Int = PixivApiConfig.RECOMMEND_LIMIT,
     ): PixivRecommendResponse
+
+    @GET("ajax/search/artworks/{word}")
+    suspend fun searchArtworks(
+        @Path("word") word: String,
+        @Query("word") wordQuery: String = word,
+        @Query("p") page: Int,
+        @Query("s_mode") sMode: String,
+        @Query("order") order: String,
+        @Query("mode") mode: String = "all",
+        @Query("type") type: String = "all",
+    ): PixivSearchResponse
 
     @GET("ranking.php")
     suspend fun ranking(

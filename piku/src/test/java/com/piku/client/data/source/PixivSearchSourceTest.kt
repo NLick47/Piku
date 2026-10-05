@@ -5,11 +5,13 @@ import com.piku.client.data.auth.PixivAuthApi
 import com.piku.client.data.auth.PixivAuthRepository
 import com.piku.client.data.auth.PixivAuthRuntime
 import com.piku.client.data.auth.PixivAuthStore
+import com.piku.client.data.auth.PixivToken
 import com.piku.client.data.local.CredentialCipher
 import com.piku.client.data.local.CredentialStorage
 import com.piku.client.data.local.InMemorySharedPreferences
 import com.piku.client.data.local.QuietFollowStore
 import com.piku.client.data.local.SettingsRepository
+import com.piku.client.data.remote.ImageRouteController
 import com.piku.client.data.remote.PikuJson
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.ResponseBody
@@ -31,13 +33,20 @@ import com.piku.client.data.remote.pixiv.PixivNovelsResponse
 import com.piku.client.data.remote.pixiv.PixivPagesResponse
 import com.piku.client.data.remote.pixiv.PixivRankingResponse
 import com.piku.client.data.remote.pixiv.PixivRecommendResponse
+import com.piku.client.data.remote.pixiv.PixivSearchBody
+import com.piku.client.data.remote.pixiv.PixivSearchItem
+import com.piku.client.data.remote.pixiv.PixivSearchResponse
+import com.piku.client.data.remote.pixiv.PixivSearchResult
 import com.piku.client.data.remote.pixiv.PixivTrendTagsResponse
 import com.piku.client.data.remote.pixiv.PixivUserDetailResponse
 import com.piku.client.data.remote.pixiv.PixivUserPreview
 import com.piku.client.data.remote.pixiv.PixivUserPreviewsResponse
 import com.piku.client.data.repository.PixivRepository
+import com.piku.client.data.repository.pixivProportionalThumb
 import com.piku.client.data.repository.toFollowUser
 import com.piku.client.data.repository.toTrendingTag
+import com.piku.client.data.repository.toWork
+import com.piku.client.domain.model.AppError
 import com.piku.client.domain.model.FollowUser
 import com.piku.client.domain.source.FILTER_TOGGLE_ON
 import com.piku.client.domain.source.SourceAuthorOpen
@@ -49,10 +58,35 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import retrofit2.HttpException
+import retrofit2.Response
 
 class PixivSearchSourceTest {
 
     private class FakeApi : PixivApi {
+        data class WebSearchCall(
+            val word: String,
+            val page: Int,
+            val sMode: String,
+            val order: String,
+        )
+
+        val webSearchCalls = mutableListOf<WebSearchCall>()
+        var webSearchResponse = PixivSearchResponse()
+
+        override suspend fun searchArtworks(
+            word: String,
+            wordQuery: String,
+            page: Int,
+            sMode: String,
+            order: String,
+            mode: String,
+            type: String,
+        ): PixivSearchResponse {
+            webSearchCalls.add(WebSearchCall(word, page, sMode, order))
+            return webSearchResponse
+        }
+
         override suspend fun ranking(mode: String, content: String, page: Int, format: String): PixivRankingResponse =
             PixivRankingResponse()
 
@@ -81,6 +115,10 @@ class PixivSearchSourceTest {
         val followCalls = mutableListOf<Pair<Long, Boolean>>()
         var searchResponse = PixivIllustsResponse()
         var userResponse = PixivUserPreviewsResponse()
+
+        /** 非空时 searchIllust/searchNovel 抛该异常（模拟会话失效 401） */
+        var searchError: HttpException? = null
+        var novelSearchError: HttpException? = null
 
         override suspend fun recommended(
             clientTime: String,
@@ -121,6 +159,7 @@ class PixivSearchSourceTest {
             searchCalls.add(
                 SearchCall(word, searchTarget, sort, duration, searchAiType, filter, offset),
             )
+            searchError?.let { throw it }
             return searchResponse
         }
 
@@ -220,6 +259,7 @@ class PixivSearchSourceTest {
             novelSearchCalls.add(
                 SearchCall(word, null, sort, null, searchAiType, filter, offset),
             )
+            novelSearchError?.let { throw it }
             return PixivNovelsResponse()
         }
 
@@ -285,22 +325,45 @@ class PixivSearchSourceTest {
         ): PixivAppActionResponse = PixivAppActionResponse()
     }
 
-    private fun repository(appApi: FakeAppApi): PixivRepository = PixivRepository(
-        api = FakeApi(),
+    private fun repository(
+        appApi: FakeAppApi,
+        webApi: FakeApi = FakeApi(),
+        loggedIn: Boolean = false,
+    ): PixivRepository = PixivRepository(
+        api = webApi,
         appApi = appApi,
         endpoints = PixivAuthEndpoints(),
         runtime = PixivAuthRuntime(dispatcher = Dispatchers.Unconfined, now = { FIXED_NOW }),
-        pixivAuth = loggedOutPixivAuth(),
+        pixivAuth = if (loggedIn) loggedInPixivAuth() else loggedOutPixivAuth(),
+        imageRoute = testImageRoute(),
         quietFollowStore = QuietFollowStore(InMemorySharedPreferences()),
     )
 
-    // 未登录会话：详情走网页端链路，与本测试改前的行为一致
+    /** 无测速样本的线路控制器：worthFullImageInline 稳定给 false（速度优先档） */
+    private fun testImageRoute(): ImageRouteController = ImageRouteController(
+        settings = SettingsRepository(InMemorySharedPreferences()),
+        prefs = InMemorySharedPreferences(),
+    )
+
+    // 未登录会话：详情与搜索走网页端链路
     private fun loggedOutPixivAuth(): PixivAuthRepository = PixivAuthRepository(
         api = FakePixivAuthApi(),
         store = PixivAuthStore(InMemoryStorage(), FakeCipher(), PikuJson),
         endpoints = PixivAuthEndpoints(),
         runtime = PixivAuthRuntime(dispatcher = Dispatchers.Unconfined, now = { FIXED_NOW }),
     )
+
+    // 已登录会话：搜索走 app-api
+    private fun loggedInPixivAuth(): PixivAuthRepository {
+        val store = PixivAuthStore(InMemoryStorage(), FakeCipher(), PikuJson)
+        store.save(PixivToken(accessToken = "at", refreshToken = "rt", expiresAt = Long.MAX_VALUE))
+        return PixivAuthRepository(
+            api = FakePixivAuthApi(),
+            store = store,
+            endpoints = PixivAuthEndpoints(),
+            runtime = PixivAuthRuntime(dispatcher = Dispatchers.Unconfined, now = { FIXED_NOW }),
+        )
+    }
 
     private class FakePixivAuthApi : PixivAuthApi {
         override suspend fun token(
@@ -327,8 +390,12 @@ class PixivSearchSourceTest {
         }
     }
 
-    private fun source(appApi: FakeAppApi): PixivSearchSource =
-        PixivSearchSource(repository(appApi))
+    private fun source(
+        appApi: FakeAppApi,
+        webApi: FakeApi = FakeApi(),
+        loggedIn: Boolean = false,
+    ): PixivSearchSource =
+        PixivSearchSource(repository(appApi, webApi, loggedIn))
 
     private companion object {
         const val FIXED_NOW = 1_700_000_000_000L
@@ -390,7 +457,7 @@ class PixivSearchSourceTest {
     @Test
     fun defaultFiltersOmitOptionalParams() = runTest {
         val appApi = FakeAppApi()
-        val impl = source(appApi)
+        val impl = source(appApi, loggedIn = true)
         val defaults = mapOf(
             PixivSearchSource.GROUP_SORT to PixivSearchSource.SORT_NEW,
             PixivSearchSource.GROUP_TARGET to PixivSearchSource.TARGET_PARTIAL,
@@ -412,7 +479,7 @@ class PixivSearchSourceTest {
     @Test
     fun filtersMapToApiParamsAndOffset() = runTest {
         val appApi = FakeAppApi()
-        val impl = source(appApi)
+        val impl = source(appApi, loggedIn = true)
         val filters = mapOf(
             PixivSearchSource.GROUP_SORT to PixivSearchSource.SORT_POPULAR,
             PixivSearchSource.GROUP_TARGET to PixivSearchSource.TARGET_TITLE,
@@ -433,7 +500,7 @@ class PixivSearchSourceTest {
     @Test
     fun tagWorksForceExactMatch() = runTest {
         val appApi = FakeAppApi()
-        val impl = source(appApi)
+        val impl = source(appApi, loggedIn = true)
 
         impl.searchTagWorks(
             "東方Project",
@@ -445,6 +512,153 @@ class PixivSearchSourceTest {
         )
 
         assertEquals(PixivSearchSource.TARGET_EXACT, appApi.searchCalls.single().searchTarget)
+    }
+
+
+    @Test
+    fun anonymousSearchRoutesToWebEndpoint() = runTest {
+        val appApi = FakeAppApi()
+        val webApi = FakeApi().apply {
+            webSearchResponse = PixivSearchResponse(
+                body = PixivSearchBody(
+                    illustManga = PixivSearchResult(data = listOf(searchItem(id = "1")), lastPage = 10),
+                ),
+            )
+        }
+
+        val page = source(appApi, webApi).searchWorks("東方", emptyMap(), 0).getOrThrow()
+
+        assertEquals(0, appApi.searchCalls.size)
+        val call = webApi.webSearchCalls.single()
+        assertEquals("東方", call.word)
+        assertEquals(1, call.page)
+        assertEquals("s_tag", call.sMode)
+        assertEquals("date_d", call.order)
+        assertEquals(listOf(1L), page.items.map { it.id })
+    }
+
+    @Test
+    fun anonymousTagSearchUsesExactTagMode() = runTest {
+        val webApi = FakeApi()
+
+        source(FakeAppApi(), webApi).searchTagWorks("東方Project", emptyMap(), 0)
+
+        assertEquals("s_tag_exact", webApi.webSearchCalls.single().sMode)
+    }
+
+    @Test
+    fun anonymousSearchMapsSortAndPopularDegradesToNew() = runTest {
+        val webApi = FakeApi()
+        val impl = source(FakeAppApi(), webApi)
+
+        impl.searchWorks("x", mapOf(PixivSearchSource.GROUP_SORT to PixivSearchSource.SORT_OLD), 0)
+        assertEquals("date_asc", webApi.webSearchCalls.first().order)
+
+        impl.searchWorks("x", mapOf(PixivSearchSource.GROUP_SORT to PixivSearchSource.SORT_POPULAR), 0)
+        assertEquals("date_d", webApi.webSearchCalls.last().order)
+    }
+
+    @Test
+    fun webSearchBeyondLastPageReturnsEmpty() = runTest {
+        val webApi = FakeApi().apply {
+            webSearchResponse = PixivSearchResponse(
+                body = PixivSearchBody(illustManga = PixivSearchResult(data = listOf(searchItem()), lastPage = 10)),
+            )
+        }
+        val impl = source(FakeAppApi(), webApi)
+
+        val last = impl.searchWorks("x", emptyMap(), 9).getOrThrow()
+        assertEquals(listOf(1L), last.items.map { it.id })
+
+        val clamped = impl.searchWorks("x", emptyMap(), 10).getOrThrow()
+        assertTrue(clamped.items.isEmpty())
+    }
+
+    /** 会话失效（401）回落网页端匿名搜索，不拿错误墙挡用户 */
+    @Test
+    fun expiredSessionFallsBackToWebSearch() = runTest {
+        val appApi = FakeAppApi().apply {
+            searchError = HttpException(Response.error<Any>(401, "".toResponseBody(null)))
+        }
+        val webApi = FakeApi().apply {
+            webSearchResponse = PixivSearchResponse(
+                body = PixivSearchBody(illustManga = PixivSearchResult(data = listOf(searchItem(id = "9")))),
+            )
+        }
+
+        val page = source(appApi, webApi, loggedIn = true).searchWorks("x", emptyMap(), 0).getOrThrow()
+
+        assertEquals(1, appApi.searchCalls.size)
+        assertEquals(listOf(9L), page.items.map { it.id })
+    }
+
+    /** 小说检索没有网页端匿名链路：401 归类 LoginRequired，外壳据此弹登录引导而非解析失败 */
+    @Test
+    fun novelSearchSessionExpiredMapsToLoginRequired() = runTest {
+        val appApi = FakeAppApi().apply {
+            novelSearchError = HttpException(Response.error<Any>(401, "".toResponseBody(null)))
+        }
+
+        val error = source(appApi, loggedIn = true)
+            .searchNovels("お嬢", emptyMap(), 0)
+            .exceptionOrNull()
+
+        assertTrue(error is AppError.LoginRequired)
+    }
+
+    /** 高清档映射：方裁缩略图升级未裁切 master1200，比例/R18/AI 随条目走 */
+    @Test
+    fun webSearchItemMapsToWorkCard() {
+        val work = searchItem(id = "7").toWork(hdThumb = true)!!
+
+        assertEquals(7L, work.id)
+        assertEquals(11L, work.authorId)
+        assertEquals("t7", work.title)
+        assertEquals(1900, work.thumbWidth)
+        assertEquals(1080, work.thumbHeight)
+        assertEquals(2, work.imageCount)
+        assertTrue(work.r18)
+        assertTrue(work.ai)
+        assertEquals(
+            "https://i.pximg.net/img-master/img/2026/10/06/03/18/15/7_p0_master1200.jpg",
+            work.thumbnailUrl,
+        )
+    }
+
+    /** 速度档映射：img-master 项改写成详情同款 540 裁切（垫底/转场可命中），custom-thumb 项原样 */
+    @Test
+    fun webSearchItemSpeedTierByShape() {
+        val imgMaster = searchItem(id = "7")
+        val speedWork = imgMaster.toWork(hdThumb = false)!!
+        assertEquals(
+            "https://i.pximg.net/c/540x540_70/img-master/img/2026/10/06/03/18/15/7_p0_master1200.jpg",
+            speedWork.thumbnailUrl,
+        )
+
+        val customThumb = searchItem(
+            id = "8",
+            url = "https://i.pximg.net/c/250x250_80_a2/custom-thumb/img/2026/10/06/03/39/34/8_p0_custom1200.jpg",
+        )
+        assertEquals(customThumb.url, customThumb.toWork(hdThumb = false)!!.thumbnailUrl)
+    }
+
+    @Test
+    fun webThumbUpgradeKeepsUnknownShapes() {
+        // 无 /c/ 裁剪前缀：原样
+        assertEquals(
+            "https://i.pximg.net/img-master/img/a/1_p0_master1200.jpg",
+            pixivProportionalThumb("https://i.pximg.net/img-master/img/a/1_p0_master1200.jpg"),
+        )
+        // 有裁剪前缀但后缀不认识：原样（宁可图方不可图裂）
+        assertEquals(
+            "https://i.pximg.net/c/250x250_80_a2/img-master/img/a/1_p0.jpg",
+            pixivProportionalThumb("https://i.pximg.net/c/250x250_80_a2/img-master/img/a/1_p0.jpg"),
+        )
+        // custom1200（新作品 custom-thumb 形态）同样升级
+        assertEquals(
+            "https://i.pximg.net/custom-thumb/img/a/2_p0_master1200.jpg",
+            pixivProportionalThumb("https://i.pximg.net/c/250x250_80_a2/custom-thumb/img/a/2_p0_custom1200.jpg"),
+        )
     }
 
     /** 小说档走专用端点：不传 target/duration（接口没有这两个参数），排序与 AI 过滤照常 */
@@ -486,7 +700,7 @@ class PixivSearchSourceTest {
 
         val appApi = FakeAppApi().apply { searchResponse = PixivIllustsResponse(illusts = listOf(r18, normal)) }
 
-        val items = source(appApi).searchWorks("x", emptyMap(), 0).getOrThrow().items
+        val items = source(appApi, loggedIn = true).searchWorks("x", emptyMap(), 0).getOrThrow().items
         assertEquals(listOf(1L, 2L), items.map { it.id })
         assertTrue(items.first().r18)
     }
@@ -607,4 +821,20 @@ class PixivSearchSourceTest {
                 isFollowed = followed,
             ),
         )
+
+    private fun searchItem(
+        id: String = "1",
+        url: String = "https://i.pximg.net/c/250x250_80_a2/img-master/img/2026/10/06/03/18/15/${id}_p0_square1200.jpg",
+    ) = PixivSearchItem(
+        id = id,
+        title = "t$id",
+        url = url,
+        userId = "11",
+        userName = "user$id",
+        pageCount = 2,
+        xRestrict = 1,
+        aiType = 2,
+        width = 1900,
+        height = 1080,
+    )
 }

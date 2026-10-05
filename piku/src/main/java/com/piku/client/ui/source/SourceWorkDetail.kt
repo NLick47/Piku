@@ -102,6 +102,7 @@ internal fun SourceWorkDetailScreen(
     onOpenAuthor: (Work) -> Unit,
     /** 点相关作品：压栈进新详情；栈深上限由导航层统一把关 */
     onRelatedClick: (Work) -> Unit,
+    onTagClick: (String) -> Unit,
     /** 登录墙的「去登录」：进 pixiv 登录页；登录成功弹回本页后 VM 自动重拉 */
     onLoginClick: () -> Unit,
     viewModel: SourceWorkDetailViewModel = hiltViewModel(key = "source-detail-${work.key}"),
@@ -340,16 +341,7 @@ internal fun SourceWorkDetailScreen(
                     customTags = state.customTags.toSet(),
                     novelBodyLoading = state.novelBodyLoading,
                     onReadClick = viewModel::openNovelReader,
-                    onTagClick = { tag ->
-                        runCatching {
-                            context.startActivity(
-                                Intent(
-                                    Intent.ACTION_VIEW,
-                                    Uri.parse("https://www.pixiv.net/tags/${Uri.encode(tag)}"),
-                                ),
-                            )
-                        }
-                    },
+                    onTagClick = onTagClick,
                     onToggleCustomTag = viewModel::toggleCustomTag,
                     onAuthorClick = { onOpenAuthor(work) },
                     isFavorite = state.isFavorite,
@@ -395,16 +387,7 @@ internal fun SourceWorkDetailScreen(
                     },
                     // 长按给保存/分享用，要等页表
                     onImageLongPress = { page -> if (state.pages.isNotEmpty()) imageActionPage = page },
-                    onTagClick = { tag ->
-                        runCatching {
-                            context.startActivity(
-                                Intent(
-                                    Intent.ACTION_VIEW,
-                                    Uri.parse("https://www.pixiv.net/tags/${Uri.encode(tag)}"),
-                                ),
-                            )
-                        }
-                    },
+                    onTagClick = onTagClick,
                     customTags = state.customTags.toSet(),
                     onToggleCustomTag = viewModel::toggleCustomTag,
                     onAuthorClick = { onOpenAuthor(work) },

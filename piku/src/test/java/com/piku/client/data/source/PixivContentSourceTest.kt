@@ -9,6 +9,8 @@ import com.piku.client.data.local.CredentialCipher
 import com.piku.client.data.local.CredentialStorage
 import com.piku.client.data.local.InMemorySharedPreferences
 import com.piku.client.data.local.QuietFollowStore
+import com.piku.client.data.local.SettingsRepository
+import com.piku.client.data.remote.ImageRouteController
 import com.piku.client.data.remote.PikuJson
 import com.piku.client.data.auth.pixivClientHash
 import com.piku.client.data.remote.pixiv.PixivApi
@@ -38,6 +40,7 @@ import com.piku.client.data.remote.pixiv.PixivPageUrls
 import com.piku.client.data.remote.pixiv.PixivPagesResponse
 import com.piku.client.data.remote.pixiv.PixivRankingResponse
 import com.piku.client.data.remote.pixiv.PixivRecommendResponse
+import com.piku.client.data.remote.pixiv.PixivSearchResponse
 import com.piku.client.data.repository.PixivRepository
 import com.piku.client.data.repository.pixivNewFeedCursor
 import com.piku.client.data.repository.pixivTotalPages
@@ -76,6 +79,16 @@ class PixivContentSourceTest {
         }
 
         override suspend fun illustPages(illustId: Long): PixivPagesResponse = pagesResponse
+
+        override suspend fun searchArtworks(
+            word: String,
+            wordQuery: String,
+            page: Int,
+            sMode: String,
+            order: String,
+            mode: String,
+            type: String,
+        ): PixivSearchResponse = PixivSearchResponse()
 
         var detailResponse = PixivIllustResponse()
         override suspend fun illustDetail(illustId: Long): PixivIllustResponse = detailResponse
@@ -338,6 +351,10 @@ class PixivContentSourceTest {
             endpoints = PixivAuthEndpoints(),
             runtime = PixivAuthRuntime(dispatcher = Dispatchers.Unconfined, now = { FIXED_NOW }),
             pixivAuth = loggedOutPixivAuth(),
+            imageRoute = ImageRouteController(
+                settings = SettingsRepository(InMemorySharedPreferences()),
+                prefs = InMemorySharedPreferences(),
+            ),
             quietFollowStore = QuietFollowStore(InMemorySharedPreferences()),
         )
 

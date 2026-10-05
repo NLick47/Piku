@@ -174,6 +174,11 @@ class SearchViewModel @Inject constructor(
      */
     private val presetTag: String = (savedStateHandle["tag"] ?: "").trim()
 
+    private val routeSource: WorkSource? =
+        (savedStateHandle["source"] ?: "")
+            .takeIf { it.isNotEmpty() }
+            ?.let { name -> WorkSource.entries.firstOrNull { it.name == name } }
+
     /** 初始 tab：带精确标签 / # 前缀直达标签 tab，@ 前缀直达用户 tab，普通词停在作品 tab */
     private val initialTab: SearchTab = when {
         presetTag.isNotEmpty() -> SearchTab.TAGS
@@ -182,9 +187,10 @@ class SearchViewModel @Inject constructor(
         else -> SearchTab.WORKS
     }
 
-    // 当前首页源与其检索插件。跟随全局 homeSource：本页换源面板与首页抽屉写的是同一个设置，
-    // 变化由 onHomeSourceChanged 统一重置并乐观重搜
-    private var source: WorkSource = settingsRepository.homeSource.value
+    // 当前源与其检索插件。详情页点标签进来（routeSource 非空）时本次搜索固定在作品所在源：
+    // 源 chip 可见可切，显式切换仍写回全局，但隐式进来不替用户改首页设置。
+    // 换源面板与首页抽屉写的是同一个设置，后续变化由 onHomeSourceChanged 统一重置并乐观重搜
+    private var source: WorkSource = routeSource ?: settingsRepository.homeSource.value
     private var searchPlugin: SourceSearch? = sourceSearchRegistry.byIdOrNull(source)
 
     /** 换源代数：每次换源自增；load 协程持旧代数返回的结果直接丢弃，防止旧源内容写进新源列表 */
@@ -240,9 +246,16 @@ class SearchViewModel @Inject constructor(
         }
         observeCustomTags()
         loadIdleContent()
-        // 首页抽屉与本页源面板写的是同一个全局 homeSource；StateFlow 同值去重，不会重复重置
+        // 首页抽屉与本页源面板写的是同一个全局 homeSource；StateFlow 同值去重，不会重复重置。
+        var awaitingSeedEcho = routeSource != null
         viewModelScope.launch {
-            settingsRepository.homeSource.collect { onHomeSourceChanged(it) }
+            settingsRepository.homeSource.collect {
+                if (awaitingSeedEcho) {
+                    awaitingSeedEcho = false
+                    return@collect
+                }
+                onHomeSourceChanged(it)
+            }
         }
         // 登录成功（含从登录引导回来）、自动重登、登出都要重载三个 tab：
         // 搜索结果与身份相关，登出后不能继续显示上一个账号才看得见的内容
@@ -579,7 +592,12 @@ class SearchViewModel @Inject constructor(
 
     /** 本页换源 = 写回全局首页源，整页重置与重搜由 homeSource 响应完成 */
     fun setHomeSource(source: WorkSource) {
-        viewModelScope.launch { setHomeSourceUseCase(source) }
+        viewModelScope.launch {
+            setHomeSourceUseCase(source)
+            // StateFlow 同值去重：种子源页面上切回与全局相同的源时 collect 不会再发射，
+            // 直调重置兜底（幂等，onHomeSourceChanged 同源早退）
+            onHomeSourceChanged(source)
+        }
     }
 
     fun toggleFollow(userId: Long) {
@@ -750,20 +768,6 @@ class SearchViewModel @Inject constructor(
     private fun loadWorksViaPlugin(plugin: SourceSearch, append: Boolean) {
         val generation = sourceGeneration
         val targetPage = if (append) worksPage + 1 else 0
-        if (!isLoggedInForSearch()) {
-            _uiState.update {
-                it.copy(
-                    worksLoading = false,
-                    worksLoadingMore = false,
-                    worksErrorRes = null,
-                    worksLoadMoreErrorRes = null,
-                    worksEndReached = true,
-                    worksNeedLogin = true,
-                    works = if (append) it.works else emptyList(),
-                )
-            }
-            return
-        }
         _uiState.update {
             if (append) it.copy(worksLoadingMore = true, worksLoadMoreErrorRes = null)
             else it.copy(worksLoading = true, worksErrorRes = null, worksLoadMoreErrorRes = null, worksNeedLogin = false)
@@ -799,18 +803,22 @@ class SearchViewModel @Inject constructor(
                             "append=$append page=$targetPage error=${error::class.simpleName}: ${error.message}",
                         error,
                     )
+                    // 会话失效/未登录撞上登录独占的档（如小说）：整页换登录引导，别给解析失败
+                    val needLogin = error is AppError.LoginRequired
                     _uiState.update {
                         if (append) {
                             it.copy(
                                 worksLoading = false,
                                 worksLoadingMore = false,
-                                worksLoadMoreErrorRes = (error as? AppError)?.toFeedErrorRes(),
+                                worksLoadMoreErrorRes = if (needLogin) null else (error as? AppError)?.toFeedErrorRes(),
+                                worksNeedLogin = needLogin,
                             )
                         } else {
                             it.copy(
                                 worksLoading = false,
                                 worksLoadingMore = false,
-                                worksErrorRes = (error as? AppError)?.toFeedErrorRes(),
+                                worksErrorRes = if (needLogin) null else (error as? AppError)?.toFeedErrorRes(),
+                                worksNeedLogin = needLogin,
                             )
                         }
                     }
