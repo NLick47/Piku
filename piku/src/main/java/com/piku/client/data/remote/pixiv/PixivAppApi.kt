@@ -422,7 +422,7 @@ interface PixivAppApi {
         @Query("filter") filter: String = PixivAppConfig.FILTER_ANDROID,
     ): PixivAppIllustFullResponse
 
-    @GET("v1/illust/related")
+    @GET("v2/illust/related")
     @Headers(HEADER_USER_AGENT, HEADER_APP_OS, HEADER_APP_OS_VERSION, HEADER_APP_VERSION)
     suspend fun relatedIllusts(
         @Header("X-Client-Time") clientTime: String,

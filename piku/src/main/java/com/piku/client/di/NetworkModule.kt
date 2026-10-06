@@ -254,7 +254,8 @@ object NetworkModule {
         if (BuildConfig.DEBUG) {
             val hostPort = PixivApiConfig.DEBUG_PROXY
             val port = hostPort?.substringAfter(':')?.toIntOrNull()
-            if (hostPort != null && port != null) return debugProxyPixivClient(doHDns, diagnostics, sniFactory, hostPort, port)
+            val host = hostPort?.substringBefore(':')
+            if (host != null && port != null) return debugProxyPixivClient(doHDns, diagnostics, sniFactory, host, port, pixivAuth)
         }
         return EchCallFactory(
             echConfig = { echConfigStore.currentOrFetch(ECH_CONFIG_WAIT_MS) },
@@ -284,12 +285,26 @@ object NetworkModule {
         sniFactory: SniStrippingSocketFactory,
         host: String,
         port: Int,
+        pixivAuth: Lazy<PixivAuthRepository>,
     ): OkHttpClient = OkHttpClient.Builder()
         .dns(doHDns)
         .sslSocketFactory(sniFactory, sniFactory.trustManager())
         .hostnameVerifier(PoipikuHostnameVerifier())
         .eventListenerFactory { DoHEventListener(doHDns, diagnostics) }
         .addInterceptor(pixivHeaderInterceptor)
+        // 与原生通道的 authHeaders 对齐：应用接口域才带令牌，刷新那一发（oauth 域）不带
+        .addInterceptor { chain ->
+            val request = chain.request()
+            val token = if (request.url.host == PixivAuthEndpoints.PIXIV_APP_API_HOST) {
+                pixivAuth.get().freshAccessToken()
+            } else {
+                null
+            }
+            chain.proceed(
+                if (token.isNullOrBlank()) request
+                else request.newBuilder().header("Authorization", "Bearer $token").build(),
+            )
+        }
         .proxy(Proxy(Proxy.Type.HTTP, InetSocketAddress.createUnresolved(host, port)))
         .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BASIC })
         .connectTimeout(NetworkTuning.CONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS)

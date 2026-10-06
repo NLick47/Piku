@@ -639,7 +639,7 @@ class PixivContentSourceTest {
         assertEquals(0, api.detailCalls)
     }
 
-    /** 登录隔离：登录态的相关作品走 app-api 的 v1/illust/related，不碰网页端 recommend */
+    /** 登录隔离：登录态的相关作品走 app-api 的 v2/illust/related，不碰网页端 recommend */
     @Test
     fun loggedInRelatedWorksUseAppApi() = runTest {
         val api = FakeApi()

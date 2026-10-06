@@ -379,8 +379,10 @@ class PixivRepository @Inject constructor(
 
     /**
      * 详情页底部的相关作品；取不到就当没有，详情页照常展示。
-     * 登录态走 app-api 的 v1/illust/related（同样只发这一条链路），未登录才用网页端的
-     * recommend/init——后者匿名可用且单次能多给（limit 给足有 60 条），但登录了不该混用。
+     * 登录态走 app-api 的 v2/illust/related，未登录走网页端的 recommend/init——
+     * 后者匿名可用且单次能多给（limit 给足有 60 条）。
+     * v1/illust/related 已被 pixiv 服务端下线（2026-10 实测回 404「端点不存在」，
+     * 与 filter 无关），v2 同形可用。
      */
     suspend fun recommend(illustId: Long): Result<List<Work>> = apiCall {
         if (pixivAuth.hasSession()) {
