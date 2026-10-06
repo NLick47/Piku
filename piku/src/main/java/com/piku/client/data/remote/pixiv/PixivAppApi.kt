@@ -139,7 +139,10 @@ data class PixivAppMetaPage(
 )
 
 @Serializable
-data class PixivAppIllustTag(val tag: String = "")
+data class PixivAppIllustTag(
+    val name: String = "",
+    @SerialName("translated_name") val translatedName: String? = null,
+)
 
 @Serializable
 data class PixivAppIllustState(
@@ -418,6 +421,15 @@ interface PixivAppApi {
         @Query("illust_id") illustId: Long,
         @Query("filter") filter: String = PixivAppConfig.FILTER_ANDROID,
     ): PixivAppIllustFullResponse
+
+    @GET("v1/illust/related")
+    @Headers(HEADER_USER_AGENT, HEADER_APP_OS, HEADER_APP_OS_VERSION, HEADER_APP_VERSION)
+    suspend fun relatedIllusts(
+        @Header("X-Client-Time") clientTime: String,
+        @Header("X-Client-Hash") clientHash: String,
+        @Query("illust_id") illustId: Long,
+        @Query("filter") filter: String = PixivAppConfig.FILTER_ANDROID,
+    ): PixivIllustsResponse
 
     /** 关注作者；restrict=private 即悄悄关注 */
     @POST("v1/user/follow/add")

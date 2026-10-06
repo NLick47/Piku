@@ -40,7 +40,13 @@ import com.piku.client.domain.source.SourceSuggestion
 import com.piku.client.domain.source.SourceTrendingTag
 import com.piku.client.domain.source.SourceWorkPage
 import com.piku.client.domain.source.SourceWorkText
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import retrofit2.HttpException
 import javax.inject.Inject
@@ -59,6 +65,12 @@ class PixivRepository @Inject constructor(
     private val imageRoute: ImageRouteController,
     private val quietFollowStore: QuietFollowStore,
 ) {
+
+    // 在途详情请求的合并表与它自己的作用域：调用方被取消不该把另一路的请求一起带走。
+    // 刻意用 IO 而不是 runtime.dispatcher——那是令牌刷新专用的单线程，别拿它跑详情
+    private val inFlightDetailMutex = Mutex()
+    private val inFlightDetails = mutableMapOf<Long, Deferred<PixivAppIllustFull>>()
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     /**
      * 看图页列表。有会话走 app-api 全量详情（登录限定作品网页端 404，只有这条路拿得到）；
@@ -96,8 +108,27 @@ class PixivRepository @Inject constructor(
     private suspend fun classifyWebWall(illustId: Long): AppError =
         webWallError(runCatching { api.illustDetail(illustId) }.map { !it.error }.getOrDefault(false))
 
-    /** app-api 全量详情：会话失效给引导登录，受限作品与 404 给终态 */
+    /**
+     * app-api 全量详情：会话失效给引导登录，受限作品与 404 给终态。
+     * 同一作品的在途请求合并成一个——详情页把取页与取文本并行发出来，两次问的是同一发
+     * `v1/illust/detail` 且参数相同，各打一发只是白烧一次限流额度。请求落地即摘掉表项，
+     * 不留缓存，重新进详情页照旧拿新数据。
+     */
     private suspend fun appIllustDetail(illustId: Long): PixivAppIllustFull {
+        val shared = inFlightDetailMutex.withLock {
+            inFlightDetails[illustId] ?: scope.async { fetchAppIllustDetail(illustId) }
+                .also { inFlightDetails[illustId] = it }
+        }
+        return try {
+            shared.await()
+        } finally {
+            inFlightDetailMutex.withLock {
+                if (inFlightDetails[illustId] === shared) inFlightDetails.remove(illustId)
+            }
+        }
+    }
+
+    private suspend fun fetchAppIllustDetail(illustId: Long): PixivAppIllustFull {
         val signature = endpoints.clientSignature(runtime.now())
         val response = try {
             appApi.illustDetail(
@@ -324,44 +355,46 @@ class PixivRepository @Inject constructor(
     }
 
     /**
-     * 详情补充文本与统计。有会话走 app-api（登录限定/R-18 作品网页端匿名拿不到文本；
-     * app-api 不带点赞数，likes 置空让 UI 不渲染该格）。未登录走网页端：
-     * 简介是 HTML 片段：<br /> 换算行、其余标签剥掉（详情壳按纯文本展示）。
-     * 计数与元信息同一个接口就带出来了，不再多打一次请求。
+     * 详情补充文本与统计。**登录态只走 app-api，绝不碰网页端**：登录限定与 R-18 只有这条路
+     * 拿得到文本，混进匿名视图的统计只会让同一页数据的来源说不清。app-api 不带点赞数，
+     * likes 置空让 UI 不渲染该格。未登录走网页端，简介要洗掉 HTML。
+     * 计数与元信息随详情接口一起回来，不再多打一次请求。
      */
-    suspend fun workText(illustId: Long): Result<SourceWorkText?> = apiCall {
+    suspend fun workText(illustId: Long): Result<SourceWorkText?> =
         if (pixivAuth.hasSession()) {
-            val illust = appIllustDetail(illustId)
-            SourceWorkText(
-                description = cleanPixivDescription(illust.caption),
-                tags = illust.tags.map { it.tag }.filter { it.isNotBlank() },
-                stats = WorkStats(
-                    views = illust.totalView,
-                    likes = null,
-                    bookmarks = illust.totalBookmarks,
-                    postedAt = illust.createDate,
-                    width = illust.width,
-                    height = illust.height,
-                    pageCount = illust.pageCount,
-                    authorAccount = illust.user.account,
-                ),
-            )
+            apiCall { appIllustDetail(illustId).toSourceWorkText() }
         } else {
-            val response = api.illustDetail(illustId)
-            if (response.error) return@apiCall null
-            SourceWorkText(
-                description = cleanPixivDescription(response.body.description),
-                tags = response.body.tags.tags.map { it.tag }.filter { it.isNotBlank() },
-                stats = response.body.toWorkStats(),
-            )
+            webWorkText(illustId)
         }
+
+    private suspend fun webWorkText(illustId: Long): Result<SourceWorkText?> = apiCall {
+        val response = api.illustDetail(illustId)
+        if (response.error) return@apiCall null
+        SourceWorkText(
+            description = cleanPixivDescription(response.body.description),
+            tags = response.body.tags.tags.map { it.tag }.filter { it.isNotBlank() },
+            stats = response.body.toWorkStats(),
+        )
     }
 
-    /** 详情页底部的相关作品；取不到就当没有，详情页照常展示 */
+    /**
+     * 详情页底部的相关作品；取不到就当没有，详情页照常展示。
+     * 登录态走 app-api 的 v1/illust/related（同样只发这一条链路），未登录才用网页端的
+     * recommend/init——后者匿名可用且单次能多给（limit 给足有 60 条），但登录了不该混用。
+     */
     suspend fun recommend(illustId: Long): Result<List<Work>> = apiCall {
-        val response = api.recommend(illustId)
-        if (response.error) return@apiCall emptyList()
-        response.body.illusts.mapNotNull { it.toWork() }
+        if (pixivAuth.hasSession()) {
+            val signature = endpoints.clientSignature(runtime.now())
+            appApi.relatedIllusts(
+                clientTime = signature.time,
+                clientHash = signature.hash,
+                illustId = illustId,
+            ).illusts.mapNotNull { it.toWork() }
+        } else {
+            val response = api.recommend(illustId)
+            if (response.error) return@apiCall emptyList()
+            response.body.illusts.mapNotNull { it.toWork() }
+        }
     }
 
     suspend fun novelRecommended(offset: Int): Result<List<Work>> = apiCall {
@@ -603,6 +636,26 @@ private const val WEB_S_MODE_TAG_EXACT = "s_tag_exact"
 private const val WEB_S_MODE_TC = "s_tc"
 private const val WEB_ORDER_NEW = "date_d"
 private const val WEB_ORDER_OLD = "date_asc"
+
+/**
+ * app-api 全量详情 → 详情文本与统计。标签对象字段是 name（与网页端的 tag 不同名，
+ * 字段名对不上时标签区会整块消失），total_view/total_bookmarks 蛇形直映；
+ * app-api 不带点赞数，likes 置空让 UI 不渲染该格。
+ */
+internal fun PixivAppIllustFull.toSourceWorkText(): SourceWorkText = SourceWorkText(
+    description = cleanPixivDescription(caption),
+    tags = tags.map { it.name }.filter { it.isNotBlank() },
+    stats = WorkStats(
+        views = totalView,
+        likes = null,
+        bookmarks = totalBookmarks,
+        postedAt = createDate,
+        width = width,
+        height = height,
+        pageCount = pageCount,
+        authorAccount = user.account,
+    ),
+)
 
 private val WEB_CROPPED_THUMB_SUFFIX = Regex("_(square|custom)1200\\.jpg$")
 

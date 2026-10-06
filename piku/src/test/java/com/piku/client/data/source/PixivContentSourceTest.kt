@@ -5,6 +5,7 @@ import com.piku.client.data.auth.PixivAuthApi
 import com.piku.client.data.auth.PixivAuthRepository
 import com.piku.client.data.auth.PixivAuthRuntime
 import com.piku.client.data.auth.PixivAuthStore
+import com.piku.client.data.auth.PixivToken
 import com.piku.client.data.local.CredentialCipher
 import com.piku.client.data.local.CredentialStorage
 import com.piku.client.data.local.InMemorySharedPreferences
@@ -31,16 +32,22 @@ import com.piku.client.data.remote.pixiv.PixivRankingItem
 import com.piku.client.data.remote.pixiv.PixivTrendTagsResponse
 import com.piku.client.data.remote.pixiv.PixivUserDetailResponse
 import com.piku.client.data.remote.pixiv.PixivUserPreviewsResponse
+import com.piku.client.domain.model.AppError
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkKind
 import com.piku.client.domain.model.WorkSource
 import com.piku.client.data.remote.pixiv.PixivIllustResponse
+import com.piku.client.data.remote.pixiv.PixivIllustBody
+import com.piku.client.data.remote.pixiv.PixivIllustTags
+import com.piku.client.data.remote.pixiv.PixivTag
 import com.piku.client.data.remote.pixiv.PixivPage
 import com.piku.client.data.remote.pixiv.PixivPageUrls
 import com.piku.client.data.remote.pixiv.PixivPagesResponse
 import com.piku.client.data.remote.pixiv.PixivRankingResponse
+import com.piku.client.data.remote.pixiv.PixivRecommendBody
 import com.piku.client.data.remote.pixiv.PixivRecommendResponse
 import com.piku.client.data.remote.pixiv.PixivSearchResponse
+import com.piku.client.data.remote.pixiv.PixivWorkCard
 import com.piku.client.data.repository.PixivRepository
 import com.piku.client.data.repository.pixivNewFeedCursor
 import com.piku.client.data.repository.pixivTotalPages
@@ -51,7 +58,11 @@ import com.piku.client.domain.source.defaultFacetChoices
 import com.piku.client.domain.source.AuthorPageStyle
 import com.piku.client.domain.source.SourceAuthorOpen
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
+import java.io.IOException
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.ResponseBody
 import okhttp3.ResponseBody.Companion.toResponseBody
@@ -91,10 +102,18 @@ class PixivContentSourceTest {
         ): PixivSearchResponse = PixivSearchResponse()
 
         var detailResponse = PixivIllustResponse()
-        override suspend fun illustDetail(illustId: Long): PixivIllustResponse = detailResponse
+        var detailCalls = 0
+        override suspend fun illustDetail(illustId: Long): PixivIllustResponse {
+            detailCalls++
+            return detailResponse
+        }
 
         var recommendResponse = PixivRecommendResponse()
-        override suspend fun recommend(illustId: Long, limit: Int): PixivRecommendResponse = recommendResponse
+        var recommendCalls = 0
+        override suspend fun recommend(illustId: Long, limit: Int): PixivRecommendResponse {
+            recommendCalls++
+            return recommendResponse
+        }
     }
 
     private class FakeAppApi : PixivAppApi {
@@ -150,12 +169,36 @@ class PixivContentSourceTest {
             illustId: Long,
         ): PixivAppIllustDetailResponse = PixivAppIllustDetailResponse()
 
+        var detailResponse = PixivAppIllustFullResponse()
+        var detailFailure: Exception? = null
+        /** 调用次数与人为延迟：在途请求合并要靠延迟把两路调用真的叠在一起 */
+        var detailCalls = 0
+        var detailDelayMs = 0L
+
         override suspend fun illustDetail(
             clientTime: String,
             clientHash: String,
             illustId: Long,
             filter: String,
-        ): PixivAppIllustFullResponse = PixivAppIllustFullResponse()
+        ): PixivAppIllustFullResponse {
+            detailCalls++
+            if (detailDelayMs > 0) delay(detailDelayMs)
+            detailFailure?.let { throw it }
+            return detailResponse
+        }
+
+        var related = emptyList<PixivAppIllust>()
+        var relatedCalls = 0
+
+        override suspend fun relatedIllusts(
+            clientTime: String,
+            clientHash: String,
+            illustId: Long,
+            filter: String,
+        ): PixivIllustsResponse {
+            relatedCalls++
+            return PixivIllustsResponse(illusts = related)
+        }
 
         override suspend fun followAdd(
             clientTime: String,
@@ -344,13 +387,17 @@ class PixivContentSourceTest {
         source = WorkSource.PIXIV,
     )
 
-    private fun repository(api: FakeApi, appApi: FakeAppApi = FakeAppApi()): PixivRepository =
+    private fun repository(
+        api: FakeApi,
+        appApi: FakeAppApi = FakeAppApi(),
+        pixivAuth: PixivAuthRepository = loggedOutPixivAuth(),
+    ): PixivRepository =
         PixivRepository(
             api = api,
             appApi = appApi,
             endpoints = PixivAuthEndpoints(),
             runtime = PixivAuthRuntime(dispatcher = Dispatchers.Unconfined, now = { FIXED_NOW }),
-            pixivAuth = loggedOutPixivAuth(),
+            pixivAuth = pixivAuth,
             imageRoute = ImageRouteController(
                 settings = SettingsRepository(InMemorySharedPreferences()),
                 prefs = InMemorySharedPreferences(),
@@ -365,6 +412,25 @@ class PixivContentSourceTest {
         endpoints = PixivAuthEndpoints(),
         runtime = PixivAuthRuntime(dispatcher = Dispatchers.Unconfined, now = { FIXED_NOW }),
     )
+
+    // 登录态会话：详情先走 app-api，兜底与登录态隔离的断言都在这条路上
+    private fun loggedInPixivAuth(): PixivAuthRepository {
+        val store = PixivAuthStore(InMemoryStorage(), FakeCipher(), PikuJson)
+        store.save(
+            PixivToken(
+                accessToken = "access",
+                refreshToken = "refresh",
+                expiresAt = FIXED_NOW + 3_600_000L,
+                userId = "1",
+            ),
+        )
+        return PixivAuthRepository(
+            api = FakePixivAuthApi(),
+            store = store,
+            endpoints = PixivAuthEndpoints(),
+            runtime = PixivAuthRuntime(dispatcher = Dispatchers.Unconfined, now = { FIXED_NOW }),
+        )
+    }
 
     private class FakePixivAuthApi : PixivAuthApi {
         override suspend fun token(
@@ -391,8 +457,14 @@ class PixivContentSourceTest {
         }
     }
 
-    private fun source(api: FakeApi, appApi: FakeAppApi = FakeAppApi()): PixivContentSource =
-        PixivContentSource(repository(api, appApi))
+    private fun source(
+        api: FakeApi,
+        appApi: FakeAppApi = FakeAppApi(),
+        pixivAuth: PixivAuthRepository = loggedOutPixivAuth(),
+    ): PixivContentSource = PixivContentSource(repository(api, appApi, pixivAuth))
+
+    private fun loggedInSource(api: FakeApi, appApi: FakeAppApi): PixivContentSource =
+        source(api, appApi, loggedInPixivAuth())
 
     private fun appIllust(id: String, xRestrict: Int = 0) = PixivAppIllust(
         id = id,
@@ -510,13 +582,13 @@ class PixivContentSourceTest {
     @Test
     fun workTextCleansDescriptionAndTakesTags() = runTest {
         val api = FakeApi().apply {
-            detailResponse = com.piku.client.data.remote.pixiv.PixivIllustResponse(
-                body = com.piku.client.data.remote.pixiv.PixivIllustBody(
+            detailResponse = PixivIllustResponse(
+                body = PixivIllustBody(
                     description = "第一行&amp;A<br />第二行&lt;B&gt;&#39;s",
-                    tags = com.piku.client.data.remote.pixiv.PixivIllustTags(
+                    tags = PixivIllustTags(
                         tags = listOf(
-                            com.piku.client.data.remote.pixiv.PixivTag("漫画"),
-                            com.piku.client.data.remote.pixiv.PixivTag(""),
+                            PixivTag("漫画"),
+                            PixivTag(""),
                         ),
                     ),
                 ),
@@ -530,6 +602,101 @@ class PixivContentSourceTest {
 
         api.detailResponse = com.piku.client.data.remote.pixiv.PixivIllustResponse(error = true)
         assertEquals(null, source(api).workDetailText(work(7)).getOrThrow())
+    }
+
+    /**
+     * 登录隔离：登录态取详情文本只走 app-api，任何失败都不许去摸网页端。
+     * 取页与取文本共用同一发 app-api 请求，失败时整页出错误态，不需要匿名数据来顶替。
+     */
+    @Test
+    fun loggedInWorkTextNeverTouchesWeb() = runTest {
+        val failures = listOf<Pair<Exception, AppError>>(
+            IOException("boom") to AppError.Network,
+            HttpException(Response.error<Any>(520, "".toResponseBody())) to AppError.Http(520),
+        )
+        for ((failure, expected) in failures) {
+            val api = FakeApi()
+            val appApi = FakeAppApi().apply { detailFailure = failure }
+
+            val result = loggedInSource(api, appApi).workDetailText(work(7))
+
+            assertEquals(expected, result.exceptionOrNull())
+            assertEquals(0, api.detailCalls)
+        }
+    }
+
+    /** 401 是服务端给的结论：会话失效要引导登录，不能被匿名数据盖掉，网页端也不该被打 */
+    @Test
+    fun loginRequiredAppApiErrorSurfacesForLoginGuide() = runTest {
+        val api = FakeApi()
+        val appApi = FakeAppApi().apply {
+            detailFailure = HttpException(Response.error<Any>(401, "".toResponseBody()))
+        }
+
+        val result = loggedInSource(api, appApi).workDetailText(work(7))
+
+        assertTrue(result.exceptionOrNull() is AppError.LoginRequired)
+        assertEquals(0, api.detailCalls)
+    }
+
+    /** 登录隔离：登录态的相关作品走 app-api 的 v1/illust/related，不碰网页端 recommend */
+    @Test
+    fun loggedInRelatedWorksUseAppApi() = runTest {
+        val api = FakeApi()
+        val appApi = FakeAppApi().apply { related = listOf(appIllust("11")) }
+
+        val related = loggedInSource(api, appApi).relatedWorks(work(7)).getOrThrow()
+
+        assertEquals(listOf(11L), related.map { it.id })
+        assertEquals(1, appApi.relatedCalls)
+        assertEquals(0, api.recommendCalls)
+    }
+
+    /** 未登录照旧走网页端（那边一次能多给），app-api 那条不该被调用 */
+    @Test
+    fun loggedOutRelatedWorksStayOnWeb() = runTest {
+        val api = FakeApi().apply {
+            recommendResponse = PixivRecommendResponse(
+                body = PixivRecommendBody(
+                    illusts = listOf(PixivWorkCard(id = "12", url = "https://i.pximg.net/12.jpg")),
+                ),
+            )
+        }
+        val appApi = FakeAppApi()
+
+        val related = source(api, appApi).relatedWorks(work(7)).getOrThrow()
+
+        assertEquals(listOf(12L), related.map { it.id })
+        assertEquals(1, api.recommendCalls)
+        assertEquals(0, appApi.relatedCalls)
+    }
+
+    /** 详情页把取页与取文本并行发出来：登录态下同一作品的 v1/illust/detail 只该打一发 */
+    @Test
+    fun parallelPageAndTextShareOneDetailRequest() = runTest {
+        val appApi = FakeAppApi().apply { detailDelayMs = 20 }
+        val source = loggedInSource(FakeApi(), appApi)
+
+        coroutineScope {
+            val pages = async { source.workPages(work(7)) }
+            val text = async { source.workDetailText(work(7)) }
+            pages.await()
+            text.await()
+        }
+
+        assertEquals(1, appApi.detailCalls)
+    }
+
+    /** 合并只覆盖在途那一次：出了详情页再进来照旧重新取，不留缓存 */
+    @Test
+    fun sequentialDetailRequestsAreNotCached() = runTest {
+        val appApi = FakeAppApi().apply { detailDelayMs = 20 }
+        val source = loggedInSource(FakeApi(), appApi)
+
+        source.workPages(work(7))
+        source.workDetailText(work(7))
+
+        assertEquals(2, appApi.detailCalls)
     }
 
     /** 实测翻过末页接口回 404：翻页中的 NotFound 就地判到底，首屏 404 照常失败 */

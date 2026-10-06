@@ -292,6 +292,13 @@ class PixivSearchSourceTest {
             filter: String,
         ): PixivAppIllustFullResponse = PixivAppIllustFullResponse()
 
+        override suspend fun relatedIllusts(
+            clientTime: String,
+            clientHash: String,
+            illustId: Long,
+            filter: String,
+        ): PixivIllustsResponse = PixivIllustsResponse()
+
         override suspend fun followAdd(
             clientTime: String,
             clientHash: String,
