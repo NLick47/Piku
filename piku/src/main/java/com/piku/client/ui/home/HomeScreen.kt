@@ -55,7 +55,8 @@ import kotlinx.coroutines.launch
  *   其余源走 ui/source 的声明驱动通用壳 [SourceFeedContent]。新增源注册进
  *   SourceRegistry / SourceAuthRegistry 后即可换源、登录、展示，宿主与两个壳都不用改。
  * - 背景域（取景/取色/编辑会话）在 background/ 包，抽屉在 drawer/ 包，
- *   二级弹层在 [HomeDialogs]，抽屉通用功能页浮层在 [HomeOverlays]；
+ *   二级弹层在 [HomeDialogs]，账号页浮层在 [HomeOverlays]；
+ *   浏览记录/收藏/标签是路由（Routes.HISTORY/COLLECTION/TAGS），不属这一层；
  *   源专属的抽屉条目与浮层（投稿等）由 [com.piku.client.ui.home.drawer.SourceDrawerPlugin]
  *   声明，宿主只装配 [DrawerScope] 与挂载，不认识任何一条。
  * - 数据源隔离：宿主不接触任何源的凭据与实现细节，账号信息一律经
@@ -92,18 +93,13 @@ fun HomeScreen(
     val dialogs = rememberHomeDialogsState()
 
     // ---- 抽屉功能页与插件浮层：任一激活时禁掉抽屉手势 ----
-    var showHistoryPage by rememberSaveable { mutableStateOf(false) }
-    var showCollectionPage by rememberSaveable { mutableStateOf(false) }
-    var showTagsPage by rememberSaveable { mutableStateOf(false) }
     var showAccountsPage by rememberSaveable { mutableStateOf(false) }
     // 抽屉插件声明的浮层（投稿/资料编辑/关注屏蔽列表…）：内容由插件给，外壳只挂载不解释
     var drawerOverlay by remember {
         mutableStateOf<(@Composable (onDismiss: () -> Unit, onClose: () -> Unit) -> Unit)?>(null)
     }
     val snackbarHostState = remember { SnackbarHostState() }
-    val anyOverlayActive = showHistoryPage || showAccountsPage ||
-        showCollectionPage || showTagsPage || dialogs.showWebDavSettings ||
-        drawerOverlay != null
+    val anyOverlayActive = showAccountsPage || dialogs.showWebDavSettings || drawerOverlay != null
 
     // ---- 滚动：网格状态、头部底衬进度、视差、停顶判定 ----
     val isScrolling = remember { mutableStateOf(false) }
@@ -233,15 +229,9 @@ fun HomeScreen(
             scope.launch { drawerState.close() }
             edit.enterEdit(state)
         },
-        onHistoryClick = {
-            showHistoryPage = true
-        },
-        onCollectionClick = {
-            showCollectionPage = true
-        },
-        onTagsClick = {
-            showTagsPage = true
-        },
+        onHistoryClick = onHistoryClick,
+        onCollectionClick = onCollectionClick,
+        onTagsClick = onTagsClick,
         // 头部点哪里全看这个源自己声明了什么能力，不看谁是"主源"：
         // 未登录 → 它的登录页；有账号主页 → 主页；没有 → 账号页
         onHeaderClick = {
@@ -390,27 +380,6 @@ fun HomeScreen(
                     showAccountsPage = false
                     row.loginRoute?.let(onSourceLoginClick)
                 },
-                showHistoryPage = showHistoryPage,
-                onHistoryBack = { showHistoryPage = false; scope.launch { drawerState.open() } },
-                showCollectionPage = showCollectionPage,
-                onCollectionBack = { showCollectionPage = false; scope.launch { drawerState.open() } },
-                showTagsPage = showTagsPage,
-                onTagsBack = { showTagsPage = false; scope.launch { drawerState.open() } },
-                // 浮层页是独立窗口：不收起会盖在导航过去的详情/作者页上面（同账号页→登录的约定），
-                // 所以点作品/作者先收浮层再交给导航
-                onWorkClick = { work ->
-                    showHistoryPage = false
-                    showCollectionPage = false
-                    showTagsPage = false
-                    onWorkClick(work)
-                },
-                onOpenAuthor = { work ->
-                    showHistoryPage = false
-                    showCollectionPage = false
-                    showTagsPage = false
-                    onAuthorClick(work)
-                },
-                state = state,
                 dark = dark,
             )
 

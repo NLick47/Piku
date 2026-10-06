@@ -8,6 +8,7 @@ import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -517,12 +518,14 @@ fun AppNavHost(
         }
         composable(Routes.HISTORY) {
             ProvideNavSharedScope(sharedScope, this) {
-                HistoryScreen(
-                    onBack = safePopBack,
-                    onWorkClick = { work: Work ->
-                        openWork(work)
-                    },
-                )
+                CompositionLocalProvider(LocalWorkMorphEnabled provides false) {
+                    HistoryScreen(
+                        onBack = safePopBack,
+                        onWorkClick = { work: Work ->
+                            openWork(work)
+                        },
+                    )
+                }
             }
         }
         composable(
