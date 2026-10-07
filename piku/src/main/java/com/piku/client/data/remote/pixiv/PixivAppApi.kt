@@ -352,7 +352,6 @@ interface PixivAppApi {
         @Query("offset") offset: Int? = null,
     ): PixivIllustsResponse
 
-    /** 关键词搜作品。search_target/sort/duration 枚举与筛选面板声明一一对应；searchAiType 0=隐藏 AI */
     @GET("v1/search/illust")
     @Headers(HEADER_USER_AGENT, HEADER_APP_OS, HEADER_APP_OS_VERSION, HEADER_APP_VERSION)
     suspend fun searchIllust(

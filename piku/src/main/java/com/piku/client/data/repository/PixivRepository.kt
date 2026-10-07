@@ -204,7 +204,7 @@ class PixivRepository @Inject constructor(
                         searchTarget = searchTarget,
                         sort = sort,
                         duration = duration,
-                        searchAiType = if (hideAi) 0 else null,
+                        searchAiType = if (hideAi) SEARCH_AI_TYPE_HIDE else null,
                         offset = page * PixivAppConfig.PAGE_SIZE,
                     )
                 } catch (e: HttpException) {
@@ -268,7 +268,7 @@ class PixivRepository @Inject constructor(
                 clientHash = signature.hash,
                 word = word,
                 sort = sort,
-                searchAiType = if (hideAi) 0 else null,
+                searchAiType = if (hideAi) SEARCH_AI_TYPE_HIDE else null,
                 offset = offset,
             )
         } catch (e: HttpException) {
@@ -763,6 +763,9 @@ private const val WEB_S_MODE_TAG_EXACT = "s_tag_exact"
 private const val WEB_S_MODE_TC = "s_tc"
 private const val WEB_ORDER_NEW = "date_d"
 private const val WEB_ORDER_OLD = "date_asc"
+
+/** search_ai_type：1 = 排除 AI 作品，0/不传 = 显示。传 0 是"不筛选"而不是"隐藏" */
+private const val SEARCH_AI_TYPE_HIDE = 1
 
 /**
  * app-api 全量详情 → 详情文本与统计。标签对象字段是 name（与网页端的 tag 不同名，

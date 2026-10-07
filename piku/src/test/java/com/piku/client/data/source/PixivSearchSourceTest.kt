@@ -543,7 +543,7 @@ class PixivSearchSourceTest {
         assertEquals(PixivSearchSource.SORT_POPULAR, call.sort)
         assertEquals(PixivSearchSource.TARGET_TITLE, call.searchTarget)
         assertEquals(PixivSearchSource.DURATION_WEEK, call.duration)
-        assertEquals(0, call.searchAiType)
+        assertEquals(1, call.searchAiType)
         assertEquals(60, call.offset)
     }
 
@@ -731,7 +731,7 @@ class PixivSearchSourceTest {
         assertEquals(PixivSearchSource.SORT_NEW, call.sort)
         assertNull(call.searchTarget)
         assertNull(call.duration)
-        assertEquals(0, call.searchAiType)
+        assertEquals(1, call.searchAiType)
         assertEquals(30, call.offset)
         assertEquals(0, appApi.searchCalls.size)
     }
