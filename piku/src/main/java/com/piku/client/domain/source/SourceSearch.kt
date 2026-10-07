@@ -33,6 +33,12 @@ interface SourceSearch {
     /** 输入联想（标签 + 译名）；空 = 外壳不显示联想层 */
     suspend fun suggest(query: String): Result<List<SourceSuggestion>> = Result.success(emptyList())
 
+    /**
+     * 标签 tab 建议网格的标签：与 [suggest] 同词，但条目可带代表缩略图。
+     * 输入联想不需要图，两条链路分开声明；默认与输入联想同路（无图）。
+     */
+    suspend fun suggestTags(query: String): Result<List<SourceSuggestion>> = suggest(query)
+
     /** 作品检索。filters = 各组当前选中项 id + 置真的开关；page 从 0 起 */
     suspend fun searchWorks(
         query: String,
@@ -112,8 +118,9 @@ data class SourceTrendingTag(
     val height: Int = 0,
 )
 
-/** 输入联想条目：标签名 + 译名（译名缺省 = 该标签没有简中翻译） */
+/** 输入联想条目：标签名 + 译名（译名缺省 = 该标签没有简中翻译）。缩略图仅标签建议网格消费 */
 data class SourceSuggestion(
     val name: String,
     val translatedName: String? = null,
+    val thumbnailUrl: String? = null,
 )

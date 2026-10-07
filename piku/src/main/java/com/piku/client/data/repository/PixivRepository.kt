@@ -43,6 +43,7 @@ import com.piku.client.domain.source.SourceTrendingTag
 import com.piku.client.domain.source.SourceWorkPage
 import com.piku.client.domain.source.SourceWorkText
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -322,6 +323,47 @@ class PixivRepository @Inject constructor(
         response.tags
             .filter { it.name.isNotBlank() }
             .map { SourceSuggestion(name = it.name, translatedName = it.translatedName) }
+    }
+
+    suspend fun suggestTags(word: String): Result<List<SourceSuggestion>> = apiCall {
+        val signature = endpoints.clientSignature(runtime.now())
+        coroutineScope {
+            val tagsAsync = async {
+                appApi.autocomplete(
+                    clientTime = signature.time,
+                    clientHash = signature.hash,
+                    word = word,
+                )
+            }
+            val thumbsAsync = async {
+                runCatching {
+                    appApi.searchPopularPreview(
+                        clientTime = signature.time,
+                        clientHash = signature.hash,
+                        word = word,
+                    )
+                }.onFailure { error ->
+                    // 取消不算"配图失败"：页面离开时整条链路都在取消，吞掉会假报错误日志（与 apiCall 同语义）
+                    if (error is CancellationException) throw error
+                    Log.d(
+                        "PikuDiag",
+                        "pixiv tag thumbs load fail word=$word " +
+                            "error=${error::class.simpleName}: ${error.message}",
+                        error,
+                    )
+                }.getOrNull()?.illusts.orEmpty()
+            }
+            val thumbs = tagThumbnails(thumbsAsync.await())
+            tagsAsync.await().tags
+                .filter { it.name.isNotBlank() }
+                .map {
+                    SourceSuggestion(
+                        name = it.name,
+                        translatedName = it.translatedName,
+                        thumbnailUrl = thumbs[it.name],
+                    )
+                }
+        }
     }
 
     suspend fun trendingTags(): Result<List<SourceTrendingTag>> = apiCall {
@@ -1067,4 +1109,34 @@ internal fun PixivTrendTag.toTrendingTag(): SourceTrendingTag? {
         width = illust.width,
         height = illust.height,
     )
+}
+
+/**
+ * 人气预览作品 → 标签代表图。响应按人气序，先出现的标签先占图（人气最高的作品当代表）。
+ * 查不到的作品（tags 全空）不参与。
+ */
+internal fun tagThumbnails(illusts: List<PixivAppIllust>): Map<String, String> {
+    val thumbs = LinkedHashMap<String, String>()
+    for (illust in illusts) {
+        val thumb = pixivTagThumb(illust.imageUrls.squareMedium, illust.imageUrls.medium)
+        if (thumb.isBlank()) continue
+        for (tag in illust.tags) {
+            if (tag.name.isNotBlank()) thumbs.putIfAbsent(tag.name, thumb)
+        }
+    }
+    return thumbs
+}
+
+private const val SQUARE_THUMB_170 = "https://i.pximg.net/c/170x170_90_a2/"
+private const val SQUARE_THUMB_540 = "https://i.pximg.net/c/540x540_70/"
+
+/**
+ * 标签卡缩略图档位：接口给的 square_medium 是 170 方裁，卡片槽位 ~500px 会糊——
+ * 前缀改写成 540 方裁（同文件 _square1200，实测 200，pixiv 给 pixpedia 标签图即此形态）。
+ * 形态不认识退 medium（540 档，比例图由卡片方裁），再退原样——宁可糊不可裂。
+ */
+internal fun pixivTagThumb(square: String, medium: String): String = when {
+    square.startsWith(SQUARE_THUMB_170) -> SQUARE_THUMB_540 + square.removePrefix(SQUARE_THUMB_170)
+    medium.isNotBlank() -> medium
+    else -> square
 }

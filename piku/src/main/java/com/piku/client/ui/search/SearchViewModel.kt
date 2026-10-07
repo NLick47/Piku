@@ -1044,7 +1044,6 @@ class SearchViewModel @Inject constructor(
         }
     }
 
-    /** 插件源的标签建议：取自联想接口，一次取完即到底（无翻页） */
     private fun loadTagSuggestionsViaPlugin(plugin: SourceSearch) {
         val generation = sourceGeneration
         if (!isLoggedInForSearch()) {
@@ -1070,13 +1069,15 @@ class SearchViewModel @Inject constructor(
             )
         }
         viewModelScope.launch {
-            plugin.suggest(base)
+            plugin.suggestTags(base)
                 .onSuccess { list ->
                     if (generation != sourceGeneration) return@onSuccess
                     _uiState.update {
                         it.copy(
                             tagSuggestionsLoading = false,
-                            tagSuggestions = list.map { s -> TagCard(name = s.name) },
+                            tagSuggestions = list.map { s ->
+                                TagCard(name = s.name, thumbnailUrl = s.thumbnailUrl)
+                            },
                             tagSuggestionsEndReached = true,
                         )
                     }

@@ -42,6 +42,9 @@ class PixivSearchSource @Inject constructor(
     override suspend fun suggest(query: String): Result<List<SourceSuggestion>> =
         repository.suggest(query)
 
+    override suspend fun suggestTags(query: String): Result<List<SourceSuggestion>> =
+        repository.suggestTags(query)
+
     override fun hiddenFilterGroups(selected: Map<String, String>): Set<String> =
         if (selected[SourceSearch.FILTER_KIND] == SourceSearch.KIND_NOVEL) {
             // 小说接口不支持按期间过滤，检索对象枚举也与作品不同：藏起来比置灰诚实

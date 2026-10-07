@@ -22,9 +22,11 @@ import com.piku.client.data.remote.pixiv.PixivAppApi
 import com.piku.client.data.remote.pixiv.PixivAppIllust
 import com.piku.client.data.remote.pixiv.PixivAppIllustDetailResponse
 import com.piku.client.data.remote.pixiv.PixivAppIllustFullResponse
+import com.piku.client.data.remote.pixiv.PixivAppIllustTag
 import com.piku.client.data.remote.pixiv.PixivAppImageUrls
 import com.piku.client.data.remote.pixiv.PixivAppProfileImages
 import com.piku.client.data.remote.pixiv.PixivAppUser
+import com.piku.client.data.remote.pixiv.PixivAutoTag
 import com.piku.client.data.remote.pixiv.PixivAutoWordsResponse
 import com.piku.client.data.remote.pixiv.PixivIllustResponse
 import com.piku.client.data.remote.pixiv.PixivIllustsResponse
@@ -44,6 +46,8 @@ import com.piku.client.data.remote.pixiv.PixivUserPreview
 import com.piku.client.data.remote.pixiv.PixivUserPreviewsResponse
 import com.piku.client.data.repository.PixivRepository
 import com.piku.client.data.repository.pixivProportionalThumb
+import com.piku.client.data.repository.pixivTagThumb
+import com.piku.client.data.repository.tagThumbnails
 import com.piku.client.data.repository.toFollowUser
 import com.piku.client.data.repository.toTrendingTag
 import com.piku.client.data.repository.toWork
@@ -123,6 +127,15 @@ class PixivSearchSourceTest {
         var searchError: HttpException? = null
         var novelSearchError: HttpException? = null
 
+        val autocompleteCalls = mutableListOf<String>()
+        var autocompleteResponse = PixivAutoWordsResponse()
+
+        val popularPreviewCalls = mutableListOf<String>()
+        var popularPreviewResponse = PixivIllustsResponse()
+
+        /** 非空时 searchPopularPreview 抛该异常（模拟配图链路失效） */
+        var popularPreviewError: HttpException? = null
+
         override suspend fun recommended(
             clientTime: String,
             clientHash: String,
@@ -189,7 +202,24 @@ class PixivSearchSourceTest {
             clientTime: String,
             clientHash: String,
             word: String,
-        ): PixivAutoWordsResponse = PixivAutoWordsResponse()
+        ): PixivAutoWordsResponse {
+            autocompleteCalls.add(word)
+            return autocompleteResponse
+        }
+
+        override suspend fun searchPopularPreview(
+            clientTime: String,
+            clientHash: String,
+            word: String,
+            searchTarget: String,
+            includeTranslatedTagResults: Boolean,
+            mergePlainKeywordResults: Boolean,
+            filter: String,
+        ): PixivIllustsResponse {
+            popularPreviewCalls.add(word)
+            popularPreviewError?.let { throw it }
+            return popularPreviewResponse
+        }
 
         override suspend fun trendingTags(
             clientTime: String,
@@ -768,6 +798,109 @@ class PixivSearchSourceTest {
         assertNull(response.tags[1].translatedName)
     }
 
+    // ---------------- 标签建议网格：联想名单 + 人气预览代表图 ----------------
+
+    @Test
+    fun suggestTagsPairsNamesWithPopularPreviewThumbs() = runTest {
+        val appApi = FakeAppApi().apply {
+            autocompleteResponse = PixivAutoWordsResponse(
+                tags = listOf(
+                    PixivAutoTag(name = "東方Project", translatedName = "东方Project"),
+                    PixivAutoTag(name = "東方"),
+                ),
+            )
+            popularPreviewResponse = PixivIllustsResponse(
+                illusts = listOf(
+                    illust(id = "1", tags = listOf("東方", "pixivタグ")),
+                    illust(id = "2", tags = listOf("東方Project")),
+                ),
+            )
+        }
+
+        val suggestions = source(appApi, loggedIn = true).suggestTags("東方").getOrThrow()
+
+        assertEquals(listOf("東方"), appApi.autocompleteCalls)
+        assertEquals(listOf("東方"), appApi.popularPreviewCalls)
+        assertEquals(listOf("東方Project", "東方"), suggestions.map { it.name })
+        assertEquals("东方Project", suggestions[0].translatedName)
+        assertEquals(square540("2"), suggestions[0].thumbnailUrl)
+        assertEquals(square540("1"), suggestions[1].thumbnailUrl)
+    }
+
+    /** 人气预览失效不拖垮名单：建议照常返回，卡片回落占位图 */
+    @Test
+    fun suggestTagsKeepsNamesWhenPopularPreviewFails() = runTest {
+        val appApi = FakeAppApi().apply {
+            autocompleteResponse = PixivAutoWordsResponse(tags = listOf(PixivAutoTag(name = "東方")))
+            popularPreviewError = HttpException(Response.error<Any>(404, "".toResponseBody(null)))
+        }
+
+        val suggestions = source(appApi, loggedIn = true).suggestTags("東方").getOrThrow()
+
+        assertEquals(listOf("東方"), suggestions.map { it.name })
+        assertNull(suggestions.single().thumbnailUrl)
+    }
+
+    /** 输入联想不带图：只发联想请求，不碰人气预览，条目永远无缩略图 */
+    @Test
+    fun suggestDoesNotFetchPopularPreview() = runTest {
+        val appApi = FakeAppApi().apply {
+            autocompleteResponse = PixivAutoWordsResponse(tags = listOf(PixivAutoTag(name = "東方")))
+            popularPreviewResponse = PixivIllustsResponse(
+                illusts = listOf(illust(id = "1", tags = listOf("東方"))),
+            )
+        }
+
+        val suggestions = source(appApi, loggedIn = true).suggest("東方").getOrThrow()
+
+        assertEquals(listOf("東方"), suggestions.map { it.name })
+        assertNull(suggestions.single().thumbnailUrl)
+        assertTrue(appApi.popularPreviewCalls.isEmpty())
+    }
+
+    /** 代表图按人气序先到先得；tags 全空/无图的作品不参与 */
+    @Test
+    fun tagThumbnailsFirstSeenWinsInPopularOrder() {
+        val map = tagThumbnails(
+            listOf(
+                illust(id = "1", tags = listOf("東方")),
+                illust(id = "2", tags = listOf("東方", "東方Project")),
+                illust(id = "3", tags = listOf("東方Project"), squareMedium = "", medium = ""),
+            ),
+        )
+
+        assertEquals(square540("1"), map["東方"])
+        assertEquals(square540("2"), map["東方Project"])
+    }
+
+    /** 档位映射：170 方裁升 540 方裁（同文件）；形态不认识退 medium；medium 也空才退原样 */
+    @Test
+    fun tagThumbTierUpgradesAndFallsBack() {
+        assertEquals(square540("1"), pixivTagThumb(square170("1"), master540("1")))
+        assertEquals(
+            "m.jpg",
+            pixivTagThumb("https://i.pximg.net/c/250x250_80_a2/img-master/img/a/1_p0_square1200.jpg", "m.jpg"),
+        )
+        assertEquals("s.jpg", pixivTagThumb("s.jpg", ""))
+    }
+
+    /** wire 形态：popular-preview 响应 illusts[].tags 建映射，端到端钉住字段名与 540 改写 */
+    @Test
+    fun popularPreviewWireFormat() {
+        val json = """
+            {"illusts":[{"id":"9527","title":"t",
+              "image_urls":{"square_medium":"${square170("9527")}","medium":"m.jpg","large":"l.jpg"},
+              "tags":[{"name":"東方Project","translated_name":"东方Project"},{"name":"東方"}]}]}
+        """.trimIndent()
+
+        val illusts = PikuJson.decodeFromString<PixivIllustsResponse>(json).illusts
+
+        assertEquals(listOf("東方Project", "東方"), illusts.single().tags.map { it.name })
+        val map = tagThumbnails(illusts)
+        assertEquals(square540("9527"), map["東方Project"])
+        assertEquals(square540("9527"), map["東方"])
+    }
+
     @Test
     fun trendingTagsWireFormat() {
         // illust 为完整作品对象，width/height 来自实测响应（Pixiv-Shaft 内嵌样本同构）
@@ -846,5 +979,28 @@ class PixivSearchSourceTest {
         aiType = 2,
         width = 1900,
         height = 1080,
+    )
+
+    private fun square170(id: String) =
+        "https://i.pximg.net/c/170x170_90_a2/img-master/img/a/${id}_p0_square1200.jpg"
+
+    private fun square540(id: String) =
+        "https://i.pximg.net/c/540x540_70/img-master/img/a/${id}_p0_square1200.jpg"
+
+    private fun master540(id: String) =
+        "https://i.pximg.net/c/540x540_70/img-master/img/a/${id}_p0_master1200.jpg"
+
+    private fun illust(
+        id: String,
+        tags: List<String>,
+        squareMedium: String? = null,
+        medium: String? = null,
+    ) = PixivAppIllust(
+        id = id,
+        imageUrls = PixivAppImageUrls(
+            squareMedium = squareMedium ?: square170(id),
+            medium = medium ?: master540(id),
+        ),
+        tags = tags.map { PixivAppIllustTag(name = it) },
     )
 }

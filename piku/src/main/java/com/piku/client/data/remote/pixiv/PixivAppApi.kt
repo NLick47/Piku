@@ -62,6 +62,7 @@ data class PixivAppIllust(
     /** 0=全年龄 1=R-18 2=R-18G */
     @SerialName("x_restrict") val xRestrict: Int = 0,
     @SerialName("illust_ai_type") val illustAiType: Int = 0,
+    val tags: List<PixivAppIllustTag> = emptyList(),
 ) {
     val illustId: Long get() = id.toLongOrNull() ?: 0
 }
@@ -408,6 +409,19 @@ interface PixivAppApi {
         @Header("X-Client-Hash") clientHash: String,
         @Query("word") word: String,
     ): PixivAutoWordsResponse
+
+    /** 该词的人气作品预览（免费账号可见的人气档，响应与搜索同形）。按译名也能命中，拉丁字母输入靠它扩覆盖 */
+    @GET("v1/search/popular-preview/illust")
+    @Headers(HEADER_USER_AGENT, HEADER_APP_OS, HEADER_APP_OS_VERSION, HEADER_APP_VERSION)
+    suspend fun searchPopularPreview(
+        @Header("X-Client-Time") clientTime: String,
+        @Header("X-Client-Hash") clientHash: String,
+        @Query("word") word: String,
+        @Query("search_target") searchTarget: String = "partial_match_for_tags",
+        @Query("include_translated_tag_results") includeTranslatedTagResults: Boolean = true,
+        @Query("merge_plain_keyword_results") mergePlainKeywordResults: Boolean = true,
+        @Query("filter") filter: String = PixivAppConfig.FILTER_ANDROID,
+    ): PixivIllustsResponse
 
     /** 24 小时热门标签，附代表作缩略图 */
     @GET("v1/trending-tags/illust")

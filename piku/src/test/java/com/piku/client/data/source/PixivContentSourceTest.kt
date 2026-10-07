@@ -276,6 +276,16 @@ class PixivContentSourceTest {
             word: String,
         ): PixivAutoWordsResponse = PixivAutoWordsResponse()
 
+        override suspend fun searchPopularPreview(
+            clientTime: String,
+            clientHash: String,
+            word: String,
+            searchTarget: String,
+            includeTranslatedTagResults: Boolean,
+            mergePlainKeywordResults: Boolean,
+            filter: String,
+        ): PixivIllustsResponse = PixivIllustsResponse()
+
         override suspend fun trendingTags(
             clientTime: String,
             clientHash: String,
