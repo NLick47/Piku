@@ -52,6 +52,10 @@ class PoipikuApplication : Application() {
                 // 上面的白名单就形同虚设。core 的 BitmapFactoryDecoder 由
                 // RealImageLoader 默认装配、不走 ServiceLoader，关掉不影响普通图片的加载
                 .serviceLoaderEnabled(false)
+                // 拦截器链默认「继承调用方」：Compose 侧发起取图时调用方就是主线程，而链里的
+                // 取图重试会 Thread.sleep（退避 500/1500/3000ms），等于把 UI 冻住几百毫秒到几秒。
+                // 链一律挪到 IO——取图/解码本来就已经各自 hop 到 IO，这里只是把链的开销也挪走。
+                .interceptorCoroutineContext(Dispatchers.IO)
                 // 关闭 hardware bitmap：此类位图直接由 HWUI/GPU 管理，与渲染线程生命周期
                 // 强耦合，在 ColorOS 等 OEM ROM 上会触发 hwuiTask 的
                 // "pthread_mutex_lock called on a destroyed mutex" native 崩溃（白屏/闪退）。

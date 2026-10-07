@@ -108,6 +108,37 @@ data class PixivRecommendResponse(
 )
 
 @Serializable
+data class PixivNovelAjaxResponse(
+    val error: Boolean = false,
+    val body: PixivNovelAjaxBody = PixivNovelAjaxBody(),
+)
+
+@Serializable
+data class PixivNovelAjaxBody(
+    /** 正文原文，pixiv 私有标记未清洗 */
+    val content: String = "",
+    @SerialName("textEmbeddedImages") val textEmbeddedImages: Map<String, PixivNovelEmbeddedImage> = emptyMap(),
+    /** 详情页补充（未登录的小说详情/正文都从这里取）：HTML 简介、标签、统计 */
+    val description: String = "",
+    val tags: PixivNovelAjaxTags = PixivNovelAjaxTags(),
+    @SerialName("viewCount") val viewCount: Int = 0,
+    @SerialName("likeCount") val likeCount: Int = 0,
+    @SerialName("bookmarkCount") val bookmarkCount: Int = 0,
+    @SerialName("createDate") val createDate: String = "",
+)
+
+/** 网页端小说标签：外层带 authorId/isLocked，真正列表在 tags.tags 里 */
+@Serializable
+data class PixivNovelAjaxTags(
+    val tags: List<PixivNovelAjaxTag> = emptyList(),
+)
+
+@Serializable
+data class PixivNovelAjaxTag(
+    val tag: String = "",
+)
+
+@Serializable
 data class PixivRecommendBody(
     val illusts: List<PixivWorkCard> = emptyList(),
 )
@@ -181,6 +212,9 @@ interface PixivApi {
     /** 插图详情（简介/标签）。匿名可看的作品直接返回；登录墙作品 error=true */
     @GET("ajax/illust/{illustId}")
     suspend fun illustDetail(@Path("illustId") illustId: Long): PixivIllustResponse
+
+    @GET("ajax/novel/{novelId}")
+    suspend fun novelMeta(@Path("novelId") novelId: Long): PixivNovelAjaxResponse
 
 
     /**

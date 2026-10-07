@@ -28,6 +28,7 @@ import com.piku.client.data.remote.pixiv.PixivAppUser
 import com.piku.client.data.remote.pixiv.PixivAutoWordsResponse
 import com.piku.client.data.remote.pixiv.PixivIllustResponse
 import com.piku.client.data.remote.pixiv.PixivIllustsResponse
+import com.piku.client.data.remote.pixiv.PixivNovelAjaxResponse
 import com.piku.client.data.remote.pixiv.PixivNovelDetailResponse
 import com.piku.client.data.remote.pixiv.PixivNovelsResponse
 import com.piku.client.data.remote.pixiv.PixivPagesResponse
@@ -93,6 +94,8 @@ class PixivSearchSourceTest {
         override suspend fun illustPages(illustId: Long): PixivPagesResponse = PixivPagesResponse()
 
         override suspend fun illustDetail(illustId: Long): PixivIllustResponse = PixivIllustResponse()
+
+        override suspend fun novelMeta(novelId: Long): PixivNovelAjaxResponse = PixivNovelAjaxResponse()
 
         override suspend fun recommend(illustId: Long, limit: Int): PixivRecommendResponse =
             PixivRecommendResponse()

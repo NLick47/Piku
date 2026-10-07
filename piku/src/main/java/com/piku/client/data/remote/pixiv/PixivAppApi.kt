@@ -249,11 +249,40 @@ data class PixivNovelsResponse(
 @Serializable
 data class PixivNovelDetailResponse(val novel: PixivNovel = PixivNovel())
 
-/** 小说正文：官方把 /v1/novel/text 摘掉了（2026-10 实测 404），只剩 webview 这条返回 HTML 的路 */
 @Serializable
 data class PixivWebviewNovel(
     val text: String = "",
     val title: String = "",
+    val illusts: Map<String, PixivWebviewIllust> = emptyMap(),
+    val images: Map<String, PixivNovelEmbeddedImage> = emptyMap(),
+)
+
+/** [pixivimage] 引用的站内作品：webview 载荷已给出可见性与图直链 */
+@Serializable
+data class PixivWebviewIllust(
+    val visible: Boolean = false,
+    val availableMessage: String? = null,
+    val illust: PixivWebviewIllustBody = PixivWebviewIllustBody(),
+)
+
+@Serializable
+data class PixivWebviewIllustBody(
+    val images: PixivWebviewIllustImages = PixivWebviewIllustImages(),
+)
+
+/** 小图/看图档/原图，官方载荷多数只给 medium（master1200） */
+@Serializable
+data class PixivWebviewIllustImages(
+    val small: String? = null,
+    val medium: String? = null,
+    val original: String? = null,
+)
+
+/** 小说正文里的内嵌上传图：urls 按档位给直链（实测有 240mw/480mw/1200x1200/128x128/original） */
+@Serializable
+data class PixivNovelEmbeddedImage(
+    val novelImageId: String = "",
+    val urls: Map<String, String> = emptyMap(),
 )
 
 @Serializable

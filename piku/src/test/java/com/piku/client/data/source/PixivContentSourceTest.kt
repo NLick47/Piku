@@ -26,7 +26,12 @@ import com.piku.client.data.remote.pixiv.PixivAutoWordsResponse
 import com.piku.client.data.remote.pixiv.PixivContentType
 import com.piku.client.data.remote.pixiv.PixivIllustsResponse
 import com.piku.client.data.remote.pixiv.PixivNovel
+import com.piku.client.data.remote.pixiv.PixivNovelAjaxBody
+import com.piku.client.data.remote.pixiv.PixivNovelAjaxResponse
+import com.piku.client.data.remote.pixiv.PixivNovelAjaxTag
+import com.piku.client.data.remote.pixiv.PixivNovelAjaxTags
 import com.piku.client.data.remote.pixiv.PixivNovelDetailResponse
+import com.piku.client.data.remote.pixiv.PixivNovelEmbeddedImage
 import com.piku.client.data.remote.pixiv.PixivNovelsResponse
 import com.piku.client.data.remote.pixiv.PixivRankingItem
 import com.piku.client.data.remote.pixiv.PixivTrendTagsResponse
@@ -49,8 +54,10 @@ import com.piku.client.data.remote.pixiv.PixivRecommendResponse
 import com.piku.client.data.remote.pixiv.PixivSearchResponse
 import com.piku.client.data.remote.pixiv.PixivWorkCard
 import com.piku.client.data.repository.PixivRepository
+import com.piku.client.data.repository.NovelBlock
 import com.piku.client.data.repository.pixivNewFeedCursor
 import com.piku.client.data.repository.pixivTotalPages
+import com.piku.client.data.repository.splitNovelBlocks
 import com.piku.client.data.repository.toWork
 import com.piku.client.domain.source.SourceFacetStyle
 import com.piku.client.domain.source.SourceFacetVisibleWhen
@@ -84,6 +91,7 @@ class PixivContentSourceTest {
         /** 置位后取页抛该异常（模拟服务端 404 等） */
         var failure: HttpException? = null
         var pagesResponse = PixivPagesResponse()
+        var pagesCalls = 0
 
         override suspend fun ranking(mode: String, content: String, page: Int, format: String): PixivRankingResponse {
             calls.add(Triple(mode, content, page))
@@ -91,7 +99,13 @@ class PixivContentSourceTest {
             return response
         }
 
-        override suspend fun illustPages(illustId: Long): PixivPagesResponse = pagesResponse
+        override suspend fun illustPages(illustId: Long): PixivPagesResponse {
+            pagesCalls++
+            return pagesResponse
+        }
+
+        var novelMetaResponse = PixivNovelAjaxResponse()
+        override suspend fun novelMeta(novelId: Long): PixivNovelAjaxResponse = novelMetaResponse
 
         override suspend fun searchArtworks(
             word: String,
@@ -472,6 +486,10 @@ class PixivContentSourceTest {
 
     private fun loggedInSource(api: FakeApi, appApi: FakeAppApi): PixivContentSource =
         source(api, appApi, loggedInPixivAuth())
+
+    /** 小说 webview 链路是登录态专属：构造带会话的仓库 */
+    private fun loggedInRepository(api: FakeApi, appApi: FakeAppApi): PixivRepository =
+        repository(api, appApi, loggedInPixivAuth())
 
     private fun appIllust(id: String, xRestrict: Int = 0) = PixivAppIllust(
         id = id,
@@ -1079,7 +1097,7 @@ class PixivContentSourceTest {
         val appApi = FakeAppApi()
         appApi.novelWebviewHtml =
             """<html><body>novel: {"id":"77","title":"題","text":"[chapter:一][newpage]本文"}, isOwnWork: false,</body></html>"""
-        assertEquals("一\n\n本文", repository(FakeApi(), appApi).novelBody(77).getOrThrow())
+        assertEquals("一\n\n本文", loggedInRepository(FakeApi(), appApi).novelBody(77).getOrThrow())
     }
 
     /** 页面结构变了（取不到 novel 对象）必须报终态，不能当成空正文放行 */
@@ -1087,7 +1105,165 @@ class PixivContentSourceTest {
     fun novelBodyFailsWhenWebviewHasNoNovelObject() = runTest {
         val appApi = FakeAppApi()
         appApi.novelWebviewHtml = "<html><body>not found</body></html>"
-        assertTrue(repository(FakeApi(), appApi).novelBody(77).isFailure)
+        assertTrue(loggedInRepository(FakeApi(), appApi).novelBody(77).isFailure)
+    }
+
+    /**
+     * 内嵌图 token 化：webview 载荷把两类标记的直链都预解析好了——pixivimage 查 illusts 表
+     * （键与标记串一致，含页码后缀），uploadedimage 查 images 表（1200x1200 档优先）；
+     * 零额外请求，图块独立成块、文本原样
+     */
+    @Test
+    fun novelBodyResolvesInlineImages() = runTest {
+        val api = FakeApi()
+        val appApi = FakeAppApi().apply {
+            novelWebviewHtml = """
+                <html><body>novel: {"id":"77","text":"段落一[pixivimage:88-2]段落二[uploadedimage:1]段落三[pixivimage:88]段落四",
+                "illusts":{"88-2":{"visible":true,"illust":{"images":{"medium":"https://i.pximg.net/img-master/a_p1_master1200.jpg"}}},
+                "88":{"visible":true,"illust":{"images":{"medium":"https://i.pximg.net/img-master/a_p0_master1200.jpg"}}}},
+                "images":{"1":{"novelImageId":"1","urls":{"1200x1200":"https://i.pximg.net/novel/e1.jpg"}}}}, isOwnWork: false,</body></html>
+            """.trimIndent()
+        }
+
+        val body = loggedInRepository(api, appApi).novelBody(77).getOrThrow()
+
+        assertEquals(
+            listOf(
+                NovelBlock.Text("段落一"),
+                NovelBlock.Image("https://i.pximg.net/img-master/a_p1_master1200.jpg"),
+                NovelBlock.Text("段落二"),
+                NovelBlock.Image("https://i.pximg.net/novel/e1.jpg"),
+                NovelBlock.Text("段落三"),
+                NovelBlock.Image("https://i.pximg.net/img-master/a_p0_master1200.jpg"),
+                NovelBlock.Text("段落四"),
+            ),
+            splitNovelBlocks(body),
+        )
+        // 直链查表即得，看图链路一次都不该打
+        assertEquals(0, api.pagesCalls)
+    }
+
+    /** webview 载荷没带 images 表时向网页端补一发（匿名），补到就渲染 */
+    @Test
+    fun novelBodyFallsBackToWebForEmbeddedImages() = runTest {
+        val api = FakeApi().apply {
+            novelMetaResponse = PixivNovelAjaxResponse(
+                body = PixivNovelAjaxBody(
+                    textEmbeddedImages = mapOf(
+                        "3" to PixivNovelEmbeddedImage(urls = mapOf("1200x1200" to "https://i.pximg.net/novel/w3.jpg")),
+                    ),
+                ),
+            )
+        }
+        val appApi = FakeAppApi().apply {
+            novelWebviewHtml = """<html><body>novel: {"id":"77","text":"前[uploadedimage:3]后"}, isOwnWork: false,</body></html>"""
+        }
+
+        val body = loggedInRepository(api, appApi).novelBody(77).getOrThrow()
+
+        assertEquals(
+            listOf(
+                NovelBlock.Text("前"),
+                NovelBlock.Image("https://i.pximg.net/novel/w3.jpg"),
+                NovelBlock.Text("后"),
+            ),
+            splitNovelBlocks(body),
+        )
+    }
+
+    /** 解析不出的内嵌图（载荷没有 / 作品不可见 / URL 表没有）清掉：正文干净，不带标记也不带死 token */
+    @Test
+    fun novelBodyDropsUnresolvableInlineImages() = runTest {
+        val api = FakeApi()
+        val appApi = FakeAppApi().apply {
+            novelWebviewHtml = """
+                <html><body>novel: {"id":"77","text":"A[pixivimage:88]B[pixivimage:99]C[uploadedimage:9]D",
+                "illusts":{"99":{"visible":false,"availableMessage":"非公開","illust":{"images":{}}}}}, isOwnWork: false,</body></html>
+            """.trimIndent()
+        }
+
+        val body = loggedInRepository(api, appApi).novelBody(77).getOrThrow()
+
+        assertEquals("ABCD", body)
+    }
+
+    /** 未登录小说详情走网页端：简介清洗、标签、统计全从匿名载荷取，app-api 不该被打 */
+    @Test
+    fun novelTextLoggedOutUsesWeb() = runTest {
+        val api = FakeApi().apply {
+            novelMetaResponse = PixivNovelAjaxResponse(
+                body = PixivNovelAjaxBody(
+                    description = "第一行&amp;A<br />第二行",
+                    tags = PixivNovelAjaxTags(tags = listOf(PixivNovelAjaxTag("東方"), PixivNovelAjaxTag(""))),
+                    viewCount = 123,
+                    likeCount = 4,
+                    bookmarkCount = 55,
+                    createDate = "2026-10-07T00:00:00+09:00",
+                ),
+            )
+        }
+
+        val text = repository(api, FakeAppApi()).novelText(77).getOrThrow()!!
+
+        assertEquals("第一行&A\n第二行", text.description)
+        assertEquals(listOf("東方"), text.tags)
+        assertEquals(123, text.stats?.views)
+        assertEquals(4, text.stats?.likes)
+        assertEquals(55, text.stats?.bookmarks)
+    }
+
+    /** 未登录撞 R-18/登录限定小说：error=true → 登录墙，与插画同形 */
+    @Test
+    fun novelTextLoggedOutLoginWall() = runTest {
+        val api = FakeApi().apply { novelMetaResponse = PixivNovelAjaxResponse(error = true) }
+
+        val result = repository(api, FakeAppApi()).novelText(77)
+
+        assertTrue(result.exceptionOrNull() is AppError.LoginRequired)
+    }
+
+    /** 未登录正文走网页端：content + textEmbeddedImages，pixivimage 无预解析走看图链路（页码 1 起） */
+    @Test
+    fun novelBodyLoggedOutUsesWeb() = runTest {
+        val api = FakeApi().apply {
+            pagesResponse = PixivPagesResponse(
+                body = listOf(
+                    PixivPage(urls = PixivPageUrls(regular = "https://i.pximg.net/img-master/a_p0_master1200.jpg")),
+                    PixivPage(urls = PixivPageUrls(regular = "https://i.pximg.net/img-master/a_p1_master1200.jpg")),
+                ),
+            )
+            novelMetaResponse = PixivNovelAjaxResponse(
+                body = PixivNovelAjaxBody(
+                    content = "段落一[pixivimage:88-2]段落二[uploadedimage:3]段落三",
+                    textEmbeddedImages = mapOf(
+                        "3" to PixivNovelEmbeddedImage(urls = mapOf("1200x1200" to "https://i.pximg.net/novel/e3.jpg")),
+                    ),
+                ),
+            )
+        }
+
+        val body = repository(api, FakeAppApi()).novelBody(77).getOrThrow()
+
+        assertEquals(
+            listOf(
+                NovelBlock.Text("段落一"),
+                NovelBlock.Image("https://i.pximg.net/img-master/a_p1_master1200.jpg"),
+                NovelBlock.Text("段落二"),
+                NovelBlock.Image("https://i.pximg.net/novel/e3.jpg"),
+                NovelBlock.Text("段落三"),
+            ),
+            splitNovelBlocks(body),
+        )
+    }
+
+    /** 未登录正文撞登录墙：整体失败给登录引导，而不是空正文 */
+    @Test
+    fun novelBodyLoggedOutLoginWall() = runTest {
+        val api = FakeApi().apply { novelMetaResponse = PixivNovelAjaxResponse(error = true) }
+
+        val result = repository(api, FakeAppApi()).novelBody(77)
+
+        assertTrue(result.exceptionOrNull() is AppError.LoginRequired)
     }
 
     /** 正文的 pixiv 私有标记按官方语义清洗：注音挂括号、超链接留标题、图片与跳转标记丢掉 */

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -23,6 +24,12 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInParent
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
@@ -35,15 +42,19 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -61,6 +72,8 @@ import com.piku.client.common.LinkSegment
 import com.piku.client.ui.common.PikuBackButton
 import com.piku.client.common.LinkText
 import com.piku.client.data.local.SettingsRepository
+import com.piku.client.data.repository.NovelBlock
+import com.piku.client.data.repository.splitNovelBlocks
 import com.piku.client.ui.theme.ControlAccentDark
 import com.piku.client.ui.theme.ControlAccentLight
 import com.piku.client.ui.theme.ViewerBackgroundDark
@@ -70,6 +83,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 internal const val NOVEL_FONT_MIN = SettingsRepository.NOVEL_FONT_MIN
 internal const val NOVEL_FONT_MAX = SettingsRepository.NOVEL_FONT_MAX
@@ -77,6 +91,17 @@ internal const val NOVEL_FONT_DEFAULT = SettingsRepository.NOVEL_FONT_DEFAULT
 
 private const val AUTO_HIDE_DELAY_MS = 2500L
 private val POIPIKU_WORK_REGEX = Regex("""https?://poipiku\.com/(\d+)/(\d+)\.html""")
+
+/** 内嵌图占位比例（宽/高）：pixiv 插画多是竖图，先按 2:3 估位，出真尺寸后按真比例校正 */
+private const val IMAGE_ASPECT_DEFAULT = 0.7f
+/** 取图失败时留的高度：只留一条痕迹，别让一张废图占满一屏 */
+private val IMAGE_FAILED_HEIGHT = 120.dp
+/**
+ * 同时在途的图块请求上限。放行窗口是按视口算的，一屏多高就能塞进多少张（约 7 张），
+ * 一次全放出去等于 7 张 8MB 级解码 + 7 次重排一起压主线程 —— 每帧放行 1 张只压了启动速率，
+ * 压不住在途总量，所以再加这道闸。
+ */
+private const val IMAGE_MAX_IN_FLIGHT = 2
 
 /** 阅读器浅色（米色纸）配色：不跟随系统主题，独立切换 */
 internal val NovelReaderBgLight = Color(0xFFF3EEDA)
@@ -133,6 +158,8 @@ fun FullNovelViewer(
     val currentOnProgressSave by rememberUpdatedState(onProgressSave)
     var controlsVisible by remember { mutableStateOf(true) }
     var autoHideJob by remember { mutableStateOf<Job?>(null) }
+    // 视口高度（px）：图块放行窗口要用
+    var viewportPx by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
     val scrollState = remember { ScrollState(0) }
 
@@ -181,6 +208,7 @@ fun FullNovelViewer(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .onSizeChanged { viewportPx = it.height }
             .background(bg)
             .pointerInput(Unit) {
                 detectTapGestures(onTap = {
@@ -211,14 +239,37 @@ fun FullNovelViewer(
                         modifier = Modifier.padding(bottom = 8.dp),
                     )
                 }
-                Text(
-                    text = remember(text, linkColor, context, currentOnWorkClick) {
-                        linkifyNovel(text, linkColor, context, currentOnWorkClick)
-                    },
-                    color = fg,
-                    fontSize = fontSize.sp,
-                    lineHeight = (fontSize * 1.7f).sp,
-                )
+                // 内嵌图切块：pixiv 正文的 [nimg:URL] token 切成图块独立渲染；
+                // 无 token 的正文（poipiku 全部、纯文字 pixiv 小说）仍是单一文本块，渲染与从前一致
+                val blocks = remember(text) { splitNovelBlocks(text) }
+                // 图块按视口窗口放行：整章图一次全请求 + 全解码会打满内存与主线程（卡顿根源）
+                val imageTracker = remember(text) { NovelImageTracker(blocks.count { it is NovelBlock.Image }) }
+                LaunchedEffect(scrollState, imageTracker) {
+                    imageTracker.pump(scrollState, viewport = { viewportPx })
+                }
+                var imageIndex = 0
+                blocks.forEach { block ->
+                    when (block) {
+                        is NovelBlock.Text -> Text(
+                            text = remember(block.text, linkColor, context, currentOnWorkClick) {
+                                linkifyNovel(block.text, linkColor, context, currentOnWorkClick)
+                            },
+                            color = fg,
+                            fontSize = fontSize.sp,
+                            lineHeight = (fontSize * 1.7f).sp,
+                        )
+
+                        is NovelBlock.Image -> {
+                            // 放行状态在图块内部按 index 自读自写：谁的状态变了只有谁重组
+                            NovelInlineImage(
+                                url = block.url,
+                                index = imageIndex++,
+                                tracker = imageTracker,
+                                placeholderColor = fg.copy(alpha = 0.05f),
+                            )
+                        }
+                    }
+                }
             }
         }
 
@@ -345,6 +396,132 @@ private fun progressPercent(scrollState: ScrollState): Int {
     val max = scrollState.maxValue
     if (max <= 0) return 100
     return ((scrollState.value.toFloat() / max) * 100).toInt().coerceIn(0, 100)
+}
+
+
+private class NovelImageTracker(imageCount: Int) {
+    private val positions = FloatArray(imageCount) { Float.POSITIVE_INFINITY }
+    private val activated = Array(imageCount) { mutableStateOf(false) }
+    private val settled = BooleanArray(imageCount)
+    private var inFlight by mutableIntStateOf(0)
+    private var revision by mutableIntStateOf(0)
+
+    fun mark(index: Int, contentY: Float) {
+        if (positions[index] == contentY) return
+        positions[index] = contentY
+        revision++
+    }
+
+    fun isActivated(index: Int): Boolean = activated[index].value
+
+    /** 图块加载收尾（成功/失败都算）：腾出在途名额，放行泵会被唤醒接着放下一张 */
+    fun onSettled(index: Int) {
+        if (settled[index]) return
+        settled[index] = true
+        inFlight--
+    }
+
+    /**
+     * 帧驱动放行：每帧最多放行 [perFrame] 张（由近及远），且在途不超过 [IMAGE_MAX_IN_FLIGHT]。
+     * 没得放行就挂起等状态变化（滚动 / 布局位移 / 有图收尾），不空转。
+     */
+    suspend fun pump(scrollState: ScrollState, viewport: () -> Int, perFrame: Int = 1) {
+        while (true) {
+            withFrameNanos { }
+            if (inFlight >= IMAGE_MAX_IN_FLIGHT || !release(scrollState.value, viewport(), perFrame)) {
+                awaitChange(scrollState, viewport)
+            }
+        }
+    }
+
+    /** 放行窗口内离视口中心最近的图，最多 [budget] 张；返回这一轮是否有图被放行 */
+    private fun release(scrollPx: Int, viewportPx: Int, budget: Int): Boolean {
+        if (viewportPx <= 0) return false
+        // 视口上方留 1.5 屏、下方留 2.5 屏余量：图在读者到达前就已完成解码，滚动时不再等它
+        val top = scrollPx - viewportPx * 1.5f
+        val bottom = scrollPx + viewportPx * 2.5f
+        val center = scrollPx + viewportPx / 2f
+        var left = budget
+        while (left > 0) {
+            var next = -1
+            var nearest = Float.MAX_VALUE
+            positions.forEachIndexed { index, y ->
+                if (activated[index].value || y !in top..bottom) return@forEachIndexed
+                val distance = abs(y - center)
+                if (distance < nearest) {
+                    nearest = distance
+                    next = index
+                }
+            }
+            if (next < 0) break
+            activated[next].value = true
+            inFlight++
+            left--
+        }
+        return left < budget
+    }
+
+    private suspend fun awaitChange(scrollState: ScrollState, viewport: () -> Int) {
+        val key = listOf(scrollState.value, viewport(), revision, inFlight)
+        snapshotFlow { listOf(scrollState.value, viewport(), revision, inFlight) }
+            .first { it != key }
+    }
+}
+
+/**
+ * 正文内嵌图：先按估的比例占位（放行前是灰块，放行后原地填报），出真尺寸后按真比例定死。
+ * 位置回调照常挂，放行泵靠它算窗口。
+ */
+@Composable
+private fun NovelInlineImage(
+    url: String,
+    index: Int,
+    tracker: NovelImageTracker,
+    placeholderColor: Color,
+) {
+    val activated = tracker.isActivated(index)
+    // 占位比例先按竖图估，出图后校正成真值。校正时图通常还是"下面一张"，读者看不到这次重排
+    var aspect by remember(url) { mutableFloatStateOf(IMAGE_ASPECT_DEFAULT) }
+    var failed by remember(url) { mutableStateOf(false) }
+    val positioned = Modifier
+        .onGloballyPositioned { coords ->
+            // positionInParent 是滚动不变量（相对滚动内容），比 boundsInRoot 便宜且不随滚动抖动
+            tracker.mark(index, coords.positionInParent().y)
+        }
+        .fillMaxWidth()
+        .padding(vertical = 10.dp)
+    // 高度由比例算定、不看位图固有尺寸：占位与出图占同一块地方，正文不会被顶动
+    val sized = if (failed) positioned.height(IMAGE_FAILED_HEIGHT) else positioned.aspectRatio(aspect)
+    if (!activated) {
+        Box(modifier = sized.background(placeholderColor))
+        return
+    }
+    val context = LocalContext.current
+    AsyncImage(
+        // 关掉淡入：大图淡入要在渲染线程逐帧混合整张位图，几张一起淡就是连掉帧。
+        // 尺寸不写死，交给 Coil 按布局约束取（宽度铺满、高度保原图比例）
+        model = remember(url, context) {
+            ImageRequest.Builder(context)
+                .data(url)
+                .crossfade(false)
+                .build()
+        },
+        contentDescription = null,
+        placeholder = remember(placeholderColor) { ColorPainter(placeholderColor) },
+        error = remember(placeholderColor) { ColorPainter(placeholderColor) },
+        onSuccess = { state ->
+            val image = state.result.image
+            if (image.width > 0 && image.height > 0) {
+                aspect = image.width.toFloat() / image.height
+            }
+            tracker.onSettled(index)
+        },
+        onError = {
+            failed = true
+            tracker.onSettled(index)
+        },
+        modifier = sized,
+    )
 }
 
 /**
