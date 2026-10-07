@@ -30,7 +30,6 @@ import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -59,6 +58,7 @@ import com.piku.client.ui.common.PikuSheetTitle
 import com.piku.client.ui.theme.LocalDarkTheme
 import com.piku.client.ui.theme.LoginBackgroundDark
 import com.piku.client.ui.theme.PikuColors
+import com.piku.client.ui.theme.themedSwitchColors
 
 // ---------------- 检索筛选：chips 行 + 底部面板 ----------------
 
@@ -396,7 +396,7 @@ internal fun SearchFilterSheet(
                     onCheckedChange = { checked ->
                         draft = if (checked) draft + (toggle.id to FILTER_TOGGLE_ON) else draft - toggle.id
                     },
-                    colors = SwitchDefaults.colors(checkedTrackColor = PikuColors.accent),
+                    colors = themedSwitchColors(dark),
                 )
             }
             Spacer(Modifier.height(8.dp))
