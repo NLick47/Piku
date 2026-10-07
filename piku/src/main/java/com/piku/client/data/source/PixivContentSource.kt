@@ -51,10 +51,14 @@ class PixivContentSource @Inject constructor(
                 ).map { items -> SourcePage(items = items) }
             }
 
-            FEED_FOLLOW -> if (facets[GROUP_CONTENT] == FACET_NOVEL) {
-                repository.novelFollowFeed(offset).map { items -> SourcePage(items = items) }
-            } else {
-                repository.followFeed(offset = offset).map { items -> SourcePage(items = items) }
+            FEED_FOLLOW -> {
+                // 公开/悄悄关注两个范围：接口没有「全部」档，一次请求只能选一边
+                val restrict = facets[GROUP_FOLLOW_SCOPE] ?: PixivAppConfig.RESTRICT_PUBLIC
+                if (facets[GROUP_CONTENT] == FACET_NOVEL) {
+                    repository.novelFollowFeed(offset = offset, restrict = restrict).map { items -> SourcePage(items = items) }
+                } else {
+                    repository.followFeed(offset = offset, restrict = restrict).map { items -> SourcePage(items = items) }
+                }
             }
 
             FEED_LATEST -> latestPage(facets, page)
@@ -120,6 +124,7 @@ class PixivContentSource @Inject constructor(
         const val FEED_LATEST = "latest"
         const val GROUP_PERIOD = "period"
         const val GROUP_CONTENT = "content"
+        const val GROUP_FOLLOW_SCOPE = "follow_scope"
         const val GROUP_LATEST_CONTENT = "latest_content"
         const val PERIOD_DAILY = "daily"
         const val FACET_ALL = "all"
@@ -201,6 +206,17 @@ class PixivContentSource @Inject constructor(
                 options = listOf(
                     SourceFacet(id = FACET_ILLUST, labelRes = R.string.pixiv_filter_illust, selectedByDefault = true),
                     SourceFacet(id = FACET_NOVEL, labelRes = R.string.pixiv_filter_novel),
+                ),
+            ),
+            // 关注流的可见范围：公开关注/悄悄关注，与关注列表的双 tab 同一词汇，id 直接用 restrict 参数值。
+            // 常显片选而不进 tab 行：tab 行已有内容档下拉，EN/JA 长文案下再挂一个下拉小屏放不下（榜单周期片选同款）
+            SourceFacetGroup(
+                id = GROUP_FOLLOW_SCOPE,
+                style = SourceFacetStyle.Chips,
+                feedId = FEED_FOLLOW,
+                options = listOf(
+                    SourceFacet(id = PixivAppConfig.RESTRICT_PUBLIC, labelRes = R.string.pixiv_follow_scope_public, selectedByDefault = true),
+                    SourceFacet(id = PixivAppConfig.RESTRICT_PRIVATE, labelRes = R.string.pixiv_follow_scope_quiet),
                 ),
             ),
             // 新着的内容类型：插画/漫画/小说。app-api 对空 content_type（全部混排）的行为未验证，先不提供「全部」

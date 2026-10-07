@@ -736,6 +736,8 @@
     <string name="pixiv_tab_ranking">人気</string>
     <string name="pixiv_tab_recommend">おすすめ</string>
     <string name="pixiv_tab_follow_new">フォロー</string>
+    <string name="pixiv_follow_scope_public">公開</string>
+    <string name="pixiv_follow_scope_quiet">非公開</string>
     <string name="pixiv_tab_new">新着</string>
     <string name="pixiv_need_login">pixivアカウントでログインすると見られます</string>
     <string name="home_coming_soon">近日公開</string>

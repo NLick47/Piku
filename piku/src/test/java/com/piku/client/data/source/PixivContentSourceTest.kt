@@ -295,6 +295,8 @@ class PixivContentSourceTest {
         var novelNextUrl: String? = null
         var novelDetailResponse = PixivNovelDetailResponse()
         var novelWebviewHtml: String = ""
+        /** 小说关注流调用：offset 与 restrict 成对记下，范围档对小说同样生效 */
+        val novelFollowCalls = mutableListOf<Pair<Int?, String>>()
 
         override suspend fun novelRecommended(
             clientTime: String,
@@ -309,7 +311,10 @@ class PixivContentSourceTest {
             clientHash: String,
             restrict: String,
             offset: Int?,
-        ): PixivNovelsResponse = PixivNovelsResponse(novels = novels)
+        ): PixivNovelsResponse {
+            novelFollowCalls.add(offset to restrict)
+            return PixivNovelsResponse(novels = novels)
+        }
 
         override suspend fun novelNew(
             clientTime: String,
@@ -778,8 +783,32 @@ class PixivContentSourceTest {
         src.page(PixivContentSource.FEED_FOLLOW, emptyMap(), 2)
 
         assertEquals(listOf(0, 2 * PixivAppConfig.PAGE_SIZE), app.followCalls.map { it.first })
-        // 默认公开关注；private（悄悄关注）另有入口，这里不该发
+        // 空档位收敛为默认：公开关注。private 只在范围档选了悄悄时才发
         assertTrue(app.followCalls.all { it.second == PixivAppConfig.RESTRICT_PUBLIC })
+    }
+
+    /** 关注流范围档驱动 restrict：悄悄档原样发出去，插画与小说两条链路同参数 */
+    @Test
+    fun followScopeFacetDrivesRestrict() = runTest {
+        val app = FakeAppApi()
+        val src = source(FakeApi(), app)
+
+        src.page(
+            PixivContentSource.FEED_FOLLOW,
+            mapOf(PixivContentSource.GROUP_FOLLOW_SCOPE to PixivAppConfig.RESTRICT_PRIVATE),
+            0,
+        )
+        src.page(
+            PixivContentSource.FEED_FOLLOW,
+            mapOf(
+                PixivContentSource.GROUP_CONTENT to PixivContentSource.FACET_NOVEL,
+                PixivContentSource.GROUP_FOLLOW_SCOPE to PixivAppConfig.RESTRICT_PRIVATE,
+            ),
+            0,
+        )
+
+        assertEquals(PixivAppConfig.RESTRICT_PRIVATE, app.followCalls.single().second)
+        assertEquals(PixivAppConfig.RESTRICT_PRIVATE, app.novelFollowCalls.single().second)
     }
 
     /** 关注卡同样按比例排版；R-18 不再被源过滤 */
@@ -940,6 +969,16 @@ class PixivContentSourceTest {
             it.id == PixivContentSource.GROUP_CONTENT && it.feedId == PixivContentSource.FEED_FOLLOW
         }
         assertEquals(listOf("illust", "novel"), followContent.options.map { it.id })
+
+        // 关注流的范围档：id 直接就是 restrict 参数值，公开默认、悄悄选了才发；片选常显，tab 行只留内容档一个下拉
+        val followScope = PixivContentSource.FACETS.first { it.id == PixivContentSource.GROUP_FOLLOW_SCOPE }
+        assertEquals(SourceFacetStyle.Chips, followScope.style)
+        assertEquals(PixivContentSource.FEED_FOLLOW, followScope.feedId)
+        assertEquals(
+            listOf(PixivAppConfig.RESTRICT_PUBLIC, PixivAppConfig.RESTRICT_PRIVATE),
+            followScope.options.map { it.id },
+        )
+        assertEquals(PixivAppConfig.RESTRICT_PUBLIC, followScope.options.first { it.selectedByDefault }.id)
     }
 
     /** 小说档必须走小说接口并落成 NOVEL 作品：走错接口取到的是插画，kind 也不会是小说 */
@@ -970,9 +1009,12 @@ class PixivContentSourceTest {
     @Test
     fun facetChoicesStayInsideOneFeed() = runTest {
         val source = PixivContentSource(repository(FakeApi()))
-        // 关注流选了小说：在关注流里合法，原样保留
+        // 关注流选了小说：在关注流里合法，原样保留；范围档补上自己的默认（公开）
         val follow = mapOf(PixivContentSource.GROUP_CONTENT to PixivContentSource.FACET_NOVEL)
-        assertEquals(follow, source.sanitizeFacetChoices(PixivContentSource.FEED_FOLLOW, follow))
+        assertEquals(
+            follow + (PixivContentSource.GROUP_FOLLOW_SCOPE to PixivAppConfig.RESTRICT_PUBLIC),
+            source.sanitizeFacetChoices(PixivContentSource.FEED_FOLLOW, follow),
+        )
         // 榜单没有小说这一档：带着别流的档位过来要退回榜单自己的默认（周期片选照常在）
         assertEquals(
             mapOf(

@@ -736,6 +736,8 @@
     <string name="pixiv_tab_ranking">Rank</string>
     <string name="pixiv_tab_recommend">For You</string>
     <string name="pixiv_tab_follow_new">Follow</string>
+    <string name="pixiv_follow_scope_public">Public</string>
+    <string name="pixiv_follow_scope_quiet">Private</string>
     <string name="pixiv_tab_new">New</string>
     <string name="pixiv_need_login">Log in with your pixiv account to see this</string>
     <string name="home_coming_soon">Coming soon</string>

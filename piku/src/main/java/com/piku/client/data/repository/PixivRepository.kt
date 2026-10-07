@@ -329,13 +329,14 @@ class PixivRepository @Inject constructor(
         response.trendTags.mapNotNull { it.toTrendingTag() }
     }
 
-    /** 关注流：已关注画师的新作，时间倒序，与推荐同为 offset 翻页。需登录，未登录时调用方不该发起 */
-    suspend fun followFeed(offset: Int): Result<List<Work>> = apiCall {
+    /** 关注流：已关注画师的新作，时间倒序，与推荐同为 offset 翻页。[restrict] 决定公开/悄悄关注的范围。需登录，未登录时调用方不该发起 */
+    suspend fun followFeed(offset: Int, restrict: String): Result<List<Work>> = apiCall {
         val signature = endpoints.clientSignature(runtime.now())
         val response = appApi.followFeed(
             clientTime = signature.time,
             clientHash = signature.hash,
             offset = offset,
+            restrict = restrict,
         )
         response.illusts.mapNotNull { it.toWork() }
     }
@@ -409,12 +410,13 @@ class PixivRepository @Inject constructor(
         response.novels.mapNotNull { it.toWork() }
     }
 
-    suspend fun novelFollowFeed(offset: Int): Result<List<Work>> = apiCall {
+    suspend fun novelFollowFeed(offset: Int, restrict: String): Result<List<Work>> = apiCall {
         val signature = endpoints.clientSignature(runtime.now())
         val response = appApi.novelFollow(
             clientTime = signature.time,
             clientHash = signature.hash,
             offset = offset,
+            restrict = restrict,
         )
         response.novels.mapNotNull { it.toWork() }
     }
