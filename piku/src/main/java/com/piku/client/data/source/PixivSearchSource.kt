@@ -53,6 +53,8 @@ class PixivSearchSource @Inject constructor(
             emptySet()
         }
 
+    override fun hiddenTagFilterGroups(): Set<String> = setOf(SourceSearch.FILTER_KIND, GROUP_TARGET)
+
     override suspend fun searchWorks(
         query: String,
         filters: Map<String, String>,

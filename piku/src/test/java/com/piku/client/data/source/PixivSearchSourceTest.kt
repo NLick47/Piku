@@ -492,6 +492,16 @@ class PixivSearchSourceTest {
         assertTrue(impl.supportsUsers)
     }
 
+    @Test
+    fun tagModeHidesKindAndTargetGroups() {
+        val impl = source(FakeAppApi())
+
+        assertEquals(
+            setOf(SourceSearch.FILTER_KIND, PixivSearchSource.GROUP_TARGET),
+            impl.hiddenTagFilterGroups(),
+        )
+    }
+
     // ---------------- 参数映射：filters → app-api 查询参数 ----------------
 
     @Test

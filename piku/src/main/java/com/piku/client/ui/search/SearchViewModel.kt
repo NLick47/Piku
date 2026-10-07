@@ -128,6 +128,8 @@ data class SearchUiState(
     val filterToggles: List<SearchFilterToggleSpec> = emptyList(),
     /** 按档位收敛后的可见组（小说档藏期间/对象），筛选行与面板都渲染这份 */
     val visibleFilterGroups: List<SearchFilterGroupSpec> = emptyList(),
+    /** 标签作品模式可见组：声明组减去 hiddenTagFilterGroups（pixiv 强制完全一致，藏类型/对象） */
+    val visibleTagFilterGroups: List<SearchFilterGroupSpec> = emptyList(),
     val selectedFilters: Map<String, String> = emptyMap(),
 )
 
@@ -208,6 +210,10 @@ class SearchViewModel @Inject constructor(
         else -> sourceAuthRegistry.isLoggedIn(source)
     }
 
+    /** 标签作品模式的可见筛选组：声明组按 [SourceSearch.hiddenTagFilterGroups] 收敛（与选中值无关） */
+    private fun tagVisibleGroups(plugin: SourceSearch?): List<SearchFilterGroupSpec> =
+        plugin?.filterGroups?.filterNot { it.id in plugin.hiddenTagFilterGroups() } ?: emptyList()
+
     private val _uiState = MutableStateFlow(
         SearchUiState(
             keyword = keyword,
@@ -218,6 +224,7 @@ class SearchViewModel @Inject constructor(
             filterGroups = searchPlugin?.filterGroups ?: emptyList(),
             filterToggles = searchPlugin?.filterToggles ?: emptyList(),
             visibleFilterGroups = searchPlugin?.filterGroups ?: emptyList(),
+            visibleTagFilterGroups = tagVisibleGroups(searchPlugin),
             selectedFilters = searchPlugin?.let(::defaultFilters) ?: emptyMap(),
         ),
     )
@@ -340,6 +347,7 @@ class SearchViewModel @Inject constructor(
                 filterGroups = searchPlugin?.filterGroups ?: emptyList(),
                 filterToggles = searchPlugin?.filterToggles ?: emptyList(),
                 visibleFilterGroups = searchPlugin?.filterGroups ?: emptyList(),
+                visibleTagFilterGroups = tagVisibleGroups(searchPlugin),
                 selectedFilters = searchPlugin?.let(::defaultFilters) ?: emptyMap(),
                 suggestions = emptyList(),
                 popularTagNames = emptyList(),

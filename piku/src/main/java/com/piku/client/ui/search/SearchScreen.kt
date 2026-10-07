@@ -120,6 +120,8 @@ fun SearchScreen(
     val searchTerm = state.keyword.trimStart('#').removePrefix("@").trim()
     val hasQuery = searchTerm.isNotEmpty()
 
+    val tagWorksMode = hasQuery && state.tab == SearchTab.TAGS && state.selectedTagName != null
+
     // 实时识别站内链接（跨源解析，host 定源）：命中后操作按钮切换为"打开链接"，
     // 提交时直接跳转不写历史；与当前源无关，p 站源下贴 poipiku 链接照样识别
     val link = remember(query) { viewModel.resolveLink(query) }
@@ -251,9 +253,11 @@ fun SearchScreen(
                         )
                         // 换源是整页动作：源 chip 三个 tab 常驻居首；筛选摘要只在作品 tab
                         // 且插件声明了条件时出现（面板与摘要行都只看可见组，小说档下期间/对象组退场）。
-                        // 标签作品模式例外：源 chip 挪进标签头行，筛选行整行让给卡片
-                        val tagWorksMode = state.tab == SearchTab.TAGS && state.selectedTagName != null
+                        // 标签作品模式不渲染筛选行：筛选入口挂在标签头行尾（TagFilterEntryChip，
+                        // 角标=非默认条件数），点开的面板按模式取标签档可见组；poipiku 等无声明的源没有入口
                         val hasFilterSpec = state.visibleFilterGroups.isNotEmpty() || state.filterToggles.isNotEmpty()
+                        val tagHasFilters = state.pluginActive &&
+                            (state.visibleTagFilterGroups.isNotEmpty() || state.filterToggles.isNotEmpty())
                         val sourceLabel = stringResource(viewModel.homeSourceLabelRes(state.source))
                         if (!tagWorksMode) {
                             SearchFilterBar(
@@ -303,6 +307,16 @@ fun SearchScreen(
                                 state = state,
                                 isTablet = isTablet,
                                 sourceLabel = sourceLabel,
+                                filterEntry = if (tagHasFilters) {
+                                    {
+                                        TagFilterEntryChip(
+                                            groups = state.visibleTagFilterGroups,
+                                            toggles = state.filterToggles,
+                                            selected = state.selectedFilters,
+                                            onOpen = { showFilterSheet = true },
+                                        )
+                                    }
+                                } else null,
                                 onSourceClick = { showSourceSheet = true },
                                 onLoginClick = handleLoginClick,
                                 onRetry = viewModel::retryTags,
@@ -330,8 +344,9 @@ fun SearchScreen(
             }
         }
         if (showFilterSheet) {
+            // 标签作品模式开的是标签档面板：可见组与筛选行一致（pixiv 藏类型/对象组）
             SearchFilterSheet(
-                groups = state.visibleFilterGroups,
+                groups = if (tagWorksMode) state.visibleTagFilterGroups else state.visibleFilterGroups,
                 toggles = state.filterToggles,
                 selected = state.selectedFilters,
                 onApply = { selected ->

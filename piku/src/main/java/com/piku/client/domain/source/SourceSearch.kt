@@ -69,6 +69,8 @@ interface SourceSearch {
      */
     fun hiddenFilterGroups(selected: Map<String, String>): Set<String> = emptySet()
 
+    fun hiddenTagFilterGroups(): Set<String> = emptySet()
+
     /** 用户检索；仅 supportsUsers 的源会被调到 */
     suspend fun searchUsers(query: String, page: Int): Result<List<FollowUser>> =
         Result.success(emptyList())

@@ -169,6 +169,7 @@ internal fun TagsTabContent(
     state: SearchUiState,
     isTablet: Boolean,
     sourceLabel: String,
+    filterEntry: (@Composable () -> Unit)? = null,
     onSourceClick: () -> Unit,
     onLoginClick: () -> Unit,
     onRetry: () -> Unit,
@@ -188,6 +189,7 @@ internal fun TagsTabContent(
             TagWorksHeader(
                 tag = selectedTag,
                 sourceLabel = sourceLabel,
+                filterEntry = filterEntry,
                 onBack = onBackToSuggestions,
                 onSourceClick = onSourceClick,
                 showBack = canBackToSuggestions,
@@ -301,14 +303,16 @@ internal fun TagsTabContent(
 }
 
 /**
- * 作品模式头部：一行装下返回标签建议 + 当前精确标签名 + 源 chip。
- * 标签名与搜索框内容同源，仅作结果区上下文；源 chip 在本模式顶替筛选行
- * （该行整行让给卡片），换源入口不缺席——种子源页面它就是"当前在哪个源"的可见凭据。
+ * 作品模式头部：返回标签建议 + 当前精确标签名 + 源 chip，行尾可选挂筛选入口。
+ * 标签名与搜索框内容同源，仅作结果区上下文；源 chip 在本模式顶替筛选行，换源入口不缺席。
+ * 筛选入口只给声明了标签档筛选的源（pixiv）：带条件数角标、点开底部面板——
+ * 不内联生效条件 chips，行不因条件多而溢出，标签名拿足宽度。
  */
 @Composable
 private fun TagWorksHeader(
     tag: String,
     sourceLabel: String,
+    filterEntry: (@Composable () -> Unit)?,
     onBack: () -> Unit,
     onSourceClick: () -> Unit,
     dark: Boolean,
@@ -341,6 +345,10 @@ private fun TagWorksHeader(
                 .padding(start = if (showBack) 4.dp else 16.dp),
         )
         SourceChip(label = sourceLabel, onClick = onSourceClick)
+        if (filterEntry != null) {
+            Spacer(Modifier.width(8.dp))
+            filterEntry()
+        }
     }
 }
 

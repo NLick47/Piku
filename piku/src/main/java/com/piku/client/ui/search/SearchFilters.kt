@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -99,44 +100,83 @@ internal fun SearchFilterBar(
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 2.dp, bottom = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        item(key = "source") {
-            SourceChip(label = sourceLabel, onClick = onSourceClick)
-        }
         if (showFilters) {
-            groups.forEach { group ->
-                val current = selected[group.id]
-                val defaultId = group.options.firstOrNull { it.default }?.id
-                if (current != null && current != defaultId) {
-                    val labelRes = group.options.firstOrNull { it.id == current }?.labelRes
-                    if (labelRes != null) {
-                        item(key = group.id) {
-                            ActiveFilterChip(
-                                text = stringResource(labelRes),
-                                onRemove = { onResetGroup(group.id) },
-                                onOpen = onOpenSheet,
-                            )
-                        }
-                    }
+            filterSummaryItems(
+                sourceLabel = sourceLabel,
+                groups = groups,
+                toggles = toggles,
+                selected = selected,
+                onSourceClick = onSourceClick,
+                onResetGroup = onResetGroup,
+                onResetToggle = onResetToggle,
+                onOpenSheet = onOpenSheet,
+            )
+        } else {
+            item(key = "source") {
+                SourceChip(label = sourceLabel, onClick = onSourceClick)
+            }
+        }
+    }
+}
+
+@Composable
+internal fun TagFilterEntryChip(
+    groups: List<SearchFilterGroupSpec>,
+    toggles: List<SearchFilterToggleSpec>,
+    selected: Map<String, String>,
+    onOpen: () -> Unit,
+) {
+    FilterOpenChip(
+        count = nonDefaultFilterCount(groups, toggles, selected),
+        onOpen = onOpen,
+    )
+}
+
+private fun LazyListScope.filterSummaryItems(
+    sourceLabel: String,
+    groups: List<SearchFilterGroupSpec>,
+    toggles: List<SearchFilterToggleSpec>,
+    selected: Map<String, String>,
+    onSourceClick: () -> Unit,
+    onResetGroup: (String) -> Unit,
+    onResetToggle: (String) -> Unit,
+    onOpenSheet: () -> Unit,
+) {
+    item(key = "source") {
+        SourceChip(label = sourceLabel, onClick = onSourceClick)
+    }
+    groups.forEach { group ->
+        val current = selected[group.id]
+        val defaultId = group.options.firstOrNull { it.default }?.id
+        if (current != null && current != defaultId) {
+            val labelRes = group.options.firstOrNull { it.id == current }?.labelRes
+            if (labelRes != null) {
+                item(key = group.id) {
+                    ActiveFilterChip(
+                        text = stringResource(labelRes),
+                        onRemove = { onResetGroup(group.id) },
+                        onOpen = onOpenSheet,
+                    )
                 }
             }
-            toggles.forEach { toggle ->
-                if (selected[toggle.id] == FILTER_TOGGLE_ON) {
-                    item(key = toggle.id) {
-                        ActiveFilterChip(
-                            text = stringResource(toggle.labelRes),
-                            onRemove = { onResetToggle(toggle.id) },
-                            onOpen = onOpenSheet,
-                        )
-                    }
-                }
-            }
-            item(key = "filter_open") {
-                FilterOpenChip(
-                    count = nonDefaultFilterCount(groups, toggles, selected),
+        }
+    }
+    toggles.forEach { toggle ->
+        if (selected[toggle.id] == FILTER_TOGGLE_ON) {
+            item(key = toggle.id) {
+                ActiveFilterChip(
+                    text = stringResource(toggle.labelRes),
+                    onRemove = { onResetToggle(toggle.id) },
                     onOpen = onOpenSheet,
                 )
             }
         }
+    }
+    item(key = "filter_open") {
+        FilterOpenChip(
+            count = nonDefaultFilterCount(groups, toggles, selected),
+            onOpen = onOpenSheet,
+        )
     }
 }
 
