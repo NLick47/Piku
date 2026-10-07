@@ -33,13 +33,15 @@ class HomeHeaderTintTest {
     }
 
     @Test
-    fun translucentDarkHeaderKeepsOldValues() {
-        val calm = headerTintAlphas(translucent = true, dark = true, deepen = 0f)
-        assertEquals(0.16f, calm.top, 0.0001f)
-        assertEquals(0.10f, calm.mid, 0.0001f)
-        val deep = headerTintAlphas(translucent = true, dark = true, deepen = 1f)
-        assertEquals(0.21f, deep.top, 0.0001f)
-        assertEquals(0.14f, deep.mid, 0.0001f)
+    fun translucentHeaderStaysClearOnBothThemes() {
+        for (dark in listOf(false, true)) {
+            val calm = headerTintAlphas(translucent = true, dark = dark, deepen = 0f)
+            assertEquals(0f, calm.top, 0.0001f)
+            assertEquals(0f, calm.mid, 0.0001f)
+            val deep = headerTintAlphas(translucent = true, dark = dark, deepen = 1f)
+            assertEquals(0f, deep.top, 0.0001f)
+            assertEquals(0f, deep.mid, 0.0001f)
+        }
     }
 
     @Test

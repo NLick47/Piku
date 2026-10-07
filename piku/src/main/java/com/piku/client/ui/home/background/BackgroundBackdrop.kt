@@ -137,13 +137,16 @@ internal data class GlassTint(val top: Float, val mid: Float)
 internal fun headerVeilTarget(translucent: Boolean, atTop: Boolean): Float =
     if (translucent && atTop) 0f else 1f
 
-/** 头部底衬透明度，与浮层化之前逐值一致 */
+/**
+ * 头部底衬透明度，非自定义背景下与浮层化之前逐值一致。
+ * 自定义背景下两个主题都归零：压在头图上的暗色膜（顶边还是硬的）看起来像滚出来的黑块，
+ * 控件可读性交给各自的承担者——搜索钮自带玻璃圆底、标签行按图取色加软阴影。
+ */
 internal fun headerTintAlphas(
     translucent: Boolean,
     dark: Boolean,
     deepen: Float,
 ): GlassTint = when {
-    translucent && dark -> GlassTint(top = 0.16f + 0.05f * deepen, mid = 0.10f + 0.04f * deepen)
     translucent -> GlassTint(top = 0f, mid = 0f)
     dark -> GlassTint(top = 0.50f + 0.10f * deepen, mid = 0.32f + 0.14f * deepen)
     else -> GlassTint(top = 0.95f + 0.03f * deepen, mid = 0.80f + 0.08f * deepen)
