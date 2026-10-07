@@ -68,6 +68,7 @@ import com.piku.client.domain.model.WorkKind
 import com.piku.client.domain.model.key
 import com.piku.client.domain.source.SourceFacetGroup
 import com.piku.client.domain.source.SourceFacetStyle
+import com.piku.client.domain.source.isVisibleWith
 import com.piku.client.domain.source.SourceFeed
 import com.piku.client.domain.source.SourceWorkOpen
 import coil3.compose.AsyncImage
@@ -164,8 +165,10 @@ internal fun SourceFeedContent(
     }
 
     val showFeedTabs = state.feeds.count { !it.comingSoon } > 1
-    // 当前流生效的维度组：tab 行最右挂下拉，下方维度行放片选
-    val currentFacets = state.facets.filter { it.feedId == null || it.feedId == state.feedId }
+    // 当前流生效的维度组：tab 行最右挂下拉，下方维度行放片选；带显示条件的组按当前选中态整组隐藏
+    val currentFacets = state.facets.filter {
+        (it.feedId == null || it.feedId == state.feedId) && it.isVisibleWith(state.facetChoices)
+    }
 
     Column(Modifier.fillMaxSize()) {
         Box(

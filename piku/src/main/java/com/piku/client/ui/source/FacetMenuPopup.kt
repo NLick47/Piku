@@ -17,16 +17,24 @@ internal fun FacetMenuPopup(
     onSelect: (optionId: String) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    // dividerAfter 标记处切组，组间画分隔线（榜单下拉的综合族 | 独立榜）
+    val groups = mutableListOf<List<MenuPopupItem>>()
+    var current = mutableListOf<MenuPopupItem>()
+    options.forEach { option ->
+        current += MenuPopupItem(
+            label = stringResource(option.labelRes),
+            selected = option.id == selectedId,
+            onClick = { onSelect(option.id) },
+        )
+        if (option.dividerAfter) {
+            groups += current
+            current = mutableListOf()
+        }
+    }
+    if (current.isNotEmpty()) groups += current
+
     MenuPopup(
-        groups = listOf(
-            options.map { option ->
-                MenuPopupItem(
-                    label = stringResource(option.labelRes),
-                    selected = option.id == selectedId,
-                    onClick = { onSelect(option.id) },
-                )
-            },
-        ),
+        groups = groups,
         dark = dark,
         anchorHeightPx = anchorHeightPx,
         onDismiss = onDismiss,

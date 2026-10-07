@@ -739,10 +739,6 @@
     <string name="home_source">内容源</string>
     <string name="home_source_select_title">选择内容源</string>
     <string name="home_source_pixiv">Pixiv</string>
-    <string name="pixiv_hint_daily">每日更新</string>
-    <string name="pixiv_hint_weekly">每周一更新</string>
-    <string name="pixiv_hint_monthly">每月 1 日更新</string>
-    <string name="pixiv_hint_rookie">每日更新</string>
     <string name="pixiv_tab_ranking">榜单</string>
     <string name="pixiv_tab_recommend">推荐</string>
     <string name="pixiv_tab_follow_new">关注</string>
@@ -759,6 +755,9 @@
     <string name="pixiv_filter_illust">插画</string>
     <string name="pixiv_filter_manga">漫画</string>
     <string name="pixiv_filter_novel">小说</string>
+    <string name="pixiv_ranking_male">男生向</string>
+    <string name="pixiv_ranking_female">女生向</string>
+    <string name="pixiv_ranking_original">原创</string>
     <string name="pixiv_novel_length">%1$d 字</string>
     <string name="pixiv_novel_read">开始阅读</string>
     <string name="pixiv_novel_loading">正在取正文</string>

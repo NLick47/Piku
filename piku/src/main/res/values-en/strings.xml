@@ -729,10 +729,6 @@
     <string name="home_source">Content source</string>
     <string name="home_source_select_title">Choose content source</string>
     <string name="home_source_pixiv">Pixiv</string>
-    <string name="pixiv_hint_daily">Updated daily</string>
-    <string name="pixiv_hint_weekly">Updated every Monday</string>
-    <string name="pixiv_hint_monthly">Updated on the 1st</string>
-    <string name="pixiv_hint_rookie">Updated daily</string>
     <string name="pixiv_tab_ranking">Rank</string>
     <string name="pixiv_tab_recommend">For You</string>
     <string name="pixiv_tab_follow_new">Follow</string>
@@ -749,6 +745,9 @@
     <string name="pixiv_filter_illust">Illust</string>
     <string name="pixiv_filter_manga">Manga</string>
     <string name="pixiv_filter_novel">Novel</string>
+    <string name="pixiv_ranking_male">Male</string>
+    <string name="pixiv_ranking_female">Female</string>
+    <string name="pixiv_ranking_original">Original</string>
     <string name="pixiv_novel_length">%1$d chars</string>
     <string name="pixiv_novel_read">Read</string>
     <string name="pixiv_novel_loading">Loading text</string>

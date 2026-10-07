@@ -53,6 +53,8 @@ import com.piku.client.data.repository.pixivNewFeedCursor
 import com.piku.client.data.repository.pixivTotalPages
 import com.piku.client.data.repository.toWork
 import com.piku.client.domain.source.SourceFacetStyle
+import com.piku.client.domain.source.SourceFacetVisibleWhen
+import com.piku.client.domain.source.isVisibleWith
 import com.piku.client.domain.source.sanitizeFacetChoices
 import com.piku.client.domain.source.defaultFacetChoices
 import com.piku.client.domain.source.AuthorPageStyle
@@ -731,6 +733,23 @@ class PixivContentSourceTest {
         assertEquals(listOf(Triple("weekly", "manga", 1)), api.calls)
     }
 
+    /** 独立榜（男生向等）固定单一日榜：mode 直接用选项值，周期不参与，content 恒传 all（实测 illust/manga 404） */
+    @Test
+    fun familyBoardFacetDrivesModeIgnoringPeriod() = runTest {
+        val api = FakeApi()
+
+        source(api).page(
+            PixivContentSource.FEED_RANKING,
+            mapOf(
+                PixivContentSource.GROUP_PERIOD to "weekly",
+                PixivContentSource.GROUP_CONTENT to "male",
+            ),
+            0,
+        )
+
+        assertEquals(listOf(Triple("male", "all", 1)), api.calls)
+    }
+
     /** 推荐流走应用接口：0 起页换算成接口的 offset（单次上限 30） */
     @Test
     fun recommendedPageTranslatesToOffset() = runTest {
@@ -906,7 +925,7 @@ class PixivContentSourceTest {
         assertEquals(AuthorPageStyle.Profile, source.authorPageStyle)
     }
 
-    /** 声明形态：四条流 = 三个登录门 + 榜单名次流；榜单带周期/内容两组维度，新着另有内容档 */
+    /** 声明形态：四条流 = 三个登录门 + 榜单名次流；榜单带周期片选与榜单下拉，新着另有内容档 */
     @Test
     fun declarationsKeepOneRankingTabWithPeriodChips() {
         assertEquals(
@@ -946,12 +965,24 @@ class PixivContentSourceTest {
         assertEquals(PixivContentSource.FEED_RANKING, period.feedId)
         assertEquals(listOf("daily", "weekly", "monthly", "rookie"), period.options.map { it.id })
         assertEquals("daily", period.options.first { it.selectedByDefault }.id)
-        assertTrue("周期菜单项都要带更新节奏提示", period.options.all { it.hintRes != null })
+        // 周期 chips 只在综合族显示：独立榜只有单一日榜，没有周期可选
+        assertEquals(
+            SourceFacetVisibleWhen(PixivContentSource.GROUP_CONTENT, setOf("all", "illust", "manga")),
+            period.visibleOnlyWhen,
+        )
+        assertTrue(period.isVisibleWith(mapOf(PixivContentSource.GROUP_CONTENT to PixivContentSource.FACET_ALL)))
+        assertFalse(period.isVisibleWith(mapOf(PixivContentSource.GROUP_CONTENT to "male")))
 
         val content = PixivContentSource.FACETS.first { it.id == PixivContentSource.GROUP_CONTENT }
         assertEquals(SourceFacetStyle.Dropdown, content.style)
         assertEquals(PixivContentSource.FEED_RANKING, content.feedId)
-        assertEquals(listOf("all", "illust", "manga"), content.options.map { it.id })
+        // 综合族三档 + 独立榜三档（选项 id 即 ranking.php 的 mode 值），AI 榜与 R-18 榜不进（总量 50 / 通道 403）；
+        // 综合族与独立榜是两类榜单，菜单里用分隔线分段
+        assertEquals(
+            listOf("all", "illust", "manga", "male", "female", "original"),
+            content.options.map { it.id },
+        )
+        assertEquals(listOf("manga"), content.options.filter { it.dividerAfter }.map { it.id })
 
         val latestContent = PixivContentSource.FACETS.first { it.id == PixivContentSource.GROUP_LATEST_CONTENT }
         assertEquals(SourceFacetStyle.Dropdown, latestContent.style)

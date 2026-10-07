@@ -13,6 +13,7 @@ import com.piku.client.domain.source.SourceAuthorOpen
 import com.piku.client.domain.source.SourceFacet
 import com.piku.client.domain.source.SourceFacetGroup
 import com.piku.client.domain.source.SourceFacetStyle
+import com.piku.client.domain.source.SourceFacetVisibleWhen
 import com.piku.client.domain.source.SourceFeed
 import com.piku.client.domain.source.SourcePage
 import com.piku.client.domain.source.SourceWorkOpen
@@ -63,16 +64,23 @@ class PixivContentSource @Inject constructor(
 
             FEED_LATEST -> latestPage(facets, page)
 
-            else -> repository.ranking(
-                mode = facets[GROUP_PERIOD] ?: PERIOD_DAILY,
-                content = facets[GROUP_CONTENT] ?: FACET_ALL,
-                page = page + 1,
-            )
-                // 翻过末页接口回 404（2026-09 实测）而非空列表：翻页中的 NotFound 就地判到底，
-                // 首屏 404（模式/类型无效）照常失败
-                .recoverCatching { error ->
-                    if (page > 0 && error == AppError.NotFound) SourcePage(items = emptyList()) else throw error
-                }
+            else -> {
+                // 榜单下拉兼任两类：综合族（content 参数有效，周期 chips 随它显示）与
+                // 独立榜（男生向/女生向/原创，单一日榜：mode 直接用选项值，content 实测只认 all，
+                // illust/manga 404；周期 chips 对独立榜整组隐藏）
+                val board = facets[GROUP_CONTENT] ?: FACET_ALL
+                val family = board in RANKING_FAMILIES
+                repository.ranking(
+                    mode = if (family) board else facets[GROUP_PERIOD] ?: PERIOD_DAILY,
+                    content = if (family) FACET_ALL else board,
+                    page = page + 1,
+                )
+                    // 翻过末页接口回 404（2026-09 实测）而非空列表：翻页中的 NotFound 就地判到底，
+                    // 首屏 404（模式/类型无效）照常失败
+                    .recoverCatching { error ->
+                        if (page > 0 && error == AppError.NotFound) SourcePage(items = emptyList()) else throw error
+                    }
+            }
         }
         // R-18/敏感的下发由 pixiv 账号侧表示设置在服务端管控，客户端不再过滤
         return result
@@ -132,6 +140,9 @@ class PixivContentSource @Inject constructor(
         const val FACET_MANGA = "manga"
         const val FACET_NOVEL = "novel"
 
+        /** 独立榜（非综合族）：只有单一日榜、content 参数只认 all，选项 id 直接用 ranking.php 的 mode 值（2026-10 实测） */
+        val RANKING_FAMILIES = setOf("male", "female", "original")
+
         /** 已接通的流；未列进的声明流视为占位（能力未到），取页给终态而不是空页 */
         val IMPLEMENTED_FEEDS = setOf(FEED_RECOMMEND, FEED_FOLLOW, FEED_RANKING, FEED_LATEST)
 
@@ -161,22 +172,27 @@ class PixivContentSource @Inject constructor(
         )
 
         val FACETS = listOf(
+            // 周期片选只对综合族有意义：榜单下拉切到独立榜（男生向/女生向/原创）时整组隐藏
             SourceFacetGroup(
                 id = GROUP_PERIOD,
                 style = SourceFacetStyle.Chips,
                 feedId = FEED_RANKING,
+                visibleOnlyWhen = SourceFacetVisibleWhen(
+                    groupId = GROUP_CONTENT,
+                    optionIds = setOf(FACET_ALL, FACET_ILLUST, FACET_MANGA),
+                ),
                 options = listOf(
                     SourceFacet(
                         id = PERIOD_DAILY,
                         labelRes = R.string.pixiv_tab_daily,
                         selectedByDefault = true,
-                        hintRes = R.string.pixiv_hint_daily,
                     ),
-                    SourceFacet(id = "weekly", labelRes = R.string.pixiv_tab_weekly, hintRes = R.string.pixiv_hint_weekly),
-                    SourceFacet(id = "monthly", labelRes = R.string.pixiv_tab_monthly, hintRes = R.string.pixiv_hint_monthly),
-                    SourceFacet(id = "rookie", labelRes = R.string.pixiv_tab_rookie, hintRes = R.string.pixiv_hint_rookie),
+                    SourceFacet(id = "weekly", labelRes = R.string.pixiv_tab_weekly),
+                    SourceFacet(id = "monthly", labelRes = R.string.pixiv_tab_monthly),
+                    SourceFacet(id = "rookie", labelRes = R.string.pixiv_tab_rookie),
                 ),
             ),
+            // 榜单下拉：综合族（综合/插画/漫画）+ 独立榜（单一日榜）。tab 行只容一个下拉，内容与榜单家族合一个选择器
             SourceFacetGroup(
                 id = GROUP_CONTENT,
                 style = SourceFacetStyle.Dropdown,
@@ -184,7 +200,10 @@ class PixivContentSource @Inject constructor(
                 options = listOf(
                     SourceFacet(id = FACET_ALL, labelRes = R.string.pixiv_filter_all, selectedByDefault = true),
                     SourceFacet(id = FACET_ILLUST, labelRes = R.string.pixiv_filter_illust),
-                    SourceFacet(id = FACET_MANGA, labelRes = R.string.pixiv_filter_manga),
+                    SourceFacet(id = FACET_MANGA, labelRes = R.string.pixiv_filter_manga, dividerAfter = true),
+                    SourceFacet(id = "male", labelRes = R.string.pixiv_ranking_male),
+                    SourceFacet(id = "female", labelRes = R.string.pixiv_ranking_female),
+                    SourceFacet(id = "original", labelRes = R.string.pixiv_ranking_original),
                 ),
             ),
             // 推荐流的内容类型：插画/漫画/小说。小说走独立的推荐端点，不与插画混排

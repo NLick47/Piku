@@ -139,8 +139,8 @@ data class SourceFacet(
     val id: String,
     @StringRes val labelRes: Int,
     val selectedByDefault: Boolean = false,
-    /** 菜单项里的补充说明（如榜单的更新节奏）；null = 不显示 */
-    @StringRes val hintRes: Int? = null,
+    /** 菜单里在本项后画分隔线：同一下拉里语义不同的选项分段（榜单下拉的综合族 | 独立榜） */
+    val dividerAfter: Boolean = false,
 )
 
 /** 一组收窄维度。一个源可声明多组（pixiv：周期=片选 + 内容类型=下拉） */
@@ -150,6 +150,14 @@ data class SourceFacetGroup(
     val options: List<SourceFacet>,
     /** 只在指定流显示（pixiv 的周期/内容只属于榜单）；null = 该源所有流共用 */
     val feedId: String? = null,
+    /** 显示条件：条件组的选中项不在允许集内时整组隐藏（榜单周期 chips 只在综合族显示）；null = 恒显示 */
+    val visibleOnlyWhen: SourceFacetVisibleWhen? = null,
+)
+
+/** 维度组的显示条件：另一组（[groupId]）的当前选中选项 ∈ [optionIds] 才显示 */
+data class SourceFacetVisibleWhen(
+    val groupId: String,
+    val optionIds: Set<String>,
 )
 
 /** 组的展示形态：常显片选（高频切换）或 tab 行尾下拉（低频筛选） */
