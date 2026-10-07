@@ -1044,6 +1044,7 @@ class SearchViewModel @Inject constructor(
         }
     }
 
+    /** 插件源的标签建议：suggestTags（联想名单 + 人气预览代表图），一次取完即到底（无翻页） */
     private fun loadTagSuggestionsViaPlugin(plugin: SourceSearch) {
         val generation = sourceGeneration
         if (!isLoggedInForSearch()) {
