@@ -352,7 +352,6 @@ internal fun DetailContent(
                 Spacer(Modifier.height(18.dp))
                 RelatedWorksSection(
                     works = detail.relatedWorks,
-                    dark = dark,
                     onClick = onRelatedWorkClick,
                 )
             }
