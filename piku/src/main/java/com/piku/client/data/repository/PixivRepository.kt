@@ -424,26 +424,72 @@ class PixivRepository @Inject constructor(
         )
     }
 
-    /**
-     * 详情页底部的相关作品；取不到就当没有，详情页照常展示。
-     * 登录态走 app-api 的 v2/illust/related，未登录走网页端的 recommend/init——
-     * 后者匿名可用且单次能多给（limit 给足有 60 条）。
-     * v1/illust/related 已被 pixiv 服务端下线（2026-10 实测回 404「端点不存在」，
-     * 与 filter 无关），v2 同形可用。
-     */
-    suspend fun recommend(illustId: Long): Result<List<Work>> = apiCall {
+/** 相关作品的一页：条目 + 取下一页的游标，游标为 null 就是没有下页 */
+    private class RelatedPage(val works: List<Work>, val cursor: RelatedCursor?)
+
+    private sealed interface RelatedCursor {
+        class WebIds(val ids: List<String>) : RelatedCursor
+        class AppUrl(val url: String) : RelatedCursor
+    }
+
+    suspend fun recommend(illustId: Long): Result<List<Work>> = apiCall { relatedWorks(illustId) }
+
+
+    private suspend fun relatedWorks(illustId: Long): List<Work> {
+        val works = LinkedHashMap<Long, Work>()
+        var page = relatedPageOrNull { firstRelatedPage(illustId) }
+        var taken = 0
+        while (page != null && taken < PixivApiConfig.RELATED_MAX_PAGES) {
+            taken++
+            val before = works.size
+            page.works.forEach { works.putIfAbsent(it.id, it) }
+            val cursor = page.cursor ?: break
+            if (works.size == before) break
+            page = relatedPageOrNull { nextRelatedPage(cursor) }
+        }
+        return works.values.toList()
+    }
+
+    private suspend fun firstRelatedPage(illustId: Long): RelatedPage? =
         if (pixivAuth.hasSession()) {
             val signature = endpoints.clientSignature(runtime.now())
-            appApi.relatedIllusts(
+            val response = appApi.relatedIllusts(
                 clientTime = signature.time,
                 clientHash = signature.hash,
                 illustId = illustId,
-            ).illusts.mapNotNull { it.toWork() }
+            )
+            RelatedPage(response.illusts.mapNotNull { it.toWork() }, appCursor(response.nextUrl))
         } else {
             val response = api.recommend(illustId)
-            if (response.error) return@apiCall emptyList()
-            response.body.illusts.mapNotNull { it.toWork() }
+            if (response.error) return null
+            RelatedPage(
+                works = response.body.illusts.mapNotNull { it.toWork() },
+                cursor = response.body.nextIds.takeIf { it.isNotEmpty() }?.let { RelatedCursor.WebIds(it) },
+            )
         }
+
+    private suspend fun nextRelatedPage(cursor: RelatedCursor): RelatedPage? = when (cursor) {
+        is RelatedCursor.AppUrl -> {
+            val signature = endpoints.clientSignature(runtime.now())
+            val response = appApi.relatedIllustsNext(cursor.url, signature.time, signature.hash)
+            RelatedPage(response.illusts.mapNotNull { it.toWork() }, appCursor(response.nextUrl))
+        }
+        is RelatedCursor.WebIds -> {
+            val response = api.recommendByIds(cursor.ids)
+            if (response.error) null
+            else RelatedPage(response.body.illusts.mapNotNull { it.toWork() }, cursor = null)
+        }
+    }
+
+    private fun appCursor(nextUrl: String?): RelatedCursor.AppUrl? =
+        nextUrl?.takeIf { it.startsWith(PixivAppConfig.BASE_URL) }?.let { RelatedCursor.AppUrl(it) }
+
+    private suspend fun <T> relatedPageOrNull(block: suspend () -> T): T? = try {
+        block()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Throwable) {
+        null
     }
 
     suspend fun novelRecommended(offset: Int): Result<List<Work>> = apiCall {

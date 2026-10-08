@@ -11,6 +11,7 @@ import retrofit2.http.Header
 import retrofit2.http.Headers
 import retrofit2.http.POST
 import retrofit2.http.Query
+import retrofit2.http.Url
 
 object PixivAppConfig {
 
@@ -471,6 +472,15 @@ interface PixivAppApi {
         @Header("X-Client-Hash") clientHash: String,
         @Query("illust_id") illustId: Long,
         @Query("filter") filter: String = PixivAppConfig.FILTER_ANDROID,
+    ): PixivIllustsResponse
+
+    /** 相关作品的续页：next_url 原样回带，offset 与 seed/viewed 服务端已在 URL 里给全 */
+    @GET
+    @Headers(HEADER_USER_AGENT, HEADER_APP_OS, HEADER_APP_OS_VERSION, HEADER_APP_VERSION)
+    suspend fun relatedIllustsNext(
+        @Url url: String,
+        @Header("X-Client-Time") clientTime: String,
+        @Header("X-Client-Hash") clientHash: String,
     ): PixivIllustsResponse
 
     /** 关注作者；restrict=private 即悄悄关注 */

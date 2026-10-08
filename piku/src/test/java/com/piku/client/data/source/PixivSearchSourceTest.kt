@@ -103,6 +103,9 @@ class PixivSearchSourceTest {
 
         override suspend fun recommend(illustId: Long, limit: Int): PixivRecommendResponse =
             PixivRecommendResponse()
+
+        override suspend fun recommendByIds(illustIds: List<String>): PixivRecommendResponse =
+            PixivRecommendResponse()
     }
 
     private class FakeAppApi : PixivAppApi {
@@ -330,6 +333,12 @@ class PixivSearchSourceTest {
             clientHash: String,
             illustId: Long,
             filter: String,
+        ): PixivIllustsResponse = PixivIllustsResponse()
+
+        override suspend fun relatedIllustsNext(
+            url: String,
+            clientTime: String,
+            clientHash: String,
         ): PixivIllustsResponse = PixivIllustsResponse()
 
         override suspend fun followAdd(

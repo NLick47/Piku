@@ -778,11 +778,6 @@ internal fun TagsBlock(
     )
 }
 
-/**
- * 底部相关作品：列数按可用宽度自适应的网格（手机 3 列、平板更宽就更多列），
- * 行数不设上限，跟着页面一起竖向滚——不套自己的滚动容器，也就没有嵌套滚动的
- * 高度冲突。条目数由接口一次给全（18 条），不分页，不会无限堆积。
- */
 @Composable
 private fun RelatedRow(works: List<Work>, onClick: (Work) -> Unit) {
     if (works.isEmpty()) return

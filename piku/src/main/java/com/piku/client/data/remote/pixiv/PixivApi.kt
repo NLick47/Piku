@@ -12,8 +12,9 @@ object PixivApiConfig {
 
     const val PAGE_SIZE = 50
 
-    /** 相关作品一次取多少：详情页末尾一长串可逛，再多加载压力就压过主图了 */
-    const val RECOMMEND_LIMIT = 60
+    const val RECOMMEND_LIMIT = 180
+
+    const val RELATED_MAX_PAGES = 6
 
     val DEBUG_PROXY: String? = null
 }
@@ -141,6 +142,8 @@ data class PixivNovelAjaxTag(
 @Serializable
 data class PixivRecommendBody(
     val illusts: List<PixivWorkCard> = emptyList(),
+    /** 首屏没装下的候选 id（wire 上是字符串数组）；本接口自己不翻页，余量交 recommendByIds 换卡片 */
+    val nextIds: List<String> = emptyList(),
 )
 
 /** 作品卡片（推荐位）；只取成卡需要的字段 */
@@ -219,14 +222,24 @@ interface PixivApi {
 
     /**
      * 作品页底部的相关作品。匿名可用（接口文档标注需要登录，但匿名照样返回）。
-     * limit 服务端照单全收（2026-10 实测 180 也全量返回），实际条数 = limit 与该作品
-     * 推荐池取小；nextIds 只是没拿完的 id 余量，并无对应翻页端点（recommend?page=1 404），
-     * 想多看就一次把 limit 给足
+     * limit 上限 180，且 180 就是整个推荐池：limit + nextIds 的总量实测从不超 180
+     * （2026-10 抽 15 个作品，19~180 不等），181 起直接回 400。没有翻页参数
+     * （offset/page/p 都被忽略、recommend?page=1 回 404），网页端自己的「更多」也只是
+     * 拿 nextIds 分批换卡片。想拿全就一次把 limit 给足。
      */
     @GET("ajax/illust/{illustId}/recommend/init")
     suspend fun recommend(
         @Path("illustId") illustId: Long,
         @Query("limit") limit: Int = PixivApiConfig.RECOMMEND_LIMIT,
+    ): PixivRecommendResponse
+
+    /**
+     * 相关作品的续页：把首屏剩下的 nextIds 换成卡片，与首屏同形。
+     * 网页端自己翻页也是走这里（只有池子超过首屏上限时才会用上）。
+     */
+    @GET("ajax/illust/recommend/illusts")
+    suspend fun recommendByIds(
+        @Query("illust_ids[]") illustIds: List<String>,
     ): PixivRecommendResponse
 
     @GET("ajax/search/artworks/{word}")
