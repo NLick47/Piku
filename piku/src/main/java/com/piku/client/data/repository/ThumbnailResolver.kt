@@ -116,17 +116,17 @@ class ThumbnailResolver @Inject constructor(
             currentThumbnailUrl.isBlank() || isPlaceholderImage(currentThumbnailUrl)
 
         /**
-         * 点击卡片时预热详情页首图用的 URL；null = 不值得预热。
+         * 点击卡片时预热详情页首图用的 URL；null = 不预热（空图/占位图）。
          *
-         * 列表卡片渲染的是同一张图的 _360 版本（见 ui.common.feedThumbUrl），详情页
-         * 首图是 _640，URL 不同 → Coil 缓存互不相通。点按瞬间按 _640 预热，正好与
-         * 详情页 HTML / append 请求并行，等首屏内容到位时图也差不多到了。
-         *
-         * 空图与占位图（登录墙/关注墙/密码/R-18/警告）返回 null：详情页要么走门卡，
-         * 要么由 append 出真实图，预热一张用不上的图只是白下载。
+         * 预热的是详情页那一档：网格卡的缩略图是 _360，详情页 HTML 的主图是同一文件的 _640，
+         * 档位挂在 URL 上、Coil 缓存互不相通——照卡片 URL 预热等于把卡片刚渲染过的那张又下
+         * 一遍，图区就只能垫着 _360 等首图到货，也就是"先糊、几秒后才清晰"。
          */
         fun detailPrefetchUrl(thumbnailUrl: String): String? =
-            thumbnailUrl.takeIf { !needsThumbnailBackfill(it) }
+            thumbnailUrl.takeIf { !needsThumbnailBackfill(it) }?.let(::detailTierUrl)
+
+        private fun detailTierUrl(url: String): String =
+            url.replace("_360.jpg", "_640.jpg")
 
         /**
          * 详情页首图的低清打底 URL（列表卡片刚渲染过的那一张）；null = 不打底。

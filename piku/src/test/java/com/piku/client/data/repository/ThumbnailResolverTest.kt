@@ -105,12 +105,22 @@ class ThumbnailResolverTest {
     }
 
     /**
-     * 点击卡片预热详情页首图：卡片渲染的是列表缩略图的 _360 版本，详情页首图是同一个
-     * 文件的 _640——URL 不同，Coil 缓存互不相通，所以要按列表给的原始 URL（_640）预热。
+     * 点击卡片预热详情页首图：关注流卡片的缩略图与详情页主图同档（_640），原样预热。
      */
     @Test
     fun detailPrefetchUrlKeepsRealListThumbnail() {
         assertEquals(listThumb, ThumbnailResolver.detailPrefetchUrl(listThumb))
+    }
+
+    /**
+     * 网格卡（主页/搜索/マイボックス/相关作品）的缩略图是 _360，详情页主图是同一文件的 _640：
+     * 预热要换成详情页那一档，否则下的正是卡片刚渲染过、详情页用不上的那张。
+     */
+    @Test
+    fun detailPrefetchUrlUpgradesGridThumbnailToDetailTier() {
+        val gridThumb = listThumb.replace("_640.jpg", "_360.jpg")
+
+        assertEquals(listThumb, ThumbnailResolver.detailPrefetchUrl(gridThumb))
     }
 
     /**
@@ -126,6 +136,9 @@ class ThumbnailResolverTest {
             "https://cdn.poipiku.com/img/publish_pass.png_640.jpg",
             "https://cdn.poipiku.com/img/R-18.png_640.jpg",
             "https://cdn.poipiku.com/img/warning.png_640.jpg",
+            // 网格页里的墙是 _360 档：占位判定必须在换档之前，否则会拿墙去换 _640 预热
+            "https://cdn.poipiku.com/img/publish_follower.png_360.jpg",
+            "https://cdn.poipiku.com/img/R-18.png_360.jpg",
         ).forEach { placeholder ->
             assertNull("$placeholder 是占位图，不该预热", ThumbnailResolver.detailPrefetchUrl(placeholder))
         }
