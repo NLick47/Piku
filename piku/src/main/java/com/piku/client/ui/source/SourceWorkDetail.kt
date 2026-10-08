@@ -371,6 +371,8 @@ internal fun SourceWorkDetailScreen(
                     scrollState = scrollState,
                     topInset = topInset,
                     sourceThumbnailUrl = work.thumbnailUrl,
+                    // 列表卡带了作品真实宽高：图区首帧就按真比例摆，别按方裁缩略图的比例摆
+                    knownAspect = work.thumbAspectOrNull(),
                     onImageShown = { page, painter -> shownPainters[page] = painter },
                     // 点击随时放行：viewerImages 在页表没回来时用屏上打底图兜底，页表到了自动补全
                     onImageClick = { page ->

@@ -150,11 +150,22 @@ class ThumbnailResolver @Inject constructor(
         private fun thumbUrl(url: String): String =
             url.replace("_640.jpg", "_360.jpg")
 
-        /** 尺寸档归一，只留底层文件：poipiku 的档位在 _640/_360 后缀上，pixiv 的挂在 /c/<尺寸>/ 前缀上 */
+        /** 同一张图的归一化指纹：忽略档位前缀、裁切目录与档位后缀，只留底层文件 */
         private fun fileKey(url: String): String =
-            PIXIV_SIZE_PREFIX.replace(thumbUrl(url), "https://i.pximg.net/")
+            PIXIV_CROPPED_FILE.replace(
+                PIXIV_SIZE_PREFIX.replace(thumbUrl(url), "https://i.pximg.net/")
+                    .replace("://i.pximg.net/custom-thumb/", "://i.pximg.net/img-master/"),
+                "_master1200.jpg",
+            )
 
-        private val PIXIV_SIZE_PREFIX = Regex("^https://i\\.pximg\\.net/c/\\d+x\\d+(_\\d+)?/")
+        /**
+         * pixiv 的档位前缀：`c/540x540_70/`、`c/600x1200_90_webp/`、`c/480x960/` …——
+         * 同一张图的裁切/编码变体，前缀整段归一。少认一种（比如带 `_webp` 的那种）就会把
+         * 列表卡和详情首图判成两张图，进详情页时底下没有垫底，闪一下白。
+         */
+        private val PIXIV_SIZE_PREFIX = Regex("^https://i\\.pximg\\.net/c/[^/]+/")
+
+        private val PIXIV_CROPPED_FILE = Regex("_(square|custom)1200\\.jpg$")
 
         /**
          * 详情页解析到真实图后，列表缩略图该回填成哪个 URL；null = 不回填。

@@ -183,9 +183,13 @@ class SourceWorkDetailInlineTierTest {
         response.body.take(2).map { it.urls.toSourceWorkPage(it.width, it.height) }
     }
 
-    /** 搜索页那种方形缩略图：与首图不是同一文件，不能拿来垫 */
+    /** 搜索页那种方形缩略图：同一张作品的裁切档，归一后能认出来，垫得上 */
     private val squareThumb =
         "https://i.pximg.net/c/360x360_70/img-master/img/2026/09/26/00/05/02/150105774_p0_square1200.jpg"
+
+    /** 别的作品的缩略图：与首图无关，不能拿来垫 */
+    private val otherWorkThumb =
+        "https://i.pximg.net/c/360x360_70/img-master/img/2026/09/26/00/05/02/150105775_p0_square1200.jpg"
 
     /** 页 0 垫列表卡那张：图区首图打底用的同一张，缓存必中，主图还在下载也不会黑 */
     @Test
@@ -203,12 +207,23 @@ class SourceWorkDetailInlineTierTest {
         assertEquals(largeThumb, viewerUnderlayUrl(largeThumb, displayed, realPages, index = 0))
     }
 
-    /** 列表卡与首图不是同一文件（方形缩略图）→ 退页表 small，绝不能垫 regular */
+    /**
+     * 方裁/自定义裁切缩略图与首图是同一张图的另一档：归一后认得出，照旧垫它——它是列表刚
+     * 渲染过、缓存必中的那张；当成"另一个文件"处理会让开图器现下载页表 small，反而先黑一下。
+     */
     @Test
-    fun viewerUnderlayFallsBackToSmallWhenListThumbnailIsAnotherFile() {
+    fun viewerUnderlayUsesTheCroppedListThumbnailWhenItIsTheSameArtwork() {
         val displayed = realPages.map { it.fullUrl }
 
-        assertEquals(realPages.first().url, viewerUnderlayUrl(squareThumb, displayed, realPages, index = 0))
+        assertEquals(squareThumb, viewerUnderlayUrl(squareThumb, displayed, realPages, index = 0))
+    }
+
+    /** 真正不是同一张图（别的作品）→ 退页表 small，绝不能垫 */
+    @Test
+    fun viewerUnderlayFallsBackToSmallWhenListThumbnailIsAnotherWork() {
+        val displayed = realPages.map { it.fullUrl }
+
+        assertEquals(realPages.first().url, viewerUnderlayUrl(otherWorkThumb, displayed, realPages, index = 0))
     }
 
     /** 深链进来的空缩略图：同样退 small */

@@ -68,6 +68,10 @@ internal fun cardAspectRatio(work: Work): Float {
         .coerceIn(MIN_CARD_ASPECT, MAX_CARD_ASPECT)
 }
 
+/** 作品真实宽高比 缺尺寸返回 null 详情图区拿它摆首帧高度 不夹卡片那套上下界 */
+internal fun Work.thumbAspectOrNull(): Float? =
+    if (thumbWidth > 0 && thumbHeight > 0) thumbWidth.toFloat() / thumbHeight else null
+
 // 按原图比例排版的卡片 给带尺寸的源用 不裁方 外观同 WorkCard 但无页数角标
 @OptIn(ExperimentalFoundationApi::class)
 @Composable

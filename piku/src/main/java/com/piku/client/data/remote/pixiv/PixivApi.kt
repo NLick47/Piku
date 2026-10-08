@@ -44,6 +44,9 @@ data class PixivRankingItem(
     @SerialName("illust_content_type")
     @Serializable(with = PixivContentTypeSerializer::class)
     val contentType: PixivContentType = PixivContentType(),
+    /** 作品真实宽高（缩略图是裁切档，比例得按这个算） */
+    val width: Int = 0,
+    val height: Int = 0,
 ) {
     val pageCount: Int get() = illustPageCount.toIntOrNull() ?: 1
 }
@@ -157,6 +160,9 @@ data class PixivWorkCard(
     @SerialName("userName") val userName: String = "",
     @SerialName("pageCount") val pageCount: Int = 1,
     @SerialName("xRestrict") val xRestrict: Int = 0,
+    /** 作品真实宽高（缩略图是方裁，比例得按这个算） */
+    val width: Int = 0,
+    val height: Int = 0,
 ) {
     val illustId: Long get() = id.toLongOrNull() ?: 0
     val authorIdLong: Long get() = userId.toLongOrNull() ?: 0

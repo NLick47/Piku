@@ -207,6 +207,44 @@ class ThumbnailResolverTest {
         assertEquals(feed, ThumbnailResolver.detailUnderlayUrl(feed, regular))
     }
 
+    /**
+     * pixiv 网页接口的方裁（_square1200，250 方图）与自定义裁切（_custom1200）缩略图，
+     * 与详情首图的 _master1200 是同一张图的不同裁切：归一后认得出是同一张，进详情页时
+     * 列表那张才垫得上——认不出就会在换清晰档时底下没有垫底，闪一下空白。
+     */
+    @Test
+    fun detailUnderlayMatchesPixivCroppedThumbnailVariants() {
+        val dir = "img-master/img/2026/09/26/00/05/02/150105774_p0_"
+        val square = "https://i.pximg.net/c/540x540_70/$dir" + "square1200.jpg"
+        val custom = "https://i.pximg.net/c/250x250/$dir" + "custom1200.jpg"
+        val master = "https://i.pximg.net/c/1200x1200/$dir" + "master1200.jpg"
+
+        assertEquals(square, ThumbnailResolver.detailUnderlayUrl(square, master))
+        assertEquals(custom, ThumbnailResolver.detailUnderlayUrl(custom, master))
+    }
+
+    /**
+     * pixiv 的档位前缀不止 `c/540x540_70/` 一种：列表卡常用 `c/600x1200_90_webp/`（app-api 的
+     * large，真机日志里的卡片就是这种）。前缀整段归一才认得出是同一张——少认一种就会把列表卡
+     * 和详情首图判成两张图，进详情页底下没垫底，闪一下白。
+     */
+    @Test
+    fun detailUnderlayMatchesPixivWebpTierPrefix() {
+        val card = "https://i.pximg.net/c/600x1200_90_webp/img-master/img/2026/05/13/00/04/24/144704872_p0_master1200.jpg"
+        val detail = "https://i.pximg.net/c/540x540_70/img-master/img/2026/05/13/00/04/24/144704872_p0_master1200.jpg"
+
+        assertEquals(card, ThumbnailResolver.detailUnderlayUrl(card, detail))
+    }
+
+    /** 裁切档挂在 custom-thumb 目录：目录不同、文件同名，也要归一成同一张 */
+    @Test
+    fun detailUnderlayMatchesPixivCustomThumbDirectory() {
+        val card = "https://i.pximg.net/c/360x360_70/custom-thumb/img/2026/08/30/13/03/59/149058915_p0_custom1200.jpg"
+        val detail = "https://i.pximg.net/c/540x540_70/img-master/img/2026/08/30/13/03/59/149058915_p0_master1200.jpg"
+
+        assertEquals(card, ThumbnailResolver.detailUnderlayUrl(card, detail))
+    }
+
     /** 换了页或换了作品就不垫：垫一张别的图比空着更误导 */
     @Test
     fun detailUnderlaySkipsOtherPixivPageOrWork() {

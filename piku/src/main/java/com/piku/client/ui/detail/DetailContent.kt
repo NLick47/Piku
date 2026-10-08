@@ -2,6 +2,7 @@ package com.piku.client.ui.detail
 
 import android.content.Intent
 import android.net.Uri
+import android.util.Log
 import androidx.compose.animation.animateContentSize
 import com.piku.client.ui.navigation.sharedWorkBounds
 import androidx.compose.foundation.BorderStroke
@@ -614,6 +615,10 @@ private fun AuthorRow(detail: WorkDetail, dark: Boolean, onAuthorClick: () -> Un
     }
 }
 
+/** 日志里的图片 URL：删掉日期目录段，只留档位前缀与文件名，一行看得完 */
+internal fun diagImageUrl(url: String?): String =
+    url?.replace(Regex("/\\d{4}/\\d{2}/\\d{2}/\\d{2}/\\d{2}/\\d{2}/"), "/…/") ?: "null"
+
 /** internal：pixiv 详情（ui.source）复用同一个图区，不另抄一份 */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -626,6 +631,11 @@ internal fun ImagePager(
     skipEnterMorph: Boolean = false,
     /** 来源页缩略图（列表卡片的 _360）：首图到位前的低清打底 */
     sourceThumbnailUrl: String = "",
+    /**
+     * 作品真实宽高比（列表卡带来的宽高）。给了就按它摆图区高度，且不再采信量出来的值——
+     * 列表缩略图是方裁，量出来的比例不是作品的比例，先按它摆、图到了再"长大"一次。
+     */
+    knownAspect: Float? = null,
     /** 内联画哪一档（长度与 detail.imageUrls 一致）；null = 用 detail.imageUrls */
     displayImageUrls: List<String>? = null,
     /** 通栏：图左右到边、高度上限按屏高放宽（p站版）；圆角也去掉 */
@@ -682,7 +692,15 @@ internal fun ImagePager(
 
     // 图区高度跟随真实宽高比：竖图不再被压成窄带，横图也不再上下留大片空白。
     // 量过的页码缓存下来，翻回看过的图能立刻恢复高度，不会先跳回默认值再跳回来。
-    val aspectCache = remember { mutableStateMapOf<Int, Float>() }
+    // 已知作品真实比例的（列表卡带了宽高）先按它摆好：量出来的那个是缩略图的裁切比例，
+    // 按它摆会在清晰图到货时"长大"一次，所以已知时干脆不采信测量值（见 onSuccess 里的判断）。
+    val aspectCache = remember(knownAspect) {
+        mutableStateMapOf<Int, Float>().apply {
+            knownAspect?.takeIf { it > 0f }?.let { put(0, it) }
+        }
+    }
+    /** 首帧那张裁切缩略图的比例不再采信：按它摆会在清晰图到货时"长大"一次 */
+    val aspectSeeded = knownAspect?.let { it > 0f } == true
     val configuration = LocalConfiguration.current
     val availableWidthDp = if (fullBleed) {
         configuration.screenWidthDp
@@ -704,6 +722,18 @@ internal fun ImagePager(
         detail.novelText.isNotBlank() -> NOVEL_PREVIEW_HEIGHT_DP
         detail.passwordProtected -> PASSWORD_HEIGHT_DP
         else -> EMPTY_HEIGHT_DP
+    }
+    // 图区高度这条链路的诊断：每换一次 URL 档位打一行，能看出高度是被哪一步改的
+    LaunchedEffect(urls, knownAspect) {
+        Log.d(
+            "PikuDiag",
+            "pixivImage pager pages=${urls.size} knownAspect=$knownAspect seeded=$aspectSeeded " +
+                "box=${boxHeightDp}dp avail=$availableWidthDp max=$maxHeightDp " +
+                "first=${diagImageUrl(urls.firstOrNull())} underlay=${diagImageUrl(underlayUrl)}",
+        )
+    }
+    LaunchedEffect(boxHeightDp) {
+        Log.d("PikuDiag", "pixivImage box=${boxHeightDp}dp aspects=${aspectCache.values.toList()}")
     }
 
     // 密码框的高度随错误/封禁提示自适应：写死高度时，提示文字超出部分会被整体裁掉
@@ -807,9 +837,15 @@ internal fun ImagePager(
                                     // 打底图与首图是同一张（见 detailUnderlayUrl），宽高比先量出来，
                                     // 图区高度一次到位，下面的内容不会等首图到了再往下跳
                                     val size = state.painter.intrinsicSize
-                                    if (size.width > 0f && size.height > 0f) {
+                                    if (size.width > 0f && size.height > 0f && !(aspectSeeded && page == 0)) {
                                         aspectCache[page] = size.width / size.height
                                     }
+                                    Log.d(
+                                        "PikuDiag",
+                                        "pixivImage underlay page=$page url=${diagImageUrl(underlay)} " +
+                                            "intrinsic=${size.width.toInt()}x${size.height.toInt()} " +
+                                            "used=${!(aspectSeeded && page == 0)} boxNow=${imageHeightDp}dp",
+                                    )
                                     onImageShown?.invoke(page, state.painter)
                                 },
                             )
@@ -828,9 +864,15 @@ internal fun ImagePager(
                             onSuccess = { state ->
                                 // 取 painter 的固有尺寸换算宽高比，不依赖 result 的具体图片类型
                                 val size = state.painter.intrinsicSize
-                                if (size.width > 0f && size.height > 0f) {
+                                if (size.width > 0f && size.height > 0f && !(aspectSeeded && page == 0)) {
                                     aspectCache[page] = size.width / size.height
                                 }
+                                Log.d(
+                                    "PikuDiag",
+                                    "pixivImage main page=$page url=${diagImageUrl(urls[page])} " +
+                                        "intrinsic=${size.width.toInt()}x${size.height.toInt()} " +
+                                        "used=${!(aspectSeeded && page == 0)} boxNow=${imageHeightDp}dp",
+                                )
                                 shownUrls[page] = urls[page]
                                 // 首图已经在屏上了：此刻再解析原图 URL，不和它抢带宽
                                 if (page == 0) onFirstImageLoaded()

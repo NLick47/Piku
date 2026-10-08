@@ -43,6 +43,7 @@ import com.piku.client.domain.usecase.RecordHistoryUseCase
 import com.piku.client.domain.usecase.RemoveCustomTagUseCase
 import com.piku.client.ui.detail.DetailViewModel
 import com.piku.client.ui.detail.ViewerImage
+import com.piku.client.ui.detail.diagImageUrl
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -354,6 +355,21 @@ class SourceWorkDetailViewModel @Inject constructor(
                         _ui.update { it.copy(loading = false, failed = true, detail = null) }
                         return@fold
                     }
+                    val upgrade = worthUpgradingInline(list, imageRouteController)
+                    val inline = inlineImageUrls(
+                        list,
+                        upgradeToFull = upgrade,
+                        sourceThumbnailUrl = work.thumbnailUrl,
+                    )
+                    // 图区这一条链路的诊断：内联选了哪一档、列表卡是哪一档、尺寸有没有带上
+                    Log.d(
+                        "PikuDiag",
+                        "pixivImage inline work=${work.id} pages=${list.size} upgrade=$upgrade " +
+                            "size=${work.thumbWidth}x${work.thumbHeight} " +
+                            "card=${diagImageUrl(work.thumbnailUrl)} " +
+                            "first=${diagImageUrl(inline.firstOrNull())} " +
+                            "full=${diagImageUrl(list.firstOrNull()?.fullUrl)}",
+                    )
                     val detail = WorkDetail(
                         title = work.title,
                         description = text?.description.orEmpty(),
@@ -361,11 +377,7 @@ class SourceWorkDetailViewModel @Inject constructor(
                         authorAvatarUrl = work.authorAvatarUrl.orEmpty(),
                         categoryCd = -1,
                         categoryName = "",
-                        imageUrls = inlineImageUrls(
-                            list,
-                            upgradeToFull = worthUpgradingInline(list, imageRouteController),
-                            sourceThumbnailUrl = work.thumbnailUrl,
-                        ),
+                        imageUrls = inline,
                         tags = text?.tags.orEmpty(),
                         r18 = work.r18,
                     )
