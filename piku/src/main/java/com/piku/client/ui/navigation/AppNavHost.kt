@@ -505,15 +505,17 @@ fun AppNavHost(
         }
         composable(Routes.COLLECTION) {
             ProvideNavSharedScope(sharedScope, this) {
-                CollectionScreen(
-                    onBack = safePopBack,
-                    onWorkClick = { work: Work ->
-                        openWork(work)
-                    },
-                    onAuthorClick = { work: Work ->
-                        openAuthorOfWork(work)
-                    },
-                )
+                CompositionLocalProvider(LocalWorkMorphEnabled provides false) {
+                    CollectionScreen(
+                        onBack = safePopBack,
+                        onWorkClick = { work: Work ->
+                            openWork(work)
+                        },
+                        onAuthorClick = { work: Work ->
+                            openAuthorOfWork(work)
+                        },
+                    )
+                }
             }
         }
         composable(Routes.HISTORY) {
