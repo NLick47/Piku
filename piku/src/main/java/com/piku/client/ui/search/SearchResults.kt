@@ -182,8 +182,8 @@ internal fun TagsTabContent(
     dark: Boolean,
 ) {
     val selectedTag = state.selectedTagName
-    // 匿名时"返回标签建议"没有去处（建议接口需登录），隐藏入口，保住手上的作品列表
-    val canBackToSuggestions = !state.tagNeedLogin
+    val canBackToSuggestions = !state.tagNeedLogin &&
+        !(state.tagSuggestions.isEmpty() && state.tagSuggestionsEndReached)
     Column(Modifier.fillMaxSize()) {
         if (selectedTag != null) {
             TagWorksHeader(

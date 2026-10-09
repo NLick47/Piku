@@ -1024,6 +1024,7 @@ class SearchViewModel @Inject constructor(
                             tagSuggestionsEndReached = list.isEmpty(),
                         )
                     }
+                    tagFallbackTarget(base, list, append)?.let(::selectTagCard)
                 }
                 .onFailure { error ->
                     if (generation != sourceGeneration) return@onFailure
@@ -1081,15 +1082,15 @@ class SearchViewModel @Inject constructor(
             plugin.suggestTags(base)
                 .onSuccess { list ->
                     if (generation != sourceGeneration) return@onSuccess
+                    val cards = list.map { s -> TagCard(name = s.name, thumbnailUrl = s.thumbnailUrl) }
                     _uiState.update {
                         it.copy(
                             tagSuggestionsLoading = false,
-                            tagSuggestions = list.map { s ->
-                                TagCard(name = s.name, thumbnailUrl = s.thumbnailUrl)
-                            },
+                            tagSuggestions = cards,
                             tagSuggestionsEndReached = true,
                         )
                     }
+                    tagFallbackTarget(base, cards, append = false)?.let(::selectTagCard)
                 }
                 .onFailure { error ->
                     if (generation != sourceGeneration) return@onFailure
@@ -1222,3 +1223,11 @@ class SearchViewModel @Inject constructor(
         }
     }
 }
+
+/**
+ * 标签建议为空时是否改按精确标签直接出作品（返回要用的标签名，null = 仍停在建议模式）。
+ * pixiv 的联想接口对 ≥11 字符的输入一律返回空，长标签（如"角色(作品)"形态）必踩，
+ * 建议模式下没有别的出口，只能把输入词当确定的标签。
+ */
+internal fun tagFallbackTarget(word: String, suggestions: List<TagCard>, append: Boolean): String? =
+    word.takeIf { !append && suggestions.isEmpty() && it.isNotBlank() }
