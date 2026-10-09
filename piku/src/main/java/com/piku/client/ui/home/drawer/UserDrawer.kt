@@ -33,7 +33,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.Logout
-import androidx.compose.material.icons.outlined.AltRoute
+import androidx.compose.material.icons.automirrored.outlined.AltRoute
 import androidx.compose.material.icons.outlined.BookmarkAdd
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.CloudSync
@@ -42,7 +42,7 @@ import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material.icons.outlined.GTranslate
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Login
+import androidx.compose.material.icons.automirrored.outlined.Login
 import androidx.compose.material.icons.outlined.ManageAccounts
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Settings
@@ -66,6 +66,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -83,7 +84,13 @@ import com.piku.client.domain.model.PixivBookmarkMirror
 import com.piku.client.domain.model.ThemeMode
 import com.piku.client.ui.common.UserAvatar
 import com.piku.client.ui.theme.AccentDark
+import com.piku.client.ui.theme.GlassBarBgDark
+import com.piku.client.ui.theme.GlassBarBgLight
 import com.piku.client.ui.theme.PikuColors
+import com.piku.client.ui.theme.ShadowAmbient
+import com.piku.client.ui.theme.ShadowSpot
+import com.piku.client.ui.theme.SoftBorderDark
+import com.piku.client.ui.theme.SoftBorderLight
 import com.piku.client.ui.theme.themedSwitchColors
 
 /**
@@ -183,11 +190,15 @@ fun UserDrawer(
                 drawerScope = drawerScope,
             )
         },
-        scrimColor = if (dark) Color(0xB3000000) else Color(0x99000000),
+        // 面板已经是高不透明的玻璃，遮罩不必再压到 60~70%：暗 52% / 亮 42% 够让它退到后面
+        scrimColor = if (dark) Color(0x85000000) else Color(0x6B000000),
         gesturesEnabled = gesturesEnabled,
         content = content,
     )
 }
+
+/** 抽屉面板的不透明度：玻璃色同族，但整屏高的表面要更实，透底才不会看成"隐约有卡片" */
+private const val PanelAlpha = 0.98f
 
 @Composable
 private fun DrawerPanel(
@@ -240,25 +251,22 @@ private fun DrawerPanel(
     // 断开是破坏性动作，先确认；文案由该源自己的插件给
     var confirmDisconnect by remember { mutableStateOf(false) }
 
+    val panelShape = RoundedCornerShape(topEnd = 26.dp, bottomEnd = 26.dp)
     Column(
         modifier = Modifier
             .fillMaxHeight()
             .width(304.dp)
-            .graphicsLayer {
-                shadowElevation = 20.dp.toPx()
-                shape = RoundedCornerShape(topEnd = 26.dp, bottomEnd = 26.dp)
-                clip = true
-            }
-            .background(
-                Brush.verticalGradient(
-                    if (dark) listOf(Color(0xFF23211F), Color(0xFF262031))
-                    else listOf(Color(0xFFFAF8F5), Color(0xFFF1EDF6)),
-                ),
+            .shadow(
+                elevation = 20.dp,
+                shape = panelShape,
+                ambientColor = ShadowAmbient,
+                spotColor = ShadowSpot,
             )
-            .border(
-                BorderStroke(0.5.dp, if (dark) Color(0x33FFFFFF) else Color(0x66FFFFFF)),
-                RoundedCornerShape(topEnd = 26.dp, bottomEnd = 26.dp),
-            )
+            .clip(panelShape)
+            // 玻璃色同族，但抽屉是整屏高的大表面：底栏那档 90% 会看成"隐约有卡片"，
+            // 这里按 PanelAlpha 收到接近实心——颜色、柔和收口、投影仍是那一套
+            .background((if (dark) GlassBarBgDark else GlassBarBgLight).copy(alpha = PanelAlpha))
+            .border(BorderStroke(0.5.dp, if (dark) SoftBorderDark else SoftBorderLight), panelShape)
             .statusBarsPadding()
             .navigationBarsPadding()
             .padding(bottom = 12.dp),
@@ -458,7 +466,7 @@ private fun DrawerPanel(
                         accent = iconAccent,
                     )
                     DrawerMenuRow(
-                        icon = Icons.Outlined.AltRoute,
+                        icon = Icons.AutoMirrored.Outlined.AltRoute,
                         label = stringResource(R.string.menu_image_route),
                         trailing = stringResource(imageRouteMode.labelRes()),
                         onClick = onImageRouteClick,
@@ -521,7 +529,7 @@ private fun DrawerPanel(
                     icon = if (loggedIn) {
                         Icons.AutoMirrored.Outlined.Logout
                     } else {
-                        Icons.Outlined.Login
+                        Icons.AutoMirrored.Outlined.Login
                     },
                     label = stringResource(if (loggedIn) R.string.logout else R.string.login_button),
                     onClick = { if (loggedIn) confirmDisconnect = true else onAccountAction() },
@@ -758,7 +766,7 @@ private fun SectionLabel(
         color = color,
         fontSize = 10.sp,
         fontWeight = FontWeight.Medium,
-        letterSpacing = 1.2.sp,
+        letterSpacing = 1.sp,
         modifier = Modifier.padding(horizontal = 22.dp, vertical = 6.dp),
     )
 }
@@ -805,6 +813,8 @@ private fun DrawerMenuRow(
             color = primary,
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
         if (trailingContent != null) {
