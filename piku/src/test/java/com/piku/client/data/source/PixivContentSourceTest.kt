@@ -15,6 +15,7 @@ import com.piku.client.data.remote.ImageRouteController
 import com.piku.client.data.remote.PikuJson
 import com.piku.client.data.auth.pixivClientHash
 import com.piku.client.data.remote.pixiv.PixivApi
+import com.piku.client.data.remote.pixiv.PixivApiConfig
 import com.piku.client.data.remote.pixiv.PixivAppActionResponse
 import com.piku.client.data.remote.pixiv.PixivAppApi
 import com.piku.client.data.remote.pixiv.PixivAppConfig
@@ -210,6 +211,12 @@ class PixivContentSourceTest {
 
         var related = emptyList<PixivAppIllust>()
         var relatedCalls = 0
+        /** 首屏给的续页地址：非空才会续页 */
+        var relatedNextUrl: String? = null
+        /** 续页脚本：第几次续页（1 起）返回哪一页；默认空页 = 没有下页 */
+        var relatedNextScript: (Int) -> PixivIllustsResponse = { PixivIllustsResponse() }
+        /** 续页请求的地址，按发出顺序记账（测「先给首屏再续页」用） */
+        val relatedNextCalls = mutableListOf<String>()
 
         override suspend fun relatedIllusts(
             clientTime: String,
@@ -218,14 +225,17 @@ class PixivContentSourceTest {
             filter: String,
         ): PixivIllustsResponse {
             relatedCalls++
-            return PixivIllustsResponse(illusts = related)
+            return PixivIllustsResponse(illusts = related, nextUrl = relatedNextUrl)
         }
 
         override suspend fun relatedIllustsNext(
             url: String,
             clientTime: String,
             clientHash: String,
-        ): PixivIllustsResponse = PixivIllustsResponse()
+        ): PixivIllustsResponse {
+            relatedNextCalls += url
+            return relatedNextScript(relatedNextCalls.size)
+        }
 
         override suspend fun followAdd(
             clientTime: String,
@@ -524,6 +534,9 @@ class PixivContentSourceTest {
 
     private companion object {
         const val FIXED_NOW = 1_700_000_000_000L
+
+        /** 续页地址：游标只认 app-api 域开头的 next_url */
+        const val RELATED_NEXT = PixivAppConfig.BASE_URL + "v2/illust/related?illust_id=7&offset=20"
     }
 
     /** 0 起页在取页时翻译成接口的 1 起页 */
@@ -715,6 +728,83 @@ class PixivContentSourceTest {
         assertEquals(listOf(12L), related.map { it.id })
         assertEquals(1, api.recommendCalls)
         assertEquals(0, appApi.relatedCalls)
+    }
+
+    /**
+     * 相关作品翻页是串行的（一页 20 条 + next_url），首屏到手就该交给调用方，
+     * 别攒到末页——攒起来底部要空好几秒。
+     */
+    @Test
+    fun relatedWorksHandOutEveryPageAsItArrives() = runTest {
+        val appApi = FakeAppApi().apply {
+            related = listOf(appIllust("11"))
+            relatedNextUrl = RELATED_NEXT
+            relatedNextScript = { PixivIllustsResponse(illusts = listOf(appIllust("12"))) }
+        }
+        val delivered = mutableListOf<List<Long>>()
+        val nextCallsAtDelivery = mutableListOf<Int>()
+
+        val all = loggedInSource(FakeApi(), appApi).relatedWorks(work(7)) { page ->
+            delivered += page.map { it.id }
+            nextCallsAtDelivery += appApi.relatedNextCalls.size
+        }.getOrThrow()
+
+        assertEquals(listOf(listOf(11L), listOf(11L, 12L)), delivered)
+        // 首屏回调时续页还没发出去：先给 UI 正是这一路的全部意义
+        assertEquals(0, nextCallsAtDelivery.first())
+        assertEquals(listOf(11L, 12L), all.map { it.id })
+    }
+
+    /** 回传的是累积结果：跨页重复的作品只算一条，后来的页不把它再报一次 */
+    @Test
+    fun relatedWorksHandOutAccumulatedDedupe() = runTest {
+        val appApi = FakeAppApi().apply {
+            related = listOf(appIllust("11"), appIllust("12"))
+            relatedNextUrl = RELATED_NEXT
+            relatedNextScript = { PixivIllustsResponse(illusts = listOf(appIllust("12"), appIllust("13"))) }
+        }
+        val delivered = mutableListOf<List<Long>>()
+
+        val all = loggedInSource(FakeApi(), appApi).relatedWorks(work(7)) { delivered += it.map { w -> w.id } }
+            .getOrThrow()
+
+        assertEquals(listOf(listOf(11L, 12L), listOf(11L, 12L, 13L)), delivered)
+        assertEquals(listOf(11L, 12L, 13L), all.map { it.id })
+    }
+
+    /** 续页挂了不清空已到的页：首屏照常留在结果里，整块只是没续上 */
+    @Test
+    fun relatedWorksKeepDeliveredPagesWhenContinuationFails() = runTest {
+        val appApi = FakeAppApi().apply {
+            related = listOf(appIllust("11"))
+            relatedNextUrl = RELATED_NEXT
+            relatedNextScript = { throw http404() }
+        }
+        val delivered = mutableListOf<List<Long>>()
+
+        val all = loggedInSource(FakeApi(), appApi).relatedWorks(work(7)) { delivered += it.map { w -> w.id } }
+            .getOrThrow()
+
+        assertEquals(listOf(listOf(11L)), delivered)
+        assertEquals(listOf(11L), all.map { it.id })
+    }
+
+    /** 页数用满就收：那条注定被丢掉的下页请求不该发出去（真机实测这里多发过一发） */
+    @Test
+    fun relatedWorksStopAtPageLimitWithoutWastedRequest() = runTest {
+        val appApi = FakeAppApi().apply {
+            related = listOf(appIllust("11"))
+            relatedNextUrl = RELATED_NEXT
+            // 每页都能续：没有页数上限的话会一直翻下去
+            relatedNextScript = { n ->
+                PixivIllustsResponse(illusts = listOf(appIllust("1${n + 1}")), nextUrl = RELATED_NEXT)
+            }
+        }
+
+        val all = loggedInSource(FakeApi(), appApi).relatedWorks(work(7)).getOrThrow()
+
+        assertEquals(PixivApiConfig.RELATED_MAX_PAGES - 1, appApi.relatedNextCalls.size)
+        assertEquals(PixivApiConfig.RELATED_MAX_PAGES, all.size)
     }
 
     /** 详情页把取页与取文本并行发出来：登录态下同一作品的 v1/illust/detail 只该打一发 */

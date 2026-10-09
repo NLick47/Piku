@@ -67,6 +67,8 @@ import com.piku.client.domain.model.AppLanguage
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkDetail
 import com.piku.client.domain.model.WorkStats
+import com.piku.client.ui.common.SkeletonBlock
+import com.piku.client.ui.common.rememberSkeletonPulse
 import com.piku.client.ui.detail.ImagePager
 import com.piku.client.ui.detail.HeadlineTranslateChip
 import com.piku.client.ui.detail.TagFlow
@@ -137,6 +139,8 @@ internal fun PixivDetailContent(
     onToggleTagsTranslation: () -> Unit = {},
     /** 底部相关作品；空列表时不渲染这一块 */
     related: List<Work> = emptyList(),
+    /** 相关作品在途：先摆骨架占位。它比详情晚到，空着会被看成「没有相关作品」 */
+    relatedLoading: Boolean = false,
     onRelatedClick: (Work) -> Unit = {},
     /** 收藏（本地）与关注：收纳进概览卡本体——关注在作者行，收藏在数据条的收藏格 */
     isFavorite: Boolean = false,
@@ -224,7 +228,7 @@ internal fun PixivDetailContent(
                 onBookmarkLongPress = onBookmarkLongPress,
                 onFollowClick = onFollowClick,
             )
-            RelatedRow(works = related, onClick = onRelatedClick)
+            RelatedRow(works = related, loading = relatedLoading, onClick = onRelatedClick)
         }
     }
 }
@@ -782,8 +786,8 @@ internal fun TagsBlock(
 }
 
 @Composable
-private fun RelatedRow(works: List<Work>, onClick: (Work) -> Unit) {
-    if (works.isEmpty()) return
+private fun RelatedRow(works: List<Work>, loading: Boolean, onClick: (Work) -> Unit) {
+    if (works.isEmpty() && !loading) return
     Spacer(Modifier.height(18.dp))
     Text(
         text = stringResource(R.string.pixiv_related_works),
@@ -792,6 +796,10 @@ private fun RelatedRow(works: List<Work>, onClick: (Work) -> Unit) {
         fontWeight = FontWeight.SemiBold,
     )
     Spacer(Modifier.height(10.dp))
+    if (works.isEmpty()) {
+        RelatedPlaceholderRow()
+        return
+    }
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val columns = (maxWidth / RELATED_COLUMN_WIDTH).toInt().coerceIn(2, 4)
         val rows = works.chunked(columns)
@@ -803,6 +811,31 @@ private fun RelatedRow(works: List<Work>, onClick: (Work) -> Unit) {
                     }
                     // 末行不满时补空位，卡片才不会被拉宽
                     repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RelatedPlaceholderRow() {
+    val pulse by rememberSkeletonPulse("relatedWorks")
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val columns = (maxWidth / RELATED_COLUMN_WIDTH).toInt().coerceIn(2, 4)
+        Row(horizontalArrangement = Arrangement.spacedBy(RELATED_GAP)) {
+            repeat(columns) {
+                Column(Modifier.weight(1f)) {
+                    SkeletonBlock(
+                        pulse = pulse,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(1f),
+                        shape = RoundedCornerShape(12.dp),
+                    )
+                    Spacer(Modifier.height(9.dp))
+                    SkeletonBlock(pulse, Modifier.fillMaxWidth(0.75f).height(11.dp))
+                    Spacer(Modifier.height(6.dp))
+                    SkeletonBlock(pulse, Modifier.fillMaxWidth(0.45f).height(9.dp))
                 }
             }
         }

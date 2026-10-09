@@ -119,6 +119,8 @@ class SourceWorkDetailViewModel @Inject constructor(
         val stats: WorkStats? = null,
         /** 底部相关作品；pixiv 才有，随详情一起回来，没有就不显示这一块 */
         val related: List<Work> = emptyList(),
+        /** 相关作品在途：底部先摆骨架占位，别让空底部被看成「没有相关作品」 */
+        val relatedLoading: Boolean = false,
         /** 计数缩写按语言分档（中日「万」/ 英文「K」） */
         val language: AppLanguage = AppLanguage.SYSTEM,
         /** pixiv 源登录态：关注按钮的显隐与云端收藏镜像都看它 */
@@ -344,6 +346,8 @@ class SourceWorkDetailViewModel @Inject constructor(
 
     private suspend fun loadIllust(work: Work, source: ContentSource) {
         coroutineScope {
+            // 相关作品与详情同时起跑：它自己按页续，先到的页先补在底部
+            val relatedJob = launch { loadRelated(work, source) }
             // 取页与取文本并行：总耗时从两次相加变成取最慢的一个
             val pagesDeferred = async { source.workPages(work) }
             val textDeferred = async { source.workDetailText(work) }
@@ -352,6 +356,7 @@ class SourceWorkDetailViewModel @Inject constructor(
             pages.fold(
                 onSuccess = { list ->
                     if (list.isEmpty()) {
+                        relatedJob.cancel()
                         _ui.update { it.copy(loading = false, failed = true, detail = null) }
                         return@fold
                     }
@@ -384,24 +389,14 @@ class SourceWorkDetailViewModel @Inject constructor(
                     _ui.update {
                         it.copy(loading = false, detail = detail, pages = list, stats = text?.stats)
                     }
-                    // 相关作品单独一路：详情先出来，它后到就补在底部，取不到就算了
-                    launch {
-                        val related = source.relatedWorks(work).getOrNull().orEmpty()
-                        // 成人门跟源走：pixiv 由账号侧服务端管控不再过滤，poipiku 沿用成人开关
-                        val filtered = if (work.source == WorkSource.PIXIV) {
-                            related
-                        } else {
-                            val adultEnabled = settingsRepository.showAdultContent.first()
-                            related.filter { item -> adultEnabled || !item.r18 }
-                        }
-                        _ui.update { it.copy(related = filtered) }
-                    }
                     // 与 poipiku 详情一致：打开即记历史（upsert 去重）
                     recordHistoryUseCase(work)
                     // 与 poipiku 详情一致：开了 AI 翻译就自动译一次（失败静默）
                     if (settingsRepository.aiTranslateEnabled.value) translate()
                 },
                 onFailure = { error ->
+                    // 详情没出来这一页就是失败态：相关作品跟着撤，别在错误页上补网格
+                    relatedJob.cancel()
                     // 打底的预览一并撤掉：重进时「detail != null」守卫才会放行自动重拉
                     _ui.update {
                         it.copy(
@@ -413,6 +408,24 @@ class SourceWorkDetailViewModel @Inject constructor(
                     }
                 },
             )
+        }
+    }
+
+    /**
+     * 相关作品单独一路：每页先到先补在底部，取不到就整块不显示，不影响详情本身。
+     * 与详情同时起跑——它要翻好几页，串在详情后面等于把两段耗时相加。
+     */
+    private suspend fun loadRelated(work: Work, source: ContentSource) {
+        _ui.update { it.copy(relatedLoading = true) }
+        // 成人门跟源走：pixiv 由账号侧服务端管控不再过滤，poipiku 沿用成人开关
+        val hideAdult = work.source != WorkSource.PIXIV && !settingsRepository.showAdultContent.first()
+        try {
+            source.relatedWorks(work) { page ->
+                _ui.update { it.copy(related = page.filter { w -> !hideAdult || !w.r18 }) }
+            }
+        } finally {
+            // 详情失败会取消这一路，占位也得跟着撤
+            _ui.update { it.copy(relatedLoading = false) }
         }
     }
 

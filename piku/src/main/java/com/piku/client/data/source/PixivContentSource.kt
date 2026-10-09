@@ -122,8 +122,10 @@ class PixivContentSource @Inject constructor(
 
     override suspend fun novelBody(work: Work): Result<String> = repository.novelBody(work.id)
 
-    override suspend fun relatedWorks(work: Work): Result<List<Work>> =
-        repository.recommend(work.id)
+    override suspend fun relatedWorks(
+        work: Work,
+        onPage: suspend (List<Work>) -> Unit,
+    ): Result<List<Work>> = repository.recommend(work.id, onPage)
 
     companion object {
         const val FEED_RECOMMEND = "recommend"

@@ -432,19 +432,33 @@ class PixivRepository @Inject constructor(
         class AppUrl(val url: String) : RelatedCursor
     }
 
-    suspend fun recommend(illustId: Long): Result<List<Work>> = apiCall { relatedWorks(illustId) }
+    suspend fun recommend(
+        illustId: Long,
+        onPage: suspend (List<Work>) -> Unit = {},
+    ): Result<List<Work>> = apiCall { relatedWorks(illustId, onPage) }
 
 
-    private suspend fun relatedWorks(illustId: Long): List<Work> {
+    private suspend fun relatedWorks(illustId: Long, onPage: suspend (List<Work>) -> Unit): List<Work> {
         val works = LinkedHashMap<Long, Work>()
+        val startedAt = System.currentTimeMillis()
         var page = relatedPageOrNull { firstRelatedPage(illustId) }
         var taken = 0
         while (page != null && taken < PixivApiConfig.RELATED_MAX_PAGES) {
             taken++
             val before = works.size
             page.works.forEach { works.putIfAbsent(it.id, it) }
+            if (works.size > before) {
+                Log.d(
+                    TAG,
+                    "related work=$illustId page=$taken size=${works.size} " +
+                        "ms=${System.currentTimeMillis() - startedAt}",
+                )
+                onPage(works.values.toList())
+            }
             val cursor = page.cursor ?: break
             if (works.size == before) break
+            // 页数用满就别再问下一页：现在问出来也只会被循环条件丢掉，白烧一发
+            if (taken >= PixivApiConfig.RELATED_MAX_PAGES) break
             page = relatedPageOrNull { nextRelatedPage(cursor) }
         }
         return works.values.toList()

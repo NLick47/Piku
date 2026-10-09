@@ -51,8 +51,13 @@ interface ContentSource {
     /**
      * 详情页底部的相关作品。默认没有（poipiku 的相关投稿走它自己那条链路）；
      * 这一路是异步的，取不到就整块不显示，不影响详情本身。
+     * [onPage] 每取到一页回调一次累积结果：相关作品要翻好几页，先到的先上屏，
+     * 别让用户对着空底部等末页回来。
      */
-    suspend fun relatedWorks(work: Work): Result<List<Work>> = Result.success(emptyList())
+    suspend fun relatedWorks(
+        work: Work,
+        onPage: suspend (List<Work>) -> Unit = {},
+    ): Result<List<Work>> = Result.success(emptyList())
 
     /**
      * 小说正文。只有 [Work.kind] 是小说的作品会调到：正文体量大，单独一路取，

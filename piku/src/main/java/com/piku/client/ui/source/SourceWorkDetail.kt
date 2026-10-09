@@ -407,6 +407,7 @@ internal fun SourceWorkDetailScreen(
                     tagsTranslating = state.tagsTranslating,
                     onToggleTagsTranslation = viewModel::onToggleTagsTranslation,
                     related = state.related,
+                    relatedLoading = state.relatedLoading,
                     onRelatedClick = onRelatedClick,
                     // 收藏与关注收进概览卡本体，不用悬浮条——相关作品网格完整可见
                     isFavorite = state.isFavorite,
