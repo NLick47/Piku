@@ -345,6 +345,7 @@ internal fun SourceWorkDetailScreen(
                     onToggleCustomTag = viewModel::toggleCustomTag,
                     onAuthorClick = { onOpenAuthor(work) },
                     isFavorite = state.isFavorite,
+                    cloudSynced = state.cloudSynced,
                     onBookmarkToggle = { viewModel.toggleFavorite() },
                     onBookmarkLongPress = { favoriteSheetVisible = true },
                     followed = state.followed,

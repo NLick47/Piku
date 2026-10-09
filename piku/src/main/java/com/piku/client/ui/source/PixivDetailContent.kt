@@ -282,18 +282,12 @@ private fun OverviewCard(
             detail = detail,
             stats = stats,
             onAuthorClick = onAuthorClick,
-            isFavorite = isFavorite,
-            cloudSynced = cloudSynced,
             dark = dark,
             followed = followed,
             showFollow = showFollow,
             followSending = followSending,
             followQuiet = followQuiet,
-            onBookmarkToggle = onBookmarkToggle,
-            onBookmarkLongPress = onBookmarkLongPress,
             onFollowClick = onFollowClick,
-            // 收藏开关挪进统计行（☆ 计数格），作者行回归 pixiv 本家版式：头像/名字/关注
-            showBookmark = false,
         )
         DescriptionBlock(
             detail = detail,
@@ -364,62 +358,17 @@ private fun TitleLine(
     }
 }
 
-/** 收藏星标：点亮=金色实心，长按进收藏夹面板；已同步 pixiv 时带角标。放作者行右侧、不遮图（小说详情用；插画详情的开关是统计行里的 BookmarkStatButton） */
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun FavoriteStarButton(
-    favorited: Boolean,
-    cloudSynced: Boolean,
-    dark: Boolean,
-    onToggle: () -> Unit,
-    onLongPress: () -> Unit,
-) {
-    val tint = if (favorited) {
-        if (dark) StarDark else StarLight
-    } else {
-        PikuColors.textSecondary
-    }
-    Box(
-        modifier = Modifier
-            .clip(CircleShape)
-            .combinedClickable(onClick = onToggle, onLongClick = onLongPress)
-            .padding(8.dp),
-    ) {
-        Icon(
-            imageVector = if (favorited) Icons.Filled.Star else Icons.Outlined.StarBorder,
-            contentDescription = stringResource(R.string.detail_favorite),
-            tint = tint,
-            modifier = Modifier.size(22.dp),
-        )
-        // 同步角标：只表示「本 App 已把这条收藏送上 pixiv」，pixiv 本家藏的不标（取消规则与此对齐）
-        if (favorited && cloudSynced) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .size(7.dp)
-                    .background(PikuColors.controlAccent, CircleShape)
-                    .border(1.dp, PikuColors.surface, CircleShape),
-            )
-        }
-    }
-}
-
 @Composable
 internal fun AuthorLine(
     detail: WorkDetail,
     stats: WorkStats?,
     onAuthorClick: () -> Unit,
-    isFavorite: Boolean,
-    cloudSynced: Boolean = false,
     dark: Boolean,
     followed: Boolean,
     showFollow: Boolean,
     followSending: Boolean,
     followQuiet: Boolean = false,
-    onBookmarkToggle: () -> Unit,
-    onBookmarkLongPress: () -> Unit,
     onFollowClick: () -> Unit,
-    showBookmark: Boolean = true,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -459,23 +408,13 @@ internal fun AuthorLine(
                 )
             }
         }
-        // 可进主页的提示：只有名字带箭头，右侧的收藏/关注仍是各自的按钮
+        // 可进主页的提示：只有名字带箭头，右侧的关注仍是它自己的按钮
         Icon(
             imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
             contentDescription = null,
             tint = PikuColors.textFaint,
             modifier = Modifier.size(16.dp),
         )
-        // 收藏星标：对作品操作，点自己区域不触发整行跳作者页；pixiv 插画页改为统计行里的按钮
-        if (showBookmark) {
-            FavoriteStarButton(
-                favorited = isFavorite,
-                cloudSynced = cloudSynced,
-                dark = dark,
-                onToggle = onBookmarkToggle,
-                onLongPress = onBookmarkLongPress,
-            )
-        }
         // 关注按钮：与 pixiv 本家同位（作者行右侧）；未登录时整颗不出现
         if (showFollow) {
             Spacer(Modifier.width(10.dp))
@@ -584,9 +523,10 @@ private fun StatsRow(
 }
 
 
+/** 收藏开关：星标 + 计数胶囊，插画与小说两套详情共用同一颗 */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun BookmarkStatButton(
+internal fun BookmarkStatButton(
     count: Int,
     language: AppLanguage,
     favorited: Boolean,

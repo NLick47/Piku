@@ -16,7 +16,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -64,6 +63,7 @@ internal fun NovelDetailContent(
     onToggleCustomTag: (String) -> Unit,
     onAuthorClick: () -> Unit,
     isFavorite: Boolean,
+    cloudSynced: Boolean,
     onBookmarkToggle: () -> Unit,
     onBookmarkLongPress: () -> Unit,
     followed: Boolean,
@@ -129,20 +129,25 @@ internal fun NovelDetailContent(
             detail = detail,
             stats = stats,
             onAuthorClick = onAuthorClick,
-            isFavorite = isFavorite,
             dark = dark,
             followed = followed,
             showFollow = showFollow,
             followSending = followSending,
             followQuiet = followQuiet,
-            onBookmarkToggle = onBookmarkToggle,
-            onBookmarkLongPress = onBookmarkLongPress,
             onFollowClick = onFollowClick,
         )
-        if (stats?.hasCounts == true || work.textLength > 0) {
-            Spacer(Modifier.height(10.dp))
-            NovelStatsRow(stats = stats, work = work, language = language)
-        }
+        Spacer(Modifier.height(10.dp))
+        // 收藏开关与作品详情页同一颗星标胶囊，且恒在——数据缺失时只藏两侧纯展示格
+        NovelStatsRow(
+            stats = stats,
+            work = work,
+            language = language,
+            dark = dark,
+            isFavorite = isFavorite,
+            cloudSynced = cloudSynced,
+            onBookmarkToggle = onBookmarkToggle,
+            onBookmarkLongPress = onBookmarkLongPress,
+        )
         MetaLine(stats = stats)
         Spacer(Modifier.height(14.dp))
         ReadButton(
@@ -167,35 +172,48 @@ internal fun NovelDetailContent(
 
 private const val NOVEL_DETAIL_COVER_ASPECT = 0.75f
 
-/** 浏览 / 收藏 / 篇幅；小说没有点赞，第三格给字数 */
+/** 浏览 / 篇幅两格纯展示，第三格是收藏胶囊；小说没有点赞，篇幅顶上它的位置 */
 @Composable
-private fun NovelStatsRow(stats: WorkStats?, work: Work, language: AppLanguage) {
-    val source = stats
-    if (source == null && work.textLength <= 0) return
-    Row(Modifier.fillMaxWidth()) {
-        if (source != null && source.hasCounts) {
+private fun NovelStatsRow(
+    stats: WorkStats?,
+    work: Work,
+    language: AppLanguage,
+    dark: Boolean,
+    isFavorite: Boolean,
+    cloudSynced: Boolean,
+    onBookmarkToggle: () -> Unit,
+    onBookmarkLongPress: () -> Unit,
+) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        if (stats?.hasCounts == true) {
             StatCell(
                 icon = Icons.Outlined.Visibility,
-                value = compactCount(source.views, language),
+                value = compactCount(stats.views, language),
                 label = stringResource(R.string.pixiv_stat_views),
                 modifier = Modifier.weight(1f),
             )
-            StatCell(
-                icon = Icons.Outlined.FavoriteBorder,
-                value = compactCount(source.bookmarks, language),
-                label = stringResource(R.string.pixiv_stat_bookmarks),
-                modifier = Modifier.weight(1f),
-            )
-            if (work.textLength <= 0) return@Row
         }
-        Text(
-            text = stringResource(R.string.pixiv_novel_length, work.textLength),
-            color = PikuColors.textPrimary,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.weight(1f),
-            textAlign = TextAlign.Center,
-        )
+        if (work.textLength > 0) {
+            Text(
+                text = stringResource(R.string.pixiv_novel_length, work.textLength),
+                color = PikuColors.textPrimary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f),
+                textAlign = TextAlign.Center,
+            )
+        }
+        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+            BookmarkStatButton(
+                count = stats?.bookmarks ?: 0,
+                language = language,
+                favorited = isFavorite,
+                cloudSynced = cloudSynced,
+                dark = dark,
+                onToggle = onBookmarkToggle,
+                onLongPress = onBookmarkLongPress,
+            )
+        }
     }
 }
 
