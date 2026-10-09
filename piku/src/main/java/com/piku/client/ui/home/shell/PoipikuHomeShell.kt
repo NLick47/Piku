@@ -73,12 +73,7 @@ internal fun PoipikuHomeShell(
                 dark = dark,
             )
             Column(Modifier.weight(1f)) {
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .statusBarsPadding()
-                        .padding(top = 8.dp),
-                ) {
+                Box(Modifier.fillMaxWidth()) {
                     LiquidGlassBackdrop(
                         dark = dark,
                         isScrolling = isScrolling,
@@ -86,7 +81,12 @@ internal fun PoipikuHomeShell(
                         translucent = state.customBackgroundPath != null,
                         progress = scrollProgress,
                     )
-                    Column(Modifier.fillMaxWidth()) {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .statusBarsPadding()
+                            .padding(top = 8.dp),
+                    ) {
                         TabletTopBar(
                             avatarUrl = state.userAvatarUrl,
                             onMenuClick = onOpenDrawer,

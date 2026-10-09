@@ -1,6 +1,7 @@
 package com.piku.client.ui.home.background
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class HomeHeaderVeilTest {
@@ -22,7 +23,6 @@ class HomeHeaderVeilTest {
     }
 }
 
-/** 头部底衬着色：必须逐项复现改动前的数值，头部仍在布局流里，滚动行为不变。 */
 class HomeHeaderTintTest {
 
     @Test
@@ -45,31 +45,31 @@ class HomeHeaderTintTest {
     }
 
     @Test
-    fun opaqueHeaderKeepsOldValues() {
-        assertEquals(
-            0.50f,
-            headerTintAlphas(translucent = false, dark = true, deepen = 0f).top,
-            0.0001f,
-        )
-        assertEquals(
-            0.32f,
-            headerTintAlphas(translucent = false, dark = true, deepen = 0f).mid,
-            0.0001f,
-        )
-        assertEquals(
-            0.95f,
-            headerTintAlphas(translucent = false, dark = false, deepen = 0f).top,
-            0.0001f,
-        )
-        assertEquals(
-            0.80f,
-            headerTintAlphas(translucent = false, dark = false, deepen = 0f).mid,
-            0.0001f,
-        )
-        assertEquals(
-            0.88f,
-            headerTintAlphas(translucent = false, dark = false, deepen = 1f).mid,
-            0.0001f,
-        )
+    fun opaqueHeaderWearsTheGlassChipMaterial() {
+        val light = headerTintAlphas(translucent = false, dark = false, deepen = 0f)
+        val dark = headerTintAlphas(translucent = false, dark = true, deepen = 0f)
+        assertEquals(0.90f, light.top, 0.0001f)
+        assertEquals(0.78f, light.mid, 0.0001f)
+        assertEquals(0.38f, dark.top, 0.0001f)
+        assertEquals(0.28f, dark.mid, 0.0001f)
+    }
+
+    @Test
+    fun darkHeaderLeavesRoomForTheSearchButton() {
+        val dark = headerTintAlphas(translucent = false, dark = true, deepen = 0f)
+        val light = headerTintAlphas(translucent = false, dark = false, deepen = 0f)
+        assertTrue("暗色底衬应比亮色更透：$dark vs $light", dark.top < light.top)
+        assertTrue("暗色底衬要给搜索钮留出落差：$dark", dark.top < 0.5f)
+    }
+
+    @Test
+    fun scrollingThickensTheHeader() {
+        for (dark in listOf(false, true)) {
+            val calm = headerTintAlphas(translucent = false, dark = dark, deepen = 0f)
+            val deep = headerTintAlphas(translucent = false, dark = dark, deepen = 1f)
+            assertTrue("滚动时顶边应更实：$deep vs $calm", deep.top > calm.top)
+            assertTrue("滚动时中段应更实：$deep vs $calm", deep.mid > calm.mid)
+            assertTrue("压实后也不该糊成实色：$deep", deep.top < 1f)
+        }
     }
 }

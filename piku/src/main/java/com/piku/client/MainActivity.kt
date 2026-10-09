@@ -7,13 +7,18 @@ import android.os.Build
 import android.os.Bundle
 import android.os.LocaleList
 import android.util.Log
+import android.view.Window
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import com.piku.client.data.local.ImageShareHelper
 import com.piku.client.data.local.LanguageStore
@@ -59,7 +64,9 @@ class MainActivity : ComponentActivity() {
         setContent {
             val themeMode by settingsRepository.themeMode.collectAsState(initial = ThemeMode.SYSTEM)
             val systemDark = isSystemInDarkTheme()
-            PoipikuTheme(darkTheme = themeMode.isDark(systemDark)) {
+            val dark = themeMode.isDark(systemDark)
+            PoipikuTheme(darkTheme = dark) {
+                SystemBarIconsFollowAppTheme(window = window, dark = dark)
                 AppNavHost(
                     deepLink = pendingDeepLink.value,
                     onDeepLinkConsumed = { pendingDeepLink.value = null },
@@ -97,5 +104,16 @@ class MainActivity : ComponentActivity() {
 
     private companion object {
         const val TAG = "PikuDiag"
+    }
+}
+
+@Composable
+private fun SystemBarIconsFollowAppTheme(window: Window, dark: Boolean) {
+    val view = LocalView.current
+    SideEffect {
+        WindowCompat.getInsetsController(window, view).apply {
+            isAppearanceLightStatusBars = !dark
+            isAppearanceLightNavigationBars = !dark
+        }
     }
 }

@@ -36,6 +36,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
@@ -46,10 +48,14 @@ import com.piku.client.R
 import com.piku.client.domain.model.PoipikuCategory
 import com.piku.client.ui.common.UserAvatar
 import com.piku.client.ui.common.labelRes
-import com.piku.client.ui.theme.GlassIconBgDark
+import com.piku.client.ui.theme.GlassBarBgLight
 import com.piku.client.ui.theme.LoginTextPrimaryDark
 import com.piku.client.ui.theme.PikuColors
 import com.piku.client.ui.theme.PikuLayout
+import com.piku.client.ui.theme.ShadowAmbient
+import com.piku.client.ui.theme.ShadowSpot
+import com.piku.client.ui.theme.SoftBorderDark
+import com.piku.client.ui.theme.SoftBorderLight
 
 @Composable
 internal fun GlassHeader(
@@ -75,9 +81,7 @@ internal fun GlassHeader(
             .fillMaxWidth()
             .pointerInput(onDoubleTapTop) {
                 detectTapGestures(onDoubleTap = { onDoubleTapTop() })
-            }
-            .statusBarsPadding()
-            .padding(top = GlassHeaderTopPadding),
+            },
     ) {
         LiquidGlassBackdrop(
             dark = dark,
@@ -88,7 +92,12 @@ internal fun GlassHeader(
             progress = scrollProgress,
             atTop = atTop,
         )
-        Column(Modifier.fillMaxWidth()) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(top = GlassHeaderTopPadding),
+        ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -166,6 +175,8 @@ internal fun TabletTopBar(
     }
 }
 
+private val HeaderChipDarkVeil = Color.White.copy(alpha = 0.12f)
+
 @Composable
 internal fun GlassIconButton(
     onClick: () -> Unit,
@@ -195,10 +206,11 @@ internal fun GlassIconButton(
                     scaleX = scale
                     scaleY = scale
                 }
+                .shadow(4.dp, CircleShape, ambientColor = ShadowAmbient, spotColor = ShadowSpot)
                 .clip(CircleShape)
-                .background(if (dark) GlassIconBgDark else PikuColors.surface)
+                .background(if (dark) HeaderChipDarkVeil else GlassBarBgLight)
                 .border(
-                    BorderStroke(0.5.dp, PikuColors.border),
+                    BorderStroke(0.5.dp, if (dark) SoftBorderDark else SoftBorderLight),
                     CircleShape,
                 ),
             contentAlignment = Alignment.Center,

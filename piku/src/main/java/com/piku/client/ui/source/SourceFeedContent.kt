@@ -26,7 +26,6 @@ import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
 import androidx.compose.foundation.lazy.staggeredgrid.itemsIndexed
-import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -106,6 +105,8 @@ import com.piku.client.ui.theme.WorkCardPlaceholderDark
 internal fun SourceFeedContent(
     dark: Boolean,
     isScrolling: MutableState<Boolean>,
+    /** 由宿主持有的网格状态：页头的头图视差读的就是它，页面自己建一颗的话宿主的视差源读不到滚动 */
+    gridState: LazyStaggeredGridState,
     avatarUrl: String?,
     menuEnabled: Boolean,
     hasCustomBackground: Boolean,
@@ -123,7 +124,6 @@ internal fun SourceFeedContent(
     viewModel: SourceFeedViewModel = hiltViewModel(),
 ) {
     val state by viewModel.ui.collectAsState()
-    val gridState = rememberLazyStaggeredGridState()
     val scope = rememberCoroutineScope()
     var detailWork by remember { mutableStateOf<Work?>(null) }
 
@@ -176,9 +176,7 @@ internal fun SourceFeedContent(
                 .fillMaxWidth()
                 .pointerInput(Unit) {
                     detectTapGestures(onDoubleTap = { gridState.scrollToTopSmart(scope) })
-                }
-                .statusBarsPadding()
-                .padding(top = GlassHeaderTopPadding),
+                },
         ) {
             LiquidGlassBackdrop(
                 dark = dark,
@@ -189,7 +187,12 @@ internal fun SourceFeedContent(
                 progress = scrollProgress,
                 atTop = atTop,
             )
-            Column(Modifier.fillMaxWidth()) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(top = GlassHeaderTopPadding),
+            ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()

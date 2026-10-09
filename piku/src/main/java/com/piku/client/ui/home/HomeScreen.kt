@@ -104,10 +104,12 @@ fun HomeScreen(
     // ---- 滚动：网格状态、头部底衬进度、视差、停顶判定 ----
     val isScrolling = remember { mutableStateOf(false) }
     val gridState = rememberLazyStaggeredGridState()
+    val sourceGridState = rememberLazyStaggeredGridState()
+    val activeGridState = if (state.homeSource == WorkSource.POIPIKU) gridState else sourceGridState
     // 传给头部在绘制阶段读取：滚动只重绘底边那条线，不触发重组
     val feedProgress: () -> Float = remember(gridState) { { gridState.feedScrollProgress() } }
     // 视差位移源：首项滚出视口顶部的像素量，封顶后到位即停；绘制阶段读取
-    val parallax: () -> Int = remember(gridState) { { gridState.scrolledOverTopPx() } }
+    val parallax: () -> Int = remember(activeGridState) { { activeGridState.scrolledOverTopPx() } }
     // 自定义背景下列表停在顶部时，头部底衬整体退场把头图让出来；滚动即恢复
     val atTop by remember {
         derivedStateOf {
@@ -302,6 +304,7 @@ fun HomeScreen(
                     SourceFeedContent(
                         dark = dark,
                         isScrolling = isScrolling,
+                        gridState = sourceGridState,
                         // 顶栏头像也要跟着当前源：放 poipiku 的头像，在看 pixiv 时永远是空的
                         avatarUrl = headerAccount?.account?.avatarUrl,
                         menuEnabled = drawerButtonEnabled,
