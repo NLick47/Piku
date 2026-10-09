@@ -565,7 +565,7 @@ class PixivRepository @Inject constructor(
      * （阅读器切块渲染），解析不出的清掉。
      */
     suspend fun novelBody(novelId: Long): Result<String> = apiCall {
-        if (pixivAuth.hasSession()) {
+        val (text, embedded) = if (pixivAuth.hasSession()) {
             val signature = endpoints.clientSignature(runtime.now())
             val html = withContext(Dispatchers.IO) {
                 appApi.novelWebview(
@@ -575,53 +575,35 @@ class PixivRepository @Inject constructor(
                 ).string()
             }
             val json = WEBVIEW_NOVEL_JSON.find(html)?.groupValues[1] ?: throw AppError.NotFound
-            novelBodyWithInlineImages(novelId, PikuJson.decodeFromString<PixivWebviewNovel>(json))
+            val novel = PikuJson.decodeFromString<PixivWebviewNovel>(json)
+            // webview 载荷在正文外给的 images 是内嵌上传图；空时回网页载荷补一次
+            novel.text to novel.images.ifEmpty {
+                if (NOVEL_UPLOADED_IMAGE.containsMatchIn(novel.text)) fetchNovelEmbeddedImages(novelId) else emptyMap()
+            }
         } else {
             val meta = webNovelMeta(novelId)
-            var text = meta.content
-            // 网页载荷不预解析 pixivimage：按作品 id 去重并行走看图链路（匿名），页码 1 起
-            val pageLists = coroutineScope {
-                NOVEL_PIXIV_IMAGE.findAll(text).groupBy { it.groupValues[1] }.keys
-                    .associateWith { id -> async { workPages(id.toLong()).getOrNull() } }
-                    .mapValues { it.value.await() }
-            }
-            text = NOVEL_PIXIV_IMAGE.replace(text) { m ->
-                val index = (m.groupValues[2].toIntOrNull() ?: 1) - 1
-                val page = pageLists[m.groupValues[1]]?.getOrNull(index.coerceAtLeast(0))
-                val url = page?.fullUrl?.ifBlank { null } ?: page?.url
-                if (url.isNullOrBlank()) m.value else "\n[nimg:$url]\n"
-            }
-            text = applyUploadedImages(text, meta.textEmbeddedImages)
-            cleanPixivNovelText(text)
+            meta.content to meta.textEmbeddedImages
         }
+        cleanPixivNovelText(applyUploadedImages(pixivImageTokens(text), embedded))
     }
 
-    private suspend fun novelBodyWithInlineImages(
-        novelId: Long,
-        novel: PixivWebviewNovel,
-    ): String {
-        var text = novel.text
-        text = NOVEL_PIXIV_IMAGE.replace(text) { m ->
-            val ref = m.value.removePrefix("[pixivimage:").removeSuffix("]")
-            val images = novel.illusts[ref]?.takeIf { it.visible }?.illust?.images
-            val url = images?.medium ?: images?.small ?: images?.original
+    /**
+     * pixivimage 标记 → `[nimg:URL]` token：按作品 id 去重并行走看图链路，页码 1 起。
+     * webview 载荷里的 illusts 恒为空数组，拿不到直链，所以登录与匿名都走这条。
+     */
+    private suspend fun pixivImageTokens(text: String): String {
+        val pageLists = coroutineScope {
+            NOVEL_PIXIV_IMAGE.findAll(text).groupBy { it.groupValues[1] }.keys
+                .associateWith { id -> async { workPages(id.toLong()).getOrNull() } }
+                .mapValues { it.value.await() }
+        }
+        return NOVEL_PIXIV_IMAGE.replace(text) { m ->
+            val index = (m.groupValues[2].toIntOrNull() ?: 1) - 1
+            val page = pageLists[m.groupValues[1]]?.getOrNull(index.coerceAtLeast(0))
+            val url = page?.fullUrl?.ifBlank { null } ?: page?.url
             if (url.isNullOrBlank()) m.value else "\n[nimg:$url]\n"
         }
-        val embedded = novel.images.ifEmpty {
-            if (NOVEL_UPLOADED_IMAGE.containsMatchIn(text)) fetchNovelEmbeddedImages(novelId) else emptyMap()
-        }
-        text = applyUploadedImages(text, embedded)
-        return cleanPixivNovelText(text)
     }
-
-    /** uploadedimage 标记换 token：档位 1200x1200 → 480mw → original，解析不出留给清扫 */
-    private fun applyUploadedImages(text: String, embedded: Map<String, PixivNovelEmbeddedImage>): String =
-        NOVEL_UPLOADED_IMAGE.replace(text) { m ->
-            val urls = embedded[m.groupValues[1]]?.urls.orEmpty()
-            // 原图档放最后：内嵌图是阅读器里顺带看的，为了它解码几千像素的原图会拖垮滚动
-            val url = urls["1200x1200"] ?: urls["480mw"] ?: urls["original"] ?: ""
-            if (url.isBlank()) m.value else "\n[nimg:$url]\n"
-        }
 
     /** 网页端小说载荷（详情/正文未登录共用）：匿名可达；R-18/登录限定 error=true → 登录墙（已删除同形，从简） */
     private suspend fun webNovelMeta(novelId: Long): PixivNovelAjaxBody {
@@ -1135,6 +1117,15 @@ private val NOVEL_PIXIV_IMAGE = Regex("""\[pixivimage:(\d+)(?:-(\d+))?\]""")
 private val NOVEL_UPLOADED_IMAGE = Regex("""\[uploadedimage:([^\]]+)\]""")
 
 private val NOVEL_JUMP = Regex("""\[jump:[^\]]*\]""")
+
+/** uploadedimage 标记换 token：档位 1200x1200 → 480mw → original，解析不出留给清扫 */
+internal fun applyUploadedImages(text: String, embedded: Map<String, PixivNovelEmbeddedImage>): String =
+    NOVEL_UPLOADED_IMAGE.replace(text) { m ->
+        val urls = embedded[m.groupValues[1]]?.urls.orEmpty()
+        // 原图档放最后：内嵌图是阅读器里顺带看的，为了它解码几千像素的原图会拖垮滚动
+        val url = urls["1200x1200"] ?: urls["480mw"] ?: urls["original"] ?: ""
+        if (url.isBlank()) m.value else "\n[nimg:$url]\n"
+    }
 
 /**
  * 正文的 pixiv 私有标记换成纯文本：注音挂括号、超链接留标题、图片与跳转标记丢弃。

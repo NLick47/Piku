@@ -20,8 +20,10 @@ import com.piku.client.data.remote.pixiv.PixivAppApi
 import com.piku.client.data.remote.pixiv.PixivAppConfig
 import com.piku.client.data.remote.pixiv.PixivAppIllust
 import com.piku.client.data.remote.pixiv.PixivAppIllustDetailResponse
+import com.piku.client.data.remote.pixiv.PixivAppIllustFull
 import com.piku.client.data.remote.pixiv.PixivAppIllustFullResponse
 import com.piku.client.data.remote.pixiv.PixivAppImageUrls
+import com.piku.client.data.remote.pixiv.PixivAppMetaPage
 import com.piku.client.data.remote.pixiv.PixivAutoWordsResponse
 import com.piku.client.data.remote.pixiv.PixivContentType
 import com.piku.client.data.remote.pixiv.PixivIllustsResponse
@@ -1128,9 +1130,8 @@ class PixivContentSourceTest {
     }
 
     /**
-     * 内嵌图 token 化：webview 载荷把两类标记的直链都预解析好了——pixivimage 查 illusts 表
-     * （键与标记串一致，含页码后缀），uploadedimage 查 images 表（1200x1200 档优先）；
-     * 零额外请求，图块独立成块、文本原样
+     * 内嵌图 token 化：uploadedimage 查 payload 的 images 表（1200x1200 档优先）；
+     * pixivimage 的 illusts 表线上恒为空数组，按作品 id 去重走看图链路（页码 1 起）
      */
     @Test
     fun novelBodyResolvesInlineImages() = runTest {
@@ -1138,10 +1139,21 @@ class PixivContentSourceTest {
         val appApi = FakeAppApi().apply {
             novelWebviewHtml = """
                 <html><body>novel: {"id":"77","text":"段落一[pixivimage:88-2]段落二[uploadedimage:1]段落三[pixivimage:88]段落四",
-                "illusts":{"88-2":{"visible":true,"illust":{"images":{"medium":"https://i.pximg.net/img-master/a_p1_master1200.jpg"}}},
-                "88":{"visible":true,"illust":{"images":{"medium":"https://i.pximg.net/img-master/a_p0_master1200.jpg"}}}},
+                "illusts":[],
                 "images":{"1":{"novelImageId":"1","urls":{"1200x1200":"https://i.pximg.net/novel/e1.jpg"}}}}, isOwnWork: false,</body></html>
             """.trimIndent()
+            detailResponse = PixivAppIllustFullResponse(
+                illust = PixivAppIllustFull(
+                    metaPages = listOf(
+                        PixivAppMetaPage(
+                            imageUrls = PixivAppImageUrls(medium = "https://i.pximg.net/img-master/a_p0_master1200.jpg"),
+                        ),
+                        PixivAppMetaPage(
+                            imageUrls = PixivAppImageUrls(medium = "https://i.pximg.net/img-master/a_p1_master1200.jpg"),
+                        ),
+                    ),
+                ),
+            )
         }
 
         val body = loggedInRepository(api, appApi).novelBody(77).getOrThrow()
@@ -1158,7 +1170,8 @@ class PixivContentSourceTest {
             ),
             splitNovelBlocks(body),
         )
-        // 直链查表即得，看图链路一次都不该打
+        // 两个标记同一个作品 id：看图链路只打一次；uploadedimage 查表，网页端一次都不摸
+        assertEquals(1, appApi.detailCalls)
         assertEquals(0, api.pagesCalls)
     }
 

@@ -3,6 +3,12 @@ package com.piku.client.data.remote.pixiv
 import com.piku.client.data.auth.PixivAuthEndpoints
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonTransformingSerializer
 import okhttp3.ResponseBody
 import retrofit2.http.Field
 import retrofit2.http.FormUrlEncoded
@@ -255,30 +261,20 @@ data class PixivNovelDetailResponse(val novel: PixivNovel = PixivNovel())
 data class PixivWebviewNovel(
     val text: String = "",
     val title: String = "",
-    val illusts: Map<String, PixivWebviewIllust> = emptyMap(),
+    @Serializable(with = PixivNovelImagesSerializer::class)
     val images: Map<String, PixivNovelEmbeddedImage> = emptyMap(),
 )
 
-/** [pixivimage] 引用的站内作品：webview 载荷已给出可见性与图直链 */
-@Serializable
-data class PixivWebviewIllust(
-    val visible: Boolean = false,
-    val availableMessage: String? = null,
-    val illust: PixivWebviewIllustBody = PixivWebviewIllustBody(),
-)
-
-@Serializable
-data class PixivWebviewIllustBody(
-    val images: PixivWebviewIllustImages = PixivWebviewIllustImages(),
-)
-
-/** 小图/看图档/原图，官方载荷多数只给 medium（master1200） */
-@Serializable
-data class PixivWebviewIllustImages(
-    val small: String? = null,
-    val medium: String? = null,
-    val original: String? = null,
-)
+/**
+ * 内嵌上传图。载荷里空集合序列化成 `[]`、非空才是 `{id: {...}}`，两种形状都要收——
+ * 按 Map 硬解会在空数组上抛 JsonDecodingException，整篇正文跟着读不出来。
+ */
+object PixivNovelImagesSerializer : JsonTransformingSerializer<Map<String, PixivNovelEmbeddedImage>>(
+    MapSerializer(String.serializer(), PixivNovelEmbeddedImage.serializer()),
+) {
+    override fun transformDeserialize(element: JsonElement): JsonElement =
+        if (element is JsonArray) JsonObject(emptyMap()) else element
+}
 
 /** 小说正文里的内嵌上传图：urls 按档位给直链（实测有 240mw/480mw/1200x1200/128x128/original） */
 @Serializable
