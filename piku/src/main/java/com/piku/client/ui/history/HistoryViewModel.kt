@@ -7,6 +7,7 @@ import com.piku.client.domain.model.HistoryTimeRange
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkKey
 import com.piku.client.domain.model.WorkSource
+import com.piku.client.domain.model.key
 import com.piku.client.domain.usecase.ClearHistoryUseCase
 import com.piku.client.domain.usecase.ObserveFavoriteIdsUseCase
 import com.piku.client.domain.usecase.ObserveHistoryUseCase
@@ -64,6 +65,9 @@ class HistoryViewModel @Inject constructor(
     /** 最近删除的记录，后进先出；连续删多条时可以一条条撤回来 */
     private val removedStack = ArrayDeque<HistoryItem>()
 
+    /** 本次列表视图的顺序快照：页内点开作品不重排，换筛选或重进页面才按最新浏览排 */
+    private val orderFreeze = HistoryOrderFreeze()
+
     private val _uiState = MutableStateFlow(HistoryUiState())
     val uiState: StateFlow<HistoryUiState> = _uiState.asStateFlow()
 
@@ -81,6 +85,7 @@ class HistoryViewModel @Inject constructor(
                         }
                     }
                 }
+                .map(orderFreeze::freeze)
                 .map(::groupByDate)
                 .collect { sections ->
                     _uiState.update { it.copy(sections = sections, loaded = true) }
@@ -94,14 +99,21 @@ class HistoryViewModel @Inject constructor(
     }
 
     fun selectRange(range: HistoryTimeRange) {
+        if (_uiState.value.selectedRange == range) return
+        orderFreeze.reset()
         _uiState.update { it.copy(selectedRange = range) }
     }
 
     fun selectSource(source: WorkSource?) {
+        if (_uiState.value.selectedSource == source) return
+        orderFreeze.reset()
         _uiState.update { it.copy(selectedSource = source) }
     }
 
     fun resetFilters() {
+        val state = _uiState.value
+        if (state.selectedRange == HistoryTimeRange.ALL && state.selectedSource == null) return
+        orderFreeze.reset()
         _uiState.update { it.copy(selectedRange = HistoryTimeRange.ALL, selectedSource = null) }
     }
 
@@ -112,10 +124,12 @@ class HistoryViewModel @Inject constructor(
     }
 
     fun remove(item: HistoryItem) {
+        // 撤销要写回真实浏览时间，列表里的 entry 带的是进入页面时的冻结时间
+        val removed = item.copy(visitedAt = orderFreeze.latestTime(item.work.key) ?: item.visitedAt)
         viewModelScope.launch {
             removeHistoryUseCase(item.work)
             if (removedStack.size == MAX_UNDO) removedStack.removeFirst()
-            removedStack.addLast(item)
+            removedStack.addLast(removed)
             _uiState.update { it.copy(pendingRemovedCount = removedStack.size) }
         }
     }
@@ -147,5 +161,29 @@ class HistoryViewModel @Inject constructor(
 
     private companion object {
         const val MAX_UNDO = 20
+    }
+}
+
+internal class HistoryOrderFreeze {
+    private var frozenTimes: Map<WorkKey, Long>? = null
+    private var latestTimes: Map<WorkKey, Long> = emptyMap()
+
+    fun reset() {
+        frozenTimes = null
+    }
+
+    fun latestTime(key: WorkKey): Long? = latestTimes[key]
+
+    fun freeze(items: List<HistoryItem>): List<HistoryItem> {
+        val times = items.associate { it.work.key to it.visitedAt }
+        latestTimes = times
+        val frozen = frozenTimes ?: times.also { frozenTimes = times }
+        val fresh = ArrayList<HistoryItem>(items.size)
+        val known = ArrayList<HistoryItem>(items.size)
+        for (item in items) {
+            val frozenAt = frozen[item.work.key]
+            if (frozenAt == null) fresh += item else known += item.copy(visitedAt = frozenAt)
+        }
+        return fresh.sortedByDescending { it.visitedAt } + known.sortedByDescending { it.visitedAt }
     }
 }

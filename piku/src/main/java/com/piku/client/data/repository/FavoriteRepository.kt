@@ -276,10 +276,7 @@ class FavoriteRepository @Inject constructor(
 
     private suspend fun addToFolder(work: Work, folderId: Long) {
         val existing = favoriteDao.favoriteById(work.source, work.id.toString())
-        favoriteDao.upsert(
-            existing?.let { work.toFavoriteEntity().copy(cloudSynced = it.cloudSynced) }
-                ?: work.toFavoriteEntity(),
-        )
+        favoriteDao.upsert(favoriteRowFor(work, existing))
         favoriteFolderDao.upsertMembership(
             FavoriteMembershipEntity(
                 folderId = folderId,
@@ -319,7 +316,7 @@ class FavoriteRepository @Inject constructor(
             val now = System.currentTimeMillis()
             val added = mutableListOf<FavoriteMembershipEntity>()
             for ((index, work) in targets.withIndex()) {
-                favoriteDao.upsert(existingFavorites[work.key] ?: work.toFavoriteEntity(now + index))
+                favoriteDao.upsert(favoriteRowFor(work, existingFavorites[work.key], now + index))
                 // 同一批内 addedAt 递增，保证批量添加后夹内顺序稳定（列表按 addedAt 倒序）
                 val membership = FavoriteMembershipEntity(
                     folderId = folderId,
@@ -583,4 +580,18 @@ class FavoriteRepository @Inject constructor(
         /** 收藏 id 集合的共享订阅存活时长：界面来回切换时不必每次重查。 */
         private const val FAVORITE_IDS_KEEP_ALIVE_MS = 5_000L
     }
+}
+
+internal fun favoriteRowFor(
+    work: Work,
+    existing: FavoriteEntity?,
+    newAddedAt: Long = System.currentTimeMillis(),
+): FavoriteEntity {
+    val row = work.toFavoriteEntity(newAddedAt)
+    if (existing == null) return row
+    return row.copy(
+        addedAt = existing.addedAt,
+        contentBackedUp = existing.contentBackedUp,
+        cloudSynced = existing.cloudSynced,
+    )
 }
