@@ -232,14 +232,16 @@ fun SearchScreen(
             )
             Box(Modifier.weight(1f)) {
                 if (!hasQuery) {
+                    val handleTrendingClick: (String) -> Unit =
+                        if (state.pluginActive) ({ tag -> submit(tag) }) else ({ tag -> submit("#$tag") })
                     IdleContent(
                         history = state.history,
-                        popularTags = state.popularTagNames,
                         customTags = state.customTags,
                         trending = state.trending,
                         pluginHint = state.pluginActive,
                         onSelect = { submit(it) },
                         onSelectCustomTag = { submit("#$it") },
+                        onSelectTrending = handleTrendingClick,
                         onManageTags = onManageTags,
                         onRemoveHistory = viewModel::removeHistory,
                         onClearHistory = viewModel::clearHistory,

@@ -1,6 +1,6 @@
 package com.piku.client.ui.search
 
-/** 搜索页待机态：我的标签 / 搜索历史 / 热门标签瀑布流 */
+/** 搜索页待机态：我的标签 / 搜索历史 / 热门标签墙 */
 
 
 import androidx.compose.foundation.BorderStroke
@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -34,13 +33,13 @@ import androidx.compose.material.icons.outlined.Whatshot
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
@@ -50,24 +49,28 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.piku.client.R
 import com.piku.client.domain.source.SourceTrendingTag
-import com.piku.client.ui.source.ProportionalWorkCard
 import com.piku.client.ui.theme.LocalDarkTheme
 import com.piku.client.ui.theme.LoginBackgroundDark
 import com.piku.client.ui.theme.LoginTextFaintLight
 import com.piku.client.ui.theme.LoginTextSecondaryDark
 import com.piku.client.ui.theme.PikuColors
 import com.piku.client.ui.theme.WorkCardPlaceholderDark
+import kotlin.math.roundToInt
+
+/** 热门标签格子：目标宽度与高度、格子间距（三列排布按屏宽折算列数） */
+private const val TRENDING_CELL_DP = 120
+private const val TRENDING_GAP_DP = 8
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun IdleContent(
     history: List<String>,
-    popularTags: List<String>,
     customTags: List<String>,
     trending: List<SourceTrendingTag>,
     pluginHint: Boolean,
     onSelect: (String) -> Unit,
     onSelectCustomTag: (String) -> Unit,
+    onSelectTrending: (String) -> Unit,
     onManageTags: () -> Unit,
     onRemoveHistory: (String) -> Unit,
     onClearHistory: () -> Unit,
@@ -154,57 +157,34 @@ internal fun IdleContent(
             }
         }
         Spacer(Modifier.height(24.dp))
-        if (trending.isNotEmpty()) {
-            // 插件源的热门标签墙：代表作缩略图一排可滑，点按即搜
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Whatshot,
-                    contentDescription = null,
-                    tint = title,
-                    modifier = Modifier.size(14.dp),
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text = stringResource(R.string.search_hot_tags),
-                    color = title,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                )
-            }
-            Spacer(Modifier.height(10.dp))
-            TrendingGrid(tags = trending, onSelect = onSelect)
-        } else {
+        // 热门标签墙：代表作缩略图两列铺开，点按即搜（poipiku 与插件源同款渲染）
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Whatshot,
+                contentDescription = null,
+                tint = title,
+                modifier = Modifier.size(14.dp),
+            )
+            Spacer(Modifier.width(6.dp))
             Text(
                 text = stringResource(R.string.search_hot_tags),
                 color = title,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
             )
-            Spacer(Modifier.height(10.dp))
-            if (popularTags.isEmpty()) {
-                Text(
-                    text = stringResource(R.string.search_hot_tags_empty),
-                    color = label,
-                    fontSize = 12.sp,
-                )
-            } else {
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    popularTags.forEach { tag ->
-                        TagPill(
-                            text = "#$tag",
-                            active = false,
-                            onClick = { onSelect("#$tag") },
-                            dark = dark,
-                        )
-                    }
-                }
-            }
+        }
+        Spacer(Modifier.height(10.dp))
+        if (trending.isEmpty()) {
+            Text(
+                text = stringResource(R.string.search_hot_tags_empty),
+                color = label,
+                fontSize = 12.sp,
+            )
+        } else {
+            TrendingGrid(tags = trending, onSelect = onSelectTrending)
         }
         Spacer(Modifier.height(24.dp))
         Text(
@@ -215,78 +195,77 @@ internal fun IdleContent(
     }
 }
 
-/** 热门标签瀑布流：两列按原图比例排（数量不多，全部铺开不横滑），点按直接检索该标签 */
+/** 热门标签墙：等宽等高的小格子铺开，图整张 Fit 居中含在格子里（不裁不切），点按直接检索该标签 */
 @Composable
 private fun TrendingGrid(
     tags: List<SourceTrendingTag>,
     onSelect: (String) -> Unit,
 ) {
-    val columns = remember(tags) { splitTrendingColumns(tags.take(12)) }
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        columns.forEach { columnTags ->
-            Column(
-                Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+    val columns = trendingColumns(LocalConfiguration.current.screenWidthDp)
+    Column(verticalArrangement = Arrangement.spacedBy(TRENDING_GAP_DP.dp)) {
+        tags.chunked(columns).forEach { rowTags ->
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(TRENDING_GAP_DP.dp),
             ) {
-                columnTags.forEach { (rank, tag) ->
-                    TrendingCard(rank = rank + 1, tag = tag, onSelect = onSelect)
+                rowTags.forEach { tag ->
+                    TrendingCard(
+                        tag = tag,
+                        onSelect = onSelect,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                // 末行不足一列：补空位，格子宽度才和上面几行一致
+                repeat(columns - rowTags.size) {
+                    Spacer(Modifier.weight(1f))
                 }
             }
         }
     }
 }
 
-/** 两列拆分：按估算高度贪心放入较矮的一列，长图不挤同侧（缺尺寸的按方图估） */
-private fun splitTrendingColumns(
-    tags: List<SourceTrendingTag>,
-): List<List<Pair<Int, SourceTrendingTag>>> {
-    var leftLoad = 0f
-    var rightLoad = 0f
-    val left = mutableListOf<Pair<Int, SourceTrendingTag>>()
-    val right = mutableListOf<Pair<Int, SourceTrendingTag>>()
-    tags.forEachIndexed { index, tag ->
-        val load = 1f / trendingAspect(tag)
-        if (leftLoad <= rightLoad) {
-            left.add(index to tag)
-            leftLoad += load
-        } else {
-            right.add(index to tag)
-            rightLoad += load
-        }
-    }
-    return listOf(left, right)
-}
-
-/** 与 ProportionalWorkCard 同款比例上下界，缺尺寸退回方图 */
-private fun trendingAspect(tag: SourceTrendingTag): Float =
-    if (tag.width <= 0 || tag.height <= 0) {
-        1f
-    } else {
-        (tag.width.toFloat() / tag.height.toFloat()).coerceIn(0.56f, 1.8f)
-    }
+/** 列数按屏宽折算：扣掉两侧 20dp 内边距后一格目标宽约 120dp，手机 3 列，平板跟着加列 */
+internal fun trendingColumns(screenWidthDp: Int): Int =
+    ((screenWidthDp - 40) / 120f).roundToInt().coerceAtLeast(3)
 
 @Composable
 private fun TrendingCard(
-    rank: Int,
     tag: SourceTrendingTag,
     onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .aspectRatio(trendingAspect(tag))
+        modifier = modifier
+            .height(TRENDING_CELL_DP.dp)
             .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = { onSelect(tag.name) }),
     ) {
-        AsyncImage(
-            model = tag.thumbnailUrl,
-            contentDescription = tag.translatedName ?: tag.name,
-            colorFilter = PikuColors.tameWhiteFilter,
-            modifier = Modifier
-                .fillMaxSize()
-                .background(if (LocalDarkTheme.current) WorkCardPlaceholderDark else Color(0xFFF1EFEA)),
-            contentScale = ContentScale.Crop,
-        )
+        if (tag.thumbnailUrl.isBlank()) {
+            // 没有封面的标签照样进墙：中性占位而不是把它筛掉
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(if (LocalDarkTheme.current) WorkCardPlaceholderDark else Color(0xFFF1EFEA)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.Label,
+                    contentDescription = tag.translatedName ?: tag.name,
+                    tint = PikuColors.textFaint,
+                    modifier = Modifier.size(28.dp),
+                )
+            }
+        } else {
+            AsyncImage(
+                model = tag.thumbnailUrl,
+                contentDescription = tag.translatedName ?: tag.name,
+                colorFilter = PikuColors.tameWhiteFilter,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(if (LocalDarkTheme.current) WorkCardPlaceholderDark else Color(0xFFF1EFEA)),
+                contentScale = ContentScale.Fit,
+            )
+        }
         Box(
             Modifier
                 .matchParentSize()
@@ -296,15 +275,6 @@ private fun TrendingCard(
                         1f to Color.Black.copy(alpha = 0.55f),
                     ),
                 ),
-        )
-        Text(
-            text = "$rank",
-            color = Color.White.copy(alpha = 0.85f),
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(start = 8.dp, top = 6.dp),
         )
         Text(
             text = "#${tag.name}",

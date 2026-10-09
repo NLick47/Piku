@@ -75,4 +75,38 @@ class PopularTagParserTest {
         assertEquals(listOf("A", "B"), tags.map { it.name })
         assertNull("没有图标的卡片不该编出 genreId", tags.first().genreId)
     }
+
+    @Test
+    fun `takes the first work of the tag as its cover`() {
+        val tags = PopularTagParser.parse(
+            """
+            <section class="CategoryListItem">
+              <h2 class="GenreNameOrg">#類司R18</h2>
+              <div class="IllustThumbList">
+                <div class="IllustThumb"><a class="IllustUser" href="/1/"><img class="IllustUserThumb" src="https://cdn.poipiku.com/avatar_120.jpg"/></a><a class="IllustThumbImg" href="/1/2.html"><img class="IllustThumbImgPic" src="https://cdn.poipiku.com/first_360.jpg"/></a></div>
+                <div class="IllustThumb"><a class="IllustThumbImg" href="/1/3.html"><img class="IllustThumbImgPic" src="https://cdn.poipiku.com/second_360.jpg"/></a></div>
+              </div>
+            </section>
+            """.trimIndent(),
+        )
+
+        assertEquals("https://cdn.poipiku.com/first_360.jpg", tags.single().thumbnailUrl)
+    }
+
+    @Test
+    fun `cover stays inside its own tag block`() {
+        val tags = PopularTagParser.parse(
+            """
+            <section class="CategoryListItem"><h2 class="GenreNameOrg">没有作品</h2></section>
+            <section class="CategoryListItem">
+              <h2 class="GenreNameOrg">有作品</h2>
+              <div class="IllustThumb"><img class="IllustThumbImgPic" src="https://cdn.poipiku.com/only_360.jpg"/></div>
+            </section>
+            """.trimIndent(),
+        )
+
+        assertEquals(listOf("没有作品", "有作品"), tags.map { it.name })
+        assertNull(tags.first().thumbnailUrl)
+        assertEquals("https://cdn.poipiku.com/only_360.jpg", tags.last().thumbnailUrl)
+    }
 }

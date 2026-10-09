@@ -69,7 +69,6 @@ data class SearchUiState(
     /** 路由传入的原始关键词（可为空串表示未搜索） */
     val keyword: String = "",
     val history: List<String> = emptyList(),
-    val popularTagNames: List<String> = emptyList(),
     val tab: SearchTab = SearchTab.WORKS,
     val works: List<Work> = emptyList(),
     val worksLoading: Boolean = false,
@@ -119,7 +118,7 @@ data class SearchUiState(
     val pluginActive: Boolean = false,
     /** 结果卡片按原图比例排版 */
     val proportional: Boolean = false,
-    /** 待机态热门标签墙 */
+    /** 待机态热门标签墙（带代表作缩略图）：插件源取 trendingTags，poipiku 由热门标签页映射，两路互斥 */
     val trending: List<SourceTrendingTag> = emptyList(),
     /** 输入联想（标签 + 译名） */
     val suggestions: List<SourceSuggestion> = emptyList(),
@@ -298,7 +297,7 @@ class SearchViewModel @Inject constructor(
         }
     }
 
-    /** 待机态热门区：poipiku 走热门标签，声明检索插件的源用自己的 trendingTags，互不混用 */
+    /** 待机态热门区：poipiku 走热门标签页（代表作图墙），声明检索插件的源用自己的 trendingTags，互不混用 */
     private fun loadIdleContent() {
         val generation = sourceGeneration
         val plugin = searchPlugin
@@ -306,8 +305,7 @@ class SearchViewModel @Inject constructor(
             viewModelScope.launch {
                 loadPopularTagsUseCase().onSuccess { tags ->
                     if (generation == sourceGeneration) {
-                        val names = tags.map(PopularTag::name)
-                        _uiState.update { it.copy(popularTagNames = names) }
+                        _uiState.update { it.copy(trending = tags.map { tag -> tag.toTrendingTag() }) }
                     }
                 }
             }
@@ -350,7 +348,6 @@ class SearchViewModel @Inject constructor(
                 visibleTagFilterGroups = tagVisibleGroups(searchPlugin),
                 selectedFilters = searchPlugin?.let(::defaultFilters) ?: emptyMap(),
                 suggestions = emptyList(),
-                popularTagNames = emptyList(),
                 trending = emptyList(),
                 followPendingIds = emptySet(),
                 followOverrides = emptyMap(),
@@ -1231,3 +1228,7 @@ class SearchViewModel @Inject constructor(
  */
 internal fun tagFallbackTarget(word: String, suggestions: List<TagCard>, append: Boolean): String? =
     word.takeIf { !append && suggestions.isEmpty() && it.isNotBlank() }
+
+/** 热门标签 → 待机态图墙条目；缺封面的标签也进墙（格子画中性占位），不替用户筛掉任何一个 */
+internal fun PopularTag.toTrendingTag(): SourceTrendingTag =
+    SourceTrendingTag(name = name, thumbnailUrl = thumbnailUrl.orEmpty())
