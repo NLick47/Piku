@@ -1,11 +1,13 @@
 package com.piku.client.ui.tags
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.domain.model.AppError
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkKey
+import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.usecase.AddCustomTagUseCase
 import com.piku.client.domain.usecase.LoadTagFeedUseCase
 import com.piku.client.domain.usecase.ObserveCustomTagsUseCase
@@ -15,10 +17,12 @@ import com.piku.client.domain.usecase.ToggleFavoriteUseCase
 import com.piku.client.ui.common.toFeedErrorRes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -39,6 +43,7 @@ data class TagsUiState(
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class TagViewModel @Inject constructor(
+    savedStateHandle: SavedStateHandle,
     private val observeCustomTagsUseCase: ObserveCustomTagsUseCase,
     private val addCustomTagUseCase: AddCustomTagUseCase,
     private val removeCustomTagUseCase: RemoveCustomTagUseCase,
@@ -51,17 +56,27 @@ class TagViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(TagsUiState())
     val uiState: StateFlow<TagsUiState> = _uiState.asStateFlow()
 
+    private val lockedSource: WorkSource? = (savedStateHandle["source"] ?: "")
+        .takeIf { it.isNotEmpty() }
+        ?.let { name -> WorkSource.entries.firstOrNull { it.name == name } }
+
+    private val sourceFlow: Flow<WorkSource> =
+        lockedSource?.let { flowOf(it) } ?: settingsRepository.homeSource
+
+    private var currentSource: WorkSource = lockedSource ?: settingsRepository.homeSource.value
+
     private var page = 0
     private var generation = 0
 
     init {
         viewModelScope.launch {
-            // 本页是首页上的浮层（HomeOverlays），ViewModel 与首页同寿：
-            // 源必须实时跟设置走，构造时锁死的话切源后这张页还在读写旧源
-            settingsRepository.homeSource.collect { resetOnSourceChange() }
+            sourceFlow.collect { source ->
+                currentSource = source
+                resetOnSourceChange()
+            }
         }
         viewModelScope.launch {
-            settingsRepository.homeSource
+            sourceFlow
                 .flatMapLatest { observeCustomTagsUseCase(it) }
                 .collect { tags ->
                     _uiState.update { it.copy(tags = tags, loaded = true) }
@@ -124,11 +139,11 @@ class TagViewModel @Inject constructor(
     }
 
     fun addTag(tag: String) {
-        viewModelScope.launch { addCustomTagUseCase(settingsRepository.homeSource.value, tag) }
+        viewModelScope.launch { addCustomTagUseCase(currentSource, tag) }
     }
 
     fun removeTag(tag: String) {
-        viewModelScope.launch { removeCustomTagUseCase(settingsRepository.homeSource.value, tag) }
+        viewModelScope.launch { removeCustomTagUseCase(currentSource, tag) }
     }
 
     fun toggleFavorite(work: Work) {

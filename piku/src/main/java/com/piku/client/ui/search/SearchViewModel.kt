@@ -38,7 +38,6 @@ import com.piku.client.domain.usecase.ObserveFavoriteIdsUseCase
 import com.piku.client.domain.usecase.ObserveSearchHistoryUseCase
 import com.piku.client.domain.usecase.RecordSearchKeywordUseCase
 import com.piku.client.domain.usecase.RemoveSearchKeywordUseCase
-import com.piku.client.domain.usecase.SetHomeSourceUseCase
 import com.piku.client.domain.usecase.ToggleFavoriteUseCase
 import com.piku.client.domain.usecase.TranslateSearchKeywordUseCase
 import com.piku.client.ui.common.toFeedErrorRes
@@ -113,7 +112,6 @@ data class SearchUiState(
     /** 本地乐观覆盖：userId -> 目标关注态，服务端确认后以服务端结果为准 */
     val followOverrides: Map<Long, Boolean> = emptyMap(),
     // ---- 检索插件（pixiv 等）声明的能力区；未声明时全部保持默认，外壳走原链路 ----
-    /** 本页生效的源，跟随全局首页源；换源面板写回后由 onHomeSourceChanged 更新 */
     val source: WorkSource = WorkSource.POIPIKU,
     val pluginActive: Boolean = false,
     /** 结果卡片按原图比例排版 */
@@ -134,11 +132,10 @@ data class SearchUiState(
 
 @HiltViewModel
 class SearchViewModel @Inject constructor(
-    savedStateHandle: SavedStateHandle,
+    private val savedStateHandle: SavedStateHandle,
     private val settingsRepository: SettingsRepository,
     private val sourceSearchRegistry: SourceSearchRegistry,
     private val sourceRegistry: SourceRegistry,
-    private val setHomeSourceUseCase: SetHomeSourceUseCase,
     private val sourceAuthRegistry: SourceAuthRegistry,
     private val observeSearchHistoryUseCase: ObserveSearchHistoryUseCase,
     private val recordSearchKeywordUseCase: RecordSearchKeywordUseCase,
@@ -188,9 +185,6 @@ class SearchViewModel @Inject constructor(
         else -> SearchTab.WORKS
     }
 
-    // 当前源与其检索插件。详情页点标签进来（routeSource 非空）时本次搜索固定在作品所在源：
-    // 源 chip 可见可切，显式切换仍写回全局，但隐式进来不替用户改首页设置。
-    // 换源面板与首页抽屉写的是同一个设置，后续变化由 onHomeSourceChanged 统一重置并乐观重搜
     private var source: WorkSource = routeSource ?: settingsRepository.homeSource.value
     private var searchPlugin: SourceSearch? = sourceSearchRegistry.byIdOrNull(source)
 
@@ -252,17 +246,6 @@ class SearchViewModel @Inject constructor(
         }
         observeCustomTags()
         loadIdleContent()
-        // 首页抽屉与本页源面板写的是同一个全局 homeSource；StateFlow 同值去重，不会重复重置。
-        var awaitingSeedEcho = routeSource != null
-        viewModelScope.launch {
-            settingsRepository.homeSource.collect {
-                if (awaitingSeedEcho) {
-                    awaitingSeedEcho = false
-                    return@collect
-                }
-                onHomeSourceChanged(it)
-            }
-        }
         // 登录成功（含从登录引导回来）、自动重登、登出都要重载三个 tab：
         // 搜索结果与身份相关，登出后不能继续显示上一个账号才看得见的内容
         viewModelScope.reloadOnSessionChange(authRepository.sessionVersion) {
@@ -321,13 +304,12 @@ class SearchViewModel @Inject constructor(
     }
 
     /**
-     * 换源（本页源面板与首页抽屉写的是同一个全局 homeSource）：整页重置——
-     * 四组分页归零、三个 tab 列表清空、筛选按新源声明回到默认，然后已搜词乐观重搜
+     * 整页重置——四组分页归零、三个 tab 列表清空、筛选按新源声明回到默认，然后已搜词乐观重搜
      * （作品 tab 始终预载，当前 tab 立即重搜，其余 tab 留空由 selectTab 兜底加载）、
      * 待机态热门区重载、自定义标签重新订阅。关注覆盖的 key 是各源自己的 userId
      * 命名空间，不能跨源残留，一并清掉。
      */
-    private fun onHomeSourceChanged(newSource: WorkSource) {
+    private fun applySource(newSource: WorkSource) {
         if (newSource == source) return
         source = newSource
         searchPlugin = sourceSearchRegistry.byIdOrNull(newSource)
@@ -593,16 +575,11 @@ class SearchViewModel @Inject constructor(
     /** 换源面板的可选源与文案：与首页换源面板完全同一套（声明序即展示序） */
     val sourceOptions: List<WorkSource> get() = sourceRegistry.all.sortedBy { it.id.ordinal }.map { it.id }
 
-    fun homeSourceLabelRes(id: WorkSource): Int = sourceRegistry.byId(id).labelRes
+    fun sourceLabelRes(id: WorkSource): Int = sourceRegistry.byId(id).labelRes
 
-    /** 本页换源 = 写回全局首页源，整页重置与重搜由 homeSource 响应完成 */
-    fun setHomeSource(source: WorkSource) {
-        viewModelScope.launch {
-            setHomeSourceUseCase(source)
-            // StateFlow 同值去重：种子源页面上切回与全局相同的源时 collect 不会再发射，
-            // 直调重置兜底（幂等，onHomeSourceChanged 同源早退）
-            onHomeSourceChanged(source)
-        }
+    fun setSource(source: WorkSource) {
+        savedStateHandle["source"] = source.name
+        applySource(source)
     }
 
     fun toggleFollow(userId: Long) {

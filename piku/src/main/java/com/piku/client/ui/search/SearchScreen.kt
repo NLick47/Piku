@@ -104,7 +104,7 @@ fun SearchScreen(
     onOpenLink: (SourceLink) -> Unit,
     onOpenExternal: (String) -> Unit,
     onLoginClick: (WorkSource) -> Unit,
-    onManageTags: () -> Unit,
+    onManageTags: (WorkSource) -> Unit,
     dark: Boolean = LocalDarkTheme.current,
 ) {
     val viewModel: SearchViewModel = hiltViewModel()
@@ -244,7 +244,7 @@ fun SearchScreen(
                         onSelect = { submit(it) },
                         onSelectCustomTag = { submit("#$it") },
                         onSelectTrending = handleTrendingClick,
-                        onManageTags = onManageTags,
+                        onManageTags = { onManageTags(state.source) },
                         onRemoveHistory = viewModel::removeHistory,
                         onClearHistory = viewModel::clearHistory,
                         dark = dark,
@@ -262,7 +262,7 @@ fun SearchScreen(
                         val hasFilterSpec = state.visibleFilterGroups.isNotEmpty() || state.filterToggles.isNotEmpty()
                         val tagHasFilters = state.pluginActive &&
                             (state.visibleTagFilterGroups.isNotEmpty() || state.filterToggles.isNotEmpty())
-                        val sourceLabel = stringResource(viewModel.homeSourceLabelRes(state.source))
+                        val sourceLabel = stringResource(viewModel.sourceLabelRes(state.source))
                         if (!tagWorksMode) {
                             SearchFilterBar(
                                 sourceLabel = sourceLabel,
@@ -362,13 +362,12 @@ fun SearchScreen(
             )
         }
         if (showSourceSheet) {
-            // 与首页换源面板同一个组件：写回全局 homeSource，本页与首页一起跟随
             HomeSourceSheet(
                 selected = state.source,
                 options = viewModel.sourceOptions,
-                labelRes = viewModel::homeSourceLabelRes,
+                labelRes = viewModel::sourceLabelRes,
                 onSelect = { source ->
-                    viewModel.setHomeSource(source)
+                    viewModel.setSource(source)
                     showSourceSheet = false
                 },
                 onDismiss = { showSourceSheet = false },

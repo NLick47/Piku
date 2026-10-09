@@ -69,7 +69,7 @@ object Routes {
     const val SOURCE_DETAIL =
         "source_detail/{source}/{kind}/{authorId}/{workId}?thumb={thumb}&title={title}&authorName={authorName}&avatar={avatar}&r18={r18}&len={len}"
     const val HISTORY = "history"
-    const val TAGS = "tags"
+    const val TAGS = "tags?source={source}"
     const val USER_WORKS = "user_works/{userId}?userName={userName}"
     const val MY_POSTS = "my_posts/{userId}?userName={userName}"
 
@@ -80,13 +80,14 @@ object Routes {
 
     fun home() = "home"
 
+    fun tags(source: WorkSource? = null) = "tags?source=${source?.name.orEmpty()}"
+
     /**
      * 统一搜索页：keyword 为空串表示待机态（搜索历史 + 热门标签）；
      * # 前缀直达标签 tab，@ 前缀直达用户 tab。
      * [tag] 非空 = 精确标签名，落地即该标签的作品列表（详情页点标签进来，跳过标签建议）；
      * 需与带 # 前缀的 keyword 搭配使用（keyword 决定 tab 与分页可用性）。
-     * [source] 非空 = 作品所在源（详情页点标签进来）：本次搜索固定在该源（源 chip 可见可切），
-     * 不写回全局首页源——点标签是隐式动作，不替用户改首页设置；null = 跟随全局首页源。
+     * [source] 非空 = 进入时的初始源（详情页点标签进来 = 作品所在源）；空 = 初始源取当前全局首页源。
      */
     fun search(keyword: String = "", tag: String = "", source: WorkSource? = null) =
         "search/${Uri.encode(keyword)}?tag=${Uri.encode(tag)}&source=${source?.name.orEmpty()}"
@@ -362,7 +363,7 @@ fun AppNavHost(
                     },
                     onTagsClick = {
                         backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = true
-                        navController.navigate(Routes.TAGS)
+                        navController.navigate(Routes.tags())
                     },
                     onSearchClick = { navController.navigate(Routes.search()) },
                     onAuthorClick = { work: Work ->
@@ -391,7 +392,7 @@ fun AppNavHost(
                     onLoginClick = { source ->
                         navController.navigate(sourceOpen.loginRoute(source) ?: Routes.LOGIN)
                     },
-                    onManageTags = { navController.navigate(Routes.TAGS) },
+                    onManageTags = { source -> navController.navigate(Routes.tags(source)) },
                     // 换词重搜另起一页：把当前页生效的源带过去，种子源不因重搜悄悄回落全局源
                     onSearch = { keyword, source ->
                         navController.navigate(Routes.search(keyword, source = source)) {
@@ -493,7 +494,12 @@ fun AppNavHost(
                 },
             )
         }
-        composable(Routes.TAGS) {
+        composable(
+            route = Routes.TAGS,
+            arguments = listOf(
+                navArgument("source") { type = NavType.StringType; defaultValue = "" },
+            ),
+        ) {
             ProvideNavSharedScope(sharedScope, this) {
                 TagScreen(
                     onBack = safePopBack,
