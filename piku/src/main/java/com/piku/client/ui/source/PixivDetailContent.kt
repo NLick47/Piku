@@ -1,16 +1,11 @@
 package com.piku.client.ui.source
 
 import android.graphics.Bitmap
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,16 +26,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,7 +43,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -84,10 +75,6 @@ import com.piku.client.ui.theme.ShadowAmbient
 import com.piku.client.ui.theme.ShadowSpot
 import com.piku.client.ui.theme.SoftBorderDark
 import com.piku.client.ui.theme.SoftBorderLight
-import com.piku.client.ui.theme.StarDark
-import com.piku.client.ui.theme.StarLight
-import com.piku.client.ui.theme.StarTintDark
-import com.piku.client.ui.theme.StarTintLight
 import java.util.Locale
 
 /** 信息区左右留白（与 poipiku 详情同一把尺子） */
@@ -523,82 +510,6 @@ private fun StatsRow(
 }
 
 
-/** 收藏开关：星标 + 计数胶囊，插画与小说两套详情共用同一颗 */
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-internal fun BookmarkStatButton(
-    count: Int,
-    language: AppLanguage,
-    favorited: Boolean,
-    cloudSynced: Boolean,
-    dark: Boolean,
-    onToggle: () -> Unit,
-    onLongPress: () -> Unit,
-) {
-    val shape = RoundedCornerShape(12.dp)
-    // 星标弹跳，与详情底栏的收藏星同款
-    val starScale = remember { Animatable(1f) }
-    LaunchedEffect(favorited) {
-        if (favorited) {
-            starScale.snapTo(1.35f)
-            starScale.animateTo(
-                1f,
-                spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-            )
-        }
-    }
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .shadow(4.dp, shape, ambientColor = ShadowAmbient, spotColor = ShadowSpot)
-            .clip(shape)
-            // 玻璃底与关注胶囊同族：未收藏白霜玻璃，收藏后换淡金玻璃
-            .background(
-                if (favorited) if (dark) StarTintDark else StarTintLight
-                else if (dark) GlassBarBgDark else GlassBarBgLight,
-            )
-            .border(
-                BorderStroke(
-                    0.5.dp,
-                    if (favorited) Color.Transparent else if (dark) SoftBorderDark else SoftBorderLight,
-                ),
-                shape,
-            )
-            .combinedClickable(onClick = onToggle, onLongClick = onLongPress)
-            .padding(horizontal = 10.dp, vertical = 5.dp),
-    ) {
-        Box {
-            Icon(
-                imageVector = if (favorited) Icons.Filled.Star else Icons.Outlined.StarBorder,
-                contentDescription = stringResource(R.string.detail_favorite),
-                tint = if (favorited) if (dark) StarDark else StarLight else PikuColors.textSecondary,
-                modifier = Modifier
-                    .size(15.dp)
-                    .graphicsLayer {
-                        scaleX = starScale.value
-                        scaleY = starScale.value
-                    },
-            )
-            // 同步角标：只表示「本 App 已把这条收藏送上 pixiv」
-            if (favorited && cloudSynced) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .size(6.dp)
-                        .background(PikuColors.controlAccent, CircleShape)
-                        .border(1.dp, PikuColors.surface, CircleShape),
-                )
-            }
-        }
-        Spacer(Modifier.width(5.dp))
-        Text(
-            text = compactCount(count, language),
-            color = PikuColors.textPrimary,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
-        )
-    }
-}
 
 /**
  * 一格计数：图标 + 数字，不写「浏览/点赞/收藏」这类小字——眼睛、心、书签已经自解释，
