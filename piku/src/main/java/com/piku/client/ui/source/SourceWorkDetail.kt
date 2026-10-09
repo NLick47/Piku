@@ -558,12 +558,10 @@ internal fun SourceWorkDetailScreen(
                 title = detail?.translated?.title
                     ?.takeIf { state.showTranslationAll && it.isNotBlank() }
                     ?: detail?.title.orEmpty(),
-                fontSize = state.novelFontSize,
-                light = state.novelReaderLight,
+                settings = state.novelReaderSettings,
                 initialPercent = state.novelProgressPercent,
                 onProgressSave = viewModel::saveNovelProgress,
-                onFontSizeChange = viewModel::setNovelFontSize,
-                onLightChange = viewModel::setNovelReaderLight,
+                onSettingsChange = viewModel::setNovelReaderSettings,
                 onClose = viewModel::closeNovelReader,
                 onWorkClick = { _, _, _ -> },
             )

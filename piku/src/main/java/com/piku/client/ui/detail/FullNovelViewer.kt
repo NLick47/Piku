@@ -1,49 +1,46 @@
 package com.piku.client.ui.detail
 
+import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.net.Uri
+import android.view.Window
+import android.view.WindowManager
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.layout.positionInParent
-import coil3.compose.AsyncImage
-import coil3.request.ImageRequest
-import coil3.request.crossfade
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.LightMode
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -52,31 +49,38 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 import com.piku.client.R
 import com.piku.client.common.LinkSegment
-import com.piku.client.ui.common.PikuBackButton
 import com.piku.client.common.LinkText
+import com.piku.client.data.local.NovelReaderSettings
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.data.repository.NovelBlock
 import com.piku.client.data.repository.splitNovelBlocks
-import com.piku.client.ui.theme.ControlAccentDark
-import com.piku.client.ui.theme.ControlAccentLight
-import com.piku.client.ui.theme.ViewerBackgroundDark
+import com.piku.client.ui.theme.LocalDarkTheme
+import com.piku.client.ui.theme.NovelReaderTheme
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.debounce
@@ -88,6 +92,9 @@ import kotlin.math.abs
 internal const val NOVEL_FONT_MIN = SettingsRepository.NOVEL_FONT_MIN
 internal const val NOVEL_FONT_MAX = SettingsRepository.NOVEL_FONT_MAX
 internal const val NOVEL_FONT_DEFAULT = SettingsRepository.NOVEL_FONT_DEFAULT
+internal const val NOVEL_LINE_HEIGHT_MIN = SettingsRepository.NOVEL_LINE_HEIGHT_MIN
+internal const val NOVEL_LINE_HEIGHT_MAX = SettingsRepository.NOVEL_LINE_HEIGHT_MAX
+internal const val NOVEL_BRIGHTNESS_MIN = SettingsRepository.NOVEL_BRIGHTNESS_MIN
 
 private const val AUTO_HIDE_DELAY_MS = 2500L
 private val POIPIKU_WORK_REGEX = Regex("""https?://poipiku\.com/(\d+)/(\d+)\.html""")
@@ -103,41 +110,28 @@ private val IMAGE_FAILED_HEIGHT = 120.dp
  */
 private const val IMAGE_MAX_IN_FLIGHT = 2
 
-/** 阅读器浅色（米色纸）配色：不跟随系统主题，独立切换 */
-internal val NovelReaderBgLight = Color(0xFFF3EEDA)
-internal val NovelReaderTextLight = Color(0xFF2E2A23)
-/** 阅读器深色配色 */
-internal val NovelReaderBgDark = ViewerBackgroundDark
-internal val NovelReaderTextDark = Color(0xFFD6D0C4)
-
-/** 亮色底部栏底色：比正文更实、更白的暖白，与浅米正文拉开层次 */
-internal val NovelReaderControlBgLight = Color(0xFFFAF5EC)
-/** 暗色底部栏底色：正文底色加一层透明度 */
-internal val NovelReaderControlBgDark = Color(0xCC141312)
-/** 亮色底部栏顶部分隔线 */
-internal val NovelReaderControlDividerLight = Color(0xFFE7E0D3)
-/** 亮色进度条强调色：醒目暖棕（独立于正文链接色 linkColor） */
-internal val NovelReaderProgressAccentLight = Color(0xFFB08A52)
-/** 亮色进度条轨道色 */
-internal val NovelReaderProgressTrackLight = Color(0xFFE6DFD2)
+/** 正文左右边距 */
+private val CONTENT_PADDING_HORIZONTAL = 20.dp
+/** 正文顶部/底部留白（浮动栏之外），也让正文在栏下淡出 */
+private val CONTENT_PADDING_TOP = 84.dp
+private val CONTENT_PADDING_BOTTOM = 112.dp
 
 /**
  * 全屏小说阅读器：
- * - 独立配色（浅米底深字 / 深底浅字），与系统主题无关，由用户显式切换并持久化
- * - 字号 A−/A+ 调节（[NOVEL_FONT_MIN]~[NOVEL_FONT_MAX]），持久化
- * - 长按文本可选中复制（SelectionContainer）
- * - 点击文本区域切换顶部/底部控制栏显隐（自动隐藏）
+ * - 配色五档可选（米黄/纸白/护眼/深色/纯黑），独立于系统主题，持久化
+ * - 浮动玻璃栏承载进度、原/译切换与字号，Aa 展开字号/行距/亮度/字体/底色设置面板
+ * - 字号与行距可调且改完停在原处；亮度与常亮直接作用于当前窗口
+ * - 长按文本可选中复制（SelectionContainer），点击正文收起/唤出控制栏
  */
 @Composable
 fun FullNovelViewer(
     text: String,
     title: String,
-    fontSize: Float,
-    light: Boolean,
+    settings: NovelReaderSettings,
     initialPercent: Int,
+    /** 第二参为是否落盘：拖动中只更新内存（实时预览），松手/点选才写盘 */
+    onSettingsChange: (NovelReaderSettings, Boolean) -> Unit,
     onProgressSave: (Int) -> Unit,
-    onFontSizeChange: (Float) -> Unit,
-    onLightChange: (Boolean) -> Unit,
     onClose: () -> Unit,
     onWorkClick: (Long, Long, String) -> Unit,
     /** 正文有原文且有可用正文模型或已有缓存译文时显示原/译切换，未翻译时点击触发拉取 */
@@ -149,26 +143,52 @@ fun FullNovelViewer(
     translating: Boolean = false,
     /** 任何翻译请求在途（含元数据）时禁用点击，避免触发被吞 */
     busy: Boolean = false,
-    /** 小说分块流式翻译进度（百分比）；非 null 时 chip 显示"翻译中 N%"且保持可点（点按仅翻面） */
+    /** 小说分块流式翻译进度（百分比）；非 null 时进度行的百分比位置改为显示翻译进度 */
     novelStreamProgress: Int? = null,
     onToggleTranslation: () -> Unit = {},
 ) {
     val context = LocalContext.current
-    val currentOnWorkClick by rememberUpdatedState(onWorkClick)
+    val view = LocalView.current
+    val activity = remember(context) { context.findActivity() }
+    val theme = remember(settings.themeId) { NovelReaderTheme.fromId(settings.themeId) }
     val currentOnProgressSave by rememberUpdatedState(onProgressSave)
+    // 正文链接化的稳定入口：宿主每重组一次都会给出新的 lambda 实例，直接把它当 remember key
+    // 会让整章链接重解析；这里只在点击时读最新回调
+    val workClickState = rememberUpdatedState(onWorkClick)
+    val workClickHandler = remember {
+        { authorId: Long, workId: Long, title: String ->
+            workClickState.value(authorId, workId, title)
+        }
+    }
     var controlsVisible by remember { mutableStateOf(true) }
+    var panelOpen by remember { mutableStateOf(false) }
     var autoHideJob by remember { mutableStateOf<Job?>(null) }
     // 视口高度（px）：图块放行窗口要用
     var viewportPx by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
     val scrollState = remember { ScrollState(0) }
+    // 读到的百分比：改字号/行距会重排，靠它把读者送回原处
+    val position = remember { ReaderPosition() }
 
     fun refreshAutoHide() {
         controlsVisible = true
         autoHideJob?.cancel()
+        // 设置面板展开时不自动收起，否则面板会自己消失
+        if (panelOpen) return
         autoHideJob = scope.launch {
             delay(AUTO_HIDE_DELAY_MS)
             controlsVisible = false
+        }
+    }
+
+    fun togglePanel() {
+        panelOpen = !panelOpen
+        // 展开时把在跑的自动收起掐掉；收起时重新计时
+        if (panelOpen) {
+            autoHideJob?.cancel()
+            controlsVisible = true
+        } else {
+            refreshAutoHide()
         }
     }
 
@@ -181,29 +201,87 @@ fun FullNovelViewer(
         val max = snapshotFlow { scrollState.maxValue }
             .filter { it > 0 }
             .first()
-        scrollState.scrollTo((initialPercent / 100f * max).toInt().coerceIn(0, max))
+        scrollState.scrollTo(readerScrollTarget(initialPercent, max))
+    }
+
+    // 排版一变（字号、行距）就按百分比回到原处：像素偏移会在重排后落到别的段落上
+    LaunchedEffect(settings.fontSize, settings.lineHeight) {
+        val target = position.percent
+        if (target <= 0) return@LaunchedEffect
+        withFrameNanos { }
+        val max = scrollState.maxValue
+        if (max > 0) scrollState.scrollTo(readerScrollTarget(target, max))
     }
 
     // 阅读进度：滚动停止约 1s 保存一次百分比（杀进程也不丢），退出时兜底再保存
     LaunchedEffect(scrollState) {
+        snapshotFlow { scrollState.value }.collect {
+            position.percent = readerProgressPercent(scrollState.value, scrollState.maxValue)
+        }
+    }
+    LaunchedEffect(scrollState) {
         snapshotFlow { scrollState.value }
             .debounce(800)
             .collect {
-                if (scrollState.maxValue > 0) currentOnProgressSave(progressPercent(scrollState))
+                if (scrollState.maxValue > 0) {
+                    currentOnProgressSave(
+                        readerProgressPercent(scrollState.value, scrollState.maxValue),
+                    )
+                }
             }
     }
     DisposableEffect(Unit) {
         onDispose {
-            if (scrollState.maxValue > 0) currentOnProgressSave(progressPercent(scrollState))
+            if (scrollState.maxValue > 0) {
+                currentOnProgressSave(
+                    readerProgressPercent(scrollState.value, scrollState.maxValue),
+                )
+            }
         }
     }
 
-    val bg = if (light) NovelReaderBgLight else NovelReaderBgDark
-    val fg = if (light) NovelReaderTextLight else NovelReaderTextDark
-    val linkColor = if (light) ControlAccentLight else ControlAccentDark
-    val controlBg = if (light) NovelReaderControlBgLight else NovelReaderControlBgDark
-    val progressAccent = if (light) NovelReaderProgressAccentLight else linkColor
-    val progressTrack = if (light) NovelReaderProgressTrackLight else fg.copy(alpha = 0.25f)
+    // 阅读亮度：只改当前窗口，退出时还给系统
+    LaunchedEffect(activity, settings.brightness) {
+        activity?.window?.let { applyWindowBrightness(it, settings.brightness) }
+    }
+    DisposableEffect(activity) {
+        onDispose {
+            activity?.window?.let {
+                applyWindowBrightness(it, NovelReaderSettings.BRIGHTNESS_SYSTEM)
+            }
+        }
+    }
+    DisposableEffect(settings.keepScreenOn) {
+        view.keepScreenOn = settings.keepScreenOn
+        onDispose { view.keepScreenOn = false }
+    }
+
+    // 阅读底色独立于 app 主题：状态栏图标按正文底取反，退出时恢复成 app 主题那一套
+    // （app 主题可能在阅读中被系统切走，恢复值要读最新的那次）
+    val appDark by rememberUpdatedState(LocalDarkTheme.current)
+    SideEffect {
+        activity?.window?.let { window ->
+            WindowCompat.getInsetsController(window, view).apply {
+                isAppearanceLightStatusBars = theme.light
+                isAppearanceLightNavigationBars = theme.light
+            }
+        }
+    }
+    DisposableEffect(activity) {
+        onDispose {
+            activity?.window?.let { window ->
+                WindowCompat.getInsetsController(window, view).apply {
+                    isAppearanceLightStatusBars = !appDark
+                    isAppearanceLightNavigationBars = !appDark
+                }
+            }
+        }
+    }
+
+    val bg = theme.bg
+    val fg = theme.fg
+    val statusBarInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val navBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     Box(
         modifier = Modifier
@@ -212,11 +290,17 @@ fun FullNovelViewer(
             .background(bg)
             .pointerInput(Unit) {
                 detectTapGestures(onTap = {
-                    if (controlsVisible) {
-                        controlsVisible = false
-                        autoHideJob?.cancel()
-                    } else {
-                        refreshAutoHide()
+                    when {
+                        // 面板开着：先收面板，控制栏留着
+                        panelOpen -> {
+                            panelOpen = false
+                            refreshAutoHide()
+                        }
+                        controlsVisible -> {
+                            controlsVisible = false
+                            autoHideJob?.cancel()
+                        }
+                        else -> refreshAutoHide()
                     }
                 })
             },
@@ -227,7 +311,10 @@ fun FullNovelViewer(
             modifier = Modifier
                 .fillMaxWidth()
                 .verticalScroll(scrollState)
-                .padding(start = 20.dp, end = 20.dp, top = 64.dp, bottom = 88.dp),
+                .padding(horizontal = CONTENT_PADDING_HORIZONTAL)
+                .padding(top = CONTENT_PADDING_TOP, bottom = CONTENT_PADDING_BOTTOM)
+                .statusBarsPadding()
+                .navigationBarsPadding(),
         ) {
             Column {
                 // 历史译文标注：正文模型已下线时展示的缓存译文须明示来源，避免误当现译
@@ -251,12 +338,13 @@ fun FullNovelViewer(
                 blocks.forEach { block ->
                     when (block) {
                         is NovelBlock.Text -> Text(
-                            text = remember(block.text, linkColor, context, currentOnWorkClick) {
-                                linkifyNovel(block.text, linkColor, context, currentOnWorkClick)
+                            text = remember(block.text, theme.link, context) {
+                                linkifyNovel(block.text, theme.link, context, workClickHandler)
                             },
                             color = fg,
-                            fontSize = fontSize.sp,
-                            lineHeight = (fontSize * 1.7f).sp,
+                            fontSize = settings.fontSize.sp,
+                            lineHeight = (settings.fontSize * settings.lineHeight).sp,
+                            fontFamily = if (settings.serif) FontFamily.Serif else FontFamily.Default,
                         )
 
                         is NovelBlock.Image -> {
@@ -273,129 +361,106 @@ fun FullNovelViewer(
             }
         }
 
-        // 顶部栏：返回 + 标题
-        if (controlsVisible) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .statusBarsPadding()
-                    .background(controlBg)
-                    .padding(start = 4.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                PikuBackButton(
-                    onClick = onClose,
-                    dark = !light,
-                    contentDescription = stringResource(R.string.detail_fullscreen_close),
-                    tint = fg,
+        // 控制栏：底衬是与正文同色的渐变，正文滚到栏下淡出而不是从栏边漏出来
+        AnimatedVisibility(
+            visible = controlsVisible,
+            enter = fadeIn(tween(200)) + slideInVertically(tween(220)) { -it / 3 },
+            exit = fadeOut(tween(140)) + slideOutVertically(tween(160)) { -it / 3 },
+            modifier = Modifier.align(Alignment.TopCenter),
+        ) {
+            Box(Modifier.fillMaxWidth()) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(statusBarInset + CONTENT_PADDING_TOP)
+                        .background(scrimTop(bg)),
                 )
-                Text(
-                    text = title,
-                    color = fg,
-                    fontSize = 14.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
+                ReaderTopBar(title = title, theme = theme, onClose = onClose)
             }
         }
 
-        // 底部设置栏：进度条 | 原/译切换 · 字号 A− 状态 A+（居中成组） · 配色切换
-        if (controlsVisible) {
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .background(controlBg),
-            ) {
-                if (light) {
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(0.5.dp)
-                            .background(NovelReaderControlDividerLight),
-                    )
-                }
-                ReaderProgressBar(
-                    scrollState = scrollState,
-                    accent = progressAccent,
-                    track = progressTrack,
-                    onDragStart = { autoHideJob?.cancel() },
-                    onDragEnd = { refreshAutoHide() },
-                )
-                Row(
-                    modifier = Modifier
+        AnimatedVisibility(
+            visible = controlsVisible,
+            enter = fadeIn(tween(200)) + slideInVertically(tween(220)) { it / 3 },
+            exit = fadeOut(tween(140)) + slideOutVertically(tween(160)) { it / 3 },
+            modifier = Modifier.align(Alignment.BottomCenter),
+        ) {
+            Box(Modifier.fillMaxWidth()) {
+                Box(
+                    Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    ReaderTranslateChip(
-                        translationAvailable = translationAvailable,
-                        translating = translating,
-                        busy = busy,
-                        showTranslation = showTranslation,
-                        streamProgress = novelStreamProgress,
-                        fg = fg,
-                        accent = linkColor,
-                        onClick = onToggleTranslation,
-                    )
-                    Box(Modifier.weight(1f))
-                    ReaderFontButton(
-                        label = "A−",
-                        enabled = fontSize > NOVEL_FONT_MIN,
-                        onClick = { onFontSizeChange(fontSize - 1f) },
-                        fg = fg,
-                    )
-                    Text(
-                        // 流式期间中间信息位临时切换为翻译进度（宽度与原状态相当，不挤压布局）；
-                        // 钳到 99 避免"翻译中 100%"闪现，终态由 Completed 事件收尾
-                        text = if (novelStreamProgress != null) {
-                            stringResource(
-                                R.string.detail_translating_progress,
-                                minOf(novelStreamProgress, 99),
-                            )
-                        } else {
-                            stringResource(
-                                R.string.detail_novel_status,
-                                fontSize.toInt(),
-                                progressPercent(scrollState),
-                            )
-                        },
-                        color = fg.copy(alpha = 0.8f),
-                        fontSize = 12.sp,
-                        maxLines = 1,
-                        modifier = Modifier.padding(horizontal = 2.dp),
-                    )
-                    ReaderFontButton(
-                        label = "A+",
-                        enabled = fontSize < NOVEL_FONT_MAX,
-                        onClick = { onFontSizeChange(fontSize + 1f) },
-                        fg = fg,
-                    )
-                    Box(Modifier.weight(1f))
-                    IconButton(onClick = { onLightChange(!light) }) {
-                        Icon(
-                            imageVector = if (light) Icons.Filled.DarkMode else Icons.Filled.LightMode,
-                            contentDescription = stringResource(
-                                if (light) R.string.detail_novel_theme_dark
-                                else R.string.detail_novel_theme_light,
-                            ),
-                            tint = fg,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    }
-                }
+                        .align(Alignment.BottomCenter)
+                        .height(navBarInset + CONTENT_PADDING_BOTTOM)
+                        .background(scrimBottom(bg)),
+                )
+                NovelReaderControls(
+                    settings = settings,
+                    theme = theme,
+                    scrollState = scrollState,
+                    panelOpen = panelOpen,
+                    onTogglePanel = { togglePanel() },
+                    onSettingsChange = onSettingsChange,
+                    onInteract = { refreshAutoHide() },
+                    onSeekStart = { autoHideJob?.cancel() },
+                    onSeekEnd = { refreshAutoHide() },
+                    translationAvailable = translationAvailable,
+                    translating = translating,
+                    busy = busy,
+                    showTranslation = showTranslation,
+                    streamProgress = novelStreamProgress,
+                    onToggleTranslation = onToggleTranslation,
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                )
             }
         }
     }
 }
 
+/** 读者读到哪儿（百分比）。挂在 remember 上，重组不会把它清掉 */
+private class ReaderPosition {
+    var percent: Int = 0
+}
+
+/** 正文底色向透明收边：栏下正文淡出，栏外不留硬边 */
+private fun scrimTop(bg: Color): Brush = Brush.verticalGradient(
+    0f to bg,
+    0.62f to bg,
+    1f to bg.copy(alpha = 0f),
+)
+
+private fun scrimBottom(bg: Color): Brush = Brush.verticalGradient(
+    0f to bg.copy(alpha = 0f),
+    0.38f to bg,
+    1f to bg,
+)
+
+/** 阅读亮度（0~1）；负值 = 跟随系统 */
+private fun applyWindowBrightness(window: Window, brightness: Float) {
+    val attrs = window.attributes
+    attrs.screenBrightness =
+        if (brightness < 0f) WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE else brightness
+    window.attributes = attrs
+}
+
+private fun Context.findActivity(): Activity? {
+    var current: Context? = this
+    while (current is ContextWrapper) {
+        if (current is Activity) return current
+        current = current.baseContext
+    }
+    return null
+}
+
 /** 阅读进度百分比（0~100；正文不足一屏无需滚动时视为已读完，显示 100） */
-private fun progressPercent(scrollState: ScrollState): Int {
-    val max = scrollState.maxValue
+internal fun readerProgressPercent(value: Int, max: Int): Int {
     if (max <= 0) return 100
-    return ((scrollState.value.toFloat() / max) * 100).toInt().coerceIn(0, 100)
+    return ((value.toFloat() / max) * 100).toInt().coerceIn(0, 100)
+}
+
+/** 百分比 → 滚动像素：进度按百分比落盘，字号/行距重排后靠它把读者送回原处 */
+internal fun readerScrollTarget(percent: Int, max: Int): Int {
+    if (max <= 0) return 0
+    return (percent / 100f * max).toInt().coerceIn(0, max)
 }
 
 
@@ -512,7 +577,7 @@ private fun NovelInlineImage(
         onSuccess = { state ->
             val image = state.result.image
             if (image.width > 0 && image.height > 0) {
-                aspect = image.width.toFloat() / image.height
+                aspect = image.width.toFloat() / image.height.toFloat()
             }
             tracker.onSettled(index)
         },
@@ -521,127 +586,6 @@ private fun NovelInlineImage(
             tracker.onSettled(index)
         },
         modifier = sized,
-    )
-}
-
-/**
- * 阅读进度条：点击或拖动快速定位，正文不足一屏时隐藏。
- * 按下时回调 [onDragStart]（暂停控制栏自动隐藏），松手时回调 [onDragEnd]（重新计时），
- * 避免拖动途中控制栏（连同进度条）自己消失。
- */
-@Composable
-private fun ReaderProgressBar(
-    scrollState: ScrollState,
-    accent: Color,
-    track: Color,
-    onDragStart: () -> Unit,
-    onDragEnd: () -> Unit,
-) {
-    val max = scrollState.maxValue
-    if (max <= 0) return
-    val scope = rememberCoroutineScope()
-    val progress = (scrollState.value.toFloat() / max).coerceIn(0f, 1f)
-
-    fun seek(ratio: Float) {
-        scope.launch { scrollState.scrollTo((ratio * max).toInt().coerceIn(0, max)) }
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(18.dp)
-            .pointerInput(max) {
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    onDragStart()
-                    seek(down.position.x / size.width.toFloat())
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull()
-                        if (change == null || !change.pressed) {
-                            onDragEnd()
-                            break
-                        }
-                        if (change.position != change.previousPosition) {
-                            seek(change.position.x / size.width.toFloat())
-                            change.consume()
-                        }
-                    }
-                }
-            },
-        contentAlignment = Alignment.CenterStart,
-    ) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(2.dp)
-                .clip(RoundedCornerShape(1.dp))
-                .background(track),
-        )
-        Box(
-            Modifier
-                .fillMaxWidth(progress)
-                .height(2.dp)
-                .clip(RoundedCornerShape(1.dp))
-                .background(accent),
-        )
-    }
-}
-
-@Composable
-private fun ReaderFontButton(
-    label: String,
-    enabled: Boolean,
-    onClick: () -> Unit,
-    fg: Color,
-) {
-    val alpha = if (enabled) 1f else 0.35f
-    Text(
-        text = label,
-        color = fg.copy(alpha = alpha),
-        fontSize = 16.sp,
-        modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .minimumInteractiveComponentSize()
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 6.dp),
-    )
-}
-
-/** 底部栏译/原切换chip：无正文不渲染；非流式的在途翻译禁点防重复扣额度；
- *  流式期间保持"原/译"短标签（进度在中间信息位展示），点按仅切换原/译展示 */
-@Composable
-private fun ReaderTranslateChip(
-    translationAvailable: Boolean,
-    translating: Boolean,
-    busy: Boolean,
-    showTranslation: Boolean,
-    streamProgress: Int? = null,
-    fg: Color,
-    accent: Color,
-    onClick: () -> Unit,
-) {
-    if (!translationAvailable) return
-    Text(
-        // 流式期间进度显示在中间信息位，这里保持"原/译"短标签只表模式与点击去向，
-        // 避免长文案挤压底栏布局
-        text = when {
-            translating && !showTranslation -> stringResource(R.string.detail_translating)
-            showTranslation -> stringResource(R.string.detail_chip_original)
-            else -> stringResource(R.string.detail_chip_translate)
-        },
-        color = if (showTranslation) accent else fg.copy(alpha = 0.7f),
-        fontSize = 14.sp,
-        modifier = Modifier
-            .padding(start = 4.dp)
-            .clip(RoundedCornerShape(999.dp))
-            .background(
-                if (showTranslation) accent.copy(alpha = 0.15f)
-                else Color.Transparent,
-            )
-            // 流式期间切换显示永远可用（无副作用）；仅非流式的在途翻译才禁点防重复扣额度
-            .clickable(enabled = !busy || streamProgress != null, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 5.dp),
     )
 }
 

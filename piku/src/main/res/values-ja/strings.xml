@@ -333,10 +333,24 @@
 
     <string name="detail_fullscreen_close">閉じる</string>
 
-    <string name="detail_novel_status">文字サイズ %1$d · 読了 %2$d%%</string>
     <string name="detail_novel_theme_dark">ダーク読書</string>
     <string name="detail_novel_theme_light">ライト読書</string>
     <string name="detail_novel_fullscreen">全画面</string>
+    <string name="detail_novel_settings">読書設定</string>
+    <string name="detail_novel_font_size">文字</string>
+    <string name="detail_novel_line_spacing">行間</string>
+    <string name="detail_novel_brightness">明るさ</string>
+    <string name="detail_novel_brightness_auto">システム</string>
+    <string name="detail_novel_font">書体</string>
+    <string name="detail_novel_font_sans">標準</string>
+    <string name="detail_novel_font_serif">明朝</string>
+    <string name="detail_novel_keep_screen_on">常時点灯</string>
+    <string name="detail_novel_background">背景</string>
+    <string name="detail_novel_theme_paper">クリーム</string>
+    <string name="detail_novel_theme_plain">ペーパー</string>
+    <string name="detail_novel_theme_green">グリーン</string>
+    <string name="detail_novel_theme_ink">ダーク</string>
+    <string name="detail_novel_theme_black">ブラック</string>
 
     <string name="detail_more">その他</string>
     <string name="detail_reaction">リアクション</string>
@@ -489,7 +503,7 @@
     <string name="detail_chip_translate">訳</string>
     <string name="detail_chip_original">原</string>
     <string name="detail_translating">翻訳中…</string>
-    <string name="detail_translating_progress">翻訳中 %1$d%%</string>
+    <string name="detail_novel_translating_percent">訳 %1$d%%</string>
     <string name="detail_novel_partial_failed">一部の段落を翻訳できませんでした。タップで再試行（済み部分は再翻訳されません）</string>
     <string name="detail_novel_model_unavailable">本文翻訳モデルが利用できないため、現在本文は翻訳できません</string>
     <string name="detail_novel_translation_stale">過去の翻訳（本文翻訳モデルはオフライン）</string>

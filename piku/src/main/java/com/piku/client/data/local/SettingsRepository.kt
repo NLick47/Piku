@@ -408,27 +408,41 @@ class SettingsRepository @Inject constructor(
         _backgroundOffsetY.value = ny
     }
 
-    private val _novelFontSize = MutableStateFlow(
-        prefs.getFloat(KEY_NOVEL_FONT_SIZE, NOVEL_FONT_DEFAULT),
-    )
-    val novelFontSize: StateFlow<Float> = _novelFontSize.asStateFlow()
+    /** 小说阅读器显示设置，独立于系统主题，由用户在阅读器里调并持久化 */
+    private val _novelReaderSettings = MutableStateFlow(readNovelReaderSettings())
+    val novelReaderSettings: StateFlow<NovelReaderSettings> = _novelReaderSettings.asStateFlow()
 
-    /** 小说阅读器浅色模式（米色纸），独立于系统主题，由用户显式切换 */
-    private val _novelReaderLight = MutableStateFlow(
-        prefs.getBoolean(KEY_NOVEL_READER_LIGHT, true),
-    )
-    val novelReaderLight: StateFlow<Boolean> = _novelReaderLight.asStateFlow()
-
-    fun setNovelFontSize(size: Float) {
-        val clamped = size.coerceIn(NOVEL_FONT_MIN, NOVEL_FONT_MAX)
-        prefs.edit().putFloat(KEY_NOVEL_FONT_SIZE, clamped).apply()
-        _novelFontSize.value = clamped
+    /** 整包写入阅读器设置；[persist] 为 false 时只更新内存（滑块拖动中的实时预览，松手才落盘） */
+    fun setNovelReaderSettings(settings: NovelReaderSettings, persist: Boolean = true) {
+        val clamped = settings.copy(
+            fontSize = settings.fontSize.coerceIn(NOVEL_FONT_MIN, NOVEL_FONT_MAX),
+            lineHeight = settings.lineHeight.coerceIn(NOVEL_LINE_HEIGHT_MIN, NOVEL_LINE_HEIGHT_MAX),
+            brightness = settings.brightness.let {
+                if (it < 0f) NovelReaderSettings.BRIGHTNESS_SYSTEM
+                else it.coerceIn(NOVEL_BRIGHTNESS_MIN, 1f)
+            },
+        )
+        if (persist) {
+            prefs.edit()
+                .putFloat(KEY_NOVEL_FONT_SIZE, clamped.fontSize)
+                .putFloat(KEY_NOVEL_LINE_HEIGHT, clamped.lineHeight)
+                .putInt(KEY_NOVEL_READER_THEME, clamped.themeId)
+                .putBoolean(KEY_NOVEL_SERIF, clamped.serif)
+                .putFloat(KEY_NOVEL_BRIGHTNESS, clamped.brightness)
+                .putBoolean(KEY_NOVEL_KEEP_SCREEN_ON, clamped.keepScreenOn)
+                .apply()
+        }
+        _novelReaderSettings.value = clamped
     }
 
-    fun setNovelReaderLight(light: Boolean) {
-        prefs.edit().putBoolean(KEY_NOVEL_READER_LIGHT, light).apply()
-        _novelReaderLight.value = light
-    }
+    private fun readNovelReaderSettings(): NovelReaderSettings = NovelReaderSettings(
+        fontSize = prefs.getFloat(KEY_NOVEL_FONT_SIZE, NOVEL_FONT_DEFAULT),
+        lineHeight = prefs.getFloat(KEY_NOVEL_LINE_HEIGHT, NOVEL_LINE_HEIGHT_DEFAULT),
+        themeId = prefs.getInt(KEY_NOVEL_READER_THEME, NOVEL_THEME_DEFAULT),
+        serif = prefs.getBoolean(KEY_NOVEL_SERIF, false),
+        brightness = prefs.getFloat(KEY_NOVEL_BRIGHTNESS, NovelReaderSettings.BRIGHTNESS_SYSTEM),
+        keepScreenOn = prefs.getBoolean(KEY_NOVEL_KEEP_SCREEN_ON, false),
+    )
 
     /**
      * 读取某作品的阅读进度（百分比 0~100，0 表示无进度）。
@@ -845,7 +859,11 @@ class SettingsRepository @Inject constructor(
         const val KEY_AUTO_CHECK_ENABLED = "auto_check_update_enabled"
         const val KEY_LAST_UPDATE_CHECK_AT = "last_update_check_at"
         const val KEY_NOVEL_FONT_SIZE = "novel_font_size"
-        const val KEY_NOVEL_READER_LIGHT = "novel_reader_light"
+        const val KEY_NOVEL_LINE_HEIGHT = "novel_line_height"
+        const val KEY_NOVEL_READER_THEME = "novel_reader_theme"
+        const val KEY_NOVEL_SERIF = "novel_serif"
+        const val KEY_NOVEL_BRIGHTNESS = "novel_brightness"
+        const val KEY_NOVEL_KEEP_SCREEN_ON = "novel_keep_screen_on"
         const val KEY_NOVEL_PROGRESS_PREFIX = "novel_progress_"
         const val KEY_IMAGE_PROGRESS_PREFIX = "image_progress_"
         const val KEY_CUSTOM_BACKGROUND_PATH = "custom_background_path"
@@ -879,6 +897,17 @@ class SettingsRepository @Inject constructor(
         const val NOVEL_FONT_MIN = 13f
         const val NOVEL_FONT_MAX = 24f
         const val NOVEL_FONT_DEFAULT = 16f
+
+        /** 小说阅读器行距倍数范围与默认值（相对字号） */
+        const val NOVEL_LINE_HEIGHT_MIN = 1.3f
+        const val NOVEL_LINE_HEIGHT_MAX = 2.4f
+        const val NOVEL_LINE_HEIGHT_DEFAULT = 1.7f
+
+        /** 阅读底色档位：与 NovelReaderTheme 的 id 对齐，UI 侧越界会回落到纸黄 */
+        const val NOVEL_THEME_DEFAULT = 0
+
+        /** 阅读亮度下限：再低就看不清字了，跟随系统由 NovelReaderSettings.BRIGHTNESS_SYSTEM 表示 */
+        const val NOVEL_BRIGHTNESS_MIN = 0.05f
 
         /** 自定义背景压暗范围与默认值（0~1） */
         const val BACKGROUND_DIM_MIN = 0f

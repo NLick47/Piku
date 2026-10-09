@@ -521,12 +521,10 @@ fun DetailScreen(
                     title = it.translated?.title
                         ?.takeIf { t -> titleTranslated && t.isNotBlank() }
                         ?: it.title,
-                    fontSize = state.novelFontSize,
-                    light = state.novelReaderLight,
+                    settings = state.novelReaderSettings,
                     initialPercent = state.novelProgressPercent,
                     onProgressSave = viewModel::saveNovelProgress,
-                    onFontSizeChange = viewModel::setNovelFontSize,
-                    onLightChange = viewModel::setNovelReaderLight,
+                    onSettingsChange = viewModel::setNovelReaderSettings,
                     onClose = { viewModel.setNovelReaderOpen(false) },
                     onWorkClick = onRelatedWorkClick,
                     // 原/译切换出现条件：有可用正文模型或本地已有缓存译文，

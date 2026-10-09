@@ -345,10 +345,24 @@
 
     <string name="detail_fullscreen_close">关闭</string>
 
-    <string name="detail_novel_status">字号 %1$d · 已读 %2$d%%</string>
     <string name="detail_novel_theme_dark">深色阅读</string>
     <string name="detail_novel_theme_light">浅色阅读</string>
     <string name="detail_novel_fullscreen">全屏阅读</string>
+    <string name="detail_novel_settings">阅读设置</string>
+    <string name="detail_novel_font_size">字号</string>
+    <string name="detail_novel_line_spacing">行距</string>
+    <string name="detail_novel_brightness">亮度</string>
+    <string name="detail_novel_brightness_auto">跟随系统</string>
+    <string name="detail_novel_font">字体</string>
+    <string name="detail_novel_font_sans">默认</string>
+    <string name="detail_novel_font_serif">宋体</string>
+    <string name="detail_novel_keep_screen_on">常亮</string>
+    <string name="detail_novel_background">背景</string>
+    <string name="detail_novel_theme_paper">米黄</string>
+    <string name="detail_novel_theme_plain">纸白</string>
+    <string name="detail_novel_theme_green">护眼</string>
+    <string name="detail_novel_theme_ink">深色</string>
+    <string name="detail_novel_theme_black">纯黑</string>
 
     <string name="detail_more">更多</string>
     <string name="detail_reaction">回应</string>
@@ -501,7 +515,7 @@
     <string name="detail_chip_translate">译</string>
     <string name="detail_chip_original">原</string>
     <string name="detail_translating">翻译中…</string>
-    <string name="detail_translating_progress">翻译中 %1$d%%</string>
+    <string name="detail_novel_translating_percent">译 %1$d%%</string>
     <string name="detail_novel_partial_failed">部分段落未译出，点击重试（已译部分不会重翻）</string>
     <string name="detail_novel_model_unavailable">正文翻译模型已下线，暂无法翻译正文</string>
     <string name="detail_novel_translation_stale">历史译文（正文翻译模型已下线）</string>

@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.piku.client.data.local.ImageSaver
 import com.piku.client.data.local.ImageShareHelper
+import com.piku.client.data.local.NovelReaderSettings
 import com.piku.client.data.local.WorkPasswordRepository
 import com.piku.client.data.repository.AdultContentRepository
 import com.piku.client.data.repository.AuthRepository
@@ -138,10 +139,8 @@ data class DetailUiState(
 
     /** 全屏小说阅读器：当前是否打开 */
     val novelReaderOpen: Boolean = false,
-    /** 全屏小说阅读器：字号（sp） */
-    val novelFontSize: Float = NOVEL_FONT_DEFAULT,
-    /** 全屏小说阅读器：浅色模式（米色纸），独立于系统主题 */
-    val novelReaderLight: Boolean = true,
+    /** 全屏小说阅读器：显示设置（字号/行距/配色/字体/亮度/常亮） */
+    val novelReaderSettings: NovelReaderSettings = NovelReaderSettings(),
     /** 全屏小说阅读器：该作品已保存的阅读进度（百分比 0~100） */
     val novelProgressPercent: Int = 0,
     /** AI 翻译开关是否开启（只控制自动翻译，不影响手动入口） */
@@ -382,14 +381,9 @@ class DetailViewModel @Inject constructor(
         settingsRepository.setImageProgress(work.key, page)
     }
 
-    /** 调整阅读器字号（持久化） */
-    fun setNovelFontSize(size: Float) {
-        settingsRepository.setNovelFontSize(size)
-    }
-
-    /** 切换阅读器配色（浅米底深字 / 深底浅字，独立于系统主题，持久化） */
-    fun setNovelReaderLight(light: Boolean) {
-        settingsRepository.setNovelReaderLight(light)
+    /** 阅读器显示设置（字号/行距/配色/字体/亮度/常亮）；[persist] 为 false 时只更新内存（拖动预览） */
+    fun setNovelReaderSettings(settings: NovelReaderSettings, persist: Boolean) {
+        settingsRepository.setNovelReaderSettings(settings, persist)
     }
 
     /** 标签翻译编排（与 pixiv 详情页共用） */
@@ -453,13 +447,8 @@ class DetailViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            settingsRepository.novelFontSize.collect { size ->
-                _uiState.update { it.copy(novelFontSize = size) }
-            }
-        }
-        viewModelScope.launch {
-            settingsRepository.novelReaderLight.collect { light ->
-                _uiState.update { it.copy(novelReaderLight = light) }
+            settingsRepository.novelReaderSettings.collect { settings ->
+                _uiState.update { it.copy(novelReaderSettings = settings) }
             }
         }
         // 会话变更后重新加载详情（登录墙作品的真实图依赖有效会话）；

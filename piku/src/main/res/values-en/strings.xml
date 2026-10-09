@@ -333,10 +333,24 @@
 
     <string name="detail_fullscreen_close">Close</string>
 
-    <string name="detail_novel_status">Size %1$d · Read %2$d%%</string>
     <string name="detail_novel_theme_dark">Dark reading</string>
     <string name="detail_novel_theme_light">Light reading</string>
     <string name="detail_novel_fullscreen">Fullscreen</string>
+    <string name="detail_novel_settings">Reading settings</string>
+    <string name="detail_novel_font_size">Size</string>
+    <string name="detail_novel_line_spacing">Spacing</string>
+    <string name="detail_novel_brightness">Brightness</string>
+    <string name="detail_novel_brightness_auto">System</string>
+    <string name="detail_novel_font">Font</string>
+    <string name="detail_novel_font_sans">Default</string>
+    <string name="detail_novel_font_serif">Serif</string>
+    <string name="detail_novel_keep_screen_on">Awake</string>
+    <string name="detail_novel_background">Theme</string>
+    <string name="detail_novel_theme_paper">Cream</string>
+    <string name="detail_novel_theme_plain">Paper</string>
+    <string name="detail_novel_theme_green">Green</string>
+    <string name="detail_novel_theme_ink">Dark</string>
+    <string name="detail_novel_theme_black">Black</string>
 
     <string name="detail_more">More</string>
     <string name="detail_reaction">React</string>
@@ -489,7 +503,7 @@
     <string name="detail_chip_translate">TR</string>
     <string name="detail_chip_original">ORI</string>
     <string name="detail_translating">Translating…</string>
-    <string name="detail_translating_progress">Translating %1$d%%</string>
+    <string name="detail_novel_translating_percent">TR %1$d%%</string>
     <string name="detail_novel_partial_failed">Some paragraphs failed. Tap to retry (finished parts are cached)</string>
     <string name="detail_novel_model_unavailable">Novel model is offline; the novel text stays untranslated</string>
     <string name="detail_novel_translation_stale">Cached translation (novel model is offline)</string>

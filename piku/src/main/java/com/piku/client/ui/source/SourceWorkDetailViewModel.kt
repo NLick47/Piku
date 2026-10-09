@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.piku.client.R
+import com.piku.client.data.local.NovelReaderSettings
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.data.local.QuietFollowStore
 import com.piku.client.data.remote.ImageRouteController
@@ -147,8 +148,7 @@ class SourceWorkDetailViewModel @Inject constructor(
         val novelText: String = "",
         val novelBodyLoading: Boolean = false,
         val novelReaderOpen: Boolean = false,
-        val novelFontSize: Float = SettingsRepository.NOVEL_FONT_DEFAULT,
-        val novelReaderLight: Boolean = true,
+        val novelReaderSettings: NovelReaderSettings = NovelReaderSettings(),
         val novelProgressPercent: Int = 0,
     ) {
         val hasTranslation: Boolean get() = detail?.translated?.hasAny == true
@@ -274,13 +274,8 @@ class SourceWorkDetailViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            settingsRepository.novelFontSize.collect { size ->
-                _ui.update { it.copy(novelFontSize = size) }
-            }
-        }
-        viewModelScope.launch {
-            settingsRepository.novelReaderLight.collect { light ->
-                _ui.update { it.copy(novelReaderLight = light) }
+            settingsRepository.novelReaderSettings.collect { settings ->
+                _ui.update { it.copy(novelReaderSettings = settings) }
             }
         }
     }
@@ -462,9 +457,9 @@ class SourceWorkDetailViewModel @Inject constructor(
         currentWork?.let { settingsRepository.setNovelProgress(it.key, percent) }
     }
 
-    fun setNovelFontSize(size: Float) = settingsRepository.setNovelFontSize(size)
-
-    fun setNovelReaderLight(light: Boolean) = settingsRepository.setNovelReaderLight(light)
+    /** 阅读器显示设置；[persist] 为 false 时只更新内存（拖动预览） */
+    fun setNovelReaderSettings(settings: NovelReaderSettings, persist: Boolean) =
+        settingsRepository.setNovelReaderSettings(settings, persist)
 
     /**
      * 标题行 chip 短按：已有译文 = 整页原/译切换（不含标签）；没有 = 立即翻短字段。
