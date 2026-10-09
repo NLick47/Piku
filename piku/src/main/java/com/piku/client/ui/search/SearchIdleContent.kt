@@ -50,10 +50,12 @@ import coil3.compose.AsyncImage
 import com.piku.client.R
 import com.piku.client.domain.source.SourceTrendingTag
 import com.piku.client.ui.theme.LocalDarkTheme
-import com.piku.client.ui.theme.LoginBackgroundDark
-import com.piku.client.ui.theme.LoginTextFaintLight
-import com.piku.client.ui.theme.LoginTextSecondaryDark
 import com.piku.client.ui.theme.PikuColors
+import com.piku.client.ui.theme.GlassBarBgDark
+import com.piku.client.ui.theme.GlassBarBgLight
+import com.piku.client.ui.theme.OnAccentDark
+import com.piku.client.ui.theme.SoftBorderDark
+import com.piku.client.ui.theme.SoftBorderLight
 import com.piku.client.ui.theme.WorkCardPlaceholderDark
 import kotlin.math.roundToInt
 
@@ -77,7 +79,8 @@ internal fun IdleContent(
     dark: Boolean,
 ) {
     val title = PikuColors.textSecondary
-    val label = PikuColors.textFaint
+    // 空态/加载提示用次级字：faint 的暗色值(#5C5852)在近黑页面上只有 2.4:1，读不出来
+    val hint = PikuColors.textSecondary
     Column(
         Modifier
             .fillMaxSize()
@@ -138,7 +141,7 @@ internal fun IdleContent(
         if (history.isEmpty()) {
             Text(
                 text = stringResource(R.string.search_history_empty),
-                color = label,
+                color = hint,
                 fontSize = 12.sp,
             )
         } else {
@@ -180,7 +183,7 @@ internal fun IdleContent(
         if (trending.isEmpty()) {
             Text(
                 text = stringResource(R.string.search_hot_tags_empty),
-                color = label,
+                color = hint,
                 fontSize = 12.sp,
             )
         } else {
@@ -189,7 +192,7 @@ internal fun IdleContent(
         Spacer(Modifier.height(24.dp))
         Text(
             text = stringResource(if (pluginHint) R.string.search_hint_pixiv else R.string.search_hint),
-            color = label,
+            color = hint,
             fontSize = 11.sp,
         )
     }
@@ -245,13 +248,13 @@ private fun TrendingCard(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(if (LocalDarkTheme.current) WorkCardPlaceholderDark else Color(0xFFF1EFEA)),
+                    .background(if (LocalDarkTheme.current) WorkCardPlaceholderDark else PikuColors.surfaceSoft),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Outlined.Label,
                     contentDescription = tag.translatedName ?: tag.name,
-                    tint = PikuColors.textFaint,
+                    tint = PikuColors.textSecondary,
                     modifier = Modifier.size(28.dp),
                 )
             }
@@ -262,7 +265,7 @@ private fun TrendingCard(
                 colorFilter = PikuColors.tameWhiteFilter,
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(if (LocalDarkTheme.current) WorkCardPlaceholderDark else Color(0xFFF1EFEA)),
+                    .background(if (LocalDarkTheme.current) WorkCardPlaceholderDark else PikuColors.surfaceSoft),
                 contentScale = ContentScale.Fit,
             )
         }
@@ -302,7 +305,7 @@ private fun MyTagsRow(
     modifier: Modifier = Modifier,
 ) {
     val title = PikuColors.textSecondary
-    val label = PikuColors.textFaint
+    val hint = PikuColors.textSecondary
     Column(modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -341,7 +344,7 @@ private fun MyTagsRow(
         if (tags.isEmpty()) {
             Text(
                 text = stringResource(R.string.my_tags_empty),
-                color = label,
+                color = hint,
                 fontSize = 12.sp,
             )
         } else {
@@ -376,7 +379,7 @@ private fun TagPill(
             .background(
                 when {
                     active -> PikuColors.accent
-                    else -> if (dark) Color(0x40FFFFFF) else Color(0xE6FFFFFF)
+                    else -> if (dark) GlassBarBgDark else GlassBarBgLight
                 },
             )
             .border(
@@ -384,7 +387,7 @@ private fun TagPill(
                     0.5.dp,
                     when {
                         active -> PikuColors.accent
-                        else -> PikuColors.border
+                        else -> if (dark) SoftBorderDark else SoftBorderLight
                     },
                 ),
                 shape,
@@ -396,8 +399,8 @@ private fun TagPill(
         Text(
             text = text,
             color = when {
-                active -> if (dark) LoginBackgroundDark else Color.White
-                else -> if (dark) LoginTextSecondaryDark else Color(0xFF5A5A5A)
+                active -> if (dark) OnAccentDark else Color.White
+                else -> PikuColors.chipLabel
             },
             fontSize = 12.sp,
             maxLines = 1,
@@ -418,9 +421,9 @@ private fun SearchKeywordChip(
     Row(
         modifier = Modifier
             .clip(shape)
-            .background(if (dark) Color(0x40FFFFFF) else Color(0xE6FFFFFF))
+            .background(if (dark) GlassBarBgDark else GlassBarBgLight)
             .border(
-                BorderStroke(0.5.dp, if (dark) Color(0x47FFFFFF) else Color(0x66A09A92)),
+                BorderStroke(0.5.dp, if (dark) SoftBorderDark else SoftBorderLight),
                 shape,
             )
             .clickable(onClick = onClick)
@@ -429,7 +432,7 @@ private fun SearchKeywordChip(
     ) {
         Text(
             text = keyword,
-            color = if (dark) LoginTextSecondaryDark else Color(0xFF5A5A5A),
+            color = PikuColors.chipLabel,
             fontSize = 12.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -446,7 +449,7 @@ private fun SearchKeywordChip(
             Icon(
                 imageVector = Icons.Filled.Close,
                 contentDescription = stringResource(R.string.search_delete),
-                tint = if (dark) LoginTextSecondaryDark else LoginTextFaintLight,
+                tint = PikuColors.textSecondary,
                 modifier = Modifier.size(11.dp),
             )
         }

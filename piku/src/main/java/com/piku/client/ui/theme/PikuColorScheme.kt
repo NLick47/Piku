@@ -10,6 +10,7 @@ data class PikuColorScheme(
     val textPrimary: Color,
     val textSecondary: Color,
     val textFaint: Color,
+    val chipLabel: Color,
     val border: Color,
     /** 卡片底（纯白）。亮色 #FFFFFF，暗色 #262421。 */
     val surface: Color,
@@ -31,6 +32,7 @@ internal val LightPikuColors = PikuColorScheme(
     textPrimary = LoginTextPrimaryLight,
     textSecondary = LoginTextSecondaryLight,
     textFaint = LoginTextFaintLight,
+    chipLabel = Color(0xFF5A5A5A),
     border = PillBorderLight,
     surface = LoginCardLight,
     surfaceMuted = Color(0xFFEAE8E3),
@@ -45,6 +47,7 @@ internal val DarkPikuColors = PikuColorScheme(
     textPrimary = LoginTextPrimaryDark,
     textSecondary = LoginTextSecondaryDark,
     textFaint = LoginTextFaintDark,
+    chipLabel = LoginTextSecondaryDark,
     border = PillBorderDark,
     surface = LoginCardDark,
     surfaceMuted = LoginCardDark,

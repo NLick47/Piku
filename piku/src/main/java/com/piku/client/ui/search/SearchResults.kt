@@ -72,6 +72,9 @@ import com.piku.client.ui.common.WorkCard
 import com.piku.client.ui.source.NovelWorkCard
 import com.piku.client.ui.source.ProportionalWorkCard
 import com.piku.client.ui.theme.PikuColors
+import com.piku.client.ui.theme.ShadowAmbient
+import com.piku.client.ui.theme.ShadowSpot
+import com.piku.client.ui.theme.SoftBorderLight
 import com.piku.client.ui.theme.WorkCardBgDark
 import com.piku.client.ui.theme.WorkCardBorderDark
 import com.piku.client.ui.theme.WorkCardInfoBgDark
@@ -444,13 +447,13 @@ private fun TagCardItem(
             .shadow(
                 elevation = if (dark) 6.dp else 10.dp,
                 shape = shape,
-                ambientColor = Color(0x33000000),
-                spotColor = Color(0x40000000),
+                ambientColor = ShadowAmbient,
+                spotColor = ShadowSpot,
             )
             .clip(shape)
             .background(if (dark) WorkCardBgDark else Color(0xCCFFFFFF))
             .border(
-                BorderStroke(1.dp, if (dark) WorkCardBorderDark else Color(0x59C8C2B8)),
+                BorderStroke(1.dp, if (dark) WorkCardBorderDark else SoftBorderLight),
                 shape,
             )
             .clickable(onClick = onClick),
@@ -467,7 +470,7 @@ private fun TagCardItem(
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(1f)
-                        .background(if (dark) WorkCardPlaceholderDark else Color(0xFFF1EFEA)),
+                        .background(if (dark) WorkCardPlaceholderDark else PikuColors.surfaceSoft),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -485,7 +488,7 @@ private fun TagCardItem(
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(1f)
-                        .background(if (dark) WorkCardPlaceholderDark else Color(0xFFF1EFEA)),
+                        .background(if (dark) WorkCardPlaceholderDark else PikuColors.surfaceSoft),
                     contentScale = ContentScale.Crop,
                 )
             }

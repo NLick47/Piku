@@ -58,6 +58,10 @@ import com.piku.client.ui.common.PikuSheetTitle
 import com.piku.client.ui.theme.LocalDarkTheme
 import com.piku.client.ui.theme.LoginBackgroundDark
 import com.piku.client.ui.theme.PikuColors
+import com.piku.client.ui.theme.GlassBarBgDark
+import com.piku.client.ui.theme.GlassBarBgLight
+import com.piku.client.ui.theme.SoftBorderDark
+import com.piku.client.ui.theme.SoftBorderLight
 import com.piku.client.ui.theme.themedSwitchColors
 
 // ---------------- 检索筛选：chips 行 + 底部面板 ----------------
@@ -189,8 +193,8 @@ internal fun SourceChip(
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(16.dp))
-            .background(if (LocalDarkTheme.current) Color(0x40FFFFFF) else Color(0xE6FFFFFF))
-            .border(BorderStroke(0.5.dp, PikuColors.border), RoundedCornerShape(16.dp))
+            .background(if (LocalDarkTheme.current) GlassBarBgDark else GlassBarBgLight)
+            .border(BorderStroke(0.5.dp, if (LocalDarkTheme.current) SoftBorderDark else SoftBorderLight), RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
             .padding(start = 12.dp, end = 8.dp, top = 7.dp, bottom = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -259,8 +263,8 @@ private fun FilterOpenChip(
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(16.dp))
-            .background(if (LocalDarkTheme.current) Color(0x40FFFFFF) else Color(0xE6FFFFFF))
-            .border(BorderStroke(0.5.dp, PikuColors.border), RoundedCornerShape(16.dp))
+            .background(if (LocalDarkTheme.current) GlassBarBgDark else GlassBarBgLight)
+            .border(BorderStroke(0.5.dp, if (LocalDarkTheme.current) SoftBorderDark else SoftBorderLight), RoundedCornerShape(16.dp))
             .clickable(onClick = onOpen)
             .padding(horizontal = 12.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -366,10 +370,10 @@ internal fun SearchFilterSheet(
                             .clip(RoundedCornerShape(17.dp))
                             .background(
                                 if (active) PikuColors.accent
-                                else if (dark) Color(0x40FFFFFF) else Color(0xE6FFFFFF),
+                                else if (dark) GlassBarBgDark else GlassBarBgLight,
                             )
                             .border(
-                                BorderStroke(0.5.dp, if (active) PikuColors.accent else PikuColors.border),
+                                BorderStroke(0.5.dp, if (active) PikuColors.accent else if (dark) SoftBorderDark else SoftBorderLight),
                                 RoundedCornerShape(17.dp),
                             )
                             .clickable { draft = draft + (group.id to option.id) }

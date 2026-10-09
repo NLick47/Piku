@@ -47,7 +47,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -72,7 +71,11 @@ import com.piku.client.ui.common.FeedbackHost
 import com.piku.client.ui.common.PikuBackButton
 import com.piku.client.ui.home.sheets.HomeSourceSheet
 import com.piku.client.ui.theme.GlassHeaderTintDark
+import com.piku.client.ui.theme.GlassBarBgDark
+import com.piku.client.ui.theme.GlassBarBgLight
 import com.piku.client.ui.theme.GlassHeaderTintLight
+import com.piku.client.ui.theme.SoftBorderDark
+import com.piku.client.ui.theme.SoftBorderLight
 import com.piku.client.ui.theme.HomeBgBottomDark
 import com.piku.client.ui.theme.HomeBgBottomLight
 import com.piku.client.ui.theme.HomeBgTopDark
@@ -80,7 +83,6 @@ import com.piku.client.ui.theme.HomeBgTopLight
 import com.piku.client.ui.theme.LocalDarkTheme
 import com.piku.client.ui.theme.LoginTextFaintLight
 import com.piku.client.ui.theme.LoginTextSecondaryDark
-import com.piku.client.ui.theme.LoginTextSecondaryLight
 import com.piku.client.ui.theme.PikuColors
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -418,11 +420,11 @@ private fun SearchTopBar(
             modifier = Modifier
                 .weight(1f)
                 .clip(RoundedCornerShape(50))
-                .background(if (dark) Color.White.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.9f))
+                .background(if (dark) GlassBarBgDark else GlassBarBgLight)
                 .border(
                     BorderStroke(
                         0.5.dp,
-                        if (dark) Color.White.copy(alpha = 0.3f) else LoginTextSecondaryLight.copy(alpha = 0.15f),
+                        if (dark) SoftBorderDark else SoftBorderLight,
                     ),
                     RoundedCornerShape(50),
                 )
