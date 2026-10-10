@@ -1,12 +1,20 @@
 package com.piku.client.ui.source
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateIntAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,12 +23,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
@@ -45,13 +54,15 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -71,9 +82,10 @@ import com.piku.client.domain.source.isVisibleWith
 import com.piku.client.domain.source.SourceFeed
 import com.piku.client.domain.source.SourceWorkOpen
 import coil3.compose.AsyncImage
+import com.piku.client.ui.common.FavoriteHeartBurst
 import com.piku.client.ui.common.LoaderDots
-import com.piku.client.ui.common.RankBadge
-import com.piku.client.ui.common.feedThumbUrl
+import com.piku.client.ui.common.RankMedal
+import com.piku.client.ui.common.heroFeedThumbUrl
 import com.piku.client.ui.common.WorkCard
 import com.piku.client.ui.home.BackToTopFab
 import com.piku.client.ui.home.CategoryEntry
@@ -97,6 +109,7 @@ import com.piku.client.ui.navigation.sharedWorkBounds
 import com.piku.client.ui.navigation.workSharedKey
 import com.piku.client.ui.theme.PikuColors
 import com.piku.client.ui.theme.PikuLayout
+import com.piku.client.ui.theme.RankGoldBorder
 import com.piku.client.ui.theme.WorkCardBgDark
 import com.piku.client.ui.theme.WorkCardPlaceholderDark
 
@@ -149,6 +162,11 @@ internal fun SourceFeedContent(
         derivedStateOf {
             gridState.firstVisibleItemIndex == 0 && gridState.firstVisibleItemScrollOffset == 0
         }
+    }
+    // 换流/换维度/换源后内容是整批替换的：滚动位置必须归零，否则停在旧列表的 offset 上，
+    // 新榜单从中间开始看（首屏加载中时 scrollToItem 也无副作用）
+    LaunchedEffect(state.source, state.feedId, state.facetChoices) {
+        if (!atTop) gridState.scrollToItem(0)
     }
     val scrollProgress = remember(gridState) { { gridState.feedScrollProgress() } }
 
@@ -408,8 +426,8 @@ private fun SourceGrid(
     onToggleFavorite: (Work) -> Unit,
 ) {
     val isTablet = LocalConfiguration.current.screenWidthDp >= 600
-    // 榜单流：前三名给 hero 位；第 4 名起在卡片上挂名次角标
-    val heroCount = if (state.ranked) minOf(RANK_HERO_COUNT, state.items.size) else 0
+    // 榜单流：rank 1 给通栏聚光卡；第 2 名起在卡片上挂名次（前三奖章、4 名起小片）
+    val heroCount = if (state.ranked) minOf(HERO_COUNT, state.items.size) else 0
     val gridItems = if (heroCount > 0) state.items.drop(heroCount) else state.items
     ThumbnailPrefetchEffect(works = gridItems, gridState = gridState, itemOffset = heroCount)
     LazyVerticalStaggeredGrid(
@@ -427,7 +445,19 @@ private fun SourceGrid(
     ) {
         if (heroCount > 0) {
             item(span = StaggeredGridItemSpan.FullLine, key = "ranking-hero") {
-                RankingHero(works = state.items.take(heroCount), dark = dark, onClick = onWorkClick)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    RankingSpotlight(
+                        work = state.items.first(),
+                        dark = dark,
+                        onClick = onWorkClick,
+                        onToggleFavorite = onToggleFavorite,
+                    )
+                }
             }
         }
         itemsIndexed(gridItems, key = { _, work -> work.key.toString() }) { index, work ->
@@ -488,39 +518,130 @@ private fun SourceGrid(
 }
 
 
-/** 榜单前三的 hero 位：1 大 2 小，名次角标金银铜。点击与网格卡片同路 */
+/**
+ * 榜单 rank 1 的通栏聚光卡：整批内容里只有第一名值得这块版面。图用原作比例取景
+ * （[heroAspect] 夹好上下界，竖图也不会无限拉高），底部压暗条放标题与作者——
+ * 压暗条方案而不是脚注，是因为浅色图上白字读不清，压暗条任何图底都稳。
+ */
 @Composable
-private fun RankingHero(
-    works: List<Work>,
+private fun RankingSpotlight(
+    work: Work,
     dark: Boolean,
     onClick: (Work) -> Unit,
+    onToggleFavorite: (Work) -> Unit,
 ) {
-    Row(
+    var heartVisible by remember { mutableStateOf(false) }
+    val shape = RoundedCornerShape(PikuLayout.CardCorner)
+    val heroWidth = minOf(
+        LocalConfiguration.current.screenWidthDp.dp - PikuLayout.ScreenInset * 2,
+        HERO_MAX_WIDTH,
+    )
+    val heroHeight = (heroWidth / heroAspect(work)).coerceIn(HERO_MIN_HEIGHT, HERO_MAX_HEIGHT)
+    Column(
         modifier = Modifier
-            .fillMaxWidth()
-            .height(212.dp)
-            .padding(top = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(PikuLayout.GridGap),
+            .width(heroWidth)
+            .shadow(
+                elevation = if (dark) 0.dp else 6.dp,
+                shape = shape,
+                ambientColor = Color(0x1F000000),
+                spotColor = Color(0x33000000),
+            )
+            .clip(shape)
+            .background(if (dark) WorkCardBgDark else Color(0xE6FFFFFF))
+            // 与网格里的 2、3 名同一套名次描边：第 1 名也是这一组的成员，不该只有它没有边界
+            .border(BorderStroke(1.dp, RankGoldBorder), shape)
+            .combinedClickable(
+                onClick = { onClick(work) },
+                // 与网格卡同款：双击收藏，心形爆裂作即时反馈
+                onDoubleClick = {
+                    heartVisible = true
+                    onToggleFavorite(work)
+                },
+            ),
     ) {
-        HeroCard(
-            work = works[0],
-            rank = 1,
-            dark = dark,
-            onClick = onClick,
-            modifier = Modifier.weight(1.35f),
-        )
-        if (works.size > 1) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(heroHeight),
+        ) {
+            AsyncImage(
+                model = heroFeedThumbUrl(work.thumbnailUrl),
+                contentDescription = work.title,
+                colorFilter = PikuColors.tameWhiteFilter,
+                modifier = Modifier
+                    .sharedWorkBounds(workSharedKey(work.authorId, work.id))
+                    .fillMaxSize()
+                    .background(if (dark) WorkCardPlaceholderDark else Color(0xFFF1EFEA)),
+                contentScale = ContentScale.Crop,
+            )
+            FavoriteHeartBurst(
+                visible = heartVisible,
+                onFinished = { heartVisible = false },
+                modifier = Modifier.align(Alignment.Center),
+            )
+            RankMedal(
+                rank = 1,
+                large = true,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(10.dp),
+            )
+            if (work.imageCount > 1) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0x99000000))
+                        .padding(horizontal = 7.dp, vertical = 3.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.home_image_count, work.imageCount),
+                        color = Color.White,
+                        fontSize = 10.sp,
+                    )
+                }
+            }
+            // 底部压暗条：图上千奇百怪，标题永远要读得清。三段而不是两段——
+            // 白衬衫、白蕾丝那类图渐变到一半就没了，15sp 的白字压不住
             Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(PikuLayout.GridGap),
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color.Transparent, Color(0x73000000), Color(0xE6000000)),
+                        ),
+                    )
+                    .padding(start = 10.dp, end = 10.dp, top = 30.dp, bottom = 10.dp),
             ) {
-                for (index in 1 until works.size) {
-                    HeroCard(
-                        work = works[index],
-                        rank = index + 1,
-                        dark = dark,
-                        onClick = onClick,
-                        modifier = Modifier.weight(1f),
+                Text(
+                    text = work.title,
+                    color = Color.White,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    lineHeight = 20.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(5.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    AsyncImage(
+                        model = work.authorAvatarUrl,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(16.dp)
+                            .clip(CircleShape),
+                        contentScale = ContentScale.Crop,
+                    )
+                    Spacer(Modifier.width(5.dp))
+                    Text(
+                        text = work.authorName,
+                        color = Color.White.copy(alpha = 0.82f),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
@@ -528,67 +649,24 @@ private fun RankingHero(
     }
 }
 
-@Composable
-private fun HeroCard(
-    work: Work,
-    rank: Int,
-    dark: Boolean,
-    onClick: (Work) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val placeholder = if (dark) WorkCardPlaceholderDark else Color(0xFFF1EFEA)
-    Box(
-        modifier = modifier
-            .fillMaxHeight()
-            .clip(RoundedCornerShape(PikuLayout.CardCorner))
-            .background(if (dark) WorkCardBgDark else Color(0xE6FFFFFF))
-            .clickable { onClick(work) },
-    ) {
-        AsyncImage(
-            model = feedThumbUrl(work.thumbnailUrl),
-            contentDescription = work.title,
-            colorFilter = PikuColors.tameWhiteFilter,
-            modifier = Modifier
-                .sharedWorkBounds(workSharedKey(work.authorId, work.id))
-                .fillMaxSize()
-                .background(placeholder),
-            contentScale = ContentScale.Crop,
-        )
-        // 底部压暗条：图上千奇百怪，标题永远要读得清
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .fillMaxWidth()
-                .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xB3000000))))
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-        ) {
-            Text(
-                text = work.title,
-                color = Color.White,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = work.authorName,
-                color = Color.White.copy(alpha = 0.78f),
-                fontSize = 10.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        RankBadge(
-            rank = rank,
-            large = true,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(8.dp),
-        )
-    }
-}
+private const val HERO_COUNT = 1
 
-private const val RANK_HERO_COUNT = 3
+private val HERO_MIN_HEIGHT = 170.dp
+private val HERO_MAX_HEIGHT = 240.dp
+
+private val HERO_MAX_WIDTH = 560.dp
+
+private const val HERO_MIN_ASPECT = 1.05f
+private const val HERO_MAX_ASPECT = 1.45f
+
+private const val HERO_DEFAULT_ASPECT = 1.3f
+
+private fun heroAspect(work: Work): Float =
+    if (work.thumbWidth > 0 && work.thumbHeight > 0) {
+        (work.thumbWidth.toFloat() / work.thumbHeight).coerceIn(HERO_MIN_ASPECT, HERO_MAX_ASPECT)
+    } else {
+        HERO_DEFAULT_ASPECT
+    }
 
 /** 刷新提示条：与 poipiku 壳同款，挂在内容区顶部；独立成函数避免外层 Column 的作用域劫持 AnimatedVisibility */
 @Composable
@@ -638,7 +716,6 @@ private fun CenteredMessage(
     }
 }
 
-/** 维度行：只剩周期这类片选一击直达；下拉筛选已挂到 tab 行最右 */
 @Composable
 private fun FacetRow(
     groups: List<SourceFacetGroup>,
@@ -650,8 +727,13 @@ private fun FacetRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = PikuLayout.ScreenInset, end = PikuLayout.ScreenInset, top = 6.dp, bottom = 2.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(
+                start = PikuLayout.ScreenInset,
+                end = PikuLayout.ScreenInset,
+                top = 4.dp,
+                bottom = 2.dp,
+            ),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         chips.forEach { group ->
@@ -666,18 +748,47 @@ private fun FacetRow(
     }
 }
 
-/** 维度片选：药丸样式，与 tab 的下划线样式区分层级 */
 @Composable
 private fun FacetChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    Text(
-        text = label,
-        color = if (selected) PikuColors.accent else PikuColors.textFaint,
-        fontSize = 12.sp,
-        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-        modifier = Modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(if (selected) PikuColors.accent.copy(alpha = 0.1f) else Color.Transparent)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 5.dp),
+    val textColor by animateColorAsState(
+        targetValue = if (selected) PikuColors.accent else PikuColors.textSecondary,
+        animationSpec = tween(durationMillis = 200),
+        label = "facetChipColor",
     )
+    var labelWidthPx by remember { mutableIntStateOf(0) }
+    val indicatorWidth by animateIntAsState(
+        targetValue = if (selected) labelWidthPx else 0,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMedium,
+        ),
+        label = "facetIndicatorWidth",
+    )
+    val density = LocalDensity.current
+    Column(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .clickable(onClick = onClick)
+            .padding(vertical = 2.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = label,
+            color = textColor,
+            fontSize = 12.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            maxLines = 1,
+            onTextLayout = { labelWidthPx = it.size.width },
+        )
+        Spacer(Modifier.height(1.dp))
+        Box(
+            modifier = Modifier
+                .height(FacetIndicatorHeight)
+                .width(with(density) { indicatorWidth.toDp() })
+                .clip(RoundedCornerShape(FacetIndicatorHeight / 2))
+                .background(PikuColors.accent),
+        )
+    }
 }
+
+private val FacetIndicatorHeight = 2.dp

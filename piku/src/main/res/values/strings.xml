@@ -754,6 +754,8 @@
     <string name="home_source_select_title">选择内容源</string>
     <string name="home_source_pixiv">Pixiv</string>
     <string name="pixiv_tab_ranking">榜单</string>
+    <!-- 名次角标的读屏文案：角标本身只是个数字，不拼语义的话屏幕阅读器只念得出数字 -->
+    <string name="ranking_rank_position">第%1$d名</string>
     <string name="pixiv_tab_recommend">推荐</string>
     <string name="pixiv_tab_follow_new">关注</string>
     <string name="pixiv_follow_scope_public">公开</string>

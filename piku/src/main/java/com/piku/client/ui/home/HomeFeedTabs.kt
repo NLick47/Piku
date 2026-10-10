@@ -228,8 +228,7 @@ internal fun FeedTabItem(
     }
 }
 
-/** 与正文笔画同重量级：再粗就比 14sp 的字还重，比旧版（2dp × 18dp）更轻 */
-private val TabIndicatorHeight = 1.5.dp
+private val TabIndicatorHeight = 2.dp
 
 internal const val TAB_LUMA_THRESHOLD = 0.5f
 

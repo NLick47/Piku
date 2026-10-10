@@ -744,6 +744,7 @@
     <string name="home_source_select_title">コンテンツソースを選択</string>
     <string name="home_source_pixiv">Pixiv</string>
     <string name="pixiv_tab_ranking">人気</string>
+    <string name="ranking_rank_position">%1$d位</string>
     <string name="pixiv_tab_recommend">おすすめ</string>
     <string name="pixiv_tab_follow_new">フォロー</string>
     <string name="pixiv_follow_scope_public">公開</string>

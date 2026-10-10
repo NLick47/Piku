@@ -43,6 +43,19 @@ val StarDark = Color(0xFFFFD166)
 val StarTintLight = Color(0x2AE0A83C)
 val StarTintDark = Color(0x33FFD166)
 
+val RankGold = StarLight
+val RankSilver = Color(0xFFB7BDC4)
+val RankBronze = Color(0xFFB98055)
+val RankGoldInk = Color(0xFF3A2A00)
+val RankSilverInk = Color(0xFF2B3238)
+val RankBronzeInk = Color(0xFF3A2100)
+
+val RankRingOutline = Color(0x1F000000)
+
+val RankGoldBorder = Color(0x9EE0A83C)
+val RankSilverBorder = Color(0x9EB7BDC4)
+val RankBronzeBorder = Color(0x9EB98055)
+
 val FollowLight = Color(0xFF4CAF50)
 val FollowDark = Color(0xFF81C784)
 val FollowTintLight = Color(0x2A4CAF50)

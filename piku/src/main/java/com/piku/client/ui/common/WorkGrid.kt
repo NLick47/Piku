@@ -50,6 +50,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -60,6 +62,16 @@ import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkSource
 import com.piku.client.ui.theme.PikuColors
 import com.piku.client.ui.theme.PikuLayout
+import com.piku.client.ui.theme.RankBronze
+import com.piku.client.ui.theme.RankBronzeInk
+import com.piku.client.ui.theme.RankBronzeBorder
+import com.piku.client.ui.theme.RankGold
+import com.piku.client.ui.theme.RankGoldBorder
+import com.piku.client.ui.theme.RankGoldInk
+import com.piku.client.ui.theme.RankRingOutline
+import com.piku.client.ui.theme.RankSilver
+import com.piku.client.ui.theme.RankSilverBorder
+import com.piku.client.ui.theme.RankSilverInk
 import com.piku.client.ui.theme.SoftBorderLight
 import com.piku.client.ui.theme.WorkCardBgDark
 import com.piku.client.ui.theme.WorkCardBorderDark
@@ -70,6 +82,18 @@ import kotlinx.coroutines.delay
 
 internal fun feedThumbUrl(url: String): String =
     if ("_640.jpg" in url) url.replace("_640.jpg", "_360.jpg") else url
+
+/**
+ * 通栏大卡位（榜单 rank 1）的图档：榜单接口给的是 `c/480x960` 裁切档，铺满通栏会糊一档，
+ * 换成同文件的 master1200——详情页首图同款，共享转场直接命中缓存，且通栏只有 rank 1
+ * 一张卡承担大图开销。
+ */
+internal fun heroFeedThumbUrl(url: String): String =
+    if (url.startsWith("https://i.pximg.net/c/") && url.contains("/img-master/")) {
+        "https://i.pximg.net/" + url.removePrefix("https://i.pximg.net/c/").substringAfter('/')
+    } else {
+        url
+    }
 
 /**
  * 卡片上的阅读进度条。[fraction] 为 0~1 的完成比例，[label] 形如 "42%" 或 "5/12"。
@@ -96,20 +120,11 @@ fun WorkCard(
     rank: Int? = null,
 ) {
     val shape = RoundedCornerShape(PikuLayout.CardCorner)
+    // 前三名压在名次色描边上：奖章只说得出"这张是第几名"，描边才把前三名整组从瀑布流里拎出来
+    val rankBorder = rank?.let { rankAccent(it) }
     var heartVisible by remember { mutableStateOf(false) }
-    val heartScale = remember { Animatable(0f) }
     val authorInteraction = remember { MutableInteractionSource() }
     val authorPressed by authorInteraction.collectIsPressedAsState()
-
-    LaunchedEffect(heartVisible) {
-        if (heartVisible) {
-            heartScale.snapTo(0f)
-            heartScale.animateTo(1.3f, tween(120, easing = LinearOutSlowInEasing))
-            heartScale.animateTo(1f, tween(80, easing = LinearOutSlowInEasing))
-            delay(180)
-            heartVisible = false
-        }
-    }
 
     Column(
         modifier = Modifier
@@ -123,8 +138,8 @@ fun WorkCard(
             .background(if (dark) WorkCardBgDark else Color(0xE6FFFFFF))
             .border(
                 BorderStroke(
-                    0.5.dp,
-                    if (dark) WorkCardBorderDark else SoftBorderLight,
+                    if (rankBorder != null) 1.dp else 0.5.dp,
+                    rankBorder ?: if (dark) WorkCardBorderDark else SoftBorderLight,
                 ),
                 shape,
             )
@@ -133,7 +148,11 @@ fun WorkCard(
                 // 参数稳定时 Compose 可跳过未变化卡片的重组
                 onClick = { onClick(work) },
                 onLongClick = onLongClick?.let { handler -> { handler(work) } },
-                onDoubleClick = { onToggleFavorite(work) },
+                // 双击收藏：心形爆裂给即时反馈，否则整张卡看不出刚才那下有没有生效
+                onDoubleClick = {
+                    heartVisible = true
+                    onToggleFavorite(work)
+                },
             ),
     ) {
         Box(Modifier.fillMaxWidth()) {
@@ -167,15 +186,25 @@ fun WorkCard(
                     contentScale = ContentScale.Crop,
                 )
             }
-            // 动图角标：网格不播放动画（几十张同时逐帧解码会拖垮滚动），
-            // 只标出这是动图，点进详情页才播。
-            if (work.isPrivate || work.ai || isAnimatedImage(work.thumbnailUrl)) {
+            // 名次和内容角标合成左上角一列：分挂两个角的话，一张卡就有两个"先看这里"。
+            // 名次排最前——它是榜单页的主语，AI/私密/动图只是限定条件。
+            // （动图角标：网格不播放动画，几十张同时逐帧解码会拖垮滚动，只标出这是动图）
+            if (rank != null || work.isPrivate || work.ai || isAnimatedImage(work.thumbnailUrl)) {
                 Row(
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .padding(8.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    if (rank != null) {
+                        // 前三名是奖章（金/银/铜），4 名起换半透明小片：每张卡都顶白底圆点太吵
+                        if (rank <= RANK_MEDAL_MAX) {
+                            RankMedal(rank = rank, large = false)
+                        } else {
+                            RankChip(rank = rank)
+                        }
+                    }
                     if (work.isPrivate) {
                         WorkPrivateBadge()
                     }
@@ -198,15 +227,6 @@ fun WorkCard(
                     }
                 }
             }
-            if (rank != null) {
-                RankBadge(
-                    rank = rank,
-                    large = false,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(8.dp),
-                )
-            }
             if (work.imageCount > 1) {
                 Box(
                     modifier = Modifier
@@ -223,20 +243,11 @@ fun WorkCard(
                     )
                 }
             }
-            if (heartVisible) {
-                Icon(
-                    imageVector = Icons.Filled.Favorite,
-                    contentDescription = null,
-                    tint = PikuColors.accent,
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .size(40.dp)
-                        .graphicsLayer {
-                            scaleX = heartScale.value
-                            scaleY = heartScale.value
-                        },
-                )
-            }
+            FavoriteHeartBurst(
+                visible = heartVisible,
+                onFinished = { heartVisible = false },
+                modifier = Modifier.align(Alignment.Center),
+            )
         }
         Column(
             Modifier
@@ -420,31 +431,103 @@ fun LoaderDots(dark: Boolean) {
     }
 }
 
-/** 名次角标：前三金银铜，其余白底深字。榜单流的 hero 与网格卡片共用 */
+/** 双击收藏的心形爆裂：[WorkCard]、[ProportionalWorkCard] 与榜单聚光卡共用 */
 @Composable
-internal fun RankBadge(
+internal fun FavoriteHeartBurst(
+    visible: Boolean,
+    onFinished: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val heartScale = remember { Animatable(0f) }
+    LaunchedEffect(visible) {
+        if (visible) {
+            heartScale.snapTo(0f)
+            heartScale.animateTo(1.3f, tween(120, easing = LinearOutSlowInEasing))
+            heartScale.animateTo(1f, tween(80, easing = LinearOutSlowInEasing))
+            delay(180)
+            onFinished()
+        }
+    }
+    if (!visible) return
+    Icon(
+        imageVector = Icons.Filled.Favorite,
+        contentDescription = null,
+        tint = PikuColors.accent,
+        modifier = modifier
+            .size(40.dp)
+            .graphicsLayer {
+                scaleX = heartScale.value
+                scaleY = heartScale.value
+            },
+    )
+}
+
+/** 前三名名次奖章：金银铜圆形。榜单聚光卡（[large]）与网格卡的 2、3 名共用 */
+@Composable
+internal fun RankMedal(
     rank: Int,
     large: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val (bg, fg) = when (rank) {
-        1 -> Color(0xFFE6B422) to Color(0xFF3A2A00)
-        2 -> Color(0xFFC6CBD1) to Color(0xFF2B3238)
-        3 -> Color(0xFFD08A54) to Color(0xFF3A2100)
+        1 -> RankGold to RankGoldInk
+        2 -> RankSilver to RankSilverInk
+        3 -> RankBronze to RankBronzeInk
         else -> Color(0xE6FFFFFF) to Color(0xFF3A3632)
     }
+    val size = if (large) 32.dp else 22.dp
+    val rankLabel = rememberRankLabel(rank)
     Box(
         modifier = modifier
-            .size(if (large) 26.dp else 20.dp)
+            .size(size)
             .clip(CircleShape)
-            .background(bg),
+            .background(bg)
+            // 图底千变万化：白环当高光把奖章从图里拎起来，外面再兜一圈极淡暗描兜底
+            .border(1.5.dp, Color.White, CircleShape)
+            .border(0.5.dp, RankRingOutline, CircleShape)
+            .semantics { contentDescription = rankLabel },
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = rank.toString(),
             color = fg,
-            fontSize = if (large) 13.sp else 11.sp,
-            fontWeight = FontWeight.Bold,
+            fontSize = if (large) 15.sp else 12.sp,
+            fontWeight = FontWeight.Medium,
         )
     }
+}
+
+/** 前三名的名次色（卡片描边用）；4 名起没有 */
+internal fun rankAccent(rank: Int): Color? = when (rank) {
+    1 -> RankGoldBorder
+    2 -> RankSilverBorder
+    3 -> RankBronzeBorder
+    else -> null
+}
+
+/** 4 名起的名次小片：与 GIF/AI 同款的半透明圆角片，不抢画面 */
+@Composable
+internal fun RankChip(rank: Int, modifier: Modifier = Modifier) {
+    val rankLabel = rememberRankLabel(rank)
+    Text(
+        text = rank.toString(),
+        color = Color.White,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Medium,
+        modifier = modifier
+            .clip(RoundedCornerShape(7.dp))
+            .background(Color(0x99000000))
+            .padding(horizontal = 7.dp, vertical = 3.dp)
+            .semantics { contentDescription = rankLabel },
+    )
+}
+
+/** 前三名才用奖章；4 名起换小片，避免满屏同款圆点 */
+internal const val RANK_MEDAL_MAX = 3
+
+/** 名次的读屏文案（"第 4 名"）：角标本身只是个数字，不拼语义的话屏幕阅读器只念得出数字 */
+@Composable
+private fun rememberRankLabel(rank: Int): String {
+    val pattern = stringResource(R.string.ranking_rank_position)
+    return remember(pattern, rank) { String.format(pattern, rank) }
 }

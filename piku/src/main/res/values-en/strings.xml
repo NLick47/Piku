@@ -744,6 +744,7 @@
     <string name="home_source_select_title">Choose content source</string>
     <string name="home_source_pixiv">Pixiv</string>
     <string name="pixiv_tab_ranking">Rank</string>
+    <string name="ranking_rank_position">No. %1$d</string>
     <string name="pixiv_tab_recommend">For You</string>
     <string name="pixiv_tab_follow_new">Follow</string>
     <string name="pixiv_follow_scope_public">Public</string>
