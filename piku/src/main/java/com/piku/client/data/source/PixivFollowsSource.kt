@@ -5,10 +5,8 @@ import com.piku.client.data.local.QuietFollowStore
 import com.piku.client.data.remote.pixiv.PixivAppConfig
 import com.piku.client.data.repository.PixivRepository
 import com.piku.client.domain.model.AppError
-import com.piku.client.domain.model.FollowUser
 import com.piku.client.domain.model.FollowUserPage
 import com.piku.client.domain.model.WorkSource
-import com.piku.client.domain.source.SourceAuthorOpen
 import com.piku.client.domain.source.SourceFollows
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.StateFlow
@@ -63,7 +61,4 @@ class PixivFollowsSource @Inject constructor(
 
     override suspend fun setFollowed(userId: Long, follow: Boolean): Result<Boolean> =
         repository.followUser(userId, follow).map { follow }
-
-    // 画师主页由主壳承载，与检索/详情页一致
-    override fun userPage(user: FollowUser): SourceAuthorOpen = SourceAuthorOpen.NativeProfile
 }

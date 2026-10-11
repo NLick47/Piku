@@ -1,14 +1,15 @@
 package com.piku.client.ui.follow
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.piku.client.R
 import com.piku.client.data.repository.reloadOnSessionChange
-import com.piku.client.data.source.PixivFollowsSource
-import com.piku.client.data.source.PoipikuFollowsSource
 import com.piku.client.domain.model.AppError
 import com.piku.client.domain.model.FollowUser
+import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.source.SourceFollows
+import com.piku.client.domain.source.SourceFollowsRegistry
 import com.piku.client.ui.common.FeedbackChannel
 import com.piku.client.ui.common.toFeedErrorRes
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -41,20 +42,28 @@ data class FollowUsersUiState(
 
 /**
  * 我的关注页的状态机，与源无关：取页与关注/取关都走 [SourceFollows] 能力。
- * 具体源由各源的抽屉插件挑下面的 Hilt 子类绑定，壳子 [FollowUsersScreen] 只认这个基类。
+ * 源从路由参数解出，能力查 [SourceFollowsRegistry]，壳子 [FollowUsersScreen] 与源零耦合。
  *
  * 双段（公开/悄悄）各自独立分页；切段时有快照就即时回显，没有就现场拉第一页。
  */
-abstract class FollowUsersViewModel(
-    private val follows: SourceFollows,
+@HiltViewModel
+class FollowUsersViewModel @Inject constructor(
+    savedStateHandle: SavedStateHandle,
+    followsRegistry: SourceFollowsRegistry,
 ) : ViewModel() {
+
+    private val follows: SourceFollows = checkNotNull(
+        savedStateHandle.get<String>("source")
+            ?.let(WorkSource::valueOf)
+            ?.let(followsRegistry::byId),
+    ) { "该源没有登记关注能力" }
 
     private val _uiState = MutableStateFlow(
         FollowUsersUiState(quietSupported = follows.quietSupported),
     )
     val uiState: StateFlow<FollowUsersUiState> = _uiState.asStateFlow()
 
-    /** 一次性反馈（本页 VM 挂在 Home 作用域，关闭页面不销毁，见 [FeedbackChannel]） */
+    /** 一次性反馈（见 [FeedbackChannel]） */
     val feedback = FeedbackChannel()
 
     /** 当前段已加载到的页码 */
@@ -259,15 +268,3 @@ abstract class FollowUsersViewModel(
         }
     }
 }
-
-/** poipiku 的绑定：列表走关注设置页解析，切换走 UpdateFollowUserF */
-@HiltViewModel
-class PoipikuFollowUsersViewModel @Inject constructor(
-    follows: PoipikuFollowsSource,
-) : FollowUsersViewModel(follows)
-
-/** pixiv 的绑定：列表走 v1/user/following（公开/悄悄双段），切换走 v1/user/follow/add|delete */
-@HiltViewModel
-class PixivFollowUsersViewModel @Inject constructor(
-    follows: PixivFollowsSource,
-) : FollowUsersViewModel(follows)

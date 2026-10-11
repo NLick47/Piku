@@ -74,6 +74,12 @@ interface DrawerScope {
     /** 外壳导航：打开用户主页 */
     fun openAuthorProfile(source: WorkSource, uid: Long, name: String)
 
+    /** 外壳导航：打开本源的关注列表（库页走路由，返回首页时抽屉重开） */
+    fun openFollowUsers(source: WorkSource)
+
+    /** 外壳导航：打开本源的屏蔽列表（poipiku 专属；与关注列表同走路由） */
+    fun openBlockUsers(source: WorkSource)
+
     /** 外壳导航：出站打开网页——应用内没有对应页时的去向（如 pixiv 用户主页） */
     fun openExternal(url: String)
 

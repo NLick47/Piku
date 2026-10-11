@@ -39,6 +39,8 @@ import com.piku.client.ui.author.AuthorProfileScreen
 import com.piku.client.ui.collection.CollectionScreen
 import com.piku.client.ui.detail.DetailScreen
 import com.piku.client.ui.detail.rememberWorkDetailPrefetch
+import com.piku.client.ui.follow.BlockUsersScreen
+import com.piku.client.ui.follow.FollowUsersScreen
 import com.piku.client.ui.follow.UserWorksScreen
 import com.piku.client.ui.history.HistoryScreen
 import com.piku.client.ui.home.HomeScreen
@@ -69,6 +71,8 @@ object Routes {
     const val SOURCE_DETAIL =
         "source_detail/{source}/{kind}/{authorId}/{workId}?thumb={thumb}&title={title}&authorName={authorName}&avatar={avatar}&r18={r18}&len={len}"
     const val HISTORY = "history"
+    const val FOLLOW_USERS = "follow_users/{source}"
+    const val BLOCK_USERS = "block_users"
     const val TAGS = "tags?source={source}"
     const val USER_WORKS = "user_works/{userId}?userName={userName}"
     const val MY_POSTS = "my_posts/{userId}?userName={userName}"
@@ -81,6 +85,8 @@ object Routes {
     fun home() = "home"
 
     fun tags(source: WorkSource? = null) = "tags?source=${source?.name.orEmpty()}"
+
+    fun followUsers(source: WorkSource) = "follow_users/$source"
 
     /**
      * 统一搜索页：keyword 为空串表示待机态（搜索历史 + 热门标签）；
@@ -375,6 +381,16 @@ fun AppNavHost(
                         backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = true
                         openAuthor(source, uid, name)
                     },
+                    onFollowUsersOpen = { source ->
+                        // 关注列表也是库页路由：返回首页时抽屉重开，与历史/收藏同语义
+                        backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = true
+                        navController.navigate(Routes.followUsers(source))
+                    },
+                    onBlockUsersOpen = { _ ->
+                        // 屏蔽列表目前 poipiku 专属，路由不带 source
+                        backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = true
+                        navController.navigate(Routes.BLOCK_USERS)
+                    },
                 )
             }
         }
@@ -534,6 +550,40 @@ fun AppNavHost(
                         },
                     )
                 }
+            }
+        }
+        composable(
+            route = Routes.FOLLOW_USERS,
+            arguments = listOf(navArgument("source") { type = NavType.StringType }),
+        ) { entry ->
+            ProvideNavSharedScope(sharedScope, this) {
+                val source = entry.arguments?.getString("source")
+                    ?.let { name -> WorkSource.entries.firstOrNull { it.name == name } }
+                FollowUsersScreen(
+                    viewModel = hiltViewModel(),
+                    onBack = safePopBack,
+                    onLoginClick = {
+                        val route = source?.let(sourceOpen::loginRoute)
+                        if (route != null) navController.navigate(route) { launchSingleTop = true }
+                    },
+                    onUserClick = { user ->
+                        source?.let { openAuthor(it, user.userId, user.name) }
+                    },
+                )
+            }
+        }
+        composable(Routes.BLOCK_USERS) {
+            ProvideNavSharedScope(sharedScope, this) {
+                BlockUsersScreen(
+                    onBack = safePopBack,
+                    onLoginClick = {
+                        val route = sourceOpen.loginRoute(WorkSource.POIPIKU)
+                        if (route != null) navController.navigate(route) { launchSingleTop = true }
+                    },
+                    onUserClick = { user ->
+                        openAuthor(WorkSource.POIPIKU, user.userId, user.name)
+                    },
+                )
             }
         }
         composable(

@@ -5,10 +5,8 @@ import com.piku.client.data.repository.DetailRepository
 import com.piku.client.data.repository.FeedRepository
 import com.piku.client.data.repository.FollowResult
 import com.piku.client.domain.model.AppError
-import com.piku.client.domain.model.FollowUser
 import com.piku.client.domain.model.FollowUserPage
 import com.piku.client.domain.model.WorkSource
-import com.piku.client.domain.source.SourceAuthorOpen
 import com.piku.client.domain.source.SourceFollows
 import kotlinx.coroutines.flow.StateFlow
 import javax.inject.Inject
@@ -43,6 +41,4 @@ class PoipikuFollowsSource @Inject constructor(
             is FollowResult.NotLoggedIn, is FollowResult.Failure -> Result.failure(AppError.Unknown)
         }
     }
-
-    override fun userPage(user: FollowUser): SourceAuthorOpen = SourceAuthorOpen.NativeDetail
 }

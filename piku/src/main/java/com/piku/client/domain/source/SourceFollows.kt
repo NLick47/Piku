@@ -1,6 +1,5 @@
 package com.piku.client.domain.source
 
-import com.piku.client.domain.model.FollowUser
 import com.piku.client.domain.model.FollowUserPage
 import com.piku.client.domain.model.WorkSource
 import kotlinx.coroutines.flow.StateFlow
@@ -34,7 +33,4 @@ interface SourceFollows {
 
     /** 关注/取关一个用户；成功返回**动作完成后**的实际关注态 */
     suspend fun setFollowed(userId: Long, follow: Boolean): Result<Boolean>
-
-    /** 点关注的用户行去哪：应用内主页或出站网页，与 [SourceSearch.userPage] 同款约定 */
-    fun userPage(user: FollowUser): SourceAuthorOpen
 }

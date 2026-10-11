@@ -4,9 +4,11 @@ import com.piku.client.data.auth.PixivAuthRepository
 import com.piku.client.data.auth.PoipikuAuth
 import com.piku.client.data.repository.FavoriteRepository
 import com.piku.client.data.source.PixivContentSource
+import com.piku.client.data.source.PixivFollowsSource
 import com.piku.client.data.source.PixivSearchSource
 import com.piku.client.data.source.PoipikuContentBackup
 import com.piku.client.data.source.PoipikuContentSource
+import com.piku.client.data.source.PoipikuFollowsSource
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.source.ContentSource
 import com.piku.client.domain.source.PixivLinkParser
@@ -14,6 +16,7 @@ import com.piku.client.domain.source.PoipikuLinkParser
 import com.piku.client.domain.source.ShellFavorites
 import com.piku.client.domain.source.SourceAuth
 import com.piku.client.domain.source.SourceContentBackup
+import com.piku.client.domain.source.SourceFollows
 import com.piku.client.domain.source.SourceLinkParser
 import com.piku.client.domain.source.SourceLinkResolver
 import com.piku.client.domain.source.SourceSearch
@@ -54,6 +57,15 @@ object SourceModule {
     @Provides
     @IntoSet
     fun pixivAuth(impl: PixivAuthRepository): SourceAuth = impl
+
+    /** 关注能力按源登记：关注列表路由按源问这张表，没登记的源不出「我的关注」入口 */
+    @Provides
+    @IntoSet
+    fun poipikuFollows(impl: PoipikuFollowsSource): SourceFollows = impl
+
+    @Provides
+    @IntoSet
+    fun pixivFollows(impl: PixivFollowsSource): SourceFollows = impl
 
     /** 搜索插件按源登记：检索页问这张表，没登记的源走外壳默认搜索 */
     @Provides

@@ -75,6 +75,8 @@ fun HomeScreen(
     onSearchClick: () -> Unit,
     onAuthorClick: (Work) -> Unit,
     onProfileOpen: (WorkSource, Long, String) -> Unit,
+    onFollowUsersOpen: (WorkSource) -> Unit,
+    onBlockUsersOpen: (WorkSource) -> Unit,
 ) {
     val viewModel: HomeViewModel = hiltViewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -189,6 +191,10 @@ fun HomeScreen(
 
         override fun openAuthorProfile(source: WorkSource, uid: Long, name: String) =
             onProfileOpen(source, uid, name)
+
+        override fun openFollowUsers(source: WorkSource) = onFollowUsersOpen(source)
+
+        override fun openBlockUsers(source: WorkSource) = onBlockUsersOpen(source)
 
         // 应用内没有对应页时的去向：交给系统浏览器
         override fun openExternal(url: String) {

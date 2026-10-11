@@ -13,16 +13,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.piku.client.R
 import com.piku.client.data.repository.ProfileRepository
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkSource
 import com.piku.client.domain.model.UserProfile
-import com.piku.client.ui.follow.BlockUsersScreen
-import com.piku.client.ui.follow.FollowUsersScreen
-import com.piku.client.ui.follow.PoipikuFollowUsersViewModel
 import com.piku.client.ui.profile.ProfileEditSheet
 import com.piku.client.ui.publish.PublishScreen
 import com.piku.client.ui.theme.LocalDarkTheme
@@ -92,33 +88,12 @@ class PoipikuDrawerPlugin @Inject constructor(
                 DrawerEntry(
                     icon = Icons.Outlined.Group,
                     label = stringResource(R.string.menu_follow_users),
-                    onClick = {
-                        scope.openOverlay { onDismiss, _ ->
-                            FullscreenDrawerOverlay(onDismiss = onDismiss) {
-                                FollowUsersScreen(
-                                    viewModel = hiltViewModel<PoipikuFollowUsersViewModel>(),
-                                    onBack = onDismiss,
-                                    onLoginClick = scope::openLogin,
-                                    onUserClick = { user -> scope.openAuthorProfile(source, user.userId, user.name) },
-                                )
-                            }
-                        }
-                    },
+                    onClick = { scope.openFollowUsers(source) },
                 ),
                 DrawerEntry(
                     icon = Icons.Outlined.Block,
                     label = stringResource(R.string.menu_block_users),
-                    onClick = {
-                        scope.openOverlay { onDismiss, _ ->
-                            FullscreenDrawerOverlay(onDismiss = onDismiss) {
-                                BlockUsersScreen(
-                                    onBack = onDismiss,
-                                    onLoginClick = scope::openLogin,
-                                    onUserClick = { user -> scope.openAuthorProfile(source, user.userId, user.name) },
-                                )
-                            }
-                        }
-                    },
+                    onClick = { scope.openBlockUsers(source) },
                 ),
             )
         } else {

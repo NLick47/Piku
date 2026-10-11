@@ -1,11 +1,12 @@
 package com.piku.client.ui.follow
 
+import androidx.lifecycle.SavedStateHandle
 import com.piku.client.domain.model.AppError
 import com.piku.client.domain.model.FollowUser
 import com.piku.client.domain.model.FollowUserPage
 import com.piku.client.domain.model.WorkSource
-import com.piku.client.domain.source.SourceAuthorOpen
 import com.piku.client.domain.source.SourceFollows
+import com.piku.client.domain.source.SourceFollowsRegistry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -62,8 +63,6 @@ class FollowUsersViewModelTest {
             return setFollowResults.getValue(userId)
         }
 
-        override fun userPage(user: FollowUser): SourceAuthorOpen = SourceAuthorOpen.NativeDetail
-
         fun bumpSession() {
             _sessionVersion.value += 1
         }
@@ -75,7 +74,10 @@ class FollowUsersViewModelTest {
         FollowUserPage(users = ids.map(::user), total = total)
 
     private fun build(follows: FakeFollows): FollowUsersViewModel {
-        val vm = object : FollowUsersViewModel(follows) {}
+        val vm = FollowUsersViewModel(
+            savedStateHandle = SavedStateHandle(mapOf("source" to WorkSource.POIPIKU.name)),
+            followsRegistry = SourceFollowsRegistry(setOf(follows)),
+        )
         dispatcher.scheduler.advanceUntilIdle()
         return vm
     }
