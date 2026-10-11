@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Piku 漫画阅读器 · 交互原型</title>
+<style>
+:root{
+  --bg:#F5F3F0; --card:#fff; --border:#E8E4DE; --fg:#2C2C2C; --fg2:#A09A92;
+  --accent:#7D746A; --screen:#141312; --glass:rgba(27,25,23,.86);
+  --ink:#D6D0C4; --trackrgba:rgba(255,255,255,.25);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+  font:14px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+  display:flex;justify-content:center;padding:32px 20px 56px}
+.wrap{display:flex;gap:32px;align-items:flex-start;flex-wrap:wrap;justify-content:center}
+.side{width:280px;flex:0 0 auto}
+.side h1{font-size:15px;font-weight:500;margin:0 0 4px}
+.side p{font-size:13px;color:var(--fg2);margin:0 0 20px}
+.side h2{font-size:13px;font-weight:500;margin:20px 0 8px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:13px;
+  background:var(--card);border:0.5px solid var(--border);border-radius:12px;padding:12px 14px}
+.kv b{font-weight:400;color:var(--fg2)}
+.hint{font-size:13px;color:var(--fg2);margin:0;padding-left:18px}
+.hint li{margin-bottom:6px}
+.hint code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;
+  background:#EDEAE4;border-radius:4px;padding:1px 5px;color:#5F584F}
+.qbtns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.qbtn{height:32px;border:0.5px solid var(--border);background:var(--card);border-radius:8px;
+  font-size:12px;color:var(--fg);cursor:pointer;font-family:inherit}
+.qbtn:hover{border-color:var(--accent)}
+.phone{width:340px;height:680px;position:relative;border-radius:30px;overflow:hidden;
+  background:var(--screen);flex:0 0 auto;touch-action:none;user-select:none}
+.track{position:absolute;inset:0}
+.track.paged{display:flex;height:100%;will-change:transform}
+.track.paged.rtl{flex-direction:row-reverse}
+.track.anim{transition:transform .23s cubic-bezier(.22,.61,.36,1)}
+.track.scroll{overflow-y:auto;overflow-x:hidden;display:block;scroll-behavior:auto}
+.page{flex:0 0 100%;height:100%;display:flex;align-items:center;justify-content:center;
+  position:relative;overflow:hidden}
+.track.scroll .page{height:auto;overflow:visible;margin-bottom:var(--gap,0)}
+.track.scroll .paper{width:100%;max-height:none}
+.paper{position:relative;background:#fff;aspect-ratio:var(--ar);flex:0 0 auto;overflow:hidden}
+.wide .page{overflow-y:auto}
+.panel{position:absolute;background:#FBF9F5;border:1px solid #D8D2C6;border-radius:3px}
+.panel i{position:absolute;right:10%;top:14%;width:36%;height:24%;background:#EDE9DF;
+  border-radius:50% 50% 46% 46%}
+.panel i::after{content:"";position:absolute;left:-14%;bottom:-42%;width:128%;height:52%;
+  background:#E4DFD3;border-radius:40% 40% 6px 6px}
+.pno{position:absolute;right:8px;bottom:6px;font-size:11px;color:#B9B3A7}
+.zoomwrap{position:absolute;inset:0;transform-origin:0 0;will-change:transform}
+.dim{position:absolute;inset:0;background:#000;pointer-events:none;opacity:0}
+.bar{position:absolute;left:12px;right:12px;border-radius:12px;
+  background:rgba(20,19,18,.78);backdrop-filter:blur(12px);
+  border:0.5px solid rgba(255,255,255,.08);transition:opacity .18s}
+.topbar{top:10px;height:38px;display:flex;align-items:center;gap:6px;padding:0 8px}
+.bottombar{bottom:12px;padding:9px 12px 10px;display:flex;flex-direction:column;gap:7px}
+.bar.hide{opacity:0;pointer-events:none}
+.iconbtn{width:30px;height:30px;border:0;background:transparent;color:#fff;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;flex:0 0 auto}
+.iconbtn svg{display:block}
+.title{color:#fff;font-size:13px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pagenum{color:rgba(255,255,255,.72);font-size:12px;flex:0 0 auto;min-width:46px;
+  text-align:right;font-variant-numeric:tabular-nums}
+.row{display:flex;align-items:center;gap:8px}
+input[type=range]{-webkit-appearance:none;appearance:none;height:20px;background:transparent;
+  flex:1;margin:0;cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:2px;
+  background:rgba(255,255,255,.22)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;
+  border-radius:50%;background:#fff;margin-top:-5px}
+.txtbtn{height:24px;padding:0 3px;border:0;background:none;color:rgba(255,255,255,.62);
+  font-size:12px;font-weight:500;letter-spacing:.3px;cursor:pointer;font-family:inherit}
+.txtbtn.on{color:#E0E0E0}
+.txtbtn.tr.on{color:#4FC3F7}
+.vsep{width:1px;height:12px;background:rgba(255,255,255,.2);flex:0 0 auto}
+.seg{display:flex;background:rgba(255,255,255,.08);border-radius:7px;padding:2px}
+.segbtn{height:20px;padding:0 10px;border:0;border-radius:5px;background:none;
+  color:rgba(255,255,255,.55);font-size:12px;cursor:pointer;font-family:inherit}
+.segbtn.on{background:rgba(255,255,255,.16);color:#fff}
+.spacer{flex:1}
+.overlay{position:absolute;inset:0;background:#1B1917;display:none;flex-direction:column;
+  padding:16px 14px;overflow-y:auto}
+.overlay.show{display:flex}
+.ovgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.ovcell{aspect-ratio:1/1.42;background:#262421;border:1px solid #46405A;border-radius:4px;
+  position:relative;cursor:pointer;overflow:hidden}
+.ovcell::before{content:"";position:absolute;left:14%;top:12%;right:14%;height:32%;
+  background:#3A3733;border-radius:2px}
+.ovcell::after{content:"";position:absolute;left:14%;top:52%;right:36%;height:7%;
+  background:#3A3733;border-radius:2px}
+.ovcell.cur{background:#3A3834;border:2px solid var(--accent)}
+.ovcell.cur::before,.ovcell.cur::after{background:#6E655B}
+.ovcell span{position:absolute;right:5px;bottom:3px;font-size:11px;color:#A49C90}
+.panelbox{position:absolute;left:12px;right:12px;bottom:12px;background:#3A3834;
+  border:0.5px solid rgba(255,255,255,.14);border-radius:14px;padding:12px 14px 14px;
+  display:none;flex-direction:column;gap:2px}
+.panelbox.show{display:flex}
+.prow{display:flex;align-items:center;gap:8px;height:34px}
+.plabel{color:var(--ink);opacity:.65;font-size:12px;width:44px;flex:0 0 auto}
+.pchip{height:26px;padding:0 12px;border-radius:13px;background:rgba(255,255,255,.1);
+  color:var(--ink);font-size:12px;border:0;cursor:pointer}
+.pchip.on{background:#E0E0E0;color:#1C1B19}
+.pbox,.pchip,.iconbtn{touch-action:manipulation}
+.toast{position:absolute;left:50%;bottom:120px;transform:translateX(-50%);background:rgba(0,0,0,.78);
+  color:#fff;font-size:12px;padding:7px 14px;border-radius:16px;opacity:0;transition:opacity .2s;
+  pointer-events:none;white-space:nowrap}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="phone" id="phone">
+    <div class="zoomwrap" id="zoomwrap">
+      <div class="track paged" id="track"></div>
+    </div>
+    <div class="dim" id="dim"></div>
+
+    <div class="bar topbar" id="topbar">
+      <button class="iconbtn" id="btnBack" title="返回">
+        <svg width="17" height="17" viewBox="0 0 17 17"><path d="M10.5 3.5L6 8.5l4.5 5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <span class="title">冬の漫画タイトル</span>
+      <button class="iconbtn" id="btnOverview" title="缩略图">
+        <svg width="17" height="17" viewBox="0 0 17 17"><rect x="2" y="2" width="5" height="5" rx="1" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="10" y="2" width="5" height="5" rx="1" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="2" y="10" width="5" height="5" rx="1" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="10" y="10" width="5" height="5" rx="1" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
+      </button>
+      <button class="iconbtn" id="btnPanel" title="阅读设置">
+        <svg width="17" height="17" viewBox="0 0 17 17"><path d="M2.5 5.5h3.6M10.4 5.5h4.1M2.5 11.5h4.1M10.9 11.5h3.6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><circle cx="8.2" cy="5.5" r="1.7" fill="none" stroke="currentColor" stroke-width="1.2"/><circle cx="8.7" cy="11.5" r="1.7" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
+      </button>
+    </div>
+
+    <div class="bar bottombar" id="bottombar">
+      <div class="row">
+        <input type="range" id="seek" min="0" max="7" step="1" value="0" />
+        <span class="pagenum" id="botNum">1 / 8</span>
+      </div>
+      <div class="row">
+        <button class="txtbtn" id="fabHd">HD</button>
+        <span class="vsep"></span>
+        <button class="txtbtn tr" id="fabTr">译</button>
+        <div class="spacer"></div>
+        <div class="seg">
+          <button class="segbtn on" data-m="paged">翻页</button>
+          <button class="segbtn" data-m="scroll">滚动</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="overlay" id="overlay">
+      <div class="row" style="margin-bottom:14px">
+        <span class="title">8 页</span>
+        <button class="iconbtn" id="ovClose">
+          <svg width="16" height="16" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div class="ovgrid" id="ovgrid"></div>
+    </div>
+
+    <div class="panelbox" id="panelbox">
+      <div class="prow"><span class="plabel">模式</span>
+        <button class="pchip" data-k="mode" data-v="paged">翻页</button>
+        <button class="pchip" data-k="mode" data-v="scroll">滚动</button>
+      </div>
+      <div class="prow"><span class="plabel">方向</span>
+        <button class="pchip" data-k="rtl" data-v="0">左→右</button>
+        <button class="pchip" data-k="rtl" data-v="1">右→左</button>
+      </div>
+      <div class="prow"><span class="plabel">适配</span>
+        <button class="pchip" data-k="fit" data-v="1">整页</button>
+        <button class="pchip" data-k="fit" data-v="0">铺满宽</button>
+      </div>
+      <div class="prow"><span class="plabel">间隙</span>
+        <button class="pchip" data-k="gap" data-v="0">无缝</button>
+        <button class="pchip" data-k="gap" data-v="1">留缝</button>
+      </div>
+      <div class="prow"><span class="plabel">亮度</span>
+        <input type="range" id="bright" min="40" max="100" value="100" />
+      </div>
+      <div class="prow"><span class="plabel">常亮</span>
+        <button class="pchip" data-k="keepOn" data-v="1">开</button>
+        <button class="pchip" data-k="keepOn" data-v="0">关</button>
+        <div class="spacer"></div>
+        <button class="pchip" data-k="vol" data-v="1" data-toggle="1">音量键翻页</button>
+      </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+  </div>
+
+  <div class="side">
+    <h1>漫画阅读器 · 交互原型</h1>
+    <p>图上能点的都实现了。用鼠标拖拽翻页，点屏幕左/中/右三分区，双击放大。</p>
+
+    <h2>当前状态</h2>
+    <div class="kv">
+      <b>模式</b><span id="sMode">翻页</span>
+      <b>方向</b><span id="sDir">右→左</span>
+      <b>页码</b><span id="sPage">1 / 8</span>
+      <b>缩放</b><span id="sZoom">1.0×</span>
+      <b>控制栏</b><span id="sBar">显示</span>
+    </div>
+
+    <h2>试用这几件事</h2>
+    <ul class="hint">
+      <li>在屏上左右拖拽 → 跟手翻页，松手吸附</li>
+      <li>点左三分之一点 → 上一页，点右三分之一点 → 下一页</li>
+      <li>点中间三分之一 → 收起/呼出控制栏（静止 3 秒自动收起，<b>收起时屏幕上只剩漫画</b>）</li>
+      <li>控制栏底排左侧的 <code>HD</code> <code>译</code> → 点亮变米白 / 天蓝，未点亮是低调的灰白文字</li>
+      <li>双击屏幕 → 放大 2.5×，再双击还原，放大后可拖动</li>
+      <li>拖底部进度条 → 任意跳页</li>
+      <li>点右上角田字 → 缩略图总览，点任意格跳页</li>
+      <li>切到<b>滚动</b>模式 → 第 3、7 页是长条图，感受连续滚动</li>
+      <li>键盘 <code>←</code> <code>→</code> → 模拟音量键翻页</li>
+    </ul>
+
+    <h2>快捷开关（仅原型辅助）</h2>
+    <div class="qbtns">
+      <button class="qbtn" data-q="mode">翻页 / 滚动</button>
+      <button class="qbtn" data-q="dir">左→右 / 右→左</button>
+      <button class="qbtn" data-q="fit">整页 / 铺满宽</button>
+      <button class="qbtn" data-q="gap">无缝 / 留缝</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const N = 8;
+const AR = [1.42, 1.42, 2.9, 1.42, 1.42, 1.42, 2.9, 1.42];
+const LAYOUTS = [
+  [[3,3,94,40],[3,47,45,26],[52,47,45,26],[3,77,94,20]],
+  [[3,3,45,42],[52,3,45,42],[3,49,94,48]],
+  [[3,3,94,24],[3,30,94,32],[3,65,94,32]]
+];
+
+const S = {
+  mode:'paged', rtl:true, page:0, fit:'1', gap:'1',
+  zoom:1, tx:0, ty:0, barOn:true, panel:false, keepOn:true, vol:true
+};
+
+const $ = id => document.getElementById(id);
+const track = $('track'), phone = $('phone'), zoomwrap = $('zoomwrap');
+
+function paperHTML(i){
+  const lay = LAYOUTS[i % 3];
+  const panels = lay.map(([x,y,w,h],k) =>
+    `<div class="panel" style="left:${x}%;top:${y}%;width:${w}%;height:${h}%">${k%2?'<i></i>':''}</div>`
+  ).join('');
+  return `<div class="paper" style="--ar:1 / ${AR[i]}">${panels}<span class="pno">${i+1}</span></div>`;
+}
+
+function build(){
+  track.innerHTML = AR.map((_,i) =>
+    `<div class="page" data-i="${i}">${paperHTML(i)}</div>`
+  ).join('');
+  $('ovgrid').innerHTML = AR.map((_,i) =>
+    `<div class="ovcell" data-i="${i}"><span>${i+1}</span></div>`
+  ).join('');
+}
+
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+
+function pageOffsetPct(){
+  return S.rtl ? S.page * 100 : -S.page * 100;
+}
+
+/* paged 模式：整页 / 铺满宽 两种适配都由这里定尺寸，CSS 的 aspect-ratio 只管滚动模式 */
+function sizePapers(){
+  const cw = phone.clientWidth, ch = phone.clientHeight, scrolling = S.mode === 'scroll';
+  AR.forEach((r, i) => {
+    const el = track.children[i].firstElementChild;
+    if (!el) return;
+    if (scrolling) { el.style.width = ''; el.style.height = ''; return; }
+    let w = cw, h = w * r;
+    if (S.fit === '1' && h > ch) { h = ch; w = h / r; }
+    el.style.width = w + 'px';
+    el.style.height = h + 'px';
+  });
+}
+
+function render(animate){
+  const scrolling = S.mode === 'scroll';
+  track.classList.toggle('paged', !scrolling);
+  track.classList.toggle('scroll', scrolling);
+  track.classList.toggle('rtl', S.rtl);
+  phone.classList.toggle('wide', !scrolling && S.fit === '0');
+  track.style.setProperty('--gap', S.gap === '1' ? '10px' : '0px');
+  sizePapers();
+
+  if (scrolling) {
+    track.style.transform = '';
+    const el = track.children[S.page];
+    if (el && animate) track.scrollTop = el.offsetTop;
+  } else {
+    if (!animate) { track.classList.remove('anim'); void track.offsetHeight; }
+    track.style.transform = `translateX(${pageOffsetPct()}%)`;
+  }
+
+  applyZoom();
+  syncUI();
+}
+
+window.addEventListener('resize', () => render(false));
+
+function applyZoom(){
+  zoomwrap.style.transform = `translate(${S.tx}px, ${S.ty}px) scale(${S.zoom})`;
+  $('dim').style.opacity = String((100 - Number($('bright').value)) / 100 * 0.85);
+}
+
+function syncUI(){
+  const txt = `${S.page + 1} / ${N}`;
+  $('botNum').textContent = txt;
+  $('seek').value = String(S.page);
+  $('sMode').textContent = S.mode === 'paged' ? '翻页' : '滚动';
+  $('sDir').textContent = S.rtl ? '右→左' : '左→右';
+  $('sPage').textContent = txt;
+  $('sZoom').textContent = S.zoom.toFixed(1) + '×';
+  $('sBar').textContent = S.barOn ? '显示' : '收起';
+
+  document.querySelectorAll('.segbtn').forEach(b =>
+    b.classList.toggle('on', b.dataset.m === S.mode)
+  );
+
+  document.querySelectorAll('.pchip').forEach(b => {
+    const k = b.dataset.k, v = b.dataset.v;
+    const cur = typeof S[k] === 'boolean' ? (S[k] ? '1' : '0') : String(S[k]);
+    b.classList.toggle('on', cur === v);
+  });
+  document.querySelectorAll('.ovcell').forEach(c =>
+    c.classList.toggle('cur', Number(c.dataset.i) === S.page)
+  );
+}
+
+function setBar(on){
+  S.barOn = on;
+  $('topbar').classList.toggle('hide', !on);
+  $('bottombar').classList.toggle('hide', !on);
+  syncUI();
+}
+
+let hideTimer = null;
+function poke(){
+  if (!S.barOn) setBar(true);
+  clearTimeout(hideTimer);
+  if (S.panel) return;
+  hideTimer = setTimeout(() => setBar(false), 3000);
+}
+
+function toast(msg){
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._h);
+  t._h = setTimeout(() => t.classList.remove('show'), 1200);
+}
+
+function goTo(p, animate = true){
+  const next = clamp(p, 0, N - 1);
+  if (next === S.page && S.mode === 'paged') { render(animate); return; }
+  S.page = next;
+  if (S.mode === 'paged' && animate) {
+    track.classList.add('anim');
+    track.style.transform = `translateX(${pageOffsetPct()}%)`;
+    clearTimeout(track._h);
+    track._h = setTimeout(() => track.classList.remove('anim'), 250);
+  } else if (S.mode === 'scroll') {
+    track.scrollTop = track.children[S.page].offsetTop;
+  }
+  syncUI();
+}
+
+function step(d){
+  if (S.zoom > 1) { S.tx = 0; S.ty = 0; applyZoom(); return; }
+  goTo(S.page + d);
+}
+
+/* 拖拽：翻页模式横拖，缩放态拖动平移 */
+let drag = null;
+phone.addEventListener('pointerdown', e => {
+  if (overlayOpen) return;
+  drag = {
+    x:e.clientX, y:e.clientY, dx:0, dy:0, moved:false, t:Date.now(),
+    paging:false, pan: S.zoom > 1
+  };
+  phone.setPointerCapture(e.pointerId);
+});
+
+phone.addEventListener('pointermove', e => {
+  if (!drag) return;
+  drag.dx = e.clientX - drag.x;
+  drag.dy = e.clientY - drag.y;
+  if (Math.hypot(drag.dx, drag.dy) > 8) drag.moved = true;
+  if (!drag.moved) return;
+
+  if (drag.pan) {
+    S.tx = drag.dx; S.ty = drag.dy;
+    applyZoom();
+  } else if (S.mode === 'paged') {
+    drag.paging = true;
+    track.classList.remove('anim');
+    const pct = pageOffsetPct() + drag.dx / phone.clientWidth * 100;
+    track.style.transform = `translateX(${pct}%)`;
+  }
+});
+
+phone.addEventListener('pointerup', e => {
+  if (!drag) return;
+  const d = drag; drag = null;
+
+  if (d.pan) { applyZoom(); return; }
+
+  if (d.paging) {
+    const th = phone.clientWidth * 0.18;
+    if (d.dx > th) step(S.rtl ? 1 : -1);
+    else if (d.dx < -th) step(S.rtl ? -1 : 1);
+    else render(true);
+    poke();
+    return;
+  }
+
+  if (d.moved || Date.now() - d.t > 400) return;
+  handleTap(e.clientX, e.clientY);
+});
+
+phone.addEventListener('pointercancel', () => { drag = null; render(true); });
+
+/* 点击：左右热区立即响应，中区给双击留 220ms 窗口 */
+let lastMidTap = 0;
+function handleTap(cx){
+  if (S.panel) { togglePanel(false); return; }
+  if (overlayOpen) return;
+  if (S.zoom > 1) { poke(); return; }
+
+  const w = phone.clientWidth;
+  const x = cx - phone.getBoundingClientRect().left;
+  const zone = x < w / 3 ? 'left' : x > w * 2 / 3 ? 'right' : 'mid';
+
+  if (zone === 'mid') {
+    const now = Date.now();
+    if (now - lastMidTap < 260) { lastMidTap = 0; toggleZoom(); return; }
+    lastMidTap = now;
+    setTimeout(() => {
+      if (lastMidTap !== now) return;
+      lastMidTap = 0;
+      setBar(!S.barOn);
+      if (S.barOn) poke();
+    }, 220);
+    return;
+  }
+
+  const back = zone === 'left' ? -1 : 1;
+  step(S.rtl ? -back : back);
+  poke();
+}
+
+function toggleZoom(){
+  if (S.zoom > 1) {
+    S.zoom = 1; S.tx = 0; S.ty = 0;
+  } else {
+    S.zoom = 2.5;
+    S.tx = -phone.clientWidth * 0.45;
+    S.ty = -phone.clientHeight * 0.25;
+  }
+  applyZoom();
+  poke();
+}
+
+/* 控件 */
+$('seek').addEventListener('input', e => goTo(Number(e.target.value), false));
+$('bright').addEventListener('input', () => applyZoom());
+document.querySelectorAll('.segbtn').forEach(b => { b.onclick = () => setMode(b.dataset.m); });
+document.querySelectorAll('.qbtn').forEach(b => {
+  b.onclick = () => {
+    const q = b.dataset.q;
+    if (q === 'mode') setMode(S.mode === 'paged' ? 'scroll' : 'paged');
+    else if (q === 'dir') { S.rtl = !S.rtl; render(false); }
+    else if (q === 'fit') { S.fit = S.fit === '1' ? '0' : '1'; render(false); }
+    else { S.gap = S.gap === '1' ? '0' : '1'; render(false); }
+    poke();
+  };
+});
+$('btnBack').onclick = () => toast('返回作品详情页');
+$('fabHd').onclick = e => { e.currentTarget.classList.toggle('on'); toast('已切换原图档'); };
+$('fabTr').onclick = e => { e.currentTarget.classList.toggle('on'); toast('本页翻译'); };
+
+/* 控制栏与浮层自己吃掉指针事件：否则点按钮会穿透成"点中区收起控制栏" */
+['topbar', 'bottombar', 'panelbox', 'overlay'].forEach(id => {
+  const el = $(id);
+  el.addEventListener('pointerdown', e => { e.stopPropagation(); clearTimeout(hideTimer); });
+  el.addEventListener('pointerup', () => poke());
+});
+
+function setMode(m){
+  S.mode = m;
+  render(false);
+  if (m === 'scroll') {
+    const el = track.children[S.page];
+    if (el) track.scrollTop = el.offsetTop;
+  }
+  poke();
+}
+
+function togglePanel(on){
+  S.panel = on ?? !S.panel;
+  $('panelbox').classList.toggle('show', S.panel);
+  if (S.panel) { setBar(true); clearTimeout(hideTimer); }
+  else poke();
+}
+
+$('btnPanel').onclick = () => togglePanel();
+
+document.querySelectorAll('.pchip').forEach(b => {
+  b.onclick = () => {
+    const k = b.dataset.k, raw = b.dataset.v;
+    if (k === 'mode') { setMode(raw); }
+    else if (b.dataset.toggle === '1') { S[k] = !S[k]; render(false); }
+    else { S[k] = (typeof S[k] === 'boolean') ? raw === '1' : raw; render(false); }
+    syncUI();
+  };
+});
+
+let overlayOpen = false;
+$('btnOverview').onclick = () => openOverview(true);
+$('ovClose').onclick = () => openOverview(false);
+function openOverview(on){
+  overlayOpen = on;
+  $('overlay').classList.toggle('show', on);
+  if (on) { setBar(true); clearTimeout(hideTimer); }
+  else poke();
+}
+$('ovgrid').addEventListener('click', e => {
+  const cell = e.target.closest('.ovcell');
+  if (!cell) return;
+  openOverview(false);
+  goTo(Number(cell.dataset.i), false);
+});
+
+/* 滚动模式：滚动位置反推页码 */
+track.addEventListener('scroll', () => {
+  if (S.mode !== 'scroll') return;
+  const mid = track.scrollTop + track.clientHeight / 2;
+  let best = 0;
+  for (let i = 0; i < N; i++) {
+    const el = track.children[i];
+    if (el.offsetTop <= mid) best = i;
+  }
+  if (best !== S.page) { S.page = best; syncUI(); }
+  poke();
+});
+
+/* 音量键翻页 */
+window.addEventListener('keydown', e => {
+  if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); step(-1); poke(); }
+  if (e.key === 'ArrowRight' || e.key === 'PageDown') { e.preventDefault(); step(1); poke(); }
+  if (e.key === 'Escape') { togglePanel(false); openOverview(false); }
+  if (e.key === ' ') { e.preventDefault(); setBar(!S.barOn); poke(); }
+});
+
+build();
+render(false);
+poke();
+</script>
+</body>
+</html>

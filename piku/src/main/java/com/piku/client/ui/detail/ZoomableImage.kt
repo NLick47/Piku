@@ -1,12 +1,5 @@
 package com.piku.client.ui.detail
 
-import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -14,40 +7,20 @@ import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
@@ -57,34 +30,34 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastAny
 import androidx.compose.ui.util.fastForEach
 import coil3.compose.AsyncImage
 import coil3.compose.SubcomposeAsyncImage
 import com.piku.client.ui.common.rememberAnimatedImage
-import com.piku.client.R
-import com.piku.client.ui.theme.OverlayScrim
-import com.piku.client.ui.theme.OverlayScrimHeavy
 import com.piku.client.ui.theme.PikuColors
-import com.piku.client.ui.theme.TranslateActiveBlue
-import com.piku.client.ui.theme.TranslateActiveBlueTint
-import com.piku.client.ui.theme.ViewerBackgroundDark
 import androidx.compose.ui.graphics.asImageBitmap
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlin.math.abs
 
 internal const val MIN_SCALE = 1f
 internal const val MAX_SCALE = 4f
 private const val DOUBLE_TAP_SCALE = 2.5f
 private const val SCALE_EPSILON = 0.01f
-private const val AUTO_HIDE_DELAY_MS = 2500L
+
+/** 点按热区：左右各三分之一翻页，中间留给显隐与双击缩放 */
+internal const val TAP_ZONE_LEFT = 0
+internal const val TAP_ZONE_CENTER = 1
+internal const val TAP_ZONE_RIGHT = 2
+
+internal fun tapZone(offset: Offset, viewport: IntSize): Int = when {
+    viewport.width <= 0 -> TAP_ZONE_CENTER
+    offset.x < viewport.width / 3f -> TAP_ZONE_LEFT
+    offset.x > viewport.width * 2f / 3f -> TAP_ZONE_RIGHT
+    else -> TAP_ZONE_CENTER
+}
 
 /** 原图淡入时长（ImageLoader 的 crossfade 是 200ms，留一点余量） */
 private const val FULL_IMAGE_FADE_MS = 250L
@@ -163,16 +136,19 @@ object ZoomTransform {
  *   避免与 pager 抢占导致页面卡在半页。
  */
 @Composable
-private fun ZoomableImage(
+internal fun ZoomableImage(
     image: ViewerImage,
     contentDescription: String?,
-    dark: Boolean,
+    contentScale: ContentScale = ContentScale.Fit,
     /** 原图档：非空时叠在最上层，就绪前下层图一直在，不黑屏不闪烁 */
     hdUrl: String? = null,
     /** 详情页图区正在显示的那张：直接画它，开图器零延迟，不依赖缓存命中 */
     preview: Painter? = null,
-    onTap: () -> Unit,
+    /** 量到原图宽高比后回传：滚动模式靠它定每页高度 */
+    onIntrinsicAspect: ((Float) -> Unit)? = null,
+    onTap: (Int) -> Unit,
     onLongPress: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     var zoom by remember { mutableStateOf(ZoomState()) }
     var viewport by remember { mutableStateOf(IntSize.Zero) }
@@ -188,10 +164,10 @@ private fun ZoomableImage(
     }
     val currentOnTap by rememberUpdatedState(onTap)
     val currentOnLongPress by rememberUpdatedState(onLongPress)
+    val currentOnIntrinsicAspect by rememberUpdatedState(onIntrinsicAspect)
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
+        modifier = modifier
             .onSizeChanged { viewport = it }
             .pointerInput(viewport) {
                 detectTapGestures(
@@ -201,7 +177,7 @@ private fun ZoomableImage(
                         zoom = ZoomTransform.zoomTo(zoom, target, pivot, viewport)
                     },
                     onLongPress = { currentOnLongPress() },
-                    onTap = { currentOnTap() },
+                    onTap = { offset -> currentOnTap(tapZone(offset, viewport)) },
                 )
             }
             .pointerInput(viewport) {
@@ -279,7 +255,7 @@ private fun ZoomableImage(
                 Image(
                     painter = preview,
                     contentDescription = contentDescription,
-                    contentScale = ContentScale.Fit,
+                    contentScale = contentScale,
                     colorFilter = PikuColors.tameWhiteFilter,
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -287,7 +263,7 @@ private fun ZoomableImage(
                 AsyncImage(
                     model = rememberAnimatedImage(image.thumbnailUrl),
                     contentDescription = contentDescription,
-                    contentScale = ContentScale.Fit,
+                    contentScale = contentScale,
                     colorFilter = PikuColors.tameWhiteFilter,
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -297,10 +273,19 @@ private fun ZoomableImage(
             SubcomposeAsyncImage(
                 model = rememberAnimatedImage(image.fullUrl),
                 contentDescription = contentDescription,
-                contentScale = ContentScale.Fit,
+                contentScale = contentScale,
                 colorFilter = PikuColors.tameWhiteFilter,
                 modifier = Modifier.fillMaxSize(),
-                onSuccess = { fullReady = true },
+                onSuccess = { state ->
+                    fullReady = true
+                    // 只有原图的比例可信：缩略图可能被裁过，按它定高会在清晰图到货时"长大"一次
+                    val intrinsic = state.painter.intrinsicSize
+                    if (intrinsic.width.isFinite() && intrinsic.height.isFinite() &&
+                        intrinsic.width > 0f && intrinsic.height > 0f
+                    ) {
+                        currentOnIntrinsicAspect?.invoke(intrinsic.width / intrinsic.height)
+                    }
+                },
                 // 失败时把缩略图放回来：原图可能是在缩略图已经撤掉之后才失败的
                 onError = {
                     fullReady = false
@@ -314,7 +299,7 @@ private fun ZoomableImage(
             SubcomposeAsyncImage(
                 model = rememberAnimatedImage(hdUrl),
                 contentDescription = contentDescription,
-                contentScale = ContentScale.Fit,
+                contentScale = contentScale,
                 colorFilter = PikuColors.tameWhiteFilter,
                 modifier = Modifier.fillMaxSize(),
                 loading = {
@@ -338,12 +323,13 @@ private fun ZoomableImage(
  * Renders an in-memory Bitmap instead of a URL-loaded image.
  */
 @Composable
-private fun TranslatedZoomableImage(
+internal fun TranslatedZoomableImage(
     bitmap: android.graphics.Bitmap,
     contentDescription: String?,
-    dark: Boolean,
-    onTap: () -> Unit,
+    contentScale: ContentScale = ContentScale.Fit,
+    onTap: (Int) -> Unit,
     onLongPress: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     var zoom by remember { mutableStateOf(ZoomState()) }
     var viewport by remember { mutableStateOf(IntSize.Zero) }
@@ -351,8 +337,7 @@ private fun TranslatedZoomableImage(
     val currentOnLongPress by rememberUpdatedState(onLongPress)
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
+        modifier = modifier
             .onSizeChanged { viewport = it }
             .pointerInput(viewport) {
                 detectTapGestures(
@@ -362,7 +347,7 @@ private fun TranslatedZoomableImage(
                         zoom = ZoomTransform.zoomTo(zoom, target, pivot, viewport)
                     },
                     onLongPress = { currentOnLongPress() },
-                    onTap = { currentOnTap() },
+                    onTap = { offset -> currentOnTap(tapZone(offset, viewport)) },
                 )
             }
             .pointerInput(viewport) {
@@ -427,244 +412,9 @@ private fun TranslatedZoomableImage(
         androidx.compose.foundation.Image(
             bitmap = bitmap.asImageBitmap(),
             contentDescription = contentDescription,
-            contentScale = ContentScale.Fit,
+            contentScale = contentScale,
             colorFilter = PikuColors.tameWhiteFilter,
             modifier = Modifier.fillMaxSize(),
         )
-    }
-}
-
-@Composable
-fun FullScreenViewer(
-    images: List<ViewerImage>,
-    startPage: Int,
-    dark: Boolean,
-    onClose: () -> Unit,
-    onLongPressImage: (Int) -> Unit,
-    hasImageModel: Boolean = false,
-    imageTranslating: Boolean = false,
-    imageTranslated: Boolean = false,
-    translatedImages: Map<Int, android.graphics.Bitmap> = emptyMap(),
-    onImageTranslateClick: (Int) -> Unit = {},
-    /** 翻页回调：0 基页码，与图区、翻译回调同基准 */
-    onPageChanged: (Int) -> Unit = {},
-    /** 开了原图档的页：对应页叠原图层，底栏出 HD 按钮；空集 = 源没有 HD 能力 */
-    hdPages: Set<Int> = emptySet(),
-    onHdToggle: (Int) -> Unit = {},
-    /** 详情页图区已上屏的图：各页的零延迟垫底，没有的页回落加载 */
-    previews: Map<Int, Painter> = emptyMap(),
-) {
-    val pagerState = rememberPagerState(
-        pageCount = { images.size },
-        initialPage = startPage,
-    )
-    var controlsVisible by remember { mutableStateOf(true) }
-    var autoHideJob by remember { mutableStateOf<Job?>(null) }
-    val scope = rememberCoroutineScope()
-
-    fun refreshAutoHide() {
-        controlsVisible = true
-        autoHideJob?.cancel()
-        autoHideJob = scope.launch {
-            delay(AUTO_HIDE_DELAY_MS)
-            controlsVisible = false
-        }
-    }
-
-    // 回调走 rememberUpdatedState：外层重组换了 lambda 也不会用到旧的那份
-    val currentOnPageChanged by rememberUpdatedState(onPageChanged)
-    LaunchedEffect(pagerState.currentPage) {
-        refreshAutoHide()
-        currentOnPageChanged(pagerState.currentPage)
-    }
-    LaunchedEffect(pagerState.isScrollInProgress) {
-        if (!pagerState.isScrollInProgress) refreshAutoHide()
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                // 恒不透明：透明底"透出详情页当垫底"依赖打底图瞬间画出，慢一拍就是整个详情页裸奔。
-                // 黑底立即可见 + 打底小图快速跟上，才是可预测的行为
-                if (dark) ViewerBackgroundDark else Color.Black,
-            ),
-    ) {
-        BackHandler(onBack = onClose)
-        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
-            val translatedBitmap = if (imageTranslated) translatedImages[page] else null
-            if (translatedBitmap != null) {
-                TranslatedZoomableImage(
-                    bitmap = translatedBitmap,
-                    contentDescription = null,
-                    dark = dark,
-                    onTap = {
-                        if (controlsVisible) {
-                            controlsVisible = false
-                            autoHideJob?.cancel()
-                        } else {
-                            refreshAutoHide()
-                        }
-                    },
-                    onLongPress = { onLongPressImage(page) },
-                )
-            } else {
-                ZoomableImage(
-                    image = images[page],
-                    contentDescription = null,
-                    dark = dark,
-                    hdUrl = images[page].hdUrl?.takeIf { page in hdPages },
-                    preview = previews[page],
-                    onTap = {
-                        if (controlsVisible) {
-                            controlsVisible = false
-                            autoHideJob?.cancel()
-                        } else {
-                            refreshAutoHide()
-                        }
-                    },
-                    onLongPress = { onLongPressImage(page) },
-                )
-            }
-        }
-        AnimatedVisibility(
-            visible = controlsVisible,
-            modifier = Modifier.align(Alignment.TopCenter),
-            enter = fadeIn(tween(150)),
-            exit = fadeOut(tween(500)),
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .statusBarsPadding()
-                    .padding(start = 8.dp, end = 12.dp, top = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(onClick = onClose) {
-                    Icon(
-                        imageVector = Icons.Filled.Close,
-                        contentDescription = stringResource(R.string.detail_fullscreen_close),
-                        tint = Color.White,
-                        modifier = Modifier.size(22.dp),
-                    )
-                }
-                Spacer(Modifier.weight(1f))
-                Text(
-                    text = stringResource(
-                        R.string.detail_image_index,
-                        pagerState.currentPage + 1,
-                        images.size,
-                    ),
-                    color = Color.White,
-                    fontSize = 12.sp,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(OverlayScrim)
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
-                )
-            }
-        }
-        // 底部浮动区域：HD 按钮 + 翻译按钮 + 页码计数器（常驻可见，不跟顶栏一起隐藏）
-        val hdAvailable = images.getOrNull(pagerState.currentPage)?.hdUrl != null
-        if (hasImageModel || images.size > 1 || hdAvailable) {
-            Row(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .navigationBarsPadding()
-                    .padding(end = 12.dp, bottom = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                if (hdAvailable) {
-                    val hdOn = pagerState.currentPage in hdPages
-                    Box(
-                        modifier = Modifier
-                            .height(40.dp)
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(if (hdOn) TranslateActiveBlueTint else OverlayScrim)
-                            .clickable { onHdToggle(pagerState.currentPage) }
-                            .padding(horizontal = 12.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = "HD",
-                            color = if (hdOn) TranslateActiveBlue else Color.White,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
-                }
-                if (hasImageModel) {
-                    // 翻译按钮：loading时展开显示"翻译中..."文字，否则显示图标
-                    Box(
-                        modifier = Modifier
-                            .height(40.dp)
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(
-                                when {
-                                    imageTranslating -> OverlayScrimHeavy
-                                    imageTranslated -> TranslateActiveBlueTint
-                                    else -> OverlayScrim
-                                },
-                            )
-                            .clickable(
-                                enabled = !imageTranslating,
-                                onClick = { onImageTranslateClick(pagerState.currentPage) },
-                            )
-                            .padding(horizontal = if (imageTranslating) 12.dp else 0.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (imageTranslating) {
-                            // loading状态：显示转圈 + "翻译中..."文字
-                            val translatingColor = if (dark) Color.White else TranslateActiveBlue
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            ) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp,
-                                    color = translatingColor,
-                                )
-                                Text(
-                                    text = stringResource(R.string.detail_translating),
-                                    color = translatingColor,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Medium,
-                                )
-                            }
-                        } else {
-                            // 正常状态：显示图标
-                            Box(
-                                modifier = Modifier.size(40.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.PhotoLibrary,
-                                    contentDescription = stringResource(R.string.detail_image_translate),
-                                    tint = if (imageTranslated) TranslateActiveBlue else Color.White,
-                                    modifier = Modifier.size(20.dp),
-                                )
-                            }
-                        }
-                    }
-                }
-                if (images.size > 1) {
-                    Text(
-                        text = stringResource(
-                            R.string.detail_image_index,
-                            pagerState.currentPage + 1,
-                            images.size,
-                        ),
-                        color = Color.White,
-                        fontSize = 12.sp,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(OverlayScrim)
-                            .padding(horizontal = 10.dp, vertical = 4.dp),
-                    )
-                }
-            }
-        }
     }
 }

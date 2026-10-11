@@ -358,6 +358,26 @@
     <string name="detail_novel_theme_green">グリーン</string>
     <string name="detail_novel_theme_ink">ダーク</string>
     <string name="detail_novel_theme_black">ブラック</string>
+    <string name="manga_overview">ページ一覧</string>
+    <string name="manga_settings">閲覧設定</string>
+    <string name="manga_overview_title">全 %1$d ページ</string>
+    <string name="manga_translate">訳</string>
+    <string name="manga_mode">表示</string>
+    <string name="manga_mode_paged">ページ</string>
+    <string name="manga_mode_scroll">連続</string>
+    <string name="manga_direction">方向</string>
+    <string name="manga_direction_ltr">左→右</string>
+    <string name="manga_direction_rtl">右→左</string>
+    <string name="manga_fit">フィット</string>
+    <string name="manga_fit_page">全体</string>
+    <string name="manga_fit_width">幅いっぱい</string>
+    <string name="manga_gap">間隔</string>
+    <string name="manga_gap_none">なし</string>
+    <string name="manga_gap_small">あり</string>
+    <string name="manga_brightness">明るさ</string>
+    <string name="manga_brightness_auto">システム</string>
+    <string name="manga_keep_screen_on">常時点灯</string>
+    <string name="manga_volume_flip">音量キー</string>
 
     <string name="detail_more">その他</string>
     <string name="detail_reaction">リアクション</string>

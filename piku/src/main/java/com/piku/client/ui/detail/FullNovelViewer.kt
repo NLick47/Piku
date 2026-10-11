@@ -435,7 +435,7 @@ private fun scrimBottom(bg: Color): Brush = Brush.verticalGradient(
 )
 
 /** 阅读亮度（0~1）；负值 = 跟随系统 */
-private fun applyWindowBrightness(window: Window, brightness: Float) {
+internal fun applyWindowBrightness(window: Window, brightness: Float) {
     val attrs = window.attributes
     attrs.screenBrightness =
         if (brightness < 0f) WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE else brightness

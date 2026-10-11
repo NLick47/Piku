@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.piku.client.data.local.ImageSaver
 import com.piku.client.data.local.ImageShareHelper
+import com.piku.client.data.local.MangaReaderSettings
 import com.piku.client.data.local.NovelReaderSettings
 import com.piku.client.data.local.WorkPasswordRepository
 import com.piku.client.data.repository.AdultContentRepository
@@ -384,6 +385,14 @@ class DetailViewModel @Inject constructor(
     /** 阅读器显示设置（字号/行距/配色/字体/亮度/常亮）；[persist] 为 false 时只更新内存（拖动预览） */
     fun setNovelReaderSettings(settings: NovelReaderSettings, persist: Boolean) {
         settingsRepository.setNovelReaderSettings(settings, persist)
+    }
+
+    /** 漫画阅读器显示设置：形态、方向、适配、间隙、亮度、常亮、音量键翻页 */
+    val mangaReaderSettings: StateFlow<MangaReaderSettings> =
+        settingsRepository.mangaReaderSettings
+
+    fun setMangaReaderSettings(settings: MangaReaderSettings, persist: Boolean) {
+        settingsRepository.setMangaReaderSettings(settings, persist)
     }
 
     /** 标签翻译编排（与 pixiv 详情页共用） */

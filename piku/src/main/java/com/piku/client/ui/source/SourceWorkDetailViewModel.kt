@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.piku.client.R
+import com.piku.client.data.local.MangaReaderSettings
 import com.piku.client.data.local.NovelReaderSettings
 import com.piku.client.data.local.SettingsRepository
 import com.piku.client.data.local.QuietFollowStore
@@ -460,6 +461,13 @@ class SourceWorkDetailViewModel @Inject constructor(
     /** 阅读器显示设置；[persist] 为 false 时只更新内存（拖动预览） */
     fun setNovelReaderSettings(settings: NovelReaderSettings, persist: Boolean) =
         settingsRepository.setNovelReaderSettings(settings, persist)
+
+    /** 漫画阅读器显示设置：形态、方向、适配、间隙、亮度、常亮、音量键翻页 */
+    val mangaReaderSettings: StateFlow<MangaReaderSettings> =
+        settingsRepository.mangaReaderSettings
+
+    fun setMangaReaderSettings(settings: MangaReaderSettings, persist: Boolean) =
+        settingsRepository.setMangaReaderSettings(settings, persist)
 
     /**
      * 标题行 chip 短按：已有译文 = 整页原/译切换（不含标签）；没有 = 立即翻短字段。
@@ -938,6 +946,8 @@ class SourceWorkDetailViewModel @Inject constructor(
 
     fun onImagePageChanged(page: Int) {
         _ui.update { it.copy(showTranslatedImage = translatedImages.containsKey(page)) }
+        // 页码 1 起存一份：收藏卡进度条读它（此前这里只切翻译态，图片进度根本没记）
+        currentWork?.let { settingsRepository.setImageProgress(it.key, page + 1) }
     }
 
     /** HD 开关：当前页在原图档与清晰档间切换 */

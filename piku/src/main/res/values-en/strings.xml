@@ -358,6 +358,26 @@
     <string name="detail_novel_theme_green">Green</string>
     <string name="detail_novel_theme_ink">Dark</string>
     <string name="detail_novel_theme_black">Black</string>
+    <string name="manga_overview">Page overview</string>
+    <string name="manga_settings">Reading settings</string>
+    <string name="manga_overview_title">%1$d pages</string>
+    <string name="manga_translate">TR</string>
+    <string name="manga_mode">Mode</string>
+    <string name="manga_mode_paged">Paged</string>
+    <string name="manga_mode_scroll">Scroll</string>
+    <string name="manga_direction">Direction</string>
+    <string name="manga_direction_ltr">L→R</string>
+    <string name="manga_direction_rtl">R→L</string>
+    <string name="manga_fit">Fit</string>
+    <string name="manga_fit_page">Whole page</string>
+    <string name="manga_fit_width">Fill width</string>
+    <string name="manga_gap">Gap</string>
+    <string name="manga_gap_none">None</string>
+    <string name="manga_gap_small">Small</string>
+    <string name="manga_brightness">Brightness</string>
+    <string name="manga_brightness_auto">System</string>
+    <string name="manga_keep_screen_on">Stay on</string>
+    <string name="manga_volume_flip">Volume keys</string>
 
     <string name="detail_more">More</string>
     <string name="detail_reaction">React</string>

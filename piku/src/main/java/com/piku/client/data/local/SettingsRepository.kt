@@ -444,6 +444,42 @@ class SettingsRepository @Inject constructor(
         keepScreenOn = prefs.getBoolean(KEY_NOVEL_KEEP_SCREEN_ON, false),
     )
 
+    /** 漫画阅读器显示设置，与小说那份各存各的 */
+    private val _mangaReaderSettings = MutableStateFlow(readMangaReaderSettings())
+    val mangaReaderSettings: StateFlow<MangaReaderSettings> = _mangaReaderSettings.asStateFlow()
+
+    /** 整包写入；[persist] 为 false 时只更新内存（亮度拖动中的实时预览，松手才落盘） */
+    fun setMangaReaderSettings(settings: MangaReaderSettings, persist: Boolean = true) {
+        val clamped = settings.copy(
+            brightness = settings.brightness.let {
+                if (it < 0f) MangaReaderSettings.BRIGHTNESS_SYSTEM
+                else it.coerceIn(MANGA_BRIGHTNESS_MIN, 1f)
+            },
+        )
+        if (persist) {
+            prefs.edit()
+                .putBoolean(KEY_MANGA_SCROLL_MODE, clamped.scrollMode)
+                .putBoolean(KEY_MANGA_RIGHT_TO_LEFT, clamped.rightToLeft)
+                .putBoolean(KEY_MANGA_FILL_WIDTH, clamped.fillWidth)
+                .putBoolean(KEY_MANGA_PAGE_GAP, clamped.pageGap)
+                .putFloat(KEY_MANGA_BRIGHTNESS, clamped.brightness)
+                .putBoolean(KEY_MANGA_KEEP_SCREEN_ON, clamped.keepScreenOn)
+                .putBoolean(KEY_MANGA_VOLUME_FLIP, clamped.volumeFlip)
+                .apply()
+        }
+        _mangaReaderSettings.value = clamped
+    }
+
+    private fun readMangaReaderSettings(): MangaReaderSettings = MangaReaderSettings(
+        scrollMode = prefs.getBoolean(KEY_MANGA_SCROLL_MODE, false),
+        rightToLeft = prefs.getBoolean(KEY_MANGA_RIGHT_TO_LEFT, true),
+        fillWidth = prefs.getBoolean(KEY_MANGA_FILL_WIDTH, false),
+        pageGap = prefs.getBoolean(KEY_MANGA_PAGE_GAP, true),
+        brightness = prefs.getFloat(KEY_MANGA_BRIGHTNESS, MangaReaderSettings.BRIGHTNESS_SYSTEM),
+        keepScreenOn = prefs.getBoolean(KEY_MANGA_KEEP_SCREEN_ON, true),
+        volumeFlip = prefs.getBoolean(KEY_MANGA_VOLUME_FLIP, false),
+    )
+
     /**
      * 读取某作品的阅读进度（百分比 0~100，0 表示无进度）。
      * 用百分比而非像素偏移存储，避免字号调整后滚动位置错位。
@@ -864,6 +900,14 @@ class SettingsRepository @Inject constructor(
         const val KEY_NOVEL_SERIF = "novel_serif"
         const val KEY_NOVEL_BRIGHTNESS = "novel_brightness"
         const val KEY_NOVEL_KEEP_SCREEN_ON = "novel_keep_screen_on"
+
+        const val KEY_MANGA_SCROLL_MODE = "manga_scroll_mode"
+        const val KEY_MANGA_RIGHT_TO_LEFT = "manga_right_to_left"
+        const val KEY_MANGA_FILL_WIDTH = "manga_fill_width"
+        const val KEY_MANGA_PAGE_GAP = "manga_page_gap"
+        const val KEY_MANGA_BRIGHTNESS = "manga_brightness"
+        const val KEY_MANGA_KEEP_SCREEN_ON = "manga_keep_screen_on"
+        const val KEY_MANGA_VOLUME_FLIP = "manga_volume_flip"
         const val KEY_NOVEL_PROGRESS_PREFIX = "novel_progress_"
         const val KEY_IMAGE_PROGRESS_PREFIX = "image_progress_"
         const val KEY_CUSTOM_BACKGROUND_PATH = "custom_background_path"
@@ -908,6 +952,9 @@ class SettingsRepository @Inject constructor(
 
         /** 阅读亮度下限：再低就看不清字了，跟随系统由 NovelReaderSettings.BRIGHTNESS_SYSTEM 表示 */
         const val NOVEL_BRIGHTNESS_MIN = 0.05f
+
+        /** 漫画阅读亮度下限，与小说同一档 */
+        const val MANGA_BRIGHTNESS_MIN = NOVEL_BRIGHTNESS_MIN
 
         /** 自定义背景压暗范围与默认值（0~1） */
         const val BACKGROUND_DIM_MIN = 0f

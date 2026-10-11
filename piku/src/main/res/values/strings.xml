@@ -370,6 +370,26 @@
     <string name="detail_novel_theme_green">护眼</string>
     <string name="detail_novel_theme_ink">深色</string>
     <string name="detail_novel_theme_black">纯黑</string>
+    <string name="manga_overview">页面总览</string>
+    <string name="manga_settings">阅读设置</string>
+    <string name="manga_overview_title">共 %1$d 页</string>
+    <string name="manga_translate">译</string>
+    <string name="manga_mode">形态</string>
+    <string name="manga_mode_paged">翻页</string>
+    <string name="manga_mode_scroll">滚动</string>
+    <string name="manga_direction">方向</string>
+    <string name="manga_direction_ltr">左→右</string>
+    <string name="manga_direction_rtl">右→左</string>
+    <string name="manga_fit">适配</string>
+    <string name="manga_fit_page">整页</string>
+    <string name="manga_fit_width">铺满宽</string>
+    <string name="manga_gap">间隙</string>
+    <string name="manga_gap_none">无缝</string>
+    <string name="manga_gap_small">留缝</string>
+    <string name="manga_brightness">亮度</string>
+    <string name="manga_brightness_auto">跟随系统</string>
+    <string name="manga_keep_screen_on">常亮</string>
+    <string name="manga_volume_flip">音量键翻页</string>
 
     <string name="detail_more">更多</string>
     <string name="detail_reaction">回应</string>

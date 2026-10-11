@@ -544,7 +544,7 @@ private fun ReaderSettingSlider(
  * 视觉只有 4dp 轨道 + 圆形滑块，配色由每档阅读主题给，与正文底同族。
  */
 @Composable
-private fun ReaderSlider(
+internal fun ReaderSlider(
     fraction: Float,
     onValueChange: (Float) -> Unit,
     active: Color,

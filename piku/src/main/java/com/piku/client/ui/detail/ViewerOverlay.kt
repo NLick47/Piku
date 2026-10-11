@@ -2,13 +2,16 @@ package com.piku.client.ui.detail
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.painter.Painter
+import com.piku.client.data.local.MangaReaderSettings
 
 @Composable
 fun ViewerOverlay(
     /** 当前打开的图页；null = 关闭态，不渲染 */
     page: Int?,
     images: List<ViewerImage>,
-    dark: Boolean,
+    title: String,
+    settings: MangaReaderSettings,
+    onSettingsChange: (MangaReaderSettings, Boolean) -> Unit,
     onClose: () -> Unit,
     onLongPressImage: (Int) -> Unit,
     hasImageModel: Boolean,
@@ -23,10 +26,12 @@ fun ViewerOverlay(
     previews: Map<Int, Painter> = emptyMap(),
 ) {
     if (page == null || images.isEmpty()) return
-    FullScreenViewer(
+    MangaReader(
         images = images,
         startPage = page.coerceIn(0, images.lastIndex),
-        dark = dark,
+        title = title,
+        settings = settings,
+        onSettingsChange = onSettingsChange,
         onClose = onClose,
         onLongPressImage = onLongPressImage,
         hasImageModel = hasImageModel,

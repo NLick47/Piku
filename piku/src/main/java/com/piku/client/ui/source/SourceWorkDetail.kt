@@ -56,6 +56,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.piku.client.R
 import com.piku.client.data.local.ShareTargets
 import com.piku.client.domain.model.Work
@@ -115,6 +116,7 @@ internal fun SourceWorkDetailScreen(
     }
 
     val state by viewModel.ui.collectAsState()
+    val mangaSettings by viewModel.mangaReaderSettings.collectAsStateWithLifecycle()
     var viewerPage by remember(work.id) { mutableStateOf(-1) }
     var imageActionPage by remember(work.id) { mutableStateOf(-1) }
     var favoriteSheetVisible by remember(work.id) { mutableStateOf(false) }
@@ -538,8 +540,10 @@ internal fun SourceWorkDetailScreen(
         ViewerOverlay(
             page = viewerPage.takeIf { it >= 0 },
             images = viewModel.viewerImages,
+            title = work.title,
+            settings = mangaSettings,
+            onSettingsChange = viewModel::setMangaReaderSettings,
             previews = shownPainters,
-            dark = dark,
             onClose = { viewerPage = -1 },
             onLongPressImage = { page -> imageActionPage = page },
             hasImageModel = state.hasImageModel,

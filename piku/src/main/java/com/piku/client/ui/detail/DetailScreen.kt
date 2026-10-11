@@ -118,6 +118,7 @@ fun DetailScreen(
 ) {
     val viewModel: DetailViewModel = hiltViewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val mangaSettings by viewModel.mangaReaderSettings.collectAsStateWithLifecycle()
     // 首张原图预热：URL 一就绪就下（只写磁盘），点开查看器时通常已经是原图
     rememberFullImagePrefetch(state.fullImageUrls.firstOrNull())
     val catalogModels by viewModel.catalogModels.collectAsStateWithLifecycle()
@@ -483,7 +484,9 @@ fun DetailScreen(
             ViewerOverlay(
                 page = viewerPage.takeIf { it >= 0 },
                 images = state.viewerImages,
-                dark = dark,
+                title = detailTitle,
+                settings = mangaSettings,
+                onSettingsChange = viewModel::setMangaReaderSettings,
                 onClose = { viewerPage = -1 },
                 onLongPressImage = { page -> imageActionPage = page },
                 hasImageModel = state.hasImageModel,
