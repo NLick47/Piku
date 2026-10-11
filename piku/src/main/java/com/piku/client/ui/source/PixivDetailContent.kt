@@ -40,6 +40,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -677,7 +678,8 @@ private fun RelatedRow(
         RelatedPlaceholderRow()
         return
     }
-    var shown by remember { mutableIntStateOf(RELATED_BATCH) }
+    // 必须与 scrollState 同寿：重建后它恢复偏移，这里若只 remember 就缩回 20 条，原偏移会被钳到新内容底部
+    var shown by rememberSaveable { mutableIntStateOf(RELATED_BATCH) }
     val preloadPx = with(LocalDensity.current) { RELATED_PRELOAD_DISTANCE.toPx() }
     val nearBottom by remember(preloadPx) {
         derivedStateOf { isNearBottom(scrollState, preloadPx) }
