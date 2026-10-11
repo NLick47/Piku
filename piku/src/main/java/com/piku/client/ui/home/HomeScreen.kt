@@ -16,7 +16,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -35,6 +34,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.currentStateAsState
 import com.piku.client.domain.model.Work
 import com.piku.client.domain.model.WorkSource
+import com.piku.client.ui.common.EffectOnChange
 import com.piku.client.ui.common.labelRes
 import com.piku.client.ui.home.background.HomeBackdropLayer
 import com.piku.client.ui.home.background.HomeBackgroundEditOverlay
@@ -117,12 +117,8 @@ fun HomeScreen(
         }
     }
     // 内容换血（切 tab/分类/重载/洗牌）时回顶
-    var seenFeedEpoch by remember { mutableIntStateOf(state.feedEpoch) }
-    LaunchedEffect(state.feedEpoch) {
-        if (state.feedEpoch != seenFeedEpoch) {
-            gridState.scrollToItem(0)
-            seenFeedEpoch = state.feedEpoch
-        }
+    EffectOnChange(keyOf = { state.feedEpoch }) {
+        gridState.scrollToItem(0)
     }
 
     // ---- 抽屉开合（带生命周期守卫：转场/后台时按钮不重复触发） ----

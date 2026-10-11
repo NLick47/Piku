@@ -71,7 +71,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.drop
 import com.piku.client.R
 import com.piku.client.data.remote.GitHubRelease
 import com.piku.client.domain.model.Work
@@ -84,6 +83,7 @@ import com.piku.client.domain.source.SourceFeed
 import com.piku.client.domain.source.SourceWorkOpen
 import coil3.compose.AsyncImage
 import com.piku.client.ui.common.FavoriteHeartBurst
+import com.piku.client.ui.common.EffectOnChange
 import com.piku.client.ui.common.LoaderDots
 import com.piku.client.ui.common.RankMedal
 import com.piku.client.ui.common.heroFeedThumbUrl
@@ -166,10 +166,8 @@ internal fun SourceFeedContent(
     }
     // 换流/换维度/换源后内容是整批替换的：滚动位置必须归零，否则停在旧列表的 offset 上，
     // 新榜单从中间开始看（首屏加载中时 scrollToItem 也无副作用）
-    LaunchedEffect(Unit) {
-        snapshotFlow { Triple(state.source, state.feedId, state.facetChoices) }
-            .drop(1)
-            .collect { if (!atTop) gridState.scrollToItem(0) }
+    EffectOnChange(keyOf = { Triple(state.source, state.feedId, state.facetChoices) }) {
+        if (!atTop) gridState.scrollToItem(0)
     }
     val scrollProgress = remember(gridState) { { gridState.feedScrollProgress() } }
 

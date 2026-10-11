@@ -78,6 +78,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import com.piku.client.ui.common.CardProgress
+import com.piku.client.ui.common.EffectOnChange
 import com.piku.client.ui.common.FeedbackHost
 import com.piku.client.ui.common.GlassCard
 import com.piku.client.ui.common.PikuBottomSheet
@@ -922,7 +923,9 @@ private fun FolderDetailContent(
     var focusOnExpand by remember { mutableStateOf(false) }
     val gridState = rememberLazyStaggeredGridState()
     // 换收藏夹、换排序、换来源筛选、改检索词都要回到顶部：否则列表一收缩，滚动位置会停在旧位置上
-    LaunchedEffect(state.currentFolderId, state.allScope, state.sort, state.sourceFilter, state.query) {
+    EffectOnChange(keyOf = {
+        listOf(state.currentFolderId, state.allScope, state.sort, state.sourceFilter, state.query)
+    }) {
         gridState.scrollToItem(0)
     }
     Column(Modifier.fillMaxSize()) {
