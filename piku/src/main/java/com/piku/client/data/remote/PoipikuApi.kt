@@ -12,6 +12,12 @@ import retrofit2.http.Query
 object ApiConfig {
     const val BASE_URL = "https://poipiku.com/"
     const val PIKU_USER_AGENT = "Piku/0.1.0 (Android)"
+
+    /**
+     * 登录态 cookie。放在这里而不是各处分头写死：会话是否成立、cookie 落盘、
+     * 网页登录接管三处都要认这个名字，写散了迟早对不上。
+     */
+    const val SESSION_COOKIE = "POIPIKU_LK"
 }
 
 @Serializable

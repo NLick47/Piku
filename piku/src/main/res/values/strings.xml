@@ -25,6 +25,13 @@
     <string name="register_error_password">密码需为 8~32 位半角字符</string>
     <string name="register_error_network">网络错误，请稍后重试</string>
     <string name="register_error_unknown">注册失败，请稍后重试</string>
+
+    <!-- poipiku 网页登录（走站内登录页的 WebView，会话 cookie 与 poipiku 的其它路径共用） -->
+    <string name="poipiku_web_login_entry">使用网页登录</string>
+    <string name="poipiku_web_login_title">网页登录 Poipiku</string>
+    <string name="poipiku_web_login_adopting">正在完成登录…</string>
+    <string name="poipiku_web_login_page_failed">登录页打不开，请检查网络</string>
+    <string name="poipiku_web_login_error_rejected">网页没有登录成功，请重试</string>
     <string name="account_logged_in">已登录</string>
     <string name="account_logged_out">未登录</string>
     <string name="drawer_login_hint">点击登录</string>

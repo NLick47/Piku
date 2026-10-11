@@ -68,5 +68,8 @@ private val NO_ACCOUNT: StateFlow<SourceAccount?> = MutableStateFlow(null)
 /** 各源登录页的路由名。放在域层是为了让插件自己声明入口，而不是让外壳穷举 */
 object SourceAuthRoutes {
     const val POIPIKU_LOGIN = "login"
+
+    const val POIPIKU_WEB_LOGIN = "poipiku_web_login"
+
     const val PIXIV_LOGIN = "pixiv_login"
 }

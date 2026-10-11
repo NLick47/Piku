@@ -23,6 +23,8 @@ import kotlinx.coroutines.sync.withLock
 import okhttp3.CookieJar
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import java.net.CookieStore
+import java.net.HttpCookie
+import java.net.URI
 import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -187,6 +189,52 @@ class AuthRepository @Inject constructor(
         clearSession()
     }
 
+    suspend fun adoptWebSession(sessionToken: String): Result<Unit> =
+        withContext(runtime.dispatcher) {
+            sessionMutex.withLock {
+                val epoch = sessionEpoch.get()
+                val cookie = HttpCookie(ApiConfig.SESSION_COOKIE, sessionToken).apply {
+                    domain = SESSION_COOKIE_DOMAIN
+                    path = "/"
+                    isHttpOnly = true
+                    secure = true
+                }
+                cookieStore.add(SESSION_URI, cookie)
+                val webUid = apiCall { authApi.checkLogin() }
+                    .fold(onSuccess = { it.user_id }, onFailure = { error ->
+                        Log.d(TAG, "adoptWebSession: checkLogin failed: $error")
+                        cookieStore.remove(SESSION_URI, cookie)
+                        return@withLock Result.failure(
+                            if (error is AppError.Network) LoginError.Network else LoginError.Unknown,
+                        )
+                    })
+                Log.d(TAG, "adoptWebSession: uid=$webUid")
+                when {
+                    webUid <= 0 -> {
+                        cookieStore.remove(SESSION_URI, cookie)
+                        Result.failure(LoginError.InvalidCredentials)
+                    }
+                    sessionEpoch.get() != epoch -> {
+                        Log.d(TAG, "adopt ok but session cleared meanwhile, discard")
+                        clearSession()
+                        Result.failure(LoginError.Cancelled)
+                    }
+                    else -> {
+                        uid = webUid.toLong()
+                        _authStatus.value = AuthStatus.LOGGED_IN
+                        credentialStore.clearAccountMemory()
+                        // uid 要落盘：冷启动正是靠它把 cookie 认成"完整会话"，缺了会被当成无效 cookie 清掉
+                        credentialStore.saveUid(webUid.toLong())
+                        // 屏蔽名单属于账号，与 clearSession 同理：不清会让旧账号的名单过滤新账号的内容
+                        blockListRepository.clear()
+                        reloginPolicy.onSessionEstablished()
+                        _sessionVersion.update { it + 1 }
+                        Result.success(Unit)
+                    }
+                }
+            }
+        }
+
     /**
      * 会话失效（或冷启动没拿到有效会话）后的自动重登：
      * - 无保存凭据 → 自认为登录中则登出，否则什么都不做
@@ -231,13 +279,12 @@ class AuthRepository @Inject constructor(
 
     private fun hasSession(): Boolean {
         val session = cookieJar.loadForRequest(ApiConfig.BASE_URL.toHttpUrl())
-            .any { it.name == SESSION_COOKIE && it.value.isNotBlank() }
+            .any { it.name == ApiConfig.SESSION_COOKIE && it.value.isNotBlank() }
         Log.d(TAG, "hasSession: $session")
         return session
     }
 
     private companion object {
-        const val SESSION_COOKIE = "POIPIKU_LK"
         const val RESULT_LOCKED = -21
         const val RESULT_EMAIL_USED = -8
         const val RESULT_INVALID_NICKNAME = -6
@@ -245,6 +292,8 @@ class AuthRepository @Inject constructor(
         const val X_REQUESTED_WITH = "XMLHttpRequest"
         const val TAG = "PikuDiag"
 
+        const val SESSION_COOKIE_DOMAIN = "poipiku.com"
+        val SESSION_URI: URI = URI(ApiConfig.BASE_URL)
     }
 }
 

@@ -45,6 +45,7 @@ import com.piku.client.ui.follow.UserWorksScreen
 import com.piku.client.ui.history.HistoryScreen
 import com.piku.client.ui.home.HomeScreen
 import com.piku.client.ui.login.EmailLoginScreen
+import com.piku.client.ui.login.PoipikuWebLoginScreen
 import com.piku.client.ui.login.RegisterScreen
 import com.piku.client.ui.myposts.MyPostsScreen
 import com.piku.client.ui.login.PixivLoginScreen
@@ -63,6 +64,7 @@ import androidx.compose.animation.core.tween
 object Routes {
     /** poipiku 的登录页也由它的插件声明（SourceAuthRoutes），这里只登记 */
     const val LOGIN = SourceAuthRoutes.POIPIKU_LOGIN
+    const val POIPIKU_WEB_LOGIN = SourceAuthRoutes.POIPIKU_WEB_LOGIN
     const val REGISTER = "register"
     const val PIXIV_LOGIN = SourceAuthRoutes.PIXIV_LOGIN
     const val HOME = "home"
@@ -309,6 +311,15 @@ fun AppNavHost(
                 canGoBack = canGoBack,
                 onSuccess = safePopBack,
                 onRegisterClick = { navController.navigate(Routes.REGISTER) },
+                onWebLoginClick = { navController.navigate(Routes.POIPIKU_WEB_LOGIN) },
+            )
+        }
+        composable(Routes.POIPIKU_WEB_LOGIN) {
+            PoipikuWebLoginScreen(
+                onBack = safePopBack,
+                // 登录成功直接回首页（栈底），弹掉本页与它下面的登录页。
+                // 与注册成功同一语义：登录不是"某个受限页的前置条件"，成功即完成。
+                onSuccess = { navController.popBackStack(Routes.HOME, inclusive = false) },
             )
         }
         composable(Routes.PIXIV_LOGIN) {

@@ -5,6 +5,7 @@ import com.piku.client.data.local.CredentialStorage
 import com.piku.client.data.local.CredentialStore
 import com.piku.client.data.local.Credentials
 import com.piku.client.data.remote.AuthApi
+import com.piku.client.data.remote.CheckLoginResponse
 import com.piku.client.data.remote.FileCookieStore
 import com.piku.client.data.remote.LoginResponse
 import com.piku.client.data.remote.PersistentCookieJar
@@ -299,6 +300,89 @@ class AuthRepositoryTest {
         assertTrue("成功登录后计数应归零，不该累计到淘汰", repo.isLoggedIn())
     }
 
+    @Test
+    fun webSessionAdoptionEstablishesLoginAndPersistsOnlyUid() {
+        val store = cookieStore(sessionValue = BLANK)
+        val credentials = credentialStore()
+        val api = FakeAuthApi().apply { checkLoginUid = UID }
+        val repo = build(api, store, credentials)
+
+        val result = runBlocking { repo.adoptWebSession(TOKEN) }
+
+        assertTrue(result.isSuccess)
+        assertEquals(UID.toLong(), repo.currentUserId())
+        assertEquals(AuthStatus.LOGGED_IN, repo.authStatus.value)
+        assertEquals(1L, repo.sessionVersion.value)
+        assertTrue("会话 cookie 必须落进应用侧 cookie 存储", hasValidSessionCookie(store))
+        assertEquals("uid 必须落盘：冷启动正是靠它把 cookie 认成完整会话", UID.toLong(), credentials.loadUid())
+        assertNull("网页登录没有密码可存", credentials.load())
+    }
+
+    /** 换账号：旧账号的密码必须丢，否则这次会话失效时 autoReLogin 会把用户登回上一个账号 */
+    @Test
+    fun webSessionAdoptionEvictsPreviousAccountCredentials() {
+        val credentials = credentialStore().apply { save(OLD_EMAIL, OLD_PASSWORD) }
+        val repo = build(
+            FakeAuthApi().apply { checkLoginUid = UID },
+            cookieStore(sessionValue = BLANK),
+            credentials,
+        )
+
+        runBlocking { repo.adoptWebSession(TOKEN) }
+
+        assertNull("旧账号的密码不能留下来", credentials.load())
+        assertEquals("uid 仍要保留", UID.toLong(), credentials.loadUid())
+    }
+
+    /** 站点不认这份 cookie：不能留下"有 cookie 但登不进"的假会话，否则冷启动会硬撑成已登录 */
+    @Test
+    fun webSessionRejectedBySiteLeavesNoSessionBehind() {
+        val store = cookieStore(sessionValue = BLANK)
+        val api = FakeAuthApi().apply { checkLoginUid = ANONYMOUS_UID }
+        val repo = build(api, store, credentialStore())
+
+        val result = runBlocking { repo.adoptWebSession(TOKEN) }
+
+        assertTrue(result.exceptionOrNull() is LoginError.InvalidCredentials)
+        assertFalse(repo.isLoggedIn())
+        assertFalse("站点不认的 cookie 必须撤掉", hasValidSessionCookie(store))
+        assertEquals("失败不该让页面重载", 0L, repo.sessionVersion.value)
+    }
+
+    /**
+     * checkLogin 网络失败：同样不能把没验证过的 cookie 留在盘上。
+     *
+     * 不钉错误类型：suspend 方法经动态代理抛出的异常会被包成 UndeclaredThrowableException
+     * 落到 apiCall 的兜底分支，测试里看不到 Network/Unknown 的区别。本例要验的是回滚。
+     */
+    @Test
+    fun webSessionAdoptionNetworkFailureLeavesNoSessionBehind() {
+        val store = cookieStore(sessionValue = BLANK)
+        val api = FakeAuthApi().apply { checkLoginBehaviour = { throw IOException("offline") } }
+        val repo = build(api, store, credentialStore())
+
+        val result = runBlocking { repo.adoptWebSession(TOKEN) }
+
+        assertTrue(result.isFailure)
+        assertFalse(repo.isLoggedIn())
+        assertFalse("没验证过的 cookie 必须撤掉", hasValidSessionCookie(store))
+    }
+
+    /** 接管在途期间用户登出：结果必须丢弃，不能把用户又登回来 */
+    @Test
+    fun webSessionAdoptionIsDiscardedWhenUserLogsOutMidFlight() {
+        val store = cookieStore(sessionValue = BLANK)
+        val api = FakeAuthApi().apply { checkLoginUid = UID }
+        val repo = build(api, store, credentialStore())
+        api.beforeCheckLoginReturns = { repo.logout() }
+
+        val result = runBlocking { repo.adoptWebSession(TOKEN) }
+
+        assertTrue(result.exceptionOrNull() is LoginError.Cancelled)
+        assertFalse("登出后不能被在途的接管登回来", repo.isLoggedIn())
+        assertNull(repo.currentUserId())
+    }
+
     // ---- 登出竞态 ----
 
     @Test
@@ -535,6 +619,11 @@ class AuthRepositoryTest {
         /** 抛 IOException 即模拟网络失败；返回负 result 即凭据失效 */
         var loginBehaviour: () -> LoginResponse = { LoginResponse(UID) }
 
+        /** checkLogin 回的 user_id：正数=登录态，-1=站点不认这份会话 */
+        var checkLoginUid: Int = UID
+        var checkLoginBehaviour: () -> CheckLoginResponse = { CheckLoginResponse(checkLoginUid) }
+        var beforeCheckLoginReturns: (() -> Unit)? = null
+
         val api: AuthApi = Proxy.newProxyInstance(
             AuthApi::class.java.classLoader,
             arrayOf(AuthApi::class.java),
@@ -545,6 +634,10 @@ class AuthRepositoryTest {
                     lastPassword = args?.getOrNull(1) as? String
                     beforeLoginReturns?.invoke()
                     loginBehaviour()
+                }
+                "checkLogin" -> {
+                    beforeCheckLoginReturns?.invoke()
+                    checkLoginBehaviour()
                 }
                 // 资料页与用户主页：昵称解析链路要它们返回真实形状的 Response
                 else -> throw UnsupportedOperationException(method.name)
@@ -589,6 +682,10 @@ class AuthRepositoryTest {
         const val UID = 14189264
         const val RESULT_INVALID = -1
         const val KEY_EMAIL = "email_enc"
+        const val OLD_EMAIL = "old@example.com"
+        const val OLD_PASSWORD = "old-secret"
 
+        /** checkLogin 在未登录时回的 user_id */
+        const val ANONYMOUS_UID = -1
     }
 }

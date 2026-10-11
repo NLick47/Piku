@@ -24,6 +24,13 @@
     <string name="register_error_email">Invalid email address</string>
     <string name="register_error_password">Password must be 8-32 half-width characters</string>
     <string name="register_error_network">Network error. Please try again later</string>
+
+    <!-- poipiku 网页登录（走站内登录页的 WebView，会话 cookie 与 poipiku 的其它路径共用） -->
+    <string name="poipiku_web_login_entry">Sign in on the web</string>
+    <string name="poipiku_web_login_title">Sign in to Poipiku</string>
+    <string name="poipiku_web_login_adopting">Finishing sign-in…</string>
+    <string name="poipiku_web_login_page_failed">Login page won\'t open — please check your network</string>
+    <string name="poipiku_web_login_error_rejected">The page didn\'t complete sign-in, please retry</string>
     <string name="register_error_unknown">Registration failed. Please try again</string>
     <string name="account_logged_in">Signed in</string>
     <string name="account_logged_out">Not signed in</string>

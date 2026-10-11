@@ -18,7 +18,7 @@ class PersistentCookieJar(
         )
         val uri = url.toUri()
         cookies.forEach { cookie ->
-            if (cookie.name == SESSION_COOKIE && cookie.value.isBlank()) {
+            if (cookie.name == ApiConfig.SESSION_COOKIE && cookie.value.isBlank()) {
                 android.util.Log.d(TAG, "session cookie cleared by server")
                 sessionMonitor.notifySessionCleared()
             }
@@ -61,6 +61,5 @@ class PersistentCookieJar(
 
     private companion object {
         const val TAG = "PikuDiag"
-        const val SESSION_COOKIE = "POIPIKU_LK"
     }
 }

@@ -7,6 +7,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -76,6 +78,7 @@ fun EmailLoginScreen(
     canGoBack: Boolean = true,
     onSuccess: () -> Unit,
     onRegisterClick: () -> Unit,
+    onWebLoginClick: () -> Unit,
 ) {
     val viewModel: LoginViewModel = hiltViewModel()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -138,6 +141,7 @@ fun EmailLoginScreen(
                     viewModel.login()
                 },
                 onRegisterClick = onRegisterClick,
+                onWebLoginClick = onWebLoginClick,
                 dark = dark,
                 modifier = Modifier
                     .widthIn(max = 440.dp)
@@ -181,6 +185,7 @@ private fun LoginGlassCard(
     onFocusPassword: () -> Unit,
     onLogin: () -> Unit,
     onRegisterClick: () -> Unit,
+    onWebLoginClick: () -> Unit,
     dark: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -310,7 +315,7 @@ private fun LoginGlassCard(
             modifier = Modifier.fillMaxWidth(),
         )
 
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.height(8.dp))
         Text(
             text = stringResource(R.string.register_link_login),
             color = PikuColors.textPrimary,
@@ -318,6 +323,25 @@ private fun LoginGlassCard(
             modifier = Modifier
                 .clip(RoundedCornerShape(8.dp))
                 .clickable(onClick = onRegisterClick)
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        val webLinkInteraction = remember { MutableInteractionSource() }
+        val webLinkPressed by webLinkInteraction.collectIsPressedAsState()
+        Text(
+            text = stringResource(R.string.poipiku_web_login_entry),
+            color = if (webLinkPressed) PikuColors.accent.copy(alpha = 0.6f) else PikuColors.accent,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(
+                    interactionSource = webLinkInteraction,
+                    indication = null,
+                    onClick = onWebLoginClick,
+                )
                 .padding(horizontal = 8.dp, vertical = 6.dp),
         )
     }

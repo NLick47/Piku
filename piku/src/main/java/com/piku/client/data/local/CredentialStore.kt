@@ -106,6 +106,12 @@ class CredentialStore(
         removeProfile()
     }
 
+    fun clearAccountMemory() {
+        storage.remove(KEY_EMAIL)
+        storage.remove(KEY_PASSWORD)
+        removeProfile()
+    }
+
     private fun removeProfile() {
         storage.remove(KEY_PROFILE_UID)
         storage.remove(KEY_PROFILE_NAME)

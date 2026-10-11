@@ -56,7 +56,10 @@ class PoipikuAuth @Inject constructor(
     override fun profileId(account: SourceAccount): String? =
         account.account.takeIf { it.isNotBlank() }
 
-    override fun logout() = repository.logout()
+    override fun logout() {
+        repository.logout()
+        PoipikuWebSession.clearWebViewCookies()
+    }
 
     private companion object {
         const val REFRESH_GRACE_MS = 5_000L

@@ -24,6 +24,13 @@
     <string name="register_error_email">メールアドレスの形式が正しくありません</string>
     <string name="register_error_password">パスワードは8〜32文字の半角文字で入力してください</string>
     <string name="register_error_network">ネットワークエラーです。時間をおいて再試行してください</string>
+
+    <!-- poipiku 网页登录（走站内登录页的 WebView，会话 cookie 与 poipiku 的其它路径共用） -->
+    <string name="poipiku_web_login_entry">ウェブでログイン</string>
+    <string name="poipiku_web_login_title">ポイピクにログイン</string>
+    <string name="poipiku_web_login_adopting">ログインを完了しています…</string>
+    <string name="poipiku_web_login_page_failed">ログインページを開けません。ネットワークをご確認ください</string>
+    <string name="poipiku_web_login_error_rejected">ログインが完了しませんでした。もう一度お試しください</string>
     <string name="register_error_unknown">登録に失敗しました。もう一度お試しください</string>
     <string name="account_logged_in">ログイン中</string>
     <string name="account_logged_out">未ログイン</string>

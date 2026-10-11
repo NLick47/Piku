@@ -15,6 +15,9 @@ import retrofit2.http.Query
 data class LoginResponse(val result: Int = -1)
 
 @Serializable
+data class CheckLoginResponse(val user_id: Int = -1)
+
+@Serializable
 data class RegisterResponse(val result: Int = -1)
 
 @Serializable
@@ -31,6 +34,9 @@ interface AuthApi {
         @Field("EM") email: String,
         @Field("PW") password: String,
     ): LoginResponse
+
+    @GET("f/CheckLoginF.jsp")
+    suspend fun checkLogin(): CheckLoginResponse
 
     /** 注册/邮箱登录表单页，内含每次加载都会轮换的 TK 令牌，必须先 GET 拿新令牌再注册 */
     @GET("LoginFormEmailV.jsp")
