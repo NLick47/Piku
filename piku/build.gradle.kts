@@ -135,6 +135,9 @@ android {
     }
 
     packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
             // 依赖自带的许可证文本（各 ~10KB，压缩后仍占体积）
