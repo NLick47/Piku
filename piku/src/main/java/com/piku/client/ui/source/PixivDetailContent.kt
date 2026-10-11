@@ -1,6 +1,7 @@
 package com.piku.client.ui.source
 
 import android.graphics.Bitmap
+import android.util.Log
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
@@ -33,7 +34,10 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -46,6 +50,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -83,6 +88,17 @@ private val PIXIV_CONTENT_PADDING = 20.dp
 /** 相关作品网格：一格的目标宽度，可用宽度除以它就是列数（411dp 屏 → 3 列） */
 private val RELATED_COLUMN_WIDTH = 112.dp
 private val RELATED_GAP = 10.dp
+
+// 相关作品首批先渲染这么多，滚到快到底再追加同量
+private const val RELATED_BATCH = 20
+
+// 离底部还剩这么远就开始要下一批
+private val RELATED_PRELOAD_DISTANCE = 600.dp
+
+/** 离底不足预载距离；viewportSize 为 0 表示还没量过，此时 maxValue 是哨兵值不可作依据 */
+private fun isNearBottom(scrollState: ScrollState, preloadPx: Float): Boolean =
+    scrollState.viewportSize > 0 &&
+        scrollState.value + scrollState.viewportSize >= scrollState.maxValue - preloadPx
 
 @Composable
 internal fun PixivDetailContent(
@@ -215,7 +231,12 @@ internal fun PixivDetailContent(
                 onBookmarkLongPress = onBookmarkLongPress,
                 onFollowClick = onFollowClick,
             )
-            RelatedRow(works = related, loading = relatedLoading, onClick = onRelatedClick)
+            RelatedRow(
+                works = related,
+                loading = relatedLoading,
+                scrollState = scrollState,
+                onClick = onRelatedClick,
+            )
         }
     }
 }
@@ -637,7 +658,12 @@ internal fun TagsBlock(
 }
 
 @Composable
-private fun RelatedRow(works: List<Work>, loading: Boolean, onClick: (Work) -> Unit) {
+private fun RelatedRow(
+    works: List<Work>,
+    loading: Boolean,
+    scrollState: ScrollState,
+    onClick: (Work) -> Unit,
+) {
     if (works.isEmpty() && !loading) return
     Spacer(Modifier.height(18.dp))
     Text(
@@ -651,9 +677,24 @@ private fun RelatedRow(works: List<Work>, loading: Boolean, onClick: (Work) -> U
         RelatedPlaceholderRow()
         return
     }
+    var shown by remember { mutableIntStateOf(RELATED_BATCH) }
+    val preloadPx = with(LocalDensity.current) { RELATED_PRELOAD_DISTANCE.toPx() }
+    val nearBottom by remember(preloadPx) {
+        derivedStateOf { isNearBottom(scrollState, preloadPx) }
+    }
+    LaunchedEffect(nearBottom, works.size, shown) {
+        val from = shown
+        val append = nearBottom && isNearBottom(scrollState, preloadPx)
+        if (append) shown = (from + RELATED_BATCH).coerceAtMost(works.size)
+        Log.d(
+            "PikuDiag",
+            "related grid key=$nearBottom append=$append total=${works.size} shown=$from->$shown " +
+                "scroll=${scrollState.value}/${scrollState.maxValue}",
+        )
+    }
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val columns = (maxWidth / RELATED_COLUMN_WIDTH).toInt().coerceIn(2, 4)
-        val rows = works.chunked(columns)
+        val rows = works.take(shown).chunked(columns)
         Column(verticalArrangement = Arrangement.spacedBy(RELATED_GAP)) {
             rows.forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(RELATED_GAP)) {

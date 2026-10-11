@@ -472,7 +472,7 @@ class PixivRepository @Inject constructor(
                 clientHash = signature.hash,
                 illustId = illustId,
             )
-            RelatedPage(response.illusts.mapNotNull { it.toWork() }, appCursor(response.nextUrl))
+            RelatedPage(response.illusts.mapNotNull { it.toWork(hdThumb = false) }, appCursor(response.nextUrl))
         } else {
             val response = api.recommend(illustId)
             if (response.error) return null
@@ -486,7 +486,7 @@ class PixivRepository @Inject constructor(
         is RelatedCursor.AppUrl -> {
             val signature = endpoints.clientSignature(runtime.now())
             val response = appApi.relatedIllustsNext(cursor.url, signature.time, signature.hash)
-            RelatedPage(response.illusts.mapNotNull { it.toWork() }, appCursor(response.nextUrl))
+            RelatedPage(response.illusts.mapNotNull { it.toWork(hdThumb = false) }, appCursor(response.nextUrl))
         }
         is RelatedCursor.WebIds -> {
             val response = api.recommendByIds(cursor.ids)
