@@ -15,9 +15,9 @@ data class SniRule(
 object PoipikuNetworkPolicy {
 
     val rules: Map<String, SniRule> = mapOf(
-        // 主站：服务器按 IP 提供证书，不依赖 SNI，直接清空以绕过 SNI 检测
+        // 主站：服务器按 IP 提供证书，不依赖 SNI，伪装成百度域名以绕过 SNI 检测
         "poipiku.com" to SniRule(
-            sni = null,
+            sni = "www.baidu.com",
             trustedSans = setOf("poipiku.com", "*.poipiku.com"),
         ),
         // 图片 CDN：CloudFront 必须靠 SNI 选择分发，但 cdn.poipiku.com 的 SNI 被

@@ -22,7 +22,6 @@ import javax.net.ssl.X509TrustManager
  * 按 [PoipikuNetworkPolicy] 改写 TLS ClientHello 的 SNI 扩展。
  *
  * 部分网络环境会对特定 SNI 明文的 TLS 握手直接 RST：
- * - poipiku.com：清空 SNI（服务器按 IP 提供证书，不依赖 SNI）
  * - cdn.poipiku.com：伪装成其 CNAME 目标（CloudFront 按 SNI 选分发，
  *   伪装域名就是同一分发，证书为 *.cloudfront.net）
  *

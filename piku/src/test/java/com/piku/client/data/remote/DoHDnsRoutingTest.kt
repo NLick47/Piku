@@ -287,19 +287,22 @@ class DoHDnsRoutingTest {
     }
 
     @Test
-    fun pixivNeverConsultsTheSystemDnsWhilePoipikuStillLeadsWithIt() {
+    fun pixivNeverConsultsTheSystemDnsWhilePoipikuKeepsItAsTheLastResort() {
         val dns = dns()
 
         // 系统 DNS 对 pixiv 只会给投毒答案，问了等于白花一次探测
         assertFalse(DoHDns.SYSTEM_SOURCE_NAME in dns.sourceNamesFor("www.pixiv.net"))
         assertFalse(DoHDns.SYSTEM_SOURCE_NAME in dns.sourceNamesFor("i.pximg.net"))
         assertTrue(DoHDns.STATIC_SOURCE_NAME in dns.sourceNamesFor("www.pixiv.net"))
-        assertEquals(DoHDns.SYSTEM_SOURCE_NAME, dns.sourceNamesFor("poipiku.com").first())
+        // poipiku 主站：内置固定 IP 打头，系统 DNS 垫底
+        val poipikuSources = dns.sourceNamesFor("poipiku.com")
+        assertEquals(DoHDns.STATIC_SOURCE_NAME, poipikuSources.first())
+        assertEquals(DoHDns.SYSTEM_SOURCE_NAME, poipikuSources.last())
     }
 
     @Test
     fun builtInAddressesCoverOurOwnHostsSoPoisonedOrExpiredDnsCannotStrandUs() {
-        val hosts = listOf("www.pixiv.net", "i.pximg.net")
+        val hosts = listOf("poipiku.com", "www.pixiv.net", "i.pximg.net")
 
         hosts.forEach { host ->
             val ips = DoHDns.STATIC_ADDRESSES[host]
@@ -317,7 +320,8 @@ class DoHDnsRoutingTest {
         val source = StaticAddressSource()
 
         assertTrue(source.resolve("i.pximg.net").isNotEmpty())
-        assertTrue(source.resolve("poipiku.com").isEmpty())
+        assertEquals(listOf("54.199.93.197"), source.resolve("poipiku.com").map { it.hostAddress })
+        assertTrue(source.resolve("pic-relay.cyou").isEmpty())
     }
 
     @Test
@@ -344,6 +348,59 @@ class DoHDnsRoutingTest {
         // 竞速里自建 DoH 第一次没给答案：全灭后必须再问它一次，而不是直接判"域名不存在"
         assertEquals(listOf(ipC), dns.lookup(HOST))
         assertTrue("自建 DoH 应被问第二次", workerCalls >= 2)
+    }
+
+    @Test
+    fun theBuiltInPoipikuAddressIsHandedOverOnlyAfterTlsVerification() {
+        val pinned = InetAddress.getByName("54.199.93.197")
+        val sources = listOf(StaticAddressSource())
+
+        val blocked = dns(
+            sources = sources,
+            probe = AddressProbe { _, _ -> ProbeReport.tlsFailed("SNI 阻断") },
+        )
+        // 内置 IP 不是免检通道：握手不过就当没有可用地址，而不是把请求交给它
+        assertThrows(UnknownHostException::class.java) { blocked.lookup("poipiku.com") }
+
+        val healthy = dns(sources = sources, probe = AddressProbe { _, _ -> ProbeReport.ok() })
+        assertEquals(listOf(pinned), healthy.lookup("poipiku.com"))
+    }
+
+    @Test
+    fun lastResortAskSkipsTheSystemDnsSoTheCleanExitIsAskedAgain() {
+        var systemCalls = 0
+        var workerCalls = 0
+        val system = CachingAddressSource(
+            ttlMs = 60_000,
+            clock = { now },
+            isUsable = { _, _ -> true },
+            name = DoHDns.SYSTEM_SOURCE_NAME,
+            delegate = AddressSource {
+                systemCalls++
+                emptyList()
+            },
+        )
+        val worker = CachingAddressSource(
+            ttlMs = 60_000,
+            clock = { now },
+            isUsable = { _, _ -> true },
+            name = DoHDns.WORKER_SOURCE_NAME,
+            delegate = AddressSource {
+                workerCalls++
+                if (workerCalls == 1) emptyList() else listOf(ipC)
+            },
+        )
+        val dns = dns(
+            sources = listOf(worker, system),
+            probe = AddressProbe { _, address ->
+                if (address == ipC) ProbeReport.ok() else ProbeReport.connectFailed()
+            },
+        )
+
+        // 全灭后的兜底这一问仍给自建 DoH；垫底的系统 DNS 不该被重问
+        assertEquals(listOf(ipC), dns.lookup(HOST))
+        assertTrue("自建 DoH 应被问第二次", workerCalls >= 2)
+        assertEquals("系统 DNS 只该被问一次", 1, systemCalls)
     }
 
     private companion object {

@@ -78,11 +78,15 @@ class DoHDns internal constructor(
     }
 
     /**
-     * 竞速来源按域名分两套：pixiv 不走系统 DNS（投毒答案对它没有价值，只多花一次探测），
-     * 其余域名保持系统 DNS 打头。单测用假来源整体覆盖。
+     * 竞速来源按域名分三套：pixiv 不走系统 DNS（投毒答案对它没有价值，只多花一次探测）；
+     * poipiku 主站内置固定 IP 打头、系统 DNS 只当最后一条退路；其余域名保持系统 DNS 打头。
+     * 单测用假来源整体覆盖。
      */
     private val pixivSources: List<AddressSource> by lazy {
         listOf(staticSource, cloudflareSource, workerSource)
+    }
+    private val poipikuSources: List<AddressSource> by lazy {
+        listOf(staticSource, alidnsSource, cloudflareSource, workerSource, systemSource)
     }
     private val otherSources: List<AddressSource> by lazy {
         listOf(systemSource, alidnsSource, cloudflareSource, workerSource)
@@ -91,6 +95,7 @@ class DoHDns internal constructor(
     internal fun sourcesFor(hostname: String): List<AddressSource> = when {
         sourcesOverride.isNotEmpty() -> sourcesOverride
         isPixivDomain(hostname) -> pixivSources
+        hostname == POIPIKU_MAIN_HOST -> poipikuSources
         else -> otherSources
     }
 
@@ -233,9 +238,10 @@ class DoHDns internal constructor(
             return fallback
         }
 
-        // 兜底二：一个可试地址都没有时，单独再问一次名单末尾的来源（自建 DoH）：
-        // 它是唯一在任何网络下都干净的出口，上一次失败可能只是瞬时
-        sourcesFor(hostname).lastOrNull()?.let { lastResort ->
+        // 兜底二：一个可试地址都没有时，单独再问一次名单末尾的 DoH（自建）：
+        // 它是唯一在任何网络下都干净的出口，上一次失败可能只是瞬时。
+        // 垫底的系统 DNS 例外：刚问过且多半是投毒答案，重问一次没有意义
+        sourcesFor(hostname).lastOrNull { sourceName(it) != SYSTEM_SOURCE_NAME }?.let { lastResort ->
             resolveVia(lastResort, hostname, sourcesSeen, probesSeen)?.let { winner ->
                 return acceptAndRoute(hostname, winner, racedAt, sourcesSeen, probesSeen)
             }
@@ -559,7 +565,12 @@ class DoHDns internal constructor(
         )
 
         val PIXIV_DOMAINS = listOf("pixiv.net", "pximg.net")
+
+        /** 有内置固定 IP、且来源名单单独排序的 poipiku 主站域名 */
+        const val POIPIKU_MAIN_HOST = "poipiku.com"
+
         val STATIC_ADDRESSES = mapOf(
+            "poipiku.com" to listOf("54.199.93.197"),
             "www.pixiv.net" to listOf("172.64.145.17", "104.18.42.239"),
             "app-api.pixiv.net" to listOf("172.64.145.17", "104.18.42.239"),
             "i.pximg.net" to listOf("210.140.139.129", "210.140.139.133", "210.140.139.134"),
