@@ -69,6 +69,8 @@ import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
@@ -275,6 +277,17 @@ fun FullNovelViewer(
                     isAppearanceLightNavigationBars = !appDark
                 }
             }
+        }
+    }
+
+    // 沉浸模式：阅读时隐藏系统栏，从屏幕边缘滑入可临时唤出，退出阅读器时恢复
+    DisposableEffect(activity) {
+        val controller = activity?.window?.let { WindowCompat.getInsetsController(it, view) }
+        controller?.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        controller?.hide(WindowInsetsCompat.Type.systemBars())
+        onDispose {
+            controller?.show(WindowInsetsCompat.Type.systemBars())
         }
     }
 
