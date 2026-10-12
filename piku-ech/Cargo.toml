@@ -23,10 +23,14 @@ jni = "0.21"
 # 只用于按 RFC 9180 向量校验 KEM 派生（ring 不暴露临时私钥，测试里自己算 DH）
 x25519-dalek = "2"
 
+[profile.dev]
+panic = "abort"
+
 [profile.release]
 opt-level = "z"
 lto = true
 codegen-units = 1
 strip = "symbols"
-# 保留 unwind：JNI 入口用 catch_unwind 兜底，不能让一个数组越界把 App 带走
-panic = "unwind"
+# panic 一律 abort：unwind 表（.eh_frame + 异常表）占 .so 两成体积，实测 -415KB。
+# JNI 边界输入已逐项校验，catch_unwind 只对显式 unwind 构建有意义
+panic = "abort"

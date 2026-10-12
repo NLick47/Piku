@@ -242,6 +242,8 @@ val buildNativeEch by tasks.registering(Exec::class) {
     inputs.dir(nativeEchDir.dir("src"))
     inputs.file(nativeEchDir.file("Cargo.toml"))
     inputs.file(nativeEchDir.file("Cargo.lock")).optional()
+    // rustflags 放这里，不改它就不会触发重建
+    inputs.file(nativeEchDir.file(".cargo/config.toml")).optional()
     outputs.dir(nativeEchJniLibs)
     doFirst {
         val ready = runCatching {

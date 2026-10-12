@@ -62,7 +62,6 @@ pub extern "system" fn Java_com_piku_client_data_remote_ech_NativeEch_fetch<'loc
             throw(&mut env, &message);
             std::ptr::null_mut()
         }
-        // 兜底：Rust 侧 panic 不该把 App 带走（profile 里保留了 unwind）
         Err(_) => {
             throw(&mut env, "原生传输内部错误");
             std::ptr::null_mut()
