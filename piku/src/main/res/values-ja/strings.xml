@@ -378,6 +378,11 @@
     <string name="manga_brightness_auto">システム</string>
     <string name="manga_keep_screen_on">常時点灯</string>
     <string name="manga_volume_flip">音量キー</string>
+    <string name="manga_hint_zone_prev">前ページ</string>
+    <string name="manga_hint_zone_next">次ページ</string>
+    <string name="manga_hint_zone_menu">メニュー表示</string>
+    <string name="manga_hint_long_press">画像を長押し：保存・共有</string>
+    <string name="manga_hint_replay">操作ヒントをもう一度見る</string>
 
     <string name="detail_more">その他</string>
     <string name="detail_reaction">リアクション</string>

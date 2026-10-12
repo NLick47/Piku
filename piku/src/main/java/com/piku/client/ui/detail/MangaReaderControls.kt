@@ -1,5 +1,7 @@
 package com.piku.client.ui.detail
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -12,6 +14,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -26,18 +29,31 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowLeft
+import androidx.compose.material.icons.automirrored.outlined.ArrowRight
 import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.material.icons.outlined.TouchApp
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
@@ -47,11 +63,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import com.piku.client.BuildConfig
 import com.piku.client.R
 import com.piku.client.data.local.MangaReaderSettings
+import com.piku.client.data.local.SettingsRepository
 import com.piku.client.ui.common.PikuBackButton
 import com.piku.client.ui.common.rememberAnimatedImage
+import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
+
+private const val MANGA_HINT_MILLIS = 6_000L
 
 /**
  * 阅读器控件的配色：看的是图，控件不跟 app 主题走，一律深底浅字。
@@ -68,12 +89,20 @@ private val MangaSegBg = Color(0x14FFFFFF)
 private val MangaSegOn = Color(0x29FFFFFF)
 private val MangaCellBg = Color(0xFF262421)
 private val MangaCellBorder = Color(0xFF46405A)
+// 色带用压暗：漫画页多是白底，白色填充看不见；压暗在白底出灰、边界亮线在暗底看得见
+private val MangaZoneFill = Color(0x3D000000)
+private val MangaZoneEdge = Color(0x73FFFFFF)
 
 private val MangaPillShape = RoundedCornerShape(12.dp)
 private val MangaCardShape = RoundedCornerShape(12.dp)
 private val MangaChipShape = RoundedCornerShape(999.dp)
 private val MangaSettingLabelWidth = 68.dp
 private val MangaSettingValueWidth = 44.dp
+private val MangaSettingRowHeight = 40.dp
+
+/** 设置面板的两段式控件与开关芯片：轨道 + 统一圆角，不用大椭圆胶囊 */
+private val MangaSegRowWidth = 168.dp
+private val MangaSegShape = RoundedCornerShape(8.dp)
 
 private fun Modifier.mangaCard(shape: Shape = MangaCardShape): Modifier =
     this.clip(shape).background(MangaBarBg).border(BorderStroke(0.5.dp, MangaBarBorder), shape)
@@ -275,6 +304,7 @@ private fun MangaSegButton(text: String, selected: Boolean, onClick: () -> Unit)
 internal fun MangaReaderSettingsPanel(
     settings: MangaReaderSettings,
     onChange: (MangaReaderSettings, Boolean) -> Unit,
+    onReplayHint: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -284,61 +314,44 @@ internal fun MangaReaderSettingsPanel(
             .consumeTaps()
             .padding(horizontal = 14.dp, vertical = 10.dp),
     ) {
-        MangaSettingRow(label = stringResource(R.string.manga_mode)) {
-            MangaChoiceChip(
-                text = stringResource(R.string.manga_mode_paged),
-                selected = !settings.scrollMode,
-                onClick = { onChange(settings.copy(scrollMode = false), true) },
-            )
-            Spacer(Modifier.width(6.dp))
-            MangaChoiceChip(
-                text = stringResource(R.string.manga_mode_scroll),
-                selected = settings.scrollMode,
-                onClick = { onChange(settings.copy(scrollMode = true), true) },
-            )
-        }
-        MangaSettingRow(label = stringResource(R.string.manga_direction)) {
-            MangaChoiceChip(
-                text = stringResource(R.string.manga_direction_ltr),
-                selected = !settings.rightToLeft,
-                onClick = { onChange(settings.copy(rightToLeft = false), true) },
-            )
-            Spacer(Modifier.width(6.dp))
-            MangaChoiceChip(
-                text = stringResource(R.string.manga_direction_rtl),
-                selected = settings.rightToLeft,
-                onClick = { onChange(settings.copy(rightToLeft = true), true) },
-            )
-        }
-        MangaSettingRow(label = stringResource(R.string.manga_fit)) {
-            MangaChoiceChip(
-                text = stringResource(R.string.manga_fit_page),
-                selected = !settings.fillWidth,
-                onClick = { onChange(settings.copy(fillWidth = false), true) },
-            )
-            Spacer(Modifier.width(6.dp))
-            MangaChoiceChip(
-                text = stringResource(R.string.manga_fit_width),
-                selected = settings.fillWidth,
-                onClick = { onChange(settings.copy(fillWidth = true), true) },
-            )
-        }
-        MangaSettingRow(label = stringResource(R.string.manga_gap)) {
-            MangaChoiceChip(
-                text = stringResource(R.string.manga_gap_none),
-                selected = !settings.pageGap,
-                onClick = { onChange(settings.copy(pageGap = false), true) },
-            )
-            Spacer(Modifier.width(6.dp))
-            MangaChoiceChip(
-                text = stringResource(R.string.manga_gap_small),
-                selected = settings.pageGap,
-                onClick = { onChange(settings.copy(pageGap = true), true) },
-            )
+        // 方向与适配只作用于翻页形态、间隙只作用于滚动形态，当前形态用不到的项不显示。
+        // 形态切换不在这里：底栏那颗分段就在面板下方，同时可见时不该出现两份
+        if (settings.scrollMode) {
+            MangaSettingRow(label = stringResource(R.string.manga_gap)) {
+                MangaSegChoice(
+                    firstText = stringResource(R.string.manga_gap_none),
+                    firstSelected = !settings.pageGap,
+                    onFirst = { onChange(settings.copy(pageGap = false), true) },
+                    secondText = stringResource(R.string.manga_gap_small),
+                    secondSelected = settings.pageGap,
+                    onSecond = { onChange(settings.copy(pageGap = true), true) },
+                )
+            }
+        } else {
+            MangaSettingRow(label = stringResource(R.string.manga_direction)) {
+                MangaSegChoice(
+                    firstText = stringResource(R.string.manga_direction_ltr),
+                    firstSelected = !settings.rightToLeft,
+                    onFirst = { onChange(settings.copy(rightToLeft = false), true) },
+                    secondText = stringResource(R.string.manga_direction_rtl),
+                    secondSelected = settings.rightToLeft,
+                    onSecond = { onChange(settings.copy(rightToLeft = true), true) },
+                )
+            }
+            MangaSettingRow(label = stringResource(R.string.manga_fit)) {
+                MangaSegChoice(
+                    firstText = stringResource(R.string.manga_fit_page),
+                    firstSelected = !settings.fillWidth,
+                    onFirst = { onChange(settings.copy(fillWidth = false), true) },
+                    secondText = stringResource(R.string.manga_fit_width),
+                    secondSelected = settings.fillWidth,
+                    onSecond = { onChange(settings.copy(fillWidth = true), true) },
+                )
+            }
         }
         val followSystem = settings.brightness < 0f
         Row(
-            modifier = Modifier.fillMaxWidth().height(38.dp),
+            modifier = Modifier.fillMaxWidth().height(MangaSettingRowHeight),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
@@ -350,15 +363,23 @@ internal fun MangaReaderSettingsPanel(
             )
             ReaderSlider(
                 fraction = if (followSystem) 1f else settings.brightness,
+                // 不做「跟随系统就不能拖」的拦截：拖滑块本身就是离开跟随系统的动作，
+                // 拦掉之后在跟随系统下会没有任何出口，亮度永远调不了
                 onValueChange = { fraction ->
-                    if (!followSystem) {
-                        onChange(settings.copy(brightness = fraction.coerceIn(0.05f, 1f)), false)
-                    }
+                    onChange(
+                        settings.copy(
+                            brightness = readerStep(fraction, SettingsRepository.MANGA_BRIGHTNESS_MIN, 1f, 0.05f),
+                        ),
+                        false,
+                    )
                 },
                 onValueChangeFinished = { fraction ->
-                    if (!followSystem) {
-                        onChange(settings.copy(brightness = fraction.coerceIn(0.05f, 1f)), true)
-                    }
+                    onChange(
+                        settings.copy(
+                            brightness = readerStep(fraction, SettingsRepository.MANGA_BRIGHTNESS_MIN, 1f, 0.05f),
+                        ),
+                        true,
+                    )
                 },
                 active = MangaOn,
                 trackColor = MangaTrack,
@@ -372,9 +393,9 @@ internal fun MangaReaderSettingsPanel(
                 textAlign = TextAlign.End,
                 modifier = Modifier.width(MangaSettingValueWidth),
             )
-            MangaChoiceChip(
+            MangaToggleChip(
                 text = stringResource(R.string.manga_brightness_auto),
-                selected = followSystem,
+                on = followSystem,
                 onClick = {
                     onChange(
                         settings.copy(brightness = MangaReaderSettings.BRIGHTNESS_SYSTEM),
@@ -384,25 +405,183 @@ internal fun MangaReaderSettingsPanel(
             )
         }
         MangaSettingRow(label = "") {
-            MangaChoiceChip(
+            MangaToggleChip(
                 text = stringResource(R.string.manga_keep_screen_on),
-                selected = settings.keepScreenOn,
+                on = settings.keepScreenOn,
                 onClick = { onChange(settings.copy(keepScreenOn = !settings.keepScreenOn), true) },
             )
             Spacer(Modifier.width(6.dp))
-            MangaChoiceChip(
+            MangaToggleChip(
                 text = stringResource(R.string.manga_volume_flip),
-                selected = settings.volumeFlip,
+                on = settings.volumeFlip,
                 onClick = { onChange(settings.copy(volumeFlip = !settings.volumeFlip), true) },
+            )
+        }
+        if (BuildConfig.DEBUG) {
+            // 调试专用：分隔线下面一行低调的文字入口，不做成又一颗开关
+            Spacer(Modifier.height(4.dp))
+            Box(Modifier.fillMaxWidth().height(1.dp).background(MangaBarBorder))
+            Text(
+                text = stringResource(R.string.manga_hint_replay),
+                color = MangaFgMuted,
+                fontSize = 12.sp,
+                maxLines = 1,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(MangaSegShape)
+                    .clickable(onClick = onReplayHint)
+                    .padding(vertical = 9.dp),
             )
         }
     }
 }
 
+/**
+ * 一次性操作提示：按屏幕三等分画出真实点按热区——左右各 1/3 翻页、中间 1/3 显隐菜单。
+ * 只在图上画，不吃事件：点哪块就真的执行哪块，配合"首次操作即退场"。
+ */
+@Composable
+internal fun MangaZoneHint(
+    settings: MangaReaderSettings,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var visible by remember { mutableStateOf(false) }
+    val alpha by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = tween(220),
+        label = "mangaHintAlpha",
+    )
+    LaunchedEffect(Unit) {
+        visible = true
+        delay(MANGA_HINT_MILLIS)
+        visible = false
+        delay(220)
+        onDismiss()
+    }
+    // 右→左时左侧是"下一页"，切成左→右后互换：标签永远跟当前方向一致
+    val forwardOnLeft = settings.rightToLeft
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .graphicsLayer { this.alpha = alpha },
+    ) {
+        val third = Modifier.fillMaxHeight().fillMaxWidth(1f / TAP_ZONE_DIVISOR)
+        if (settings.scrollMode) {
+            // 滚动形态左右点按无操作，只画中间那条
+            HintZone(
+                label = stringResource(R.string.manga_hint_zone_menu),
+                icon = Icons.Outlined.TouchApp,
+                filled = true,
+                modifier = third.align(Alignment.Center),
+            )
+        } else {
+            HintZone(
+                label = stringResource(
+                    if (forwardOnLeft) R.string.manga_hint_zone_next else R.string.manga_hint_zone_prev,
+                ),
+                icon = Icons.AutoMirrored.Outlined.ArrowLeft,
+                filled = true,
+                edge = HintZoneEdge.RIGHT,
+                modifier = third.align(Alignment.CenterStart),
+            )
+            HintZone(
+                label = stringResource(R.string.manga_hint_zone_menu),
+                icon = Icons.Outlined.TouchApp,
+                filled = false,
+                modifier = third.align(Alignment.Center),
+            )
+            HintZone(
+                label = stringResource(
+                    if (forwardOnLeft) R.string.manga_hint_zone_prev else R.string.manga_hint_zone_next,
+                ),
+                icon = Icons.AutoMirrored.Outlined.ArrowRight,
+                filled = true,
+                edge = HintZoneEdge.LEFT,
+                modifier = third.align(Alignment.CenterEnd),
+            )
+        }
+        HintCaption(
+            text = stringResource(R.string.manga_hint_long_press),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(bottom = 96.dp),
+        )
+    }
+}
+
+/** 分区线只画在本区靠中心的那条边上，和相邻区共享一条缝 */
+private enum class HintZoneEdge { NONE, LEFT, RIGHT }
+
+@Composable
+private fun HintZone(
+    label: String,
+    icon: ImageVector,
+    filled: Boolean,
+    modifier: Modifier = Modifier,
+    edge: HintZoneEdge = HintZoneEdge.NONE,
+) {
+    Box(
+        modifier = modifier
+            .then(if (filled) Modifier.background(MangaZoneFill) else Modifier)
+            .zoneEdge(edge),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(
+            modifier = Modifier
+                .clip(MangaChipShape)
+                .background(MangaBarBg)
+                .border(BorderStroke(0.5.dp, MangaBarBorder), MangaChipShape)
+                .padding(horizontal = 12.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MangaFg,
+                modifier = Modifier.size(15.dp),
+            )
+            Text(
+                text = label,
+                color = MangaFg,
+                fontSize = 13.sp,
+                maxLines = 1,
+                modifier = Modifier.padding(start = 6.dp),
+            )
+        }
+    }
+}
+
+private fun Modifier.zoneEdge(edge: HintZoneEdge): Modifier =
+    if (edge == HintZoneEdge.NONE) {
+        this
+    } else {
+        drawBehind {
+            val stroke = 1.5.dp.toPx()
+            val x = if (edge == HintZoneEdge.RIGHT) size.width - stroke / 2f else stroke / 2f
+            drawLine(MangaZoneEdge, Offset(x, 0f), Offset(x, size.height), stroke)
+        }
+    }
+
+/** 副手势说明：压在图上，靠投影保证亮底也能读清 */
+@Composable
+private fun HintCaption(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text = text,
+        color = MangaFg,
+        fontSize = 12.sp,
+        maxLines = 1,
+        style = LocalTextStyle.current.copy(shadow = Shadow(Color(0xCC000000), blurRadius = 6f)),
+        modifier = modifier,
+    )
+}
+
 @Composable
 private fun MangaSettingRow(label: String, content: @Composable () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().height(38.dp),
+        modifier = Modifier.fillMaxWidth().height(MangaSettingRowHeight),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -416,18 +595,62 @@ private fun MangaSettingRow(label: String, content: @Composable () -> Unit) {
     }
 }
 
+/** 两段式控件：一条浅底轨道 + 等宽两段，各行控件的位置因此完全对齐 */
 @Composable
-private fun MangaChoiceChip(text: String, selected: Boolean, onClick: () -> Unit) {
+private fun MangaSegChoice(
+    firstText: String,
+    firstSelected: Boolean,
+    onFirst: () -> Unit,
+    secondText: String,
+    secondSelected: Boolean,
+    onSecond: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .width(MangaSegRowWidth)
+            .clip(MangaSegShape)
+            .background(MangaSegBg)
+            .padding(2.dp),
+    ) {
+        MangaSegSegment(firstText, firstSelected, onFirst, Modifier.weight(1f))
+        MangaSegSegment(secondText, secondSelected, onSecond, Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun MangaSegSegment(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Text(
         text = text,
-        color = if (selected) MangaOn else MangaFgMuted,
+        color = if (selected) MangaFg else MangaFgMuted,
+        fontSize = 12.sp,
+        maxLines = 1,
+        textAlign = TextAlign.Center,
+        modifier = modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(if (selected) MangaSegOn else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(vertical = 6.dp),
+    )
+}
+
+/** 开关芯片：未选中也留一层浅底，否则一整行只剩光秃秃的文字看不出能点 */
+@Composable
+private fun MangaToggleChip(text: String, on: Boolean, onClick: () -> Unit) {
+    Text(
+        text = text,
+        color = if (on) MangaFg else MangaFgMuted,
         fontSize = 12.sp,
         maxLines = 1,
         modifier = Modifier
-            .clip(MangaChipShape)
-            .background(if (selected) MangaSegOn else Color.Transparent)
+            .clip(MangaSegShape)
+            .background(if (on) MangaSegOn else MangaSegBg)
             .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 5.dp),
+            .padding(horizontal = 12.dp, vertical = 6.dp),
     )
 }
 

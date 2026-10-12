@@ -378,6 +378,11 @@
     <string name="manga_brightness_auto">System</string>
     <string name="manga_keep_screen_on">Stay on</string>
     <string name="manga_volume_flip">Volume keys</string>
+    <string name="manga_hint_zone_prev">Prev page</string>
+    <string name="manga_hint_zone_next">Next page</string>
+    <string name="manga_hint_zone_menu">Show menu</string>
+    <string name="manga_hint_long_press">Long-press an image: save · share</string>
+    <string name="manga_hint_replay">Replay gesture hints</string>
 
     <string name="detail_more">More</string>
     <string name="detail_reaction">React</string>

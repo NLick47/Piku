@@ -480,6 +480,26 @@ class SettingsRepository @Inject constructor(
         volumeFlip = prefs.getBoolean(KEY_MANGA_VOLUME_FLIP, false),
     )
 
+    /** 某形态的操作提示是否已看过；翻页与滚动各记一份 */
+    fun mangaHintSeen(scrollMode: Boolean): Boolean =
+        prefs.getBoolean(mangaHintKey(scrollMode), false)
+
+    /** 标记该形态的提示已展示，展示前就写：提前退出或进程被杀不会让提示反复弹 */
+    fun markMangaHintSeen(scrollMode: Boolean) {
+        prefs.edit().putBoolean(mangaHintKey(scrollMode), true).apply()
+    }
+
+    /** 调试用：清掉两形态的标记，下次打开阅读器等同首次 */
+    fun resetMangaHints() {
+        prefs.edit()
+            .remove(KEY_MANGA_HINT_PAGED_SEEN)
+            .remove(KEY_MANGA_HINT_SCROLL_SEEN)
+            .apply()
+    }
+
+    private fun mangaHintKey(scrollMode: Boolean): String =
+        if (scrollMode) KEY_MANGA_HINT_SCROLL_SEEN else KEY_MANGA_HINT_PAGED_SEEN
+
     /**
      * 读取某作品的阅读进度（百分比 0~100，0 表示无进度）。
      * 用百分比而非像素偏移存储，避免字号调整后滚动位置错位。
@@ -908,6 +928,10 @@ class SettingsRepository @Inject constructor(
         const val KEY_MANGA_BRIGHTNESS = "manga_brightness"
         const val KEY_MANGA_KEEP_SCREEN_ON = "manga_keep_screen_on"
         const val KEY_MANGA_VOLUME_FLIP = "manga_volume_flip"
+
+        /** 漫画阅读器操作提示的已展示标记，按形态各一份；改文案时升版本后缀即可再提示一次 */
+        const val KEY_MANGA_HINT_PAGED_SEEN = "manga_hint_paged_seen_v1"
+        const val KEY_MANGA_HINT_SCROLL_SEEN = "manga_hint_scroll_seen_v1"
         const val KEY_NOVEL_PROGRESS_PREFIX = "novel_progress_"
         const val KEY_IMAGE_PROGRESS_PREFIX = "image_progress_"
         const val KEY_CUSTOM_BACKGROUND_PATH = "custom_background_path"

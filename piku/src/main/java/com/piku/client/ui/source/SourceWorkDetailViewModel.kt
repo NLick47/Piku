@@ -469,6 +469,13 @@ class SourceWorkDetailViewModel @Inject constructor(
     fun setMangaReaderSettings(settings: MangaReaderSettings, persist: Boolean) =
         settingsRepository.setMangaReaderSettings(settings, persist)
 
+    /** 漫画阅读器操作提示的已看标记；重播只在调试入口用 */
+    fun mangaHintSeen(scrollMode: Boolean): Boolean = settingsRepository.mangaHintSeen(scrollMode)
+
+    fun markMangaHintSeen(scrollMode: Boolean) = settingsRepository.markMangaHintSeen(scrollMode)
+
+    fun resetMangaHints() = settingsRepository.resetMangaHints()
+
     /**
      * 标题行 chip 短按：已有译文 = 整页原/译切换（不含标签）；没有 = 立即翻短字段。
      * 原顶栏翻译图标的职责，图标去掉后由页内这颗 chip 承担。

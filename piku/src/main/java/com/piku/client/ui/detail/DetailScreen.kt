@@ -497,6 +497,9 @@ fun DetailScreen(
                 // 进度存储语义是页码 1 起，壳的回调是 0 基
                 onPageChanged = { page -> viewModel.saveImageProgress(page + 1) },
                 previews = shownPainters,
+                hintSeen = viewModel::mangaHintSeen,
+                markHintSeen = viewModel::markMangaHintSeen,
+                onReplayHints = viewModel::resetMangaHints,
             )
             if (state.novelReaderOpen && it.novelText.isNotBlank()) {
                 val novelTranslated = state.showTranslation(TranslateField.NOVEL)

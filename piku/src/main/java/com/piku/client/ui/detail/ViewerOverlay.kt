@@ -24,6 +24,9 @@ fun ViewerOverlay(
     onHdToggle: (Int) -> Unit = {},
     /** 详情页图区已上屏的图：各页的零延迟垫底，没有的页回落加载 */
     previews: Map<Int, Painter> = emptyMap(),
+    hintSeen: (Boolean) -> Boolean = { true },
+    markHintSeen: (Boolean) -> Unit = {},
+    onReplayHints: () -> Unit = {},
 ) {
     if (page == null || images.isEmpty()) return
     MangaReader(
@@ -43,5 +46,8 @@ fun ViewerOverlay(
         hdPages = hdPages,
         onHdToggle = onHdToggle,
         previews = previews,
+        hintSeen = hintSeen,
+        markHintSeen = markHintSeen,
+        onReplayHints = onReplayHints,
     )
 }

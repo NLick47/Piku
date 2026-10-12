@@ -52,10 +52,13 @@ internal const val TAP_ZONE_LEFT = 0
 internal const val TAP_ZONE_CENTER = 1
 internal const val TAP_ZONE_RIGHT = 2
 
+/** 点按热区的三等分：区域提示的色带宽度共用它，改这里两处一起变 */
+internal const val TAP_ZONE_DIVISOR = 3f
+
 internal fun tapZone(offset: Offset, viewport: IntSize): Int = when {
     viewport.width <= 0 -> TAP_ZONE_CENTER
-    offset.x < viewport.width / 3f -> TAP_ZONE_LEFT
-    offset.x > viewport.width * 2f / 3f -> TAP_ZONE_RIGHT
+    offset.x < viewport.width / TAP_ZONE_DIVISOR -> TAP_ZONE_LEFT
+    offset.x > viewport.width * 2f / TAP_ZONE_DIVISOR -> TAP_ZONE_RIGHT
     else -> TAP_ZONE_CENTER
 }
 

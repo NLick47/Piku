@@ -395,6 +395,12 @@ class DetailViewModel @Inject constructor(
         settingsRepository.setMangaReaderSettings(settings, persist)
     }
 
+    fun mangaHintSeen(scrollMode: Boolean): Boolean = settingsRepository.mangaHintSeen(scrollMode)
+
+    fun markMangaHintSeen(scrollMode: Boolean) = settingsRepository.markMangaHintSeen(scrollMode)
+
+    fun resetMangaHints() = settingsRepository.resetMangaHints()
+
     /** 标签翻译编排（与 pixiv 详情页共用） */
     private val tagsTranslation = TagsTranslationController(
         repository = translationRepository,

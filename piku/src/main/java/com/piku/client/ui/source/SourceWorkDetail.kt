@@ -554,6 +554,9 @@ internal fun SourceWorkDetailScreen(
             onPageChanged = viewModel::onImagePageChanged,
             hdPages = state.hdPages,
             onHdToggle = viewModel::onHdToggle,
+            hintSeen = viewModel::mangaHintSeen,
+            markHintSeen = viewModel::markMangaHintSeen,
+            onReplayHints = viewModel::resetMangaHints,
         )
         // 阅读器盖在顶栏与详情之上，与 poipiku 详情页同级
         if (state.novelReaderOpen && state.novelText.isNotBlank()) {

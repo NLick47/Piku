@@ -391,6 +391,11 @@
     <string name="manga_brightness_auto">跟随系统</string>
     <string name="manga_keep_screen_on">常亮</string>
     <string name="manga_volume_flip">音量键翻页</string>
+    <string name="manga_hint_zone_prev">上一页</string>
+    <string name="manga_hint_zone_next">下一页</string>
+    <string name="manga_hint_zone_menu">显示菜单</string>
+    <string name="manga_hint_long_press">长按图片：保存 · 分享</string>
+    <string name="manga_hint_replay">重看操作提示</string>
 
     <string name="detail_more">更多</string>
     <string name="detail_reaction">回应</string>

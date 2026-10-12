@@ -12,7 +12,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,6 +30,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -62,13 +62,10 @@ import com.piku.client.ui.theme.ViewerBackgroundDark
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
-import kotlin.math.abs
 
 private const val AUTO_HIDE_DELAY_MS = 2600L
-
-/** 下滑超过屏高的这个比例算"要退出"：短滑不会误退 */
-private const val DISMISS_DRAG_FRACTION = 0.18f
 
 /** 未测到真实比例前的占位：竖漫常见宽高比 */
 private const val DEFAULT_PAGE_ASPECT = 1f / 1.42f
@@ -97,6 +94,12 @@ fun MangaReader(
     hdPages: Set<Int> = emptySet(),
     onHdToggle: (Int) -> Unit = {},
     previews: Map<Int, Painter> = emptyMap(),
+    /** 该形态的操作提示是否已看过；查的是落盘标记，只在打开与切形态时问一次 */
+    hintSeen: (scrollMode: Boolean) -> Boolean = { true },
+    /** 提示上屏前先落盘，避免提前退出导致反复弹 */
+    markHintSeen: (scrollMode: Boolean) -> Unit = {},
+    /** 调试入口：清掉标记让提示重新出现 */
+    onReplayHints: () -> Unit = {},
 ) {
     val view = LocalView.current
     val activity = remember(view) { view.context.findActivity() }
@@ -119,6 +122,21 @@ fun MangaReader(
     var jumpTarget by remember { mutableStateOf<Int?>(null) }
     val currentOnPageChanged by rememberUpdatedState(onPageChanged)
 
+    // 一次性手势提示：形态各看一次；nonce 只用于让提示重新计时
+    var hintVisible by remember { mutableStateOf(false) }
+    var hintNonce by remember { mutableIntStateOf(0) }
+    LaunchedEffect(settings.scrollMode) {
+        if (!hintSeen(settings.scrollMode)) {
+            markHintSeen(settings.scrollMode)
+            hintVisible = true
+            hintNonce++
+        }
+    }
+    // 首次操作即退场：翻页、滚动都算（首帧的初始页码不算操作）
+    LaunchedEffect(Unit) {
+        snapshotFlow { page }.drop(1).collect { hintVisible = false }
+    }
+
     fun refreshAutoHide() {
         controlsVisible = true
         autoHideJob?.cancel()
@@ -131,6 +149,7 @@ fun MangaReader(
 
     fun togglePanel() {
         panelOpen = !panelOpen
+        hintVisible = false
         if (panelOpen) {
             autoHideJob?.cancel()
             controlsVisible = true
@@ -142,11 +161,20 @@ fun MangaReader(
     fun openOverview(open: Boolean) {
         overviewOpen = open
         if (open) {
+            hintVisible = false
             autoHideJob?.cancel()
             controlsVisible = true
         } else {
             refreshAutoHide()
         }
+    }
+
+    /** 调试重播：清标记、收起面板，让提示按"首次打开"的样子再来一遍 */
+    fun replayHints() {
+        onReplayHints()
+        if (panelOpen) togglePanel()
+        hintNonce++
+        hintVisible = true
     }
 
     /** 外部翻页统一走这里：改页码 + 发一次性请求给当前形态的载体 */
@@ -204,22 +232,19 @@ fun MangaReader(
             .focusRequester(focusRequester)
             .focusable()
             .onKeyEvent { event ->
-                if (!settings.volumeFlip || event.type != KeyEventType.KeyUp) return@onKeyEvent false
-                when (event.key) {
+                if (!settings.volumeFlip) return@onKeyEvent false
+                if (event.key != Key.VolumeDown && event.key != Key.VolumeUp) return@onKeyEvent false
+                // 按下就得吃掉：只消费抬手的话，系统已经在按下时调了音量并弹了音量条；
+                // 翻页动作仍留给抬手，按住连发不会连翻好几页
+                if (event.type == KeyEventType.KeyUp) {
                     // 往下翻 = 前进，与滚动方向一致
-                    Key.VolumeDown -> {
-                        step(1)
-                        true
-                    }
-                    Key.VolumeUp -> {
-                        step(-1)
-                        true
-                    }
-                    else -> false
+                    if (event.key == Key.VolumeDown) step(1) else step(-1)
                 }
+                true
             },
     ) {
         val onTapCenter: () -> Unit = {
+            hintVisible = false
             if (controlsVisible) {
                 controlsVisible = false
                 autoHideJob?.cancel()
@@ -257,9 +282,19 @@ fun MangaReader(
                 onPageChanged = { page = it + 1 },
                 onLongPressImage = onLongPressImage,
                 onStep = ::step,
-                onSwipeDown = onClose,
                 onTapCenter = onTapCenter,
             )
+        }
+
+        // 区域提示画在内容之上、控制栏之下：顶/底栏压着色带，边缘保持干净
+        if (hintVisible) {
+            key(hintNonce) {
+                MangaZoneHint(
+                    settings = settings,
+                    onDismiss = { hintVisible = false },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
 
         // 亮度只走窗口（applyWindowBrightness），不再叠一层遮罩：
@@ -286,17 +321,18 @@ fun MangaReader(
                 .padding(bottom = 8.dp),
         ) {
             AnimatedVisibility(
-                visible = panelOpen && !overviewOpen,
+                visible = panelOpen && controlsVisible && !overviewOpen,
                 enter = expandVertically(expandFrom = Alignment.Bottom) + fadeIn(tween(160)),
                 exit = shrinkVertically(shrinkTowards = Alignment.Bottom) + fadeOut(tween(120)),
             ) {
                 MangaReaderSettingsPanel(
                     settings = settings,
                     onChange = onSettingsChange,
+                    onReplayHint = ::replayHints,
                     modifier = Modifier
                         .padding(horizontal = 12.dp)
                         .padding(bottom = 8.dp)
-                        .blockInputsWhen(!panelOpen),
+                        .blockInputsWhen(!panelOpen || !controlsVisible),
                 )
             }
             AnimatedVisibility(
@@ -352,7 +388,6 @@ private fun PagedReader(
     onPageChanged: (Int) -> Unit,
     onLongPressImage: (Int) -> Unit,
     onStep: (Int) -> Unit,
-    onSwipeDown: () -> Unit,
     onTapCenter: () -> Unit,
 ) {
     val pagerState = rememberPagerState(
@@ -394,25 +429,16 @@ private fun PagedReader(
         key = { it },
     ) { index ->
         val pageScroll = rememberScrollState()
-        val gestureModifier = if (settings.fillWidth) {
-            // 铺满宽时页内要能上下滚，别再接管垂直拖动
+        // 铺满宽时页内要能上下滚；整页模式不接管任何拖动，横滑翻页交给 pager
+        val pageDragModifier = if (settings.fillWidth) {
             Modifier.verticalScroll(pageScroll)
         } else {
-            Modifier.pointerInput(Unit) {
-                var accumulated = 0f
-                detectVerticalDragGestures(
-                    onDragStart = { accumulated = 0f },
-                    onVerticalDrag = { _, dragAmount -> accumulated += dragAmount },
-                    onDragEnd = {
-                        if (abs(accumulated) > size.height * DISMISS_DRAG_FRACTION) onSwipeDown()
-                    },
-                )
-            }
+            Modifier
         }
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .then(gestureModifier)
+                .then(pageDragModifier)
                 .mangaTapZones(
                     onLeft = { onStep(if (settings.rightToLeft) 1 else -1) },
                     onRight = { onStep(if (settings.rightToLeft) -1 else 1) },
@@ -619,8 +645,8 @@ private fun Modifier.mangaTapZones(
                             (up.position - origin).getDistance() <= viewConfiguration.touchSlop
                         if (isQuickTap) {
                             when {
-                                up.position.x < size.width / 3f -> left()
-                                up.position.x > size.width * 2f / 3f -> right()
+                                up.position.x < size.width / TAP_ZONE_DIVISOR -> left()
+                                up.position.x > size.width * 2f / TAP_ZONE_DIVISOR -> right()
                             }
                         }
                         break
