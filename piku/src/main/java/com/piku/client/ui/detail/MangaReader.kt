@@ -52,8 +52,11 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import coil3.size.Size as CoilSize
 import com.piku.client.data.local.MangaReaderSettings
 import com.piku.client.ui.theme.ViewerBackgroundDark
 import kotlinx.coroutines.Job
@@ -356,6 +359,16 @@ private fun PagedReader(
         pageCount = { images.size },
         initialPage = initialPage.coerceIn(0, images.lastIndex.coerceAtLeast(0)),
     )
+    // 翻页预热只备垫底那一档（页表小图）：翻过去立刻有图，不再黑屏等网络。
+    // 原图档不提前下——漫画几十页，提前下原图就是几十上百兆，仍按打开哪页取哪页
+    var viewportSize by remember { mutableStateOf(IntSize.Zero) }
+    rememberPagerWindowPrefetch(
+        urls = remember(images) { images.map { it.thumbnailUrl } },
+        currentPage = pagerState.currentPage,
+        // 页内容就是视口：按实测尺寸预热，翻页才命中内存里那一张
+        pageSizePx = viewportSize.takeIf { it.width > 0 && it.height > 0 }
+            ?.let { CoilSize(it.width, it.height) },
+    )
     // 铺满宽时每页要能上下滚：比例也在这里测，容器高度正好等于图的高度
     val aspects = remember { mutableStateMapOf<Int, Float>() }
     val currentOnPageChanged by rememberUpdatedState(onPageChanged)
@@ -375,7 +388,9 @@ private fun PagedReader(
     HorizontalPager(
         state = pagerState,
         reverseLayout = settings.rightToLeft,
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .onSizeChanged { viewportSize = it },
         key = { it },
     ) { index ->
         val pageScroll = rememberScrollState()

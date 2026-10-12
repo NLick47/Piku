@@ -71,6 +71,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
@@ -87,6 +88,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import coil3.size.Size as CoilSize
 import com.piku.client.R
 import com.piku.client.common.LinkSegment
 import com.piku.client.common.LinkText
@@ -712,7 +714,7 @@ internal fun ImagePager(
     // 外层高度取「已测量过的图里最高的那张」，而不是当前页的高度：
     // 翻页时外层纹丝不动，下面的标题/描述/标签就不会跟着上下跳。
     // 代价是尺寸小的图上下会留出背景色的空白带——用这点留白换下方内容稳定。
-    // HorizontalPager 会预加载相邻页，所以下一张的高度通常在翻页前就已经算进来了。
+    // 相邻页的高度要等它自己上屏量过才算得进来，翻页那一帧仍会按新比例长一次。
     val imageHeightDp = aspectCache.values.maxOfOrNull { heightForAspect(it) }
         ?: IMAGE_HEIGHT_DEFAULT_DP
     // 无图时按内容给合适高度：一行提示不需要 320dp，密码框和小说预览才需要空间
@@ -723,6 +725,19 @@ internal fun ImagePager(
         detail.passwordProtected -> PASSWORD_HEIGHT_DP
         else -> EMPTY_HEIGHT_DP
     }
+    // 翻页预热：pager 静止时不组合相邻页，下一页要滑到才发请求，等于每页都现等一次网络。
+    // 这里按图区的真实像素尺寸提前取，翻过去命中 Coil 内存缓存
+    val prefetchDensity = LocalDensity.current
+    val pageSizePx = remember(availableWidthDp, imageHeightDp, prefetchDensity) {
+        with(prefetchDensity) {
+            CoilSize(availableWidthDp.dp.roundToPx(), imageHeightDp.dp.roundToPx())
+        }
+    }
+    rememberPagerWindowPrefetch(
+        urls = urls,
+        currentPage = pagerState.currentPage,
+        pageSizePx = pageSizePx,
+    )
     // 图区高度这条链路的诊断：每换一次 URL 档位打一行，能看出高度是被哪一步改的
     LaunchedEffect(urls, knownAspect) {
         Log.d(

@@ -1,6 +1,7 @@
 package com.piku.client.ui.detail
 
 import android.content.Context
+import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -10,12 +11,22 @@ import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import coil3.size.Size as CoilSize
 import com.piku.client.data.repository.ThumbnailResolver
+import com.piku.client.ui.common.isAnimatedImage
 
 /** 预取时的解码尺寸提示：只影响这次预取自身的解码（见 [rememberWorkDetailPrefetch]） */
 private const val PREFETCH_SIDE_PX = 512
 
 /** 原图预取的解码尺寸提示：原图常有几千像素，这里只约束这次预取自身的临时解码 */
 private const val FULL_IMAGE_PREFETCH_SIDE_PX = 1440
+
+/** 翻页窗口里连内存一起预热的页数：下一页 */
+private const val PREFETCH_MEMORY_AHEAD = 1
+
+/** 翻页窗口里只写磁盘的后续页数：再往后两张 */
+private const val PREFETCH_DISK_AHEAD = 2
+
+/** 翻页窗口里回翻预热：上一张 */
+private const val PREFETCH_DISK_BEHIND = 1
 
 /**
  * 点击作品卡片时预热详情页首图。
@@ -53,6 +64,75 @@ internal fun rememberFullImagePrefetch(url: String?) {
     LaunchedEffect(context, url) {
         if (url.isNullOrBlank()) return@LaunchedEffect
         enqueueDiskPrefetch(context, url, FULL_IMAGE_PREFETCH_SIDE_PX)
+    }
+}
+
+/** 翻页预热目标：[page] 页码，[memory] = true 连内存一起写（要按页内容的真实尺寸解码才对得上） */
+internal data class PagerPrefetchTarget(val page: Int, val memory: Boolean)
+
+/**
+ * 翻页预热窗口：下一页内存档，再往后 [PREFETCH_DISK_AHEAD] 张与上一张磁盘档。
+ *
+ * 窗口大小固定，与总页数无关——漫画四十页也只多下这三张，不会跟着页数涨。
+ * 动图不预热：页面用的是带 #anim 的独立内存键，预热进去对不上。
+ */
+internal fun pagerPrefetchWindow(urls: List<String>, currentPage: Int): List<PagerPrefetchTarget> {
+    val targets = buildList {
+        for (offset in 1..PREFETCH_MEMORY_AHEAD) {
+            add(PagerPrefetchTarget(currentPage + offset, memory = true))
+        }
+        for (offset in PREFETCH_MEMORY_AHEAD + 1..PREFETCH_MEMORY_AHEAD + PREFETCH_DISK_AHEAD) {
+            add(PagerPrefetchTarget(currentPage + offset, memory = false))
+        }
+        for (offset in 1..PREFETCH_DISK_BEHIND) {
+            add(PagerPrefetchTarget(currentPage - offset, memory = false))
+        }
+    }
+    return targets
+        .filter { it.page in urls.indices && urls[it.page].isNotBlank() }
+        .distinctBy { urls[it.page] }
+        .filterNot { isAnimatedImage(urls[it.page]) }
+}
+
+/**
+ * 图区/阅读器的翻页预热，跟着当前页走（窗口见 [pagerPrefetchWindow]）。
+ *
+ * 只靠 Compose 的 pager 是不够的：它静止时不组合相邻页，预取发生在滑动的当帧，
+ * 等于每次翻页都从零开始等一次网络。
+ *
+ * 内存档按 [pageSizePx] 解码，与页内容同尺寸——翻过去命中内存，网络和解码都不用等；
+ * 尺寸对不上（比例不同的页把图区撑高过）就退化成磁盘命中，仍然没有网络等待。
+ */
+@Composable
+internal fun rememberPagerWindowPrefetch(
+    urls: List<String>,
+    currentPage: Int,
+    /** 页内容的像素尺寸；null = 没有可靠尺寸，整窗只写磁盘 */
+    pageSizePx: CoilSize?,
+) {
+    val context = LocalContext.current
+    val window = remember(urls, currentPage) { pagerPrefetchWindow(urls, currentPage) }
+    LaunchedEffect(context, window, pageSizePx) {
+        if (window.isEmpty()) return@LaunchedEffect
+        val loader = SingletonImageLoader.get(context)
+        window.forEach { target ->
+            val memorySize = pageSizePx?.takeIf { target.memory }
+            loader.enqueue(
+                ImageRequest.Builder(context)
+                    .data(urls[target.page])
+                    .size(memorySize ?: CoilSize(PREFETCH_SIDE_PX, PREFETCH_SIDE_PX))
+                    .memoryCachePolicy(
+                        if (memorySize != null) CachePolicy.ENABLED else CachePolicy.DISABLED,
+                    )
+                    .build(),
+            )
+        }
+        Log.d(
+            "PikuDiag",
+            "pixivImage prefetch cur=$currentPage " +
+                "mem=${window.filter { it.memory }.map { it.page }} " +
+                "disk=${window.filterNot { it.memory }.map { it.page }} size=$pageSizePx",
+        )
     }
 }
 
