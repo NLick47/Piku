@@ -122,6 +122,10 @@ android {
             "en",
             "ja",
         )
+        // okhttp 自带的公共后缀表（压缩后 41KB）：R8 之后 PublicSuffixDatabase
+        // 在 dex 里没有任何调用点，这份表运行时永远读不到。
+        // packaging.resources.excludes 管不到 assets（三种写法都验证过，不生效）
+        ignoreAssetsPatterns += "PublicSuffixDatabase.list"
     }
 
     testOptions {
