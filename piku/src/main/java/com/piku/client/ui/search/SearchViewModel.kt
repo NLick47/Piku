@@ -118,6 +118,8 @@ data class SearchUiState(
     val proportional: Boolean = false,
     /** 待机态热门标签墙（带代表作缩略图）：插件源取 trendingTags，poipiku 由热门标签页映射，两路互斥 */
     val trending: List<SourceTrendingTag> = emptyList(),
+    /** 热门墙是否有请求在飞；UI 按它 + 宽限期决定出占位还是空态文案 */
+    val trendingLoading: Boolean = true,
     /** 输入联想（标签 + 译名） */
     val suggestions: List<SourceSuggestion> = emptyList(),
     /** 检索筛选声明与当前选中值（组 → 选项 id，开关 → "1"） */
@@ -284,19 +286,28 @@ class SearchViewModel @Inject constructor(
     private fun loadIdleContent() {
         val generation = sourceGeneration
         val plugin = searchPlugin
+        _uiState.update { it.copy(trendingLoading = true) }
         if (plugin == null) {
             viewModelScope.launch {
-                loadPopularTagsUseCase().onSuccess { tags ->
-                    if (generation == sourceGeneration) {
-                        _uiState.update { it.copy(trending = tags.map { tag -> tag.toTrendingTag() }) }
+                val result = loadPopularTagsUseCase()
+                if (generation == sourceGeneration) {
+                    _uiState.update {
+                        it.copy(
+                            trending = result.getOrDefault(emptyList()).map { tag -> tag.toTrendingTag() },
+                            trendingLoading = false,
+                        )
                     }
                 }
             }
         } else {
             viewModelScope.launch {
-                plugin.trendingTags().onSuccess { list ->
-                    if (generation == sourceGeneration) {
-                        _uiState.update { it.copy(trending = list) }
+                val result = plugin.trendingTags()
+                if (generation == sourceGeneration) {
+                    _uiState.update {
+                        it.copy(
+                            trending = result.getOrDefault(emptyList()),
+                            trendingLoading = false,
+                        )
                     }
                 }
             }
@@ -331,6 +342,7 @@ class SearchViewModel @Inject constructor(
                 selectedFilters = searchPlugin?.let(::defaultFilters) ?: emptyMap(),
                 suggestions = emptyList(),
                 trending = emptyList(),
+                trendingLoading = true,
                 followPendingIds = emptySet(),
                 followOverrides = emptyMap(),
                 works = emptyList(),

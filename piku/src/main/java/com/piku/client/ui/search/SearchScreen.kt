@@ -240,6 +240,7 @@ fun SearchScreen(
                         history = state.history,
                         customTags = state.customTags,
                         trending = state.trending,
+                        trendingLoading = state.trendingLoading,
                         pluginHint = state.pluginActive,
                         onSelect = { submit(it) },
                         onSelectCustomTag = { submit("#$it") },

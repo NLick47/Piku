@@ -33,6 +33,9 @@ import androidx.compose.material.icons.outlined.Whatshot
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,6 +45,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -49,6 +53,8 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.piku.client.R
 import com.piku.client.domain.source.SourceTrendingTag
+import com.piku.client.ui.common.SkeletonBlock
+import com.piku.client.ui.common.rememberSkeletonPulse
 import com.piku.client.ui.theme.LocalDarkTheme
 import com.piku.client.ui.theme.PikuColors
 import com.piku.client.ui.theme.GlassBarBgDark
@@ -57,11 +63,18 @@ import com.piku.client.ui.theme.OnAccentDark
 import com.piku.client.ui.theme.SoftBorderDark
 import com.piku.client.ui.theme.SoftBorderLight
 import com.piku.client.ui.theme.WorkCardPlaceholderDark
+import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
 /** 热门标签格子：目标宽度与高度、格子间距（三列排布按屏宽折算列数） */
 private const val TRENDING_CELL_DP = 120
 private const val TRENDING_GAP_DP = 8
+
+/**
+ * 请求超过这个时长才画占位格子：pixiv 这类秒回的源整段占位都来不及出现，
+ * 慢源（poipiku 热门页）则换来一个和真格子等大的骨架，不会从空文案闪成内容
+ */
+private const val TRENDING_HINT_DELAY_MS = 400L
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -69,6 +82,7 @@ internal fun IdleContent(
     history: List<String>,
     customTags: List<String>,
     trending: List<SourceTrendingTag>,
+    trendingLoading: Boolean,
     pluginHint: Boolean,
     onSelect: (String) -> Unit,
     onSelectCustomTag: (String) -> Unit,
@@ -180,7 +194,14 @@ internal fun IdleContent(
             )
         }
         Spacer(Modifier.height(10.dp))
-        if (trending.isEmpty()) {
+        // 占位延时到点才画；loading 一结束 produceState 就取消等待，秒回的源整段占位都不会出现
+        val hintReady by produceState(initialValue = false, trendingLoading) {
+            delay(TRENDING_HINT_DELAY_MS)
+            value = true
+        }
+        if (shouldShowTrendingSkeleton(trending, trendingLoading, hintReady)) {
+            TrendingSkeletonGrid()
+        } else if (trending.isEmpty()) {
             Text(
                 text = stringResource(R.string.search_hot_tags_empty),
                 color = hint,
@@ -198,28 +219,60 @@ internal fun IdleContent(
     }
 }
 
+/**
+ * 占位格子的显示判定：请求在飞、还没数据、且过去了 [TRENDING_HINT_DELAY_MS] 才画。
+ * 秒回的源第三个条件永远不成立，不会闪出一段占位
+ */
+internal fun shouldShowTrendingSkeleton(
+    trending: List<SourceTrendingTag>,
+    loading: Boolean,
+    hintReady: Boolean,
+): Boolean = loading && trending.isEmpty() && hintReady
+
 /** 热门标签墙：等宽等高的小格子铺开，图整张 Fit 居中含在格子里（不裁不切），点按直接检索该标签 */
 @Composable
 private fun TrendingGrid(
     tags: List<SourceTrendingTag>,
     onSelect: (String) -> Unit,
 ) {
+    TrendingGridLayout(items = tags) { tag, cellModifier ->
+        TrendingCard(tag = tag, onSelect = onSelect, modifier = cellModifier)
+    }
+}
+
+/** 首屏占位：格子数量与样式跟真墙一致，数据一到是原地换内容，不用整段重排 */
+@Composable
+private fun TrendingSkeletonGrid() {
+    val pulse = rememberSkeletonPulse("searchTrending")
+    val description = stringResource(R.string.search_hot_tags_loading)
+    TrendingGridLayout(items = List(trendingColumns(LocalConfiguration.current.screenWidthDp)) { Unit }) { _, cellModifier ->
+        SkeletonBlock(
+            pulse = pulse.value,
+            modifier = cellModifier
+                .height(TRENDING_CELL_DP.dp)
+                .semantics { contentDescription = description },
+            shape = RoundedCornerShape(12.dp),
+        )
+    }
+}
+
+/** 真墙与占位共用的排布：一行 [columns] 格，末行不足补空位，格子宽度才和上面几行一致 */
+@Composable
+private fun <T> TrendingGridLayout(
+    items: List<T>,
+    cell: @Composable (T, Modifier) -> Unit,
+) {
     val columns = trendingColumns(LocalConfiguration.current.screenWidthDp)
     Column(verticalArrangement = Arrangement.spacedBy(TRENDING_GAP_DP.dp)) {
-        tags.chunked(columns).forEach { rowTags ->
+        items.chunked(columns).forEach { rowItems ->
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(TRENDING_GAP_DP.dp),
             ) {
-                rowTags.forEach { tag ->
-                    TrendingCard(
-                        tag = tag,
-                        onSelect = onSelect,
-                        modifier = Modifier.weight(1f),
-                    )
+                rowItems.forEach { item ->
+                    cell(item, Modifier.weight(1f))
                 }
-                // 末行不足一列：补空位，格子宽度才和上面几行一致
-                repeat(columns - rowTags.size) {
+                repeat(columns - rowItems.size) {
                     Spacer(Modifier.weight(1f))
                 }
             }
