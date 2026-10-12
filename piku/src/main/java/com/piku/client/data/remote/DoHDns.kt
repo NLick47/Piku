@@ -92,8 +92,10 @@ class DoHDns internal constructor(
         listOf(systemSource, alidnsSource, cloudflareSource, workerSource)
     }
 
-    internal fun sourcesFor(hostname: String): List<AddressSource> = when {
-        sourcesOverride.isNotEmpty() -> sourcesOverride
+    internal fun sourcesFor(hostname: String): List<AddressSource> =
+        if (sourcesOverride.isNotEmpty()) sourcesOverride else defaultSourcesFor(hostname)
+
+    private fun defaultSourcesFor(hostname: String): List<AddressSource> = when {
         isPixivDomain(hostname) -> pixivSources
         hostname == POIPIKU_MAIN_HOST -> poipikuSources
         else -> otherSources
@@ -216,11 +218,11 @@ class DoHDns internal constructor(
             Thread.currentThread().interrupt()
         }
 
-        // 兜底一：还有曾经验证过的地址时，交给真实请求判定，而不是抛"域名不存在"——
-        // 后者会让 App 看起来像没网，用户唯一的出路是重启
+        // 兜底一：还有曾经验证过的地址或只在兜底出场的内置 IP 时，交给真实请求判定，
+        // 而不是抛"域名不存在"——后者会让 App 看起来像没网，用户唯一的出路是重启
         val fallback = selector.order(
             hostname,
-            persistedAddresses(hostname, clock()),
+            persistedAddresses(hostname, clock()) + builtInAddresses(hostname),
             NetworkTuning.MAX_FALLBACK_ROUTES,
             includeWaiting = true,
         )
@@ -355,6 +357,10 @@ class DoHDns internal constructor(
 
     private fun cachedAddresses(hostname: String): List<InetAddress> =
         sourcesFor(hostname).mapNotNull { (it as? CachingAddressSource)?.cached(hostname) }.flatten()
+
+    /** 只在兜底路径出场的内置 IP：已经参与竞速的域名不补，免得绕过 TLS 探测直接交给 OkHttp */
+    private fun builtInAddresses(hostname: String): List<InetAddress> =
+        staticSource.resolve(hostname).takeIf { staticSource !in defaultSourcesFor(hostname) }.orEmpty()
 
     private fun dohSource(name: String, url: String, bootstrap: List<String>): AddressSource {
         val source = DohSource(url, bootstrap.map { InetAddress.getByName(it) })
@@ -571,6 +577,15 @@ class DoHDns internal constructor(
 
         val STATIC_ADDRESSES = mapOf(
             "poipiku.com" to listOf("54.199.93.197"),
+            // 直连 CDN 只认 CloudFront 边缘 IP；只给兜底路径，不参与来源竞速。
+            // 顺序按境内实测延迟排（LAX54 最快，HKG61 是另一条出口）
+            "cdn.poipiku.com" to listOf(
+                "54.239.180.51",
+                "18.65.14.51",
+                "54.239.180.98",
+                "54.239.180.106",
+                "54.239.180.76",
+            ),
             "www.pixiv.net" to listOf("172.64.145.17", "104.18.42.239"),
             "app-api.pixiv.net" to listOf("172.64.145.17", "104.18.42.239"),
             "i.pximg.net" to listOf("210.140.139.129", "210.140.139.133", "210.140.139.134"),

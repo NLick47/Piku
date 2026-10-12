@@ -117,8 +117,9 @@ class DoHDnsRoutingTest {
             },
         )
 
-        // 竞速里 ipA 连不上：下一个地址顶上来，而不是把这次解析判死
-        assertEquals(listOf(ipB), dns.lookup(HOST))
+        // 竞速里 ipA 连不上：下一个地址顶上来，而不是把这次解析判死。
+        // 只断言首位：落败的探测还在跑时它的地址可能同时留在候选里，这是"落败不取消"的设计
+        assertEquals(ipB, dns.lookup(HOST).first())
 
         // 缓刑期内 ipA 不参与，哪怕它还在解析缓存里
         assertEquals(listOf(ipB), dns.lookup(HOST))
@@ -302,7 +303,7 @@ class DoHDnsRoutingTest {
 
     @Test
     fun builtInAddressesCoverOurOwnHostsSoPoisonedOrExpiredDnsCannotStrandUs() {
-        val hosts = listOf("poipiku.com", "www.pixiv.net", "i.pximg.net")
+        val hosts = listOf("poipiku.com", "cdn.poipiku.com", "www.pixiv.net", "i.pximg.net")
 
         hosts.forEach { host ->
             val ips = DoHDns.STATIC_ADDRESSES[host]
@@ -401,6 +402,25 @@ class DoHDnsRoutingTest {
         assertEquals(listOf(ipC), dns.lookup(HOST))
         assertTrue("自建 DoH 应被问第二次", workerCalls >= 2)
         assertEquals("系统 DNS 只该被问一次", 1, systemCalls)
+    }
+
+    @Test
+    fun builtInAddressListsNeverRepeatAnAddress() {
+        DoHDns.STATIC_ADDRESSES.forEach { (host, ips) ->
+            assertEquals("$host 的内置 IP 有重复", ips.distinct(), ips)
+        }
+    }
+
+    @Test
+    fun aDeadEndFallsBackToTheBuiltInCdnAddress() {
+        val dns = dns(
+            sources = listOf(AddressSource { emptyList() }),
+            probe = AddressProbe { _, _ -> ProbeReport.connectFailed() },
+        )
+
+        // 竞速与 DoH 全灭时，内置的 CDN IP 作为最后一条路交给真实请求去试（表里第一条 = 实测最快的那个）
+        assertEquals(listOf(InetAddress.getByName("54.239.180.51")), dns.lookup("cdn.poipiku.com"))
+        assertTrue(dns.lastTrace("cdn.poipiku.com")!!.fallback)
     }
 
     private companion object {
