@@ -1,0 +1,590 @@
+package com.piku.client.core.ui.sheets
+
+import com.piku.client.source.poipiku.ui.home.HomeUiState
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.outlined.CloudSync
+import androidx.compose.material.icons.outlined.GTranslate
+import androidx.compose.material.icons.outlined.Tag
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.ModalBottomSheetProperties
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Velocity
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.piku.client.R
+import com.piku.client.core.storage.prefs.CatalogSource
+import com.piku.client.core.translation.ModelEntry
+import com.piku.client.core.translation.Role
+import com.piku.client.core.ui.common.PikuBottomSheet
+import com.piku.client.core.ui.theme.LoginBackgroundDark
+import com.piku.client.core.ui.theme.PikuColors
+import com.piku.client.core.ui.theme.themedSwitchColors
+
+/** 弹窗内的分区小标题 */
+@Composable
+fun SheetSectionLabel(text: String, color: Color) {
+    Text(
+        text = text,
+        color = color,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.Medium,
+        modifier = Modifier.padding(start = 4.dp),
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun AiTranslateSheet(
+    state: HomeUiState,
+    onToggleEnabled: (Boolean) -> Unit,
+    onToggleTagsAuto: (Boolean) -> Unit,
+    onSelectModel: (ModelEntry) -> Unit,
+    onSelectNovelModel: (ModelEntry?) -> Unit,
+    onSelectImageModel: (ModelEntry?) -> Unit,
+    onSaveCatalog: (String, String) -> Unit,
+    onResetCatalog: () -> Unit,
+    onActivateSource: (CatalogSource) -> Unit,
+    onSaveAsSource: (String, String) -> Unit,
+    onRenameSource: (CatalogSource, String) -> Unit,
+    onDeleteSource: (CatalogSource) -> Unit,
+    onOpenSources: () -> Unit,
+    catalogOpen: Boolean = false,
+    onDismiss: () -> Unit,
+    dark: Boolean,
+) {
+    BackHandler(enabled = !catalogOpen) { onDismiss() }
+
+    val sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    PikuBottomSheet(
+        onDismissRequest = onDismiss,
+        dark = dark,
+        sheetState = sheetState,
+        properties = ModalBottomSheetProperties(shouldDismissOnBackPress = false),
+        scrollable = false,
+    ) {
+            AiTranslateMainPage(
+                state = state,
+                onToggleEnabled = onToggleEnabled,
+                onToggleTagsAuto = onToggleTagsAuto,
+                onSelectModel = onSelectModel,
+                onSelectNovelModel = onSelectNovelModel,
+                onSelectImageModel = onSelectImageModel,
+                onOpenSources = onOpenSources,
+                dark = dark,
+            )
+    }
+}
+
+@Composable
+private fun AiTranslateMainPage(
+    state: HomeUiState,
+    onToggleEnabled: (Boolean) -> Unit,
+    onToggleTagsAuto: (Boolean) -> Unit,
+    onSelectModel: (ModelEntry) -> Unit,
+    onSelectNovelModel: (ModelEntry?) -> Unit,
+    onSelectImageModel: (ModelEntry?) -> Unit,
+    onOpenSources: () -> Unit,
+    dark: Boolean,
+) {
+    val primary = PikuColors.textPrimary
+    val secondary = PikuColors.textSecondary
+    val accent = PikuColors.controlAccent
+
+    var textExpanded by remember { mutableStateOf(false) }
+    var novelExpanded by remember { mutableStateOf(false) }
+    var imageExpanded by remember { mutableStateOf(false) }
+
+    val blockSheetDragScroll = remember {
+        object : NestedScrollConnection {
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource,
+            ): Offset = available
+
+            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity =
+                available
+        }
+    }
+
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.85f)
+            .nestedScroll(blockSheetDragScroll)
+            .verticalScroll(rememberScrollState()),
+    ) {
+        Text(
+            text = stringResource(R.string.menu_ai_translate),
+            color = primary,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(Modifier.height(14.dp))
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .border(
+                    BorderStroke(0.5.dp, PikuColors.border),
+                    RoundedCornerShape(14.dp),
+                )
+                .clickable { onToggleEnabled(!state.aiTranslateEnabled) }
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(accent.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.GTranslate,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(19.dp),
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.ai_translate_enable),
+                    color = primary,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = stringResource(R.string.ai_translate_auto_subtitle),
+                    color = secondary,
+                    fontSize = 11.sp,
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Switch(
+                checked = state.aiTranslateEnabled,
+                onCheckedChange = onToggleEnabled,
+                colors = themedSwitchColors(dark),
+            )
+        }
+
+        AnimatedVisibility(
+            visible = state.aiTranslateEnabled,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically(),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 14.dp, top = 8.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .border(
+                        BorderStroke(0.5.dp, PikuColors.border),
+                        RoundedCornerShape(12.dp),
+                    )
+                    .clickable { onToggleTagsAuto(!state.autoTranslateTags) }
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(30.dp)
+                        .clip(RoundedCornerShape(9.dp))
+                        .background(PikuColors.surfaceMuted),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Tag,
+                        contentDescription = null,
+                        tint = secondary,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+                Spacer(Modifier.width(11.dp))
+                Text(
+                    text = stringResource(R.string.ai_translate_tags_auto),
+                    color = primary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(8.dp))
+                Switch(
+                    checked = state.autoTranslateTags,
+                    onCheckedChange = onToggleTagsAuto,
+                    colors = themedSwitchColors(dark),
+                )
+            }
+        }
+
+        Spacer(Modifier.height(18.dp))
+
+        val usableModels = state.translateModels.filter { it.available && !it.apiKey.isNullOrBlank() }
+
+        val isTextSelected: (ModelEntry) -> Boolean = { entry ->
+            val textStoredAlive = usableModels.any { it.model == state.llmModel && it.baseUrl == state.llmBaseUrl }
+            if (textStoredAlive) {
+                entry.model == state.llmModel && entry.baseUrl == state.llmBaseUrl
+            } else {
+                entry.id == state.roleDefaultIds.text
+            }
+        }
+        val textEntries = usableModels.filter { Role.TEXT in it.roles }
+        val selectedTextLabel = textEntries.firstOrNull(isTextSelected)?.label
+            ?: stringResource(R.string.ai_translate_not_selected)
+
+        CollapsibleSection(
+            title = stringResource(R.string.ai_translate_model),
+            summary = selectedTextLabel,
+            expanded = textExpanded,
+            onToggle = { textExpanded = !textExpanded },
+            dark = dark,
+        ) {
+            ModelListCard(
+                entries = textEntries,
+                isSelected = isTextSelected,
+                onSelect = onSelectModel,
+                dark = dark,
+            )
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        val novelModels = usableModels.filter { Role.NOVEL in it.roles }
+        val isNovelSelected: (ModelEntry) -> Boolean = { entry ->
+            val novelStoredAlive =
+                novelModels.any { it.model == state.llmNovelModel && it.baseUrl == state.llmNovelBaseUrl }
+            if (novelStoredAlive) {
+                entry.model == state.llmNovelModel && entry.baseUrl == state.llmNovelBaseUrl
+            } else {
+                entry.id == state.roleDefaultIds.novel
+            }
+        }
+        val novelSummary = when {
+            novelModels.isEmpty() -> stringResource(R.string.ai_translate_novel_follow)
+            novelModels.any(isNovelSelected) -> novelModels.first(isNovelSelected).label
+            else -> stringResource(R.string.ai_translate_not_selected)
+        }
+
+        CollapsibleSection(
+            title = stringResource(R.string.ai_translate_novel_model),
+            summary = novelSummary,
+            expanded = novelExpanded,
+            onToggle = { novelExpanded = !novelExpanded },
+            dark = dark,
+        ) {
+            if (novelModels.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.ai_translate_novel_model_empty),
+                    color = secondary,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
+                )
+            } else {
+                ModelListCard(
+                    entries = novelModels,
+                    isSelected = isNovelSelected,
+                    onSelect = onSelectNovelModel,
+                    dark = dark,
+                )
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        val imageModels = usableModels.filter { Role.IMAGE in it.roles }
+        val isImageSelected: (ModelEntry) -> Boolean = { entry ->
+            val imageStoredAlive =
+                imageModels.any { it.model == state.llmImageModel && it.baseUrl == state.llmImageBaseUrl }
+            if (imageStoredAlive) {
+                entry.model == state.llmImageModel && entry.baseUrl == state.llmImageBaseUrl
+            } else {
+                entry.id == state.roleDefaultIds.image
+            }
+        }
+        val imageSummary = when {
+            imageModels.isEmpty() -> stringResource(R.string.ai_translate_image_model_empty)
+            imageModels.any(isImageSelected) -> imageModels.first(isImageSelected).label
+            else -> stringResource(R.string.ai_translate_not_selected)
+        }
+
+        CollapsibleSection(
+            title = stringResource(R.string.ai_translate_image_model),
+            summary = imageSummary,
+            expanded = imageExpanded,
+            onToggle = { imageExpanded = !imageExpanded },
+            dark = dark,
+        ) {
+            if (imageModels.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.ai_translate_image_model_empty),
+                    color = secondary,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
+                )
+            } else {
+                ModelListCard(
+                    entries = imageModels,
+                    isSelected = isImageSelected,
+                    onSelect = onSelectImageModel,
+                    dark = dark,
+                )
+            }
+        }
+
+        Spacer(Modifier.height(18.dp))
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .border(
+                    BorderStroke(0.5.dp, PikuColors.border),
+                    RoundedCornerShape(14.dp),
+                )
+                .clickable(onClick = onOpenSources)
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(accent.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.CloudSync,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(19.dp),
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.ai_translate_catalog_source),
+                    color = primary,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = stringResource(
+                        if (state.catalogIsCustom) {
+                            R.string.ai_translate_catalog_custom
+                        } else {
+                            R.string.ai_translate_catalog_default
+                        },
+                    ),
+                    color = secondary,
+                    fontSize = 11.sp,
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Icon(
+                imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                contentDescription = null,
+                tint = secondary,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun CollapsibleSection(
+    title: String,
+    summary: String,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    dark: Boolean,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val primary = PikuColors.textPrimary
+    val secondary = PikuColors.textSecondary
+
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .clickable(onClick = onToggle)
+                .padding(horizontal = 4.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = title,
+                color = primary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = summary,
+                color = secondary,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.width(4.dp))
+            Icon(
+                imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                contentDescription = null,
+                tint = secondary,
+                modifier = Modifier
+                    .size(16.dp)
+                    .rotate(if (expanded) 90f else 0f),
+            )
+        }
+        AnimatedVisibility(
+            visible = expanded,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut(),
+        ) {
+            Column { content() }
+        }
+    }
+}
+
+@Composable
+private fun ModelListCard(
+    entries: List<ModelEntry>,
+    isSelected: (ModelEntry) -> Boolean,
+    onSelect: (ModelEntry) -> Unit,
+    dark: Boolean,
+) {
+    if (entries.isEmpty()) return
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .border(
+                BorderStroke(0.5.dp, PikuColors.border),
+                RoundedCornerShape(14.dp),
+            ),
+    ) {
+        entries.forEachIndexed { index, entry ->
+            ModelOptionRow(
+                entry = entry,
+                selected = isSelected(entry),
+                onClick = { onSelect(entry) },
+                dark = dark,
+            )
+            if (index < entries.lastIndex) {
+                HorizontalDivider(
+                    color = PikuColors.border,
+                    thickness = 0.5.dp,
+                    modifier = Modifier.padding(start = 14.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ModelOptionRow(
+    entry: ModelEntry,
+    selected: Boolean,
+    onClick: () -> Unit,
+    dark: Boolean,
+) {
+    val primary = PikuColors.textPrimary
+    val secondary = PikuColors.textSecondary
+    val accent = PikuColors.controlAccent
+    val rowBg by animateColorAsState(
+        targetValue = if (selected) {
+            accent.copy(alpha = if (dark) 0.18f else 0.12f)
+        } else {
+            Color.Transparent
+        },
+        label = "modelRowBg",
+    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(rowBg)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = entry.label,
+                color = primary,
+                fontSize = 14.sp,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+            )
+            if (entry.hint.isNotBlank()) {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = entry.hint,
+                    color = secondary,
+                    fontSize = 11.sp,
+                )
+            }
+        }
+        if (selected) {
+            Spacer(Modifier.width(8.dp))
+            Icon(
+                imageVector = Icons.Filled.Check,
+                contentDescription = null,
+                tint = accent,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+    }
+}

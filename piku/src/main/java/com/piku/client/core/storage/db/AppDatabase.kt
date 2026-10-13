@@ -1,0 +1,310 @@
+package com.piku.client.core.storage.db
+
+import androidx.room.Database
+import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
+
+/** schema 版本：动它就必须补一段迁移，单测会盯着"1..这里 不能断档" */
+internal const val DATABASE_SCHEMA_VERSION = 14
+
+@Database(
+    entities = [
+        FavoriteEntity::class,
+        FavoriteFolderEntity::class,
+        FavoriteMembershipEntity::class,
+        HistoryEntity::class,
+        SearchKeywordEntity::class,
+        WorkPasswordEntity::class,
+        TranslationEntity::class,
+        DraftEntity::class,
+        DraftImageEntity::class,
+    ],
+    version = DATABASE_SCHEMA_VERSION,
+    exportSchema = false,
+)
+abstract class AppDatabase : RoomDatabase() {
+    abstract fun favoriteDao(): FavoriteDao
+    abstract fun favoriteFolderDao(): FavoriteFolderDao
+    abstract fun historyDao(): HistoryDao
+    abstract fun searchKeywordDao(): SearchKeywordDao
+    abstract fun workPasswordDao(): WorkPasswordDao
+    abstract fun translationDao(): TranslationDao
+    abstract fun draftDao(): DraftDao
+
+    companion object {
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE favorites ADD COLUMN authorId INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE favorites ADD COLUMN thumbnailUrl TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE favorites ADD COLUMN authorAvatarUrl TEXT")
+                db.execSQL("ALTER TABLE favorites ADD COLUMN imageCount INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE favorites ADD COLUMN r18 INTEGER NOT NULL DEFAULT 0")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS history (" +
+                        "workId TEXT NOT NULL PRIMARY KEY, " +
+                        "authorId INTEGER NOT NULL, " +
+                        "title TEXT NOT NULL, " +
+                        "authorName TEXT NOT NULL, " +
+                        "authorAvatarUrl TEXT, " +
+                        "thumbnailUrl TEXT NOT NULL, " +
+                        "imageCount INTEGER NOT NULL, " +
+                        "r18 INTEGER NOT NULL, " +
+                        "visitedAt INTEGER NOT NULL)",
+                )
+            }
+        }
+
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS favorite_folders (" +
+                        "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "name TEXT NOT NULL, " +
+                        "createdAt INTEGER NOT NULL)",
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS favorite_memberships (" +
+                        "folderId INTEGER NOT NULL, " +
+                        "workId TEXT NOT NULL, " +
+                        "addedAt INTEGER NOT NULL, " +
+                        "PRIMARY KEY(folderId, workId), " +
+                        "FOREIGN KEY(folderId) REFERENCES favorite_folders(id) ON DELETE CASCADE, " +
+                        "FOREIGN KEY(workId) REFERENCES favorites(workId) ON DELETE CASCADE)",
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_favorite_memberships_folderId ON favorite_memberships(folderId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_favorite_memberships_workId ON favorite_memberships(workId)")
+                db.execSQL(
+                    "INSERT INTO favorite_folders(name, createdAt) " +
+                        "VALUES('默认收藏夹', ${System.currentTimeMillis()})",
+                )
+                db.execSQL(
+                    "INSERT INTO favorite_memberships(folderId, workId, addedAt) " +
+                        "SELECT (SELECT id FROM favorite_folders ORDER BY id LIMIT 1), workId, addedAt FROM favorites",
+                )
+            }
+        }
+
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS search_keywords (" +
+                        "keyword TEXT NOT NULL PRIMARY KEY, " +
+                        "searchedAt INTEGER NOT NULL)",
+                )
+            }
+        }
+
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS work_passwords (" +
+                        "workId INTEGER NOT NULL PRIMARY KEY, " +
+                        "password TEXT NOT NULL, " +
+                        "updatedAt INTEGER NOT NULL)",
+                )
+            }
+        }
+
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // 默认收藏夹显式化：新增 isDefault 标记。
+                // 迁移时把最早创建的收藏夹（即旧逻辑的“默认夹”）标记为默认。
+                db.execSQL(
+                    "ALTER TABLE favorite_folders ADD COLUMN isDefault INTEGER NOT NULL DEFAULT 0",
+                )
+                db.execSQL(
+                    "UPDATE favorite_folders SET isDefault = 1 " +
+                        "WHERE id = (SELECT id FROM favorite_folders ORDER BY createdAt ASC, id ASC LIMIT 1)",
+                )
+            }
+        }
+
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // AI 翻译译文缓存：(原文哈希, 目标语言, 引擎) 三元组为主键，
+                // 换模型/换语言互不污染，纯缓存表，丢失只会重新翻译。
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS translations (" +
+                        "srcHash TEXT NOT NULL, " +
+                        "targetLang TEXT NOT NULL, " +
+                        "engineId TEXT NOT NULL, " +
+                        "translated TEXT NOT NULL, " +
+                        "updatedAt INTEGER NOT NULL, " +
+                        "PRIMARY KEY(srcHash, targetLang, engineId))",
+                )
+            }
+        }
+
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_translations_updatedAt ON translations(updatedAt)")
+            }
+        }
+
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE favorites ADD COLUMN contentBackedUp INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // 只给会持续增长的表补索引：history 是累积型大表（范围查询 + 排序），
+                // favorites 无淘汰上限、每次收藏操作都会让列表 Flow 重排全表。
+                // search_keywords 有 MAX_KEYWORDS=20 的硬上限，建索引纯亏。
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_history_visitedAt ON history(visitedAt)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_favorites_addedAt ON favorites(addedAt)")
+            }
+        }
+
+        val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // 发布草稿单槽位：payload 存 PublishDraft JSON，图片在 filesDir 由代码管理
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS draft_works (" +
+                        "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "payload TEXT NOT NULL, " +
+                        "updatedAt INTEGER NOT NULL)",
+                )
+            }
+        }
+
+        val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS drafts (" +
+                        "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "kind INTEGER NOT NULL, " +
+                        "categoryCd INTEGER NOT NULL, " +
+                        "tags TEXT NOT NULL, " +
+                        "description TEXT NOT NULL, " +
+                        "publish INTEGER NOT NULL, " +
+                        "nsfwWire INTEGER, " +
+                        "visibility INTEGER NOT NULL, " +
+                        "password TEXT NOT NULL, " +
+                        "showRecent INTEGER NOT NULL, " +
+                        "showFirstOnly INTEGER NOT NULL, " +
+                        "title TEXT NOT NULL, " +
+                        "body TEXT NOT NULL, " +
+                        "novelDirection INTEGER NOT NULL, " +
+                        "createdAt INTEGER NOT NULL, " +
+                        "updatedAt INTEGER NOT NULL)",
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS draft_images (" +
+                        "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "draftId INTEGER NOT NULL, " +
+                        "path TEXT NOT NULL, " +
+                        "sortOrder INTEGER NOT NULL, " +
+                        "FOREIGN KEY(draftId) REFERENCES drafts(id) ON DELETE CASCADE)",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_draft_images_draftId " +
+                        "ON draft_images(draftId)",
+                )
+                db.execSQL("DROP TABLE IF EXISTS draft_works")
+            }
+        }
+
+        val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // 收藏/历史/归属加 source 维度：(source, workId) 是跨源唯一键，各源 id 空间互不相通。
+                // SQLite 改不了主键，只能建新表→拷数据（存量全是 poipiku）→换名
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS favorites_new (" +
+                        "source TEXT NOT NULL, " +
+                        "workId TEXT NOT NULL, " +
+                        "authorId INTEGER NOT NULL DEFAULT 0, " +
+                        "title TEXT NOT NULL, " +
+                        "authorName TEXT NOT NULL, " +
+                        "thumbnailUrl TEXT NOT NULL DEFAULT '', " +
+                        "authorAvatarUrl TEXT, " +
+                        "imageCount INTEGER NOT NULL DEFAULT 0, " +
+                        "r18 INTEGER NOT NULL DEFAULT 0, " +
+                        "addedAt INTEGER NOT NULL, " +
+                        "contentBackedUp INTEGER NOT NULL DEFAULT 0, " +
+                        "PRIMARY KEY(source, workId))",
+                )
+                db.execSQL(
+                    "INSERT INTO favorites_new(source, workId, authorId, title, authorName, " +
+                        "thumbnailUrl, authorAvatarUrl, imageCount, r18, addedAt, contentBackedUp) " +
+                        "SELECT 'POIPIKU', workId, authorId, title, authorName, thumbnailUrl, " +
+                        "authorAvatarUrl, imageCount, r18, addedAt, contentBackedUp FROM favorites",
+                )
+                db.execSQL("DROP TABLE favorites")
+                db.execSQL("ALTER TABLE favorites_new RENAME TO favorites")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_favorites_addedAt ON favorites(addedAt)")
+
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS favorite_memberships_new (" +
+                        "folderId INTEGER NOT NULL, " +
+                        "source TEXT NOT NULL, " +
+                        "workId TEXT NOT NULL, " +
+                        "addedAt INTEGER NOT NULL, " +
+                        "PRIMARY KEY(folderId, source, workId), " +
+                        "FOREIGN KEY(folderId) REFERENCES favorite_folders(id) ON DELETE CASCADE, " +
+                        "FOREIGN KEY(source, workId) REFERENCES favorites(source, workId) ON DELETE CASCADE)",
+                )
+                db.execSQL(
+                    "INSERT INTO favorite_memberships_new(folderId, source, workId, addedAt) " +
+                        "SELECT folderId, 'POIPIKU', workId, addedAt FROM favorite_memberships",
+                )
+                db.execSQL("DROP TABLE favorite_memberships")
+                db.execSQL("ALTER TABLE favorite_memberships_new RENAME TO favorite_memberships")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_favorite_memberships_folderId ON favorite_memberships(folderId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_favorite_memberships_source_workId ON favorite_memberships(source, workId)")
+
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS history_new (" +
+                        "source TEXT NOT NULL, " +
+                        "workId TEXT NOT NULL, " +
+                        "authorId INTEGER NOT NULL, " +
+                        "title TEXT NOT NULL, " +
+                        "authorName TEXT NOT NULL, " +
+                        "authorAvatarUrl TEXT, " +
+                        "thumbnailUrl TEXT NOT NULL, " +
+                        "imageCount INTEGER NOT NULL, " +
+                        "r18 INTEGER NOT NULL, " +
+                        "visitedAt INTEGER NOT NULL, " +
+                        "PRIMARY KEY(source, workId))",
+                )
+                db.execSQL(
+                    "INSERT INTO history_new(source, workId, authorId, title, authorName, " +
+                        "authorAvatarUrl, thumbnailUrl, imageCount, r18, visitedAt) " +
+                        "SELECT 'POIPIKU', workId, authorId, title, authorName, authorAvatarUrl, " +
+                        "thumbnailUrl, imageCount, r18, visitedAt FROM history",
+                )
+                db.execSQL("DROP TABLE history")
+                db.execSQL("ALTER TABLE history_new RENAME TO history")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_history_visitedAt ON history(visitedAt)")
+            }
+        }
+
+        val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // 收藏行加云端镜像标记：pixiv 收藏同步/取消都以它为准；存量一律视为未同步
+                db.execSQL(
+                    "ALTER TABLE favorites ADD COLUMN cloudSynced INTEGER NOT NULL DEFAULT 0",
+                )
+            }
+        }
+
+        /** 全部迁移，必须覆盖 1..version 且不断档（有单测盯着） */
+        val ALL_MIGRATIONS: Array<Migration> = arrayOf(
+            MIGRATION_1_2,
+            MIGRATION_2_3,
+            MIGRATION_3_4,
+            MIGRATION_4_5,
+            MIGRATION_5_6,
+            MIGRATION_6_7,
+            MIGRATION_7_8,
+            MIGRATION_8_9,
+            MIGRATION_9_10,
+            MIGRATION_10_11,
+            MIGRATION_11_12,
+            MIGRATION_12_13,
+            MIGRATION_13_14,
+        )
+    }
+}

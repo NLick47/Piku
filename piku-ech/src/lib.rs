@@ -36,7 +36,7 @@ fn encode(response: Response) -> Vec<u8> {
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_piku_client_data_remote_ech_NativeEch_fetch<'local>(
+pub extern "system" fn Java_com_piku_client_source_pixiv_data_ech_NativeEch_fetch<'local>(
     mut env: JNIEnv<'local>,
     _class: JClass<'local>,
     url: JString<'local>,

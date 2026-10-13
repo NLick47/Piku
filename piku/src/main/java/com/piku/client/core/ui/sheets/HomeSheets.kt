@@ -1,0 +1,482 @@
+package com.piku.client.core.ui.sheets
+
+import com.piku.client.core.ui.drawer.labelRes
+import com.piku.client.core.ui.drawer.pixivMirrorOptionRes
+
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.piku.client.R
+import com.piku.client.core.model.WorkSource
+import com.piku.client.core.model.AppLanguage
+import com.piku.client.source.poipiku.data.model.CATEGORY_GROUPS
+import com.piku.client.source.poipiku.data.model.PoipikuCategory
+import com.piku.client.core.model.ImageRouteMode
+import com.piku.client.core.model.PixivBookmarkMirror
+import com.piku.client.core.model.ThemeMode
+import com.piku.client.core.ui.common.PikuBottomSheet
+import com.piku.client.core.ui.common.PikuSheetSubtitle
+import com.piku.client.core.ui.common.PikuSheetTitle
+import com.piku.client.core.ui.theme.AccentDark
+import com.piku.client.core.ui.theme.LoginBackgroundDark
+import com.piku.client.core.ui.theme.LoginCardDark
+import com.piku.client.core.ui.theme.LoginTextPrimaryDark
+import com.piku.client.core.ui.theme.LoginTextPrimaryLight
+import com.piku.client.core.ui.theme.LoginTextSecondaryDark
+import com.piku.client.core.ui.theme.PikuColors
+
+
+
+private fun retentionDaysRes(days: Int): Int = when (days) {
+    7 -> R.string.retention_7d
+    30 -> R.string.retention_30d
+    90 -> R.string.retention_90d
+    else -> R.string.retention_forever
+}
+
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
+@Composable
+internal fun CategorySheet(
+    selected: PoipikuCategory,
+    onSelect: (PoipikuCategory) -> Unit,
+    onDismiss: () -> Unit,
+    dark: Boolean,
+) {
+    PikuBottomSheet(
+        onDismissRequest = onDismiss,
+        dark = dark,
+        scrollable = true,
+    ) {
+            PikuSheetTitle(text = stringResource(R.string.home_category_select))
+            Spacer(Modifier.height(4.dp))
+            PikuSheetSubtitle(
+                text = stringResource(
+                    R.string.home_category_current,
+                    stringResource(selected.nameRes),
+                ),
+            )
+            Spacer(Modifier.height(16.dp))
+            AllCategoriesButton(
+                active = selected == PoipikuCategory.ALL,
+                onClick = { onSelect(PoipikuCategory.ALL) },
+                dark = dark,
+            )
+            Spacer(Modifier.height(20.dp))
+            CATEGORY_GROUPS.forEach { group ->
+                Text(
+                    text = stringResource(group.titleRes),
+                    color = PikuColors.textFaint,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Medium,
+                    letterSpacing = 1.sp,
+                )
+                Spacer(Modifier.height(8.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    group.categories.forEach { category ->
+                        CategoryPill(
+                            text = stringResource(category.nameRes),
+                            active = selected == category,
+                            onClick = { onSelect(category) },
+                            dark = dark,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+            }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun ThemeModeSheet(
+    selected: ThemeMode,
+    onSelect: (ThemeMode) -> Unit,
+    onDismiss: () -> Unit,
+    dark: Boolean,
+) {
+    PikuBottomSheet(
+        onDismissRequest = onDismiss,
+        dark = dark,
+    ) {
+            PikuSheetTitle(text = stringResource(R.string.theme_select_title))
+            Spacer(Modifier.height(16.dp))
+            SettingsOptionRow(
+                text = stringResource(R.string.theme_mode_system),
+                selected = selected == ThemeMode.SYSTEM,
+                onClick = { onSelect(ThemeMode.SYSTEM) },
+                dark = dark,
+            )
+            Spacer(Modifier.height(8.dp))
+            SettingsOptionRow(
+                text = stringResource(R.string.theme_mode_light),
+                selected = selected == ThemeMode.LIGHT,
+                onClick = { onSelect(ThemeMode.LIGHT) },
+                dark = dark,
+            )
+            Spacer(Modifier.height(8.dp))
+            SettingsOptionRow(
+                text = stringResource(R.string.theme_mode_dark),
+                selected = selected == ThemeMode.DARK,
+                onClick = { onSelect(ThemeMode.DARK) },
+                dark = dark,
+            )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun HomeSourceSheet(
+    selected: WorkSource,
+    options: List<WorkSource>,
+    labelRes: (WorkSource) -> Int,
+    onSelect: (WorkSource) -> Unit,
+    onDismiss: () -> Unit,
+    dark: Boolean,
+) {
+    PikuBottomSheet(
+        onDismissRequest = onDismiss,
+        dark = dark,
+    ) {
+        PikuSheetTitle(text = stringResource(R.string.home_source_select_title))
+        Spacer(Modifier.height(16.dp))
+        options.forEach { option ->
+            SettingsOptionRow(
+                text = stringResource(labelRes(option)),
+                selected = selected == option,
+                onClick = { onSelect(option) },
+                dark = dark,
+            )
+            Spacer(Modifier.height(8.dp))
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun ImageRouteSheet(
+    selected: ImageRouteMode,
+    onSelect: (ImageRouteMode) -> Unit,
+    onDismiss: () -> Unit,
+    dark: Boolean,
+) {
+    PikuBottomSheet(
+        onDismissRequest = onDismiss,
+        dark = dark,
+    ) {
+        PikuSheetTitle(text = stringResource(R.string.image_route_select_title))
+        Spacer(Modifier.height(4.dp))
+        PikuSheetSubtitle(text = stringResource(R.string.image_route_select_hint))
+        Spacer(Modifier.height(16.dp))
+        SettingsOptionRow(
+            text = stringResource(R.string.image_route_auto),
+            selected = selected == ImageRouteMode.AUTO,
+            onClick = { onSelect(ImageRouteMode.AUTO) },
+            dark = dark,
+        )
+        Spacer(Modifier.height(8.dp))
+        SettingsOptionRow(
+            text = stringResource(R.string.image_route_direct),
+            selected = selected == ImageRouteMode.DIRECT,
+            onClick = { onSelect(ImageRouteMode.DIRECT) },
+            dark = dark,
+        )
+        Spacer(Modifier.height(8.dp))
+        SettingsOptionRow(
+            text = stringResource(R.string.image_route_relay),
+            selected = selected == ImageRouteMode.RELAY,
+            onClick = { onSelect(ImageRouteMode.RELAY) },
+            dark = dark,
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun PixivMirrorSheet(
+    selected: PixivBookmarkMirror,
+    onSelect: (PixivBookmarkMirror) -> Unit,
+    onDismiss: () -> Unit,
+    dark: Boolean,
+) {
+    PikuBottomSheet(
+        onDismissRequest = onDismiss,
+        dark = dark,
+    ) {
+        PikuSheetTitle(text = stringResource(R.string.pixiv_mirror_select_title))
+        Spacer(Modifier.height(4.dp))
+        PikuSheetSubtitle(text = stringResource(R.string.pixiv_mirror_select_hint))
+        Spacer(Modifier.height(16.dp))
+        PixivBookmarkMirror.entries.forEach { mode ->
+            SettingsOptionRow(
+                text = stringResource(mode.pixivMirrorOptionRes()),
+                selected = selected == mode,
+                onClick = { onSelect(mode) },
+                dark = dark,
+            )
+            Spacer(Modifier.height(8.dp))
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun RetentionSheet(
+    selectedDays: Int,
+    onSelect: (Int) -> Unit,
+    onDismiss: () -> Unit,
+    dark: Boolean,
+) {
+    PikuBottomSheet(
+        onDismissRequest = onDismiss,
+        dark = dark,
+    ) {
+            PikuSheetTitle(text = stringResource(R.string.retention_select_title))
+            Spacer(Modifier.height(4.dp))
+            PikuSheetSubtitle(text = stringResource(R.string.retention_select_hint))
+            Spacer(Modifier.height(16.dp))
+            listOf(7, 30, 90, 0).forEach { days ->
+                SettingsOptionRow(
+                    text = stringResource(retentionDaysRes(days)),
+                    selected = selectedDays == days,
+                    onClick = { onSelect(days) },
+                    dark = dark,
+                )
+                Spacer(Modifier.height(8.dp))
+            }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun LanguageSheet(
+    selected: AppLanguage,
+    onSelect: (AppLanguage) -> Unit,
+    onDismiss: () -> Unit,
+    dark: Boolean,
+) {
+    PikuBottomSheet(
+        onDismissRequest = onDismiss,
+        dark = dark,
+    ) {
+            PikuSheetTitle(text = stringResource(R.string.language_select_title))
+            Spacer(Modifier.height(16.dp))
+            AppLanguage.entries.forEach { language ->
+                SettingsOptionRow(
+                    text = stringResource(language.labelRes()),
+                    selected = selected == language,
+                    onClick = { onSelect(language) },
+                    dark = dark,
+                )
+                Spacer(Modifier.height(8.dp))
+            }
+    }
+}
+
+/** 破坏性动作前的确认：文案由调用方给（退出登录 / 解除授权共用同一副壳） */
+@Composable
+internal fun ConfirmDestructiveDialog(
+    title: String,
+    message: String,
+    confirmLabel: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    dark: Boolean,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = PikuColors.surface,
+        title = {
+            Text(
+                text = title,
+                color = PikuColors.textPrimary,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        },
+        text = {
+            Text(
+                text = message,
+                color = PikuColors.textSecondary,
+                fontSize = 13.sp,
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(text = confirmLabel, color = PikuColors.error)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(
+                    text = stringResource(R.string.detail_favorite_cancel),
+                    color = PikuColors.textFaint,
+                )
+            }
+        },
+    )
+}
+
+@Composable
+private fun SettingsOptionRow(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    dark: Boolean,
+) {
+    val shape = RoundedCornerShape(14.dp)
+    val container = when {
+        selected -> if (dark) {
+            LoginTextPrimaryDark.copy(alpha = 0.14f)
+        } else {
+            LoginTextPrimaryLight.copy(alpha = 0.07f)
+        }
+        else -> Color.Transparent
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(container)
+            .border(BorderStroke(0.5.dp, PikuColors.border), shape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = text,
+            color = PikuColors.textPrimary,
+            fontSize = 14.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            modifier = Modifier.weight(1f),
+        )
+        if (selected) {
+            Icon(
+                imageVector = Icons.Filled.Check,
+                contentDescription = null,
+                tint = AccentDark,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun AllCategoriesButton(
+    active: Boolean,
+    onClick: () -> Unit,
+    dark: Boolean,
+) {
+    val shape = RoundedCornerShape(14.dp)
+    val container by animateColorAsState(
+        targetValue = when {
+            active -> PikuColors.textPrimary
+            else -> if (dark) LoginCardDark else Color(0xFF000000).copy(alpha = 0.03f)
+        },
+        label = "allBtnBg",
+    )
+    val content by animateColorAsState(
+        targetValue = when {
+            active -> if (dark) LoginBackgroundDark else Color.White
+            else -> if (dark) LoginTextSecondaryDark else Color(0xFF5A5A5A)
+        },
+        label = "allBtnText",
+    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(container)
+            .border(BorderStroke(0.5.dp, PikuColors.border), shape)
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = stringResource(R.string.home_category_all),
+            color = content,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+@Composable
+private fun CategoryPill(
+    text: String,
+    active: Boolean,
+    onClick: () -> Unit,
+    dark: Boolean,
+) {
+    val shape = RoundedCornerShape(20.dp)
+    val container by animateColorAsState(
+        targetValue = when {
+            active -> PikuColors.textPrimary
+            else -> if (dark) LoginCardDark else Color(0xFF000000).copy(alpha = 0.04f)
+        },
+        label = "pillBg",
+    )
+    val content by animateColorAsState(
+        targetValue = when {
+            active -> if (dark) LoginBackgroundDark else Color.White
+            else -> if (dark) LoginTextSecondaryDark else Color(0xFF5A5A5A)
+        },
+        label = "pillText",
+    )
+    Row(
+        modifier = Modifier
+            .clip(shape)
+            .then(if (active) Modifier.shadow(3.dp, shape) else Modifier)
+            .background(container)
+            .border(BorderStroke(0.5.dp, PikuColors.border), shape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = text,
+            color = content,
+            fontSize = 13.sp,
+        )
+    }
+}

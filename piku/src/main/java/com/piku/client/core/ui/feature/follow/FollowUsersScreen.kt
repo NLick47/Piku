@@ -1,0 +1,427 @@
+package com.piku.client.core.ui.feature.follow
+
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.People
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.piku.client.R
+import com.piku.client.core.model.FollowUser
+import com.piku.client.core.ui.common.FeedbackHost
+import com.piku.client.core.ui.common.FollowPillButton
+import com.piku.client.core.ui.common.GlassCard
+import com.piku.client.core.ui.common.LoaderDots
+import com.piku.client.core.ui.common.LoginPrompt
+import com.piku.client.core.ui.common.PikuBackButton
+import com.piku.client.core.ui.common.PikuSegmented
+import com.piku.client.core.ui.common.UserAvatar
+import com.piku.client.core.ui.theme.GlassHeaderTintDark
+import com.piku.client.core.ui.theme.GlassHeaderTintLight
+import com.piku.client.core.ui.theme.HomeBgBottomDark
+import com.piku.client.core.ui.theme.HomeBgBottomLight
+import com.piku.client.core.ui.theme.HomeBgTopDark
+import com.piku.client.core.ui.theme.HomeBgTopLight
+import com.piku.client.core.ui.theme.LocalDarkTheme
+import com.piku.client.core.ui.theme.PikuColors
+import kotlinx.coroutines.flow.distinctUntilChanged
+
+/**
+ * 我的关注列表页（壳子，与源无关）：展示已关注的创作者，可跳转其作品页或在行内取消关注。
+ * 数据由 [viewModel] 给——各源用自己的 Hilt 绑定实例化，壳子只管排版与状态。
+ */
+@Composable
+fun FollowUsersScreen(
+    viewModel: FollowUsersViewModel,
+    onBack: () -> Unit,
+    onLoginClick: () -> Unit,
+    onUserClick: (FollowUser) -> Unit,
+    dark: Boolean = LocalDarkTheme.current,
+) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    FeedbackHost(channel = viewModel.feedback, snackbarHostState = snackbarHostState)
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    if (dark) listOf(HomeBgTopDark, HomeBgBottomDark)
+                    else listOf(HomeBgTopLight, HomeBgBottomLight),
+                ),
+            ),
+    ) {
+        Column(Modifier.fillMaxSize()) {
+            FollowTopBar(
+                title = stringResource(R.string.follow_users_title),
+                count = state.total?.takeIf { it > 0 }
+                    ?.let { stringResource(R.string.follow_users_count, it) },
+                onBack = onBack,
+                dark = dark,
+            )
+
+            if (state.quietSupported) {
+                FollowTabRow(
+                    selected = state.tab,
+                    onSelect = viewModel::selectTab,
+                )
+            }
+            when {
+                state.followNeedLogin -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        LoginPrompt(
+                            message = stringResource(R.string.follow_users_login),
+                            onLogin = onLoginClick,
+                            dark = dark,
+                        )
+                    }
+                }
+                state.loading && state.users.isEmpty() -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        LoaderDots(dark = dark)
+                    }
+                }
+                state.errorRes != null && state.users.isEmpty() -> {
+                    val errorRes = state.errorRes
+                    FollowErrorState(errorRes = errorRes ?: R.string.home_error_parse, onRetry = viewModel::retry, dark = dark)
+                }
+                state.users.isEmpty() -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.Outlined.People,
+                                contentDescription = null,
+                                tint = PikuColors.textFaint,
+                                modifier = Modifier.size(32.dp),
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                text = stringResource(R.string.follow_users_empty),
+                                color = PikuColors.textSecondary,
+                                fontSize = 14.sp,
+                                lineHeight = 22.sp,
+                            )
+                        }
+                    }
+                }
+                else -> {
+                    FollowUserList(
+                        state = state,
+                        dark = dark,
+                        onUserClick = onUserClick,
+                        onToggleFollow = viewModel::toggleFollow,
+                        onLoadMore = viewModel::loadMore,
+                        onRetryLoadMore = viewModel::retryLoadMore,
+                    )
+                }
+            }
+        }
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(16.dp),
+        )
+    }
+}
+
+@Composable
+private fun FollowTopBar(
+    title: String,
+    count: String?,
+    onBack: () -> Unit,
+    dark: Boolean,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(if (dark) GlassHeaderTintDark else GlassHeaderTintLight)
+            .border(BorderStroke(0.5.dp, PikuColors.border))
+            .statusBarsPadding()
+            .padding(start = 4.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        PikuBackButton(
+            onClick = onBack,
+            dark = dark,
+            contentDescription = stringResource(R.string.back),
+        )
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = title,
+                color = PikuColors.textPrimary,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (count != null) {
+                Text(
+                    text = count,
+                    color = PikuColors.textFaint,
+                    fontSize = 12.sp,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FollowUserList(
+    state: FollowUsersUiState,
+    dark: Boolean,
+    onUserClick: (FollowUser) -> Unit,
+    onToggleFollow: (Long) -> Unit,
+    onLoadMore: () -> Unit,
+    onRetryLoadMore: () -> Unit,
+) {
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(listState, state.users.size) {
+        snapshotFlow {
+            val info = listState.layoutInfo
+            val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: 0
+            lastVisible >= info.totalItemsCount - 6
+        }
+            .distinctUntilChanged()
+            .collect { nearEnd ->
+                if (nearEnd && !state.endReached && !state.loadingMore && state.loadMoreErrorRes == null) {
+                    onLoadMore()
+                }
+            }
+    }
+
+    LazyColumn(
+        state = listState,
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 96.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        items(state.users, key = { it.userId }) { user ->
+            FollowUserRow(
+                user = user,
+                unfollowing = user.userId in state.unfollowingIds,
+                unfollowed = user.userId in state.unfollowedIds,
+                dark = dark,
+                onClick = { onUserClick(user) },
+                onToggleFollow = { onToggleFollow(user.userId) },
+                modifier = Modifier.animateItem(),
+            )
+        }
+        when {
+            state.loadMoreErrorRes != null -> {
+                item {
+                    FollowLoadMoreError(errorRes = state.loadMoreErrorRes, onRetry = onRetryLoadMore, dark = dark)
+                }
+            }
+            state.loadingMore -> {
+                item {
+                    Box(Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
+                        LoaderDots(dark = dark)
+                    }
+                }
+            }
+            state.endReached && state.users.size >= 30 -> {
+                item {
+                    Box(Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
+                        Text(
+                            text = stringResource(R.string.home_no_more),
+                            color = PikuColors.textFaint,
+                            fontSize = 12.sp,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FollowUserRow(
+    user: FollowUser,
+    unfollowing: Boolean,
+    unfollowed: Boolean,
+    dark: Boolean,
+    onClick: () -> Unit,
+    onToggleFollow: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(20.dp)
+    GlassCard(
+        dark = dark,
+        shape = shape,
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 13.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            UserAvatar(avatarUrl = user.avatarUrl, onClick = onClick, dark = dark, size = 48.dp)
+            Spacer(Modifier.width(13.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = user.name,
+                    color = PikuColors.textPrimary,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = "ID: ${user.userId}",
+                    color = PikuColors.textFaint,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.width(10.dp))
+            FollowPillButton(
+                followed = !unfollowed,
+                refollow = true,
+                sending = unfollowing,
+                dark = dark,
+                onClick = onToggleFollow,
+            )
+        }
+    }
+}
+
+@Composable
+private fun FollowTabRow(
+    selected: FollowTab,
+    onSelect: (FollowTab) -> Unit,
+) {
+    val tabs = FollowTab.entries
+    PikuSegmented(
+        labels = listOf(
+            stringResource(R.string.follow_tab_public),
+            stringResource(R.string.follow_tab_quiet),
+        ),
+        selectedIndex = tabs.indexOf(selected),
+        onSelect = { onSelect(tabs[it]) },
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 6.dp),
+    )
+}
+
+@Composable
+private fun FollowErrorState(
+    errorRes: Int,
+    onRetry: () -> Unit,
+    dark: Boolean,
+) {
+    val shape = RoundedCornerShape(14.dp)
+    Column(
+        Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            text = stringResource(errorRes),
+            color = PikuColors.textSecondary,
+            fontSize = 14.sp,
+        )
+        Spacer(Modifier.height(14.dp))
+        Box(
+            modifier = Modifier
+                .clip(shape)
+                .background(PikuColors.surface)
+                .border(
+                    BorderStroke(0.5.dp, PikuColors.border),
+                    shape,
+                )
+                .clickable(onClick = onRetry)
+                .padding(horizontal = 24.dp, vertical = 10.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = stringResource(R.string.home_retry),
+                color = PikuColors.textPrimary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
+}
+
+@Composable
+private fun FollowLoadMoreError(
+    errorRes: Int,
+    onRetry: () -> Unit,
+    dark: Boolean,
+) {
+    val shape = RoundedCornerShape(14.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 10.dp)
+            .clip(shape)
+            .background(PikuColors.surface)
+            .border(
+                BorderStroke(0.5.dp, PikuColors.border),
+                shape,
+            )
+            .clickable(onClick = onRetry)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = stringResource(errorRes),
+            color = PikuColors.textFaint,
+            fontSize = 12.sp,
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = stringResource(R.string.home_retry),
+            color = PikuColors.textPrimary,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}

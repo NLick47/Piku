@@ -11,10 +11,10 @@ import coil3.request.allowHardware
 import coil3.request.crossfade
 import coil3.serviceLoaderEnabled
 import coil3.size.Precision
-import com.piku.client.data.remote.ImageRetryInterceptor
-import com.piku.client.data.remote.ImageRouteProbe
-import com.piku.client.data.remote.translation.ModelCatalogRepository
-import com.piku.client.data.repository.BlockListSync
+import com.piku.client.core.network.image.ImageRetryInterceptor
+import com.piku.client.core.network.image.ImageRouteProbe
+import com.piku.client.core.translation.ModelCatalogRepository
+import com.piku.client.source.poipiku.data.repository.BlockListSync
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors

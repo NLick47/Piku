@@ -1,0 +1,1058 @@
+package com.piku.client.core.storage.prefs
+
+import android.content.SharedPreferences
+import com.piku.client.core.data.SyncResult
+import com.piku.client.core.data.SyncState
+import com.piku.client.core.model.FolderSort
+import com.piku.client.core.model.PixivBookmarkMirror
+import com.piku.client.core.model.WorkKey
+import com.piku.client.core.model.WorkSource
+import com.piku.client.core.model.ImageRouteMode
+import com.piku.client.core.model.ReadingProgress
+import com.piku.client.core.model.ThemeMode
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import java.io.File
+import java.util.UUID
+import javax.inject.Inject
+import javax.inject.Singleton
+
+/** 目录源条目的新 id（SettingsRepository 与 ViewModel 共用的生成规则） */
+internal fun newCatalogSourceId(): String = UUID.randomUUID().toString()
+
+/**
+ * 应用设置存储。
+ * 使用 SharedPreferences（而非 DataStore）是为了去掉 DataStore 依赖、缩小 APK；
+ * 与 [LanguageStore] 同一套模式：内存 StateFlow 为准，写后同步更新内存 + apply() 落盘。
+ * 读操作全部同步内存，写操作 setter 无挂起点，调用线程上读改写原子完成。
+ */
+@Singleton
+class SettingsRepository @Inject constructor(
+    private val prefs: SharedPreferences,
+) {
+
+    init {
+        // 双图层一次性迁移：引入头部层独立取景前只有一套背景取景参数，
+        // 把它复制为头部层初值，老用户升级后跟随模式渲染与旧版完全一致。
+        if (!prefs.getBoolean(KEY_DUAL_LAYER_MIGRATED, false)) {
+            prefs.edit()
+                .putFloat(KEY_HERO_OFFSET_X, prefs.getFloat(KEY_BACKGROUND_OFFSET_X, 0f))
+                .putFloat(KEY_HERO_OFFSET_Y, prefs.getFloat(KEY_BACKGROUND_OFFSET_Y, 0f))
+                .putFloat(
+                    KEY_HERO_SCALE,
+                    prefs.getFloat(KEY_BACKGROUND_SCALE, BACKGROUND_SCALE_DEFAULT),
+                )
+                .putBoolean(KEY_DUAL_LAYER_MIGRATED, true)
+                .apply()
+        }
+    }
+
+    private val _showAdultContent = MutableStateFlow(
+        prefs.getBoolean(KEY_SHOW_ADULT_CONTENT, false),
+    )
+    val showAdultContent: StateFlow<Boolean> = _showAdultContent.asStateFlow()
+
+    private val _themeMode = MutableStateFlow(
+        prefs.getString(KEY_THEME_MODE, null)
+            ?.let { name -> runCatching { ThemeMode.valueOf(name) }.getOrNull() }
+            ?: ThemeMode.SYSTEM,
+    )
+    val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
+
+    /** 图片取源线路：自动 / 强制直连 / 强制中转。默认自动（启动探测 + 失败回退）。 */
+    private val _imageRouteMode = MutableStateFlow(
+        prefs.getString(KEY_IMAGE_ROUTE_MODE, null)
+            ?.let { name -> runCatching { ImageRouteMode.valueOf(name) }.getOrNull() }
+            ?: ImageRouteMode.AUTO,
+    )
+    val imageRouteMode: StateFlow<ImageRouteMode> = _imageRouteMode.asStateFlow()
+
+    /** 收藏夹内的排序方式；纯本地偏好，与账号无关 */
+    private val _folderSort = MutableStateFlow(
+        prefs.getString(KEY_FOLDER_SORT, null)
+            ?.let { name -> runCatching { FolderSort.valueOf(name) }.getOrNull() }
+            ?: FolderSort.ADDED,
+    )
+    val folderSort: StateFlow<FolderSort> = _folderSort.asStateFlow()
+
+    /** pixiv 收藏镜像档位：收藏时是否同时进 pixiv 个人收藏、以何种可见性进。默认同步公开（历史行为） */
+    private val _pixivBookmarkMirror = MutableStateFlow(
+        prefs.getString(KEY_PIXIV_BOOKMARK_MIRROR, null)
+            ?.let { name -> runCatching { PixivBookmarkMirror.valueOf(name) }.getOrNull() }
+            ?: PixivBookmarkMirror.PUBLIC,
+    )
+    val pixivBookmarkMirror: StateFlow<PixivBookmarkMirror> = _pixivBookmarkMirror.asStateFlow()
+
+    /** 浏览记录保留天数，0 表示永久保留 */
+    private val _historyRetentionDays = MutableStateFlow(
+        prefs.getInt(KEY_HISTORY_RETENTION_DAYS, 0),
+    )
+    val historyRetentionDays: StateFlow<Int> = _historyRetentionDays.asStateFlow()
+
+    /** 启动时自动检查更新 */
+    private val _autoCheckEnabled = MutableStateFlow(
+        prefs.getBoolean(KEY_AUTO_CHECK_ENABLED, true),
+    )
+    val autoCheckEnabled: StateFlow<Boolean> = _autoCheckEnabled.asStateFlow()
+
+    /** 上次检查更新时间（epoch millis），0 表示从未检查过 */
+    private val _lastUpdateCheckAt = MutableStateFlow(
+        prefs.getLong(KEY_LAST_UPDATE_CHECK_AT, 0L),
+    )
+    val lastUpdateCheckAt: StateFlow<Long> = _lastUpdateCheckAt.asStateFlow()
+
+    /** 首页自定义背景图片路径（应用私有目录），null 表示使用默认背景 */
+    private val _customBackgroundPath = MutableStateFlow(
+        prefs.getString(KEY_CUSTOM_BACKGROUND_PATH, null)?.takeIf { File(it).exists() },
+    )
+    val customBackgroundPath: StateFlow<String?> = _customBackgroundPath.asStateFlow()
+
+    /** 首页源；只作用于首页，搜索/收藏/历史不跟着切 */
+    private val _homeSource = MutableStateFlow(
+        prefs.getString(KEY_HOME_SOURCE, null)
+            ?.let { name -> runCatching { WorkSource.valueOf(name) }.getOrNull() }
+            ?: WorkSource.POIPIKU,
+    )
+    val homeSource: StateFlow<WorkSource> = _homeSource.asStateFlow()
+
+    /** 自定义背景压暗程度 0~1，0 表示不压暗 */
+    private val _backgroundDim = MutableStateFlow(
+        prefs.getFloat(KEY_BACKGROUND_DIM, BACKGROUND_DIM_DEFAULT),
+    )
+    val backgroundDim: StateFlow<Float> = _backgroundDim.asStateFlow()
+
+    /** 自定义背景暗色遮罩色（ARGB，取自图片主色），null 表示未提取，回退纯黑 */
+    private val _backgroundScrimDark = MutableStateFlow(
+        prefs.getInt(KEY_BACKGROUND_SCRIM_DARK, Int.MIN_VALUE)
+            .takeIf { it != Int.MIN_VALUE },
+    )
+    val backgroundScrimDark: StateFlow<Int?> = _backgroundScrimDark.asStateFlow()
+
+    /** 自定义背景亮色遮罩色（ARGB，取自图片主色），null 表示未提取，回退纯白 */
+    private val _backgroundScrimLight = MutableStateFlow(
+        prefs.getInt(KEY_BACKGROUND_SCRIM_LIGHT, Int.MIN_VALUE)
+            .takeIf { it != Int.MIN_VALUE },
+    )
+    val backgroundScrimLight: StateFlow<Int?> = _backgroundScrimLight.asStateFlow()
+
+    /** 独立背景图在首页的水平/垂直归一化偏移（-1~1，Alignment.Offset 空间）。
+     * -1 表示左/上边缘，0 表示居中，1 表示右/下边缘。
+     * 双图层引入后仅作用于独立背景图的取景；跟随模式由头部层偏移驱动。 */
+    private val _backgroundOffsetX = MutableStateFlow(
+        prefs.getFloat(KEY_BACKGROUND_OFFSET_X, 0f)
+    )
+    val backgroundOffsetX: StateFlow<Float> = _backgroundOffsetX.asStateFlow()
+    private val _backgroundOffsetY = MutableStateFlow(
+        prefs.getFloat(KEY_BACKGROUND_OFFSET_Y, 0f)
+    )
+    val backgroundOffsetY: StateFlow<Float> = _backgroundOffsetY.asStateFlow()
+
+    /** 保存的背景图片原始宽/高（像素），用于拖动手势计算溢出量。
+     * 由 saveFromUri 成功后顺手写入，若为 null 则退回使用容器尺寸估算。 */
+    private val _backgroundImgWidth = MutableStateFlow(
+        prefs.getInt(KEY_BACKGROUND_IMG_WIDTH, 0).takeIf { it > 0 }
+    )
+    val backgroundImgWidth: StateFlow<Int?> = _backgroundImgWidth.asStateFlow()
+    private val _backgroundImgHeight = MutableStateFlow(
+        prefs.getInt(KEY_BACKGROUND_IMG_HEIGHT, 0).takeIf { it > 0 }
+    )
+    val backgroundImgHeight: StateFlow<Int?> = _backgroundImgHeight.asStateFlow()
+
+    private val _backgroundScale = MutableStateFlow(
+        prefs.getFloat(KEY_BACKGROUND_SCALE, BACKGROUND_SCALE_DEFAULT)
+            .coerceIn(BACKGROUND_SCALE_MIN, BACKGROUND_SCALE_MAX),
+    )
+    val backgroundScale: StateFlow<Float> = _backgroundScale.asStateFlow()
+
+    /** 内容区背景模糊强度（dp），0 表示不模糊 */
+    private val _backgroundBlur = MutableStateFlow(
+        prefs.getFloat(KEY_BACKGROUND_BLUR, BACKGROUND_BLUR_DEFAULT)
+            .coerceIn(BACKGROUND_BLUR_MIN, BACKGROUND_BLUR_MAX),
+    )
+    val backgroundBlur: StateFlow<Float> = _backgroundBlur.asStateFlow()
+
+    /** 头部清晰区占屏幕高度比例（0.22~0.45） */
+    private val _backgroundHeroFraction = MutableStateFlow(
+        prefs.getFloat(KEY_BACKGROUND_HERO, BACKGROUND_HERO_DEFAULT)
+            .coerceIn(BACKGROUND_HERO_MIN, BACKGROUND_HERO_MAX),
+    )
+    val backgroundHeroFraction: StateFlow<Float> = _backgroundHeroFraction.asStateFlow()
+
+    /** 头部层水平/垂直归一化偏移（-1~1），独立于背景层；缩放 <1（画框式）时不生效 */
+    private val _heroOffsetX = MutableStateFlow(prefs.getFloat(KEY_HERO_OFFSET_X, 0f))
+    val heroOffsetX: StateFlow<Float> = _heroOffsetX.asStateFlow()
+    private val _heroOffsetY = MutableStateFlow(prefs.getFloat(KEY_HERO_OFFSET_Y, 0f))
+    val heroOffsetY: StateFlow<Float> = _heroOffsetY.asStateFlow()
+
+    /** 头部层缩放：0.5~1.5。≥1 满铺裁切取景；<1 整幅缩小，缩到能装进清晰区就转为画框式呈现 */
+    private val _heroScale = MutableStateFlow(
+        prefs.getFloat(KEY_HERO_SCALE, HERO_SCALE_DEFAULT)
+            .coerceIn(HERO_SCALE_MIN, HERO_SCALE_MAX),
+    )
+    val heroScale: StateFlow<Float> = _heroScale.asStateFlow()
+
+    /** 独立背景层图片路径（应用私有目录），null 表示跟随头部图（无缝过渡）。
+     * 引入后 backgroundOffsetX/Y/Scale 仅作为该独立背景图的取景参数。 */
+    private val _backdropPath = MutableStateFlow(
+        prefs.getString(KEY_BACKDROP_PATH, null)?.takeIf { File(it).exists() },
+    )
+    val backdropPath: StateFlow<String?> = _backdropPath.asStateFlow()
+
+    /** 独立背景图原始宽/高（像素），用于分离模式下拖动溢出计算 */
+    private val _backdropImgWidth = MutableStateFlow(
+        prefs.getInt(KEY_BACKDROP_IMG_WIDTH, 0).takeIf { it > 0 }
+    )
+    val backdropImgWidth: StateFlow<Int?> = _backdropImgWidth.asStateFlow()
+    private val _backdropImgHeight = MutableStateFlow(
+        prefs.getInt(KEY_BACKDROP_IMG_HEIGHT, 0).takeIf { it > 0 }
+    )
+    val backdropImgHeight: StateFlow<Int?> = _backdropImgHeight.asStateFlow()
+
+    fun setShowAdultContent(value: Boolean) {
+        prefs.edit().putBoolean(KEY_SHOW_ADULT_CONTENT, value).apply()
+        _showAdultContent.value = value
+    }
+
+    fun setThemeMode(mode: ThemeMode) {
+        prefs.edit().putString(KEY_THEME_MODE, mode.name).apply()
+        _themeMode.value = mode
+    }
+
+    fun setImageRouteMode(mode: ImageRouteMode) {
+        prefs.edit().putString(KEY_IMAGE_ROUTE_MODE, mode.name).apply()
+        _imageRouteMode.value = mode
+    }
+
+    fun setHomeSource(value: WorkSource) {
+        prefs.edit().putString(KEY_HOME_SOURCE, value.name).apply()
+        _homeSource.value = value
+    }
+
+    fun setFolderSort(sort: FolderSort) {
+        prefs.edit().putString(KEY_FOLDER_SORT, sort.name).apply()
+        _folderSort.value = sort
+    }
+
+    fun setPixivBookmarkMirror(mode: PixivBookmarkMirror) {
+        prefs.edit().putString(KEY_PIXIV_BOOKMARK_MIRROR, mode.name).apply()
+        _pixivBookmarkMirror.value = mode
+    }
+
+    fun setHistoryRetentionDays(days: Int) {
+        prefs.edit().putInt(KEY_HISTORY_RETENTION_DAYS, days).apply()
+        _historyRetentionDays.value = days
+    }
+
+    fun setAutoCheckEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_AUTO_CHECK_ENABLED, enabled).apply()
+        _autoCheckEnabled.value = enabled
+    }
+
+    fun setCustomBackgroundPath(path: String?) {
+        if (path == null) {
+            prefs.edit().remove(KEY_CUSTOM_BACKGROUND_PATH).apply()
+        } else {
+            prefs.edit().putString(KEY_CUSTOM_BACKGROUND_PATH, path).apply()
+        }
+        _customBackgroundPath.value = path
+    }
+
+    /** 使用原始图片尺寸更新背景路径，并把偏移重置居中。
+     * [imgWidth] 和 [imgHeight] 为像素单位，用于后续拖动手势的溢出计算。 */
+    fun setCustomBackgroundPath(path: String?, imgWidth: Int?, imgHeight: Int?) {
+        if (path == null) {
+            prefs.edit().remove(KEY_CUSTOM_BACKGROUND_PATH).apply()
+        } else {
+            prefs.edit().putString(KEY_CUSTOM_BACKGROUND_PATH, path).apply()
+        }
+        // 写入原始图片尺寸（用于后续拖动溢出计算）
+        prefs.edit()
+            .putInt(KEY_BACKGROUND_IMG_WIDTH, imgWidth ?: 0)
+            .putInt(KEY_BACKGROUND_IMG_HEIGHT, imgHeight ?: 0)
+            .apply()
+        // 内存态同步：否则换图后 uiState 仍持旧图尺寸，画框式比例与拖拽溢出会算错
+        _backgroundImgWidth.value = imgWidth?.takeIf { it > 0 }
+        _backgroundImgHeight.value = imgHeight?.takeIf { it > 0 }
+        // 换图时把偏移和缩放重置为默认
+        _backgroundOffsetX.value = 0f
+        _backgroundOffsetY.value = 0f
+        _backgroundScale.value = BACKGROUND_SCALE_DEFAULT
+        // 持久化重置
+        prefs.edit()
+            .putFloat(KEY_BACKGROUND_OFFSET_X, 0f)
+            .putFloat(KEY_BACKGROUND_OFFSET_Y, 0f)
+            .putFloat(KEY_BACKGROUND_SCALE, BACKGROUND_SCALE_DEFAULT)
+            .apply()
+        _customBackgroundPath.value = path
+    }
+
+    fun setBackgroundScale(value: Float, persist: Boolean = false) {
+        val clamped = value.coerceIn(BACKGROUND_SCALE_MIN, BACKGROUND_SCALE_MAX)
+        if (persist) prefs.edit().putFloat(KEY_BACKGROUND_SCALE, clamped).apply()
+        _backgroundScale.value = clamped
+    }
+
+    fun setBackgroundDim(value: Float, persist: Boolean = false) {
+        val clamped = value.coerceIn(BACKGROUND_DIM_MIN, BACKGROUND_DIM_MAX)
+        if (persist) prefs.edit().putFloat(KEY_BACKGROUND_DIM, clamped).apply()
+        _backgroundDim.value = clamped
+    }
+
+    fun setBackgroundBlur(value: Float, persist: Boolean = false) {
+        val clamped = value.coerceIn(BACKGROUND_BLUR_MIN, BACKGROUND_BLUR_MAX)
+        if (persist) prefs.edit().putFloat(KEY_BACKGROUND_BLUR, clamped).apply()
+        _backgroundBlur.value = clamped
+    }
+
+    fun setBackgroundHeroFraction(value: Float, persist: Boolean = false) {
+        val clamped = value.coerceIn(BACKGROUND_HERO_MIN, BACKGROUND_HERO_MAX)
+        if (persist) prefs.edit().putFloat(KEY_BACKGROUND_HERO, clamped).apply()
+        _backgroundHeroFraction.value = clamped
+    }
+
+    /** 头部层缩放（0.5~1.5） */
+    fun setHeroScale(value: Float, persist: Boolean = false) {
+        val clamped = value.coerceIn(HERO_SCALE_MIN, HERO_SCALE_MAX)
+        if (persist) prefs.edit().putFloat(KEY_HERO_SCALE, clamped).apply()
+        _heroScale.value = clamped
+    }
+
+    /** 头部层归一化偏移（内存即时更新，[persist] 为 true 时同步落盘） */
+    fun setHeroOffset(x: Float, y: Float, persist: Boolean = false) {
+        val nx = x.coerceIn(-1f, 1f)
+        val ny = y.coerceIn(-1f, 1f)
+        if (persist) {
+            prefs.edit()
+                .putFloat(KEY_HERO_OFFSET_X, nx)
+                .putFloat(KEY_HERO_OFFSET_Y, ny)
+                .apply()
+        }
+        _heroOffsetX.value = nx
+        _heroOffsetY.value = ny
+    }
+
+    /** 保存独立背景图路径与尺寸，取景参数重置为默认 */
+    fun setBackdropPath(path: String?, imgWidth: Int?, imgHeight: Int?) {
+        prefs.edit()
+            .applyPath(KEY_BACKDROP_PATH, path)
+            .putInt(KEY_BACKDROP_IMG_WIDTH, imgWidth ?: 0)
+            .putInt(KEY_BACKDROP_IMG_HEIGHT, imgHeight ?: 0)
+            .putFloat(KEY_BACKGROUND_OFFSET_X, 0f)
+            .putFloat(KEY_BACKGROUND_OFFSET_Y, 0f)
+            .putFloat(KEY_BACKGROUND_SCALE, BACKGROUND_SCALE_DEFAULT)
+            .apply()
+        _backdropImgWidth.value = imgWidth?.takeIf { it > 0 }
+        _backdropImgHeight.value = imgHeight?.takeIf { it > 0 }
+        _backgroundOffsetX.value = 0f
+        _backgroundOffsetY.value = 0f
+        _backgroundScale.value = BACKGROUND_SCALE_DEFAULT
+        _backdropPath.value = path
+    }
+
+    /** 清除独立背景图，回到跟随头部模式（背景层重新使用头部图 + 头部取景） */
+    fun clearBackdropPath() {
+        prefs.edit()
+            .remove(KEY_BACKDROP_PATH)
+            .remove(KEY_BACKDROP_IMG_WIDTH)
+            .remove(KEY_BACKDROP_IMG_HEIGHT)
+            .apply()
+        _backdropPath.value = null
+        _backdropImgWidth.value = null
+        _backdropImgHeight.value = null
+    }
+
+    fun setBackgroundScrims(scrimDark: Int?, scrimLight: Int?) {
+        prefs.edit()
+            .applyScrim(KEY_BACKGROUND_SCRIM_DARK, scrimDark)
+            .applyScrim(KEY_BACKGROUND_SCRIM_LIGHT, scrimLight)
+            .apply()
+        _backgroundScrimDark.value = scrimDark
+        _backgroundScrimLight.value = scrimLight
+    }
+
+    private fun SharedPreferences.Editor.applyScrim(key: String, value: Int?): SharedPreferences.Editor =
+        if (value == null) remove(key) else putInt(key, value)
+
+    private fun SharedPreferences.Editor.applyPath(key: String, value: String?): SharedPreferences.Editor =
+        if (value == null) remove(key) else putString(key, value)
+
+    /** 归一化偏移持久化（拖动结束时调用） */
+    fun persistBackgroundOffset() {
+        prefs.edit()
+            .putFloat(KEY_BACKGROUND_OFFSET_X, _backgroundOffsetX.value)
+            .putFloat(KEY_BACKGROUND_OFFSET_Y, _backgroundOffsetY.value)
+            .apply()
+    }
+
+    /** 头部层归一化偏移持久化（拖动结束时调用） */
+    fun persistHeroOffset() {
+        prefs.edit()
+            .putFloat(KEY_HERO_OFFSET_X, _heroOffsetX.value)
+            .putFloat(KEY_HERO_OFFSET_Y, _heroOffsetY.value)
+            .apply()
+    }
+
+    /** 设置归一化偏移（内存即时更新，[persist] 为 true 时同步落盘）。
+     * [x], [y] 均在 -1~1 的 Alignment.Offset 空间。 */
+    fun setBackgroundOffset(x: Float, y: Float, persist: Boolean = false) {
+        val nx = x.coerceIn(-1f, 1f)
+        val ny = y.coerceIn(-1f, 1f)
+        if (persist) {
+            prefs.edit()
+                .putFloat(KEY_BACKGROUND_OFFSET_X, nx)
+                .putFloat(KEY_BACKGROUND_OFFSET_Y, ny)
+                .apply()
+        }
+        _backgroundOffsetX.value = nx
+        _backgroundOffsetY.value = ny
+    }
+
+    /** 小说阅读器显示设置，独立于系统主题，由用户在阅读器里调并持久化 */
+    private val _novelReaderSettings = MutableStateFlow(readNovelReaderSettings())
+    val novelReaderSettings: StateFlow<NovelReaderSettings> = _novelReaderSettings.asStateFlow()
+
+    /** 整包写入阅读器设置；[persist] 为 false 时只更新内存（滑块拖动中的实时预览，松手才落盘） */
+    fun setNovelReaderSettings(settings: NovelReaderSettings, persist: Boolean = true) {
+        val clamped = settings.copy(
+            fontSize = settings.fontSize.coerceIn(NOVEL_FONT_MIN, NOVEL_FONT_MAX),
+            lineHeight = settings.lineHeight.coerceIn(NOVEL_LINE_HEIGHT_MIN, NOVEL_LINE_HEIGHT_MAX),
+            brightness = settings.brightness.let {
+                if (it < 0f) NovelReaderSettings.BRIGHTNESS_SYSTEM
+                else it.coerceIn(NOVEL_BRIGHTNESS_MIN, 1f)
+            },
+        )
+        if (persist) {
+            prefs.edit()
+                .putFloat(KEY_NOVEL_FONT_SIZE, clamped.fontSize)
+                .putFloat(KEY_NOVEL_LINE_HEIGHT, clamped.lineHeight)
+                .putInt(KEY_NOVEL_READER_THEME, clamped.themeId)
+                .putBoolean(KEY_NOVEL_SERIF, clamped.serif)
+                .putFloat(KEY_NOVEL_BRIGHTNESS, clamped.brightness)
+                .putBoolean(KEY_NOVEL_KEEP_SCREEN_ON, clamped.keepScreenOn)
+                .apply()
+        }
+        _novelReaderSettings.value = clamped
+    }
+
+    private fun readNovelReaderSettings(): NovelReaderSettings = NovelReaderSettings(
+        fontSize = prefs.getFloat(KEY_NOVEL_FONT_SIZE, NOVEL_FONT_DEFAULT),
+        lineHeight = prefs.getFloat(KEY_NOVEL_LINE_HEIGHT, NOVEL_LINE_HEIGHT_DEFAULT),
+        themeId = prefs.getInt(KEY_NOVEL_READER_THEME, NOVEL_THEME_DEFAULT),
+        serif = prefs.getBoolean(KEY_NOVEL_SERIF, false),
+        brightness = prefs.getFloat(KEY_NOVEL_BRIGHTNESS, NovelReaderSettings.BRIGHTNESS_SYSTEM),
+        keepScreenOn = prefs.getBoolean(KEY_NOVEL_KEEP_SCREEN_ON, false),
+    )
+
+    /** 漫画阅读器显示设置，与小说那份各存各的 */
+    private val _mangaReaderSettings = MutableStateFlow(readMangaReaderSettings())
+    val mangaReaderSettings: StateFlow<MangaReaderSettings> = _mangaReaderSettings.asStateFlow()
+
+    /** 整包写入；[persist] 为 false 时只更新内存（亮度拖动中的实时预览，松手才落盘） */
+    fun setMangaReaderSettings(settings: MangaReaderSettings, persist: Boolean = true) {
+        val clamped = settings.copy(
+            brightness = settings.brightness.let {
+                if (it < 0f) MangaReaderSettings.BRIGHTNESS_SYSTEM
+                else it.coerceIn(MANGA_BRIGHTNESS_MIN, 1f)
+            },
+        )
+        if (persist) {
+            prefs.edit()
+                .putBoolean(KEY_MANGA_SCROLL_MODE, clamped.scrollMode)
+                .putBoolean(KEY_MANGA_RIGHT_TO_LEFT, clamped.rightToLeft)
+                .putBoolean(KEY_MANGA_FILL_WIDTH, clamped.fillWidth)
+                .putBoolean(KEY_MANGA_PAGE_GAP, clamped.pageGap)
+                .putFloat(KEY_MANGA_BRIGHTNESS, clamped.brightness)
+                .putBoolean(KEY_MANGA_KEEP_SCREEN_ON, clamped.keepScreenOn)
+                .putBoolean(KEY_MANGA_VOLUME_FLIP, clamped.volumeFlip)
+                .apply()
+        }
+        _mangaReaderSettings.value = clamped
+    }
+
+    private fun readMangaReaderSettings(): MangaReaderSettings = MangaReaderSettings(
+        scrollMode = prefs.getBoolean(KEY_MANGA_SCROLL_MODE, false),
+        rightToLeft = prefs.getBoolean(KEY_MANGA_RIGHT_TO_LEFT, true),
+        fillWidth = prefs.getBoolean(KEY_MANGA_FILL_WIDTH, false),
+        pageGap = prefs.getBoolean(KEY_MANGA_PAGE_GAP, true),
+        brightness = prefs.getFloat(KEY_MANGA_BRIGHTNESS, MangaReaderSettings.BRIGHTNESS_SYSTEM),
+        keepScreenOn = prefs.getBoolean(KEY_MANGA_KEEP_SCREEN_ON, true),
+        volumeFlip = prefs.getBoolean(KEY_MANGA_VOLUME_FLIP, false),
+    )
+
+    /** 某形态的操作提示是否已看过；翻页与滚动各记一份 */
+    fun mangaHintSeen(scrollMode: Boolean): Boolean =
+        prefs.getBoolean(mangaHintKey(scrollMode), false)
+
+    /** 标记该形态的提示已展示，展示前就写：提前退出或进程被杀不会让提示反复弹 */
+    fun markMangaHintSeen(scrollMode: Boolean) {
+        prefs.edit().putBoolean(mangaHintKey(scrollMode), true).apply()
+    }
+
+    /** 调试用：清掉两形态的标记，下次打开阅读器等同首次 */
+    fun resetMangaHints() {
+        prefs.edit()
+            .remove(KEY_MANGA_HINT_PAGED_SEEN)
+            .remove(KEY_MANGA_HINT_SCROLL_SEEN)
+            .apply()
+    }
+
+    private fun mangaHintKey(scrollMode: Boolean): String =
+        if (scrollMode) KEY_MANGA_HINT_SCROLL_SEEN else KEY_MANGA_HINT_PAGED_SEEN
+
+    /**
+     * 读取某作品的阅读进度（百分比 0~100，0 表示无进度）。
+     * 用百分比而非像素偏移存储，避免字号调整后滚动位置错位。
+     */
+    fun getNovelProgress(key: WorkKey): Int =
+        prefs.getInt(novelProgressKey(key), 0).coerceIn(0, 100)
+
+    /** 保存某作品的阅读进度（百分比 0~100） */
+    fun setNovelProgress(key: WorkKey, percent: Int) {
+        val clamped = percent.coerceIn(0, 100)
+        prefs.edit().putInt(novelProgressKey(key), clamped).apply()
+        publishProgress(key) { it.copy(novelPercent = clamped) }
+    }
+
+    /** 图集读到第几页（1 起，0 表示无进度） */
+    fun getImageProgress(key: WorkKey): Int =
+        prefs.getInt(imageProgressKey(key), 0).coerceAtLeast(0)
+
+    /**
+     * 保存图集页码（"上次看到第几页"，往回翻也会更新）。
+     * 页码没变时直接返回，避免同一页反复触发写入与状态更新。
+     */
+    fun setImageProgress(key: WorkKey, page: Int) {
+        if (page <= 0) return
+        if (prefs.getInt(imageProgressKey(key), 0) == page) return
+        prefs.edit().putInt(imageProgressKey(key), page).apply()
+        publishProgress(key) { it.copy(imagePage = page) }
+    }
+
+    /** 键里的作品身份带源：两源同号的作品各有各的进度 */
+    private fun novelProgressKey(key: WorkKey): String =
+        "$KEY_NOVEL_PROGRESS_PREFIX${key.source.name}_${key.workId}"
+
+    private fun imageProgressKey(key: WorkKey): String =
+        "$KEY_IMAGE_PROGRESS_PREFIX${key.source.name}_${key.workId}"
+
+    /**
+     * 全量阅读进度快照（作品 → 进度）。收藏夹要靠它给卡片画进度条，
+     * 逐个作品去读 SharedPreferences 太散，启动时扫一遍、之后按需更新。
+     */
+    private val _readingProgress = MutableStateFlow(loadReadingProgress())
+    val readingProgress: StateFlow<Map<WorkKey, ReadingProgress>> = _readingProgress.asStateFlow()
+
+    private fun loadReadingProgress(): Map<WorkKey, ReadingProgress> {
+        migrateLegacyProgressKeys()
+        val result = mutableMapOf<WorkKey, ReadingProgress>()
+        prefs.all.forEach { (prefKey, value) ->
+            val isNovel = prefKey.startsWith(KEY_NOVEL_PROGRESS_PREFIX)
+            val isImage = prefKey.startsWith(KEY_IMAGE_PROGRESS_PREFIX)
+            if (!isNovel && !isImage) return@forEach
+            val suffix = prefKey.removePrefix(
+                if (isNovel) KEY_NOVEL_PROGRESS_PREFIX else KEY_IMAGE_PROGRESS_PREFIX,
+            )
+            val key = parseProgressKey(suffix) ?: return@forEach
+            val amount = (value as? Int)?.takeIf { it > 0 } ?: return@forEach
+            val current = result[key] ?: ReadingProgress()
+            result[key] = if (isNovel) {
+                current.copy(novelPercent = amount)
+            } else {
+                current.copy(imagePage = amount)
+            }
+        }
+        return result
+    }
+
+    /**
+     * 只有 poipiku 的年代进度键不带源段（novel_progress_123）。
+     * 搬成带源的新键再读：留着老键会让一部作品有两把键，而阅读器/看图器只读新键
+     * （升级后接着读会从头开始），两把并存时快照取值还得看遍历顺序。
+     */
+    private fun migrateLegacyProgressKeys() {
+        val rewrites = mutableMapOf<String, String>()
+        prefs.all.forEach { (prefKey, _) ->
+            val isNovel = prefKey.startsWith(KEY_NOVEL_PROGRESS_PREFIX)
+            val isImage = prefKey.startsWith(KEY_IMAGE_PROGRESS_PREFIX)
+            if (!isNovel && !isImage) return@forEach
+            val suffix = prefKey.removePrefix(
+                if (isNovel) KEY_NOVEL_PROGRESS_PREFIX else KEY_IMAGE_PROGRESS_PREFIX,
+            )
+            // 有源段的是新键；裸数字才是老键（旧版只可能写数字 id）
+            if (suffix.indexOf('_') >= 0 || suffix.toLongOrNull() == null) return@forEach
+            val key = WorkKey(WorkSource.POIPIKU, suffix)
+            rewrites[prefKey] = if (isNovel) novelProgressKey(key) else imageProgressKey(key)
+        }
+        if (rewrites.isEmpty()) return
+        val edit = prefs.edit()
+        rewrites.forEach { (legacyKey, newKey) ->
+            // 升级后已经写过新键就以新键为准，只把老键清掉
+            if (!prefs.contains(newKey)) edit.putInt(newKey, prefs.getInt(legacyKey, 0))
+            edit.remove(legacyKey)
+        }
+        edit.apply()
+    }
+
+    /** 「源_workId」 */
+    private fun parseProgressKey(suffix: String): WorkKey? {
+        val separator = suffix.indexOf('_')
+        if (separator < 0) return null
+        val source = WorkSource.entries.firstOrNull { it.name == suffix.substring(0, separator) }
+            ?: return null
+        return WorkKey(source, suffix.substring(separator + 1))
+    }
+
+    private fun publishProgress(key: WorkKey, transform: (ReadingProgress) -> ReadingProgress) {
+        val current = _readingProgress.value[key] ?: ReadingProgress()
+        val next = transform(current)
+        if (next == current) return
+        _readingProgress.value = _readingProgress.value + (key to next)
+    }
+
+    fun recordUpdateCheck() {
+        prefs.edit().putLong(KEY_LAST_UPDATE_CHECK_AT, System.currentTimeMillis()).apply()
+        _lastUpdateCheckAt.value = System.currentTimeMillis()
+    }
+
+    // ---------------- AI 翻译 ----------------
+
+    /**
+     * AI 翻译总开关：关闭时不发任何翻译请求，UI 也不显示译文入口。
+     * 新装默认开启（内置免费模型零配置可用）；老用户已保存的值不受影响。
+     */
+    private val _aiTranslateEnabled = MutableStateFlow(
+        prefs.getBoolean(KEY_AI_TRANSLATE_ENABLED, true),
+    )
+    val aiTranslateEnabled: StateFlow<Boolean> = _aiTranslateEnabled.asStateFlow()
+
+    /** LLM 服务地址（OpenAI 兼容，不含 /chat/completions 段） */
+    private val _llmBaseUrl = MutableStateFlow(
+        prefs.getString(KEY_LLM_BASE_URL, null)?.takeIf { it.isNotBlank() } ?: LLM_BASE_URL_DEFAULT,
+    )
+    val llmBaseUrl: StateFlow<String> = _llmBaseUrl.asStateFlow()
+
+    /**
+     * 模型 id（对应目录条目，也允许自填未收录的模型）。
+     * 空串 = 未显式选择，走目录 defaults.roles 解析出的场景默认；
+     * 高亮与实际翻译共用同一套解析，避免"存了个对不上目录的旧默认值导致无高亮"。
+     */
+    private val _llmModel = MutableStateFlow(
+        prefs.getString(KEY_LLM_MODEL, null)?.trim() ?: LLM_MODEL_DEFAULT,
+    )
+    val llmModel: StateFlow<String> = _llmModel.asStateFlow()
+
+    /**
+     * 小说正文专用模型地址：空串表示跟随文本翻译模型（[llmBaseUrl]）。
+     * 仅长篇正文走此模型，短文本字段仍用 [llmBaseUrl]/[llmModel]。
+     */
+    private val _llmNovelBaseUrl = MutableStateFlow(
+        prefs.getString(KEY_LLM_NOVEL_BASE_URL, null)?.takeIf { it.isNotBlank() } ?: "",
+    )
+    val llmNovelBaseUrl: StateFlow<String> = _llmNovelBaseUrl.asStateFlow()
+
+    /** 小说正文专用模型 id：空串表示跟随文本翻译模型（[llmModel]） */
+    private val _llmNovelModel = MutableStateFlow(
+        prefs.getString(KEY_LLM_NOVEL_MODEL, null)?.takeIf { it.isNotBlank() } ?: "",
+    )
+    val llmNovelModel: StateFlow<String> = _llmNovelModel.asStateFlow()
+
+    /** 图片翻译专用模型地址，空串走目录默认 */
+    private val _llmImageBaseUrl = MutableStateFlow(
+        prefs.getString(KEY_LLM_IMAGE_BASE_URL, null)?.takeIf { it.isNotBlank() } ?: "",
+    )
+    val llmImageBaseUrl: StateFlow<String> = _llmImageBaseUrl.asStateFlow()
+
+    /** 图片翻译专用模型 id，空串走目录默认 */
+    private val _llmImageModel = MutableStateFlow(
+        prefs.getString(KEY_LLM_IMAGE_MODEL, null)?.takeIf { it.isNotBlank() } ?: "",
+    )
+    val llmImageModel: StateFlow<String> = _llmImageModel.asStateFlow()
+
+    /**
+     * 远程模型目录地址：默认即官方加密目录（自家中继，见 [CATALOG_URL_DEFAULT]，
+     * 拉不到时按 [CATALOG_URL_MIRRORS] 依次回退），
+     * 启动时自动拉取以获得内置免费模型的共享 key 与模型修正；
+     * 用户清空则不发任何请求、只用编译期内置列表。
+     */
+    private val _catalogRemoteUrl = MutableStateFlow(
+        prefs.getString(KEY_CATALOG_REMOTE_URL, null)?.takeIf { it.isNotBlank() } ?: CATALOG_URL_DEFAULT,
+    )
+    val catalogRemoteUrl: StateFlow<String> = _catalogRemoteUrl.asStateFlow()
+
+    /**
+     * 自定义加密目录的解密密钥（64 位 hex，空串 = 使用编译期内置密钥）。
+     * 与 [catalogRemoteUrl] 配套：第三方列表作者把地址和密钥一起分发，
+     * 使用者在此成对填入；恢复默认地址时一并清空。
+     */
+    private val _catalogEncKey = MutableStateFlow(
+        prefs.getString(KEY_CATALOG_ENC_KEY, null)?.trim()?.lowercase() ?: "",
+    )
+    val catalogEncKey: StateFlow<String> = _catalogEncKey.asStateFlow()
+
+    /** 读取磁盘缓存的目录密文（body, url, version），启动时用于立即展示，避免白屏等待网络 */
+    fun loadCatalogCache(): Triple<String, String, Int>? {
+        val body = prefs.getString(KEY_CATALOG_CACHE_BODY, null)?.takeIf { it.isNotBlank() }
+        val url = prefs.getString(KEY_CATALOG_CACHE_URL, null).orEmpty()
+        val version = prefs.getInt(KEY_CATALOG_CACHE_VERSION, 0)
+        return if (body != null) Triple(body, url, version) else null
+    }
+
+    /** 保存目录密文到磁盘缓存 */
+    fun saveCatalogCache(body: String, url: String, version: Int) {
+        prefs.edit()
+            .putString(KEY_CATALOG_CACHE_BODY, body)
+            .putString(KEY_CATALOG_CACHE_URL, url)
+            .putInt(KEY_CATALOG_CACHE_VERSION, version)
+            .apply()
+    }
+
+    /** 清空目录缓存 */
+    fun clearCatalogCache() {
+        prefs.edit()
+            .remove(KEY_CATALOG_CACHE_BODY)
+            .remove(KEY_CATALOG_CACHE_URL)
+            .remove(KEY_CATALOG_CACHE_VERSION)
+            .apply()
+    }
+
+    /**
+     * 已保存的自定义目录源列表（官方默认不入库，UI 固定首行渲染）。
+     * 激活态即上面 [catalogRemoteUrl]/[catalogEncKey] 两键，切换 = 写入这两键。
+     */
+    private val _catalogSources = MutableStateFlow(loadCatalogSources())
+    val catalogSources: StateFlow<List<CatalogSource>> = _catalogSources.asStateFlow()
+
+    /** 首次读取时迁移：旧版单源自定义（非默认地址）自动种为列表第一条 */
+    private fun loadCatalogSources(): List<CatalogSource> {
+        val raw = prefs.getString(KEY_CATALOG_SOURCES, null)?.takeIf { it.isNotBlank() }
+        if (raw != null) return CatalogSourceCodec.decode(raw)
+        val legacyUrl = prefs.getString(KEY_CATALOG_REMOTE_URL, null)?.trim().orEmpty()
+        if (legacyUrl.isEmpty() || legacyUrl == CATALOG_URL_DEFAULT) return emptyList()
+        val seeded = listOf(
+            CatalogSource(
+                id = newCatalogSourceId(),
+                name = CatalogSourceCodec.autoName(legacyUrl),
+                url = legacyUrl,
+                encKey = prefs.getString(KEY_CATALOG_ENC_KEY, null)?.trim()?.lowercase().orEmpty(),
+            ),
+        )
+        prefs.edit().putString(KEY_CATALOG_SOURCES, CatalogSourceCodec.encode(seeded)).apply()
+        return seeded
+    }
+
+    private fun persistCatalogSources(sources: List<CatalogSource>) {
+        prefs.edit().putString(KEY_CATALOG_SOURCES, CatalogSourceCodec.encode(sources)).apply()
+        _catalogSources.value = sources
+    }
+
+    /** 按 id upsert；同 id 已存在则整体替换 */
+    fun saveCatalogSource(source: CatalogSource) {
+        persistCatalogSources(_catalogSources.value.filterNot { it.id == source.id } + source)
+    }
+
+    fun renameCatalogSource(id: String, name: String) {
+        persistCatalogSources(_catalogSources.value.map { if (it.id == id) it.copy(name = name) else it })
+    }
+
+    fun deleteCatalogSource(id: String) {
+        persistCatalogSources(_catalogSources.value.filterNot { it.id == id })
+    }
+
+    fun setAiTranslateEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_AI_TRANSLATE_ENABLED, enabled).apply()
+        _aiTranslateEnabled.value = enabled
+    }
+
+    /**
+     * 自动翻译标签：关 = 翻译请求不携带标签（标签又多又长，拖着正文一起翻纯属浪费），
+     * 标签区保留「译」chip，用户点它时才单独发标签翻译（逐条缓存，翻过的秒回）。
+     */
+    private val _autoTranslateTags = MutableStateFlow(
+        prefs.getBoolean(KEY_AUTO_TRANSLATE_TAGS, false),
+    )
+    val autoTranslateTags: StateFlow<Boolean> = _autoTranslateTags.asStateFlow()
+
+    fun setAutoTranslateTags(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_AUTO_TRANSLATE_TAGS, enabled).apply()
+        _autoTranslateTags.value = enabled
+    }
+
+    /** 空值回退默认地址，避免用户清空后无法发请求 */
+    fun setLlmBaseUrl(url: String) {
+        val value = url.trim().ifBlank { LLM_BASE_URL_DEFAULT }
+        prefs.edit().putString(KEY_LLM_BASE_URL, value).apply()
+        _llmBaseUrl.value = value
+    }
+
+    /** 空串恢复「未显式选择」状态（跟随目录场景默认）；不做非空兜底以免伪造出假选中态 */
+    fun setLlmModel(model: String) {
+        val value = model.trim()
+        prefs.edit().putString(KEY_LLM_MODEL, value).apply()
+        _llmModel.value = value
+    }
+
+    /** 空串回退为「跟随文本翻译」（不持久化默认空串以外的回退值） */
+    fun setLlmNovelBaseUrl(url: String) {
+        val value = url.trim()
+        prefs.edit().putString(KEY_LLM_NOVEL_BASE_URL, value).apply()
+        _llmNovelBaseUrl.value = value
+    }
+
+    /** 空串表示跟随文本翻译模型 */
+    fun setLlmNovelModel(model: String) {
+        val value = model.trim()
+        prefs.edit().putString(KEY_LLM_NOVEL_MODEL, value).apply()
+        _llmNovelModel.value = value
+    }
+
+    /** 空串走目录默认 */
+    fun setLlmImageBaseUrl(url: String) {
+        val value = url.trim()
+        prefs.edit().putString(KEY_LLM_IMAGE_BASE_URL, value).apply()
+        _llmImageBaseUrl.value = value
+    }
+
+    /** 空串走目录默认 */
+    fun setLlmImageModel(model: String) {
+        val value = model.trim()
+        prefs.edit().putString(KEY_LLM_IMAGE_MODEL, value).apply()
+        _llmImageModel.value = value
+    }
+
+    fun setCatalogRemoteUrl(url: String) {
+        val value = url.trim()
+        prefs.edit().putString(KEY_CATALOG_REMOTE_URL, value).apply()
+        _catalogRemoteUrl.value = value
+    }
+
+    /** 空串表示清除自定义密钥（回退编译期内置密钥）；格式校验由 UI 层负责 */
+    fun setCatalogEncKey(key: String) {
+        val value = key.trim().lowercase()
+        prefs.edit().putString(KEY_CATALOG_ENC_KEY, value).apply()
+        _catalogEncKey.value = value
+    }
+
+    // ---------------- WebDAV 同步 ----------------
+
+    /** WebDAV 服务器地址 */
+    private val _webDavUrl = MutableStateFlow(
+        prefs.getString(KEY_WEBDAV_URL, null)?.takeIf { it.isNotBlank() } ?: "",
+    )
+    val webDavUrl: StateFlow<String> = _webDavUrl.asStateFlow()
+
+    /** WebDAV 用户名 */
+    private val _webDavUsername = MutableStateFlow(
+        prefs.getString(KEY_WEBDAV_USERNAME, null)?.takeIf { it.isNotBlank() } ?: "",
+    )
+    val webDavUsername: StateFlow<String> = _webDavUsername.asStateFlow()
+
+    /** WebDAV 密码（明文存储，SharedPreferences 本身受应用沙箱保护） */
+    private val _webDavPassword = MutableStateFlow(
+        prefs.getString(KEY_WEBDAV_PASSWORD, null) ?: "",
+    )
+    val webDavPassword: StateFlow<String> = _webDavPassword.asStateFlow()
+
+    /** WebDAV 同步总开关 */
+    private val _webDavEnabled = MutableStateFlow(
+        prefs.getBoolean(KEY_WEBDAV_ENABLED, false),
+    )
+    val webDavEnabled: StateFlow<Boolean> = _webDavEnabled.asStateFlow()
+
+    /** 上次同步时间（epoch millis），0 表示从未同步 */
+    private val _lastSyncAt = MutableStateFlow(
+        prefs.getLong(KEY_WEBDAV_LAST_SYNC_AT, 0L),
+    )
+    val lastSyncAt: StateFlow<Long> = _lastSyncAt.asStateFlow()
+
+    /** 上次同步结果（内存态，不持久化，每次启动重置） */
+    private val _lastSyncResult = MutableStateFlow<SyncResult?>(null)
+    val lastSyncResult: StateFlow<SyncResult?> = _lastSyncResult.asStateFlow()
+
+    fun setWebDavUrl(url: String) {
+        val value = url.trim()
+        prefs.edit().putString(KEY_WEBDAV_URL, value).apply()
+        _webDavUrl.value = value
+    }
+
+    fun setWebDavUsername(username: String) {
+        val value = username.trim()
+        prefs.edit().putString(KEY_WEBDAV_USERNAME, value).apply()
+        _webDavUsername.value = value
+    }
+
+    fun setWebDavPassword(password: String) {
+        prefs.edit().putString(KEY_WEBDAV_PASSWORD, password).apply()
+        _webDavPassword.value = password
+    }
+
+    fun setWebDavEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_WEBDAV_ENABLED, enabled).apply()
+        _webDavEnabled.value = enabled
+    }
+
+    fun recordSyncResult(result: SyncResult) {
+        _lastSyncResult.value = result
+        if (result.state == SyncState.SUCCESS) {
+            val now = System.currentTimeMillis()
+            prefs.edit().putLong(KEY_WEBDAV_LAST_SYNC_AT, now).apply()
+            _lastSyncAt.value = now
+        }
+    }
+
+    fun clearSyncResult() {
+        _lastSyncResult.value = null
+    }
+
+    companion object {
+        const val KEY_SHOW_ADULT_CONTENT = "show_adult_content"
+        const val KEY_THEME_MODE = "theme_mode"
+        const val KEY_IMAGE_ROUTE_MODE = "image_route_mode"
+        const val KEY_HOME_SOURCE = "home_source"
+        const val KEY_FOLDER_SORT = "folder_sort"
+        const val KEY_PIXIV_BOOKMARK_MIRROR = "pixiv_bookmark_mirror"
+        const val KEY_HISTORY_RETENTION_DAYS = "history_retention_days"
+        const val KEY_AUTO_CHECK_ENABLED = "auto_check_update_enabled"
+        const val KEY_LAST_UPDATE_CHECK_AT = "last_update_check_at"
+        const val KEY_NOVEL_FONT_SIZE = "novel_font_size"
+        const val KEY_NOVEL_LINE_HEIGHT = "novel_line_height"
+        const val KEY_NOVEL_READER_THEME = "novel_reader_theme"
+        const val KEY_NOVEL_SERIF = "novel_serif"
+        const val KEY_NOVEL_BRIGHTNESS = "novel_brightness"
+        const val KEY_NOVEL_KEEP_SCREEN_ON = "novel_keep_screen_on"
+
+        const val KEY_MANGA_SCROLL_MODE = "manga_scroll_mode"
+        const val KEY_MANGA_RIGHT_TO_LEFT = "manga_right_to_left"
+        const val KEY_MANGA_FILL_WIDTH = "manga_fill_width"
+        const val KEY_MANGA_PAGE_GAP = "manga_page_gap"
+        const val KEY_MANGA_BRIGHTNESS = "manga_brightness"
+        const val KEY_MANGA_KEEP_SCREEN_ON = "manga_keep_screen_on"
+        const val KEY_MANGA_VOLUME_FLIP = "manga_volume_flip"
+
+        /** 漫画阅读器操作提示的已展示标记，按形态各一份；改文案时升版本后缀即可再提示一次 */
+        const val KEY_MANGA_HINT_PAGED_SEEN = "manga_hint_paged_seen_v1"
+        const val KEY_MANGA_HINT_SCROLL_SEEN = "manga_hint_scroll_seen_v1"
+        const val KEY_NOVEL_PROGRESS_PREFIX = "novel_progress_"
+        const val KEY_IMAGE_PROGRESS_PREFIX = "image_progress_"
+        const val KEY_CUSTOM_BACKGROUND_PATH = "custom_background_path"
+        const val KEY_BACKGROUND_DIM = "background_dim"
+        const val KEY_BACKGROUND_SCRIM_DARK = "background_scrim_dark"
+        const val KEY_BACKGROUND_SCRIM_LIGHT = "background_scrim_light"
+        /** 首页背景水平/垂直归一化偏移与缩放：双图层引入后仅作为
+         * 独立背景图（backdrop）的取景参数；跟随模式下由头部层参数驱动。 */
+        const val KEY_BACKGROUND_OFFSET_X = "background_offset_x"
+        const val KEY_BACKGROUND_OFFSET_Y = "background_offset_y"
+        const val KEY_BACKGROUND_IMG_WIDTH = "background_img_width"
+        const val KEY_BACKGROUND_IMG_HEIGHT = "background_img_height"
+        const val KEY_BACKGROUND_SCALE = "background_scale"
+        const val KEY_BACKGROUND_BLUR = "background_blur"
+        const val KEY_BACKGROUND_HERO = "background_hero"
+
+        /** 头部层独立取景参数 */
+        const val KEY_HERO_OFFSET_X = "hero_offset_x"
+        const val KEY_HERO_OFFSET_Y = "hero_offset_y"
+        const val KEY_HERO_SCALE = "hero_scale"
+
+        /** 独立背景图（null = 跟随头部图） */
+        const val KEY_BACKDROP_PATH = "backdrop_path"
+        const val KEY_BACKDROP_IMG_WIDTH = "backdrop_img_width"
+        const val KEY_BACKDROP_IMG_HEIGHT = "backdrop_img_height"
+
+        /** 双图层迁移标记：老版本只有一套取景参数，首次启动复制为头部层初值 */
+        const val KEY_DUAL_LAYER_MIGRATED = "dual_layer_migrated"
+
+        /** 小说阅读器字号范围与默认值（sp） */
+        const val NOVEL_FONT_MIN = 13f
+        const val NOVEL_FONT_MAX = 24f
+        const val NOVEL_FONT_DEFAULT = 16f
+
+        /** 小说阅读器行距倍数范围与默认值（相对字号） */
+        const val NOVEL_LINE_HEIGHT_MIN = 1.3f
+        const val NOVEL_LINE_HEIGHT_MAX = 2.4f
+        const val NOVEL_LINE_HEIGHT_DEFAULT = 1.7f
+
+        /** 阅读底色档位：与 NovelReaderTheme 的 id 对齐，UI 侧越界会回落到纸黄 */
+        const val NOVEL_THEME_DEFAULT = 0
+
+        /** 阅读亮度下限：再低就看不清字了，跟随系统由 NovelReaderSettings.BRIGHTNESS_SYSTEM 表示 */
+        const val NOVEL_BRIGHTNESS_MIN = 0.05f
+
+        /** 漫画阅读亮度下限，与小说同一档 */
+        const val MANGA_BRIGHTNESS_MIN = NOVEL_BRIGHTNESS_MIN
+
+        /** 自定义背景压暗范围与默认值（0~1） */
+        const val BACKGROUND_DIM_MIN = 0f
+        const val BACKGROUND_DIM_MAX = 0.8f
+        const val BACKGROUND_DIM_DEFAULT = 0f
+
+        /** 自定义背景缩放范围与默认值（1~1.5）。
+         * 下限 1.0：缩放只负责放大取景，铺满由 Crop 保证，避免缩小露边。
+         * 仅作用于独立背景图；头部层用 HERO_SCALE_*（允许 <1 画框式）。 */
+        const val BACKGROUND_SCALE_MIN = 1.0f
+        const val BACKGROUND_SCALE_MAX = 1.5f
+        const val BACKGROUND_SCALE_DEFAULT = 1.0f
+
+        /** 头部层缩放范围与默认值：≥1 满铺裁切；<1 整幅缩小，装得进清晰区才是画框式 */
+        const val HERO_SCALE_MIN = 0.5f
+        const val HERO_SCALE_MAX = BACKGROUND_SCALE_MAX
+        const val HERO_SCALE_DEFAULT = 1.0f
+
+        /** 内容区背景模糊强度范围与默认值（dp） */
+        const val BACKGROUND_BLUR_MIN = 0f
+        const val BACKGROUND_BLUR_MAX = 48f
+        const val BACKGROUND_BLUR_DEFAULT = 14f
+
+        /** 头部清晰区高度比例的外围范围与默认值（占屏幕高度）。
+         * 实际可用范围还要被 200~420dp 钳一次，滑杆量程用 heroFractionRange 算，别直接用这两个值 */
+        const val BACKGROUND_HERO_MIN = 0.22f
+        const val BACKGROUND_HERO_MAX = 0.45f
+        const val BACKGROUND_HERO_DEFAULT = 0.34f
+
+        /** AI 翻译设置 */
+        const val KEY_AI_TRANSLATE_ENABLED = "ai_translate_enabled"
+        const val KEY_AUTO_TRANSLATE_TAGS = "ai_translate_tags_auto"
+        const val KEY_LLM_BASE_URL = "llm_base_url"
+        const val KEY_LLM_MODEL = "llm_model"
+        const val KEY_LLM_NOVEL_BASE_URL = "llm_novel_base_url"
+        const val KEY_LLM_NOVEL_MODEL = "llm_novel_model"
+        const val KEY_LLM_IMAGE_BASE_URL = "llm_image_base_url"
+        const val KEY_LLM_IMAGE_MODEL = "llm_image_model"
+        const val KEY_CATALOG_REMOTE_URL = "llm_catalog_remote_url"
+        const val KEY_CATALOG_ENC_KEY = "llm_catalog_enc_key"
+        const val KEY_CATALOG_SOURCES = "llm_catalog_sources"
+
+        /** WebDAV 同步设置 */
+        const val KEY_WEBDAV_URL = "webdav_url"
+        const val KEY_WEBDAV_USERNAME = "webdav_username"
+        const val KEY_WEBDAV_PASSWORD = "webdav_password"
+        const val KEY_WEBDAV_ENABLED = "webdav_enabled"
+        const val KEY_WEBDAV_LAST_SYNC_AT = "webdav_last_sync_at"
+
+        /**
+         * 列表外自定义模型的兜底端点；文本模型 id 默认空串 = 未显式选择，
+         * 实际默认由远程目录 defaults.roles 声明（官方目录 text → Qwen3-8B，novel → DeepSeek）。
+         */
+        const val LLM_BASE_URL_DEFAULT = "https://open.bigmodel.cn/api/paas/v4"
+        const val LLM_MODEL_DEFAULT = ""
+
+        /**
+         * 内置远程模型目录：AES-256-GCM 密文由 piku-models 仓库的 CI 发布到 catalog 分支。
+         * [CATALOG_URL_MIRRORS] 按序回退——自家中继国内最快（海外被 geo 规则挡下后自动落到
+         * jsDelivr），GitHub raw 留给海外直连兜底。
+         */
+        const val CATALOG_URL_DEFAULT = "https://pic-relay.cyou/catalog/models.enc.json"
+        const val CATALOG_URL_JSDELIVR = "https://cdn.jsdelivr.net/gh/NLick47/piku-models@catalog/models.enc.json"
+        const val CATALOG_URL_GITHUB_RAW = "https://raw.githubusercontent.com/NLick47/piku-models/catalog/models.enc.json"
+
+        /**
+         * 官方目录的候选源（含 [CATALOG_URL_DEFAULT] 本身，按序尝试）。
+         * 旧版主地址 jsDelivr 也在内：用户此前「恢复默认」写进 prefs 的地址因此仍认作官方源。
+         */
+        val CATALOG_URL_MIRRORS = listOf(CATALOG_URL_DEFAULT, CATALOG_URL_JSDELIVR, CATALOG_URL_GITHUB_RAW)
+
+        /** 远程目录的磁盘缓存 key：保存上次成功拉取的原始密文，启动时先加载再后台刷新 */
+        private const val KEY_CATALOG_CACHE_BODY = "catalog_cache_body"
+        private const val KEY_CATALOG_CACHE_URL = "catalog_cache_url"
+        private const val KEY_CATALOG_CACHE_VERSION = "catalog_cache_version"
+    }
+}
