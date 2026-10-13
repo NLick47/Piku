@@ -18,3 +18,5 @@
     public static int v(...);
     public static int i(...);
 }
+
+-repackageclasses 'p'

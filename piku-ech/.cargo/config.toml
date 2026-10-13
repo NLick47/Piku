@@ -1,2 +1,5 @@
 [target.aarch64-linux-android]
 rustflags = ["-C", "force-unwind-tables=no"]
+
+[env]
+CFLAGS = "-fno-asynchronous-unwind-tables"
