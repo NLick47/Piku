@@ -1,20 +1,51 @@
 use std::sync::{Arc, OnceLock};
 
 use rustls::client::{EchConfig, EchMode};
-use rustls::pki_types::{EchConfigListBytes, ServerName};
+use rustls::pki_types::{CertificateDer, EchConfigListBytes, ServerName};
 use rustls::RootCertStore;
 
 use crate::hpke::ECH_HPKE_SUITE;
 
-fn roots() -> Arc<RootCertStore> {
-    static ROOTS: OnceLock<Arc<RootCertStore>> = OnceLock::new();
+static ROOTS: OnceLock<Arc<RootCertStore>> = OnceLock::new();
+
+fn roots() -> Result<Arc<RootCertStore>, String> {
     ROOTS
-        .get_or_init(|| {
-            let mut store = RootCertStore::empty();
-            store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-            Arc::new(store)
-        })
-        .clone()
+        .get()
+        .cloned()
+        .ok_or_else(|| "系统根证书未加载".into())
+}
+
+pub fn install_roots(store: RootCertStore) -> Result<(), String> {
+    ROOTS
+        .set(Arc::new(store))
+        .map_err(|_| "根证书已安装，忽略重复调用".into())
+}
+
+
+pub fn install_der_roots(blob: &[u8]) -> Result<usize, String> {
+    let mut store = RootCertStore::empty();
+    let mut pos = 0;
+    let mut installed = 0;
+    while pos < blob.len() {
+        let Some(len_bytes) = blob.get(pos..pos + 4) else {
+            return Err("根证书流长度不对".into());
+        };
+        let len =
+            u32::from_be_bytes([len_bytes[0], len_bytes[1], len_bytes[2], len_bytes[3]]) as usize;
+        pos += 4;
+        let Some(der) = blob.get(pos..pos + len) else {
+            return Err("根证书流长度不对".into());
+        };
+        pos += len;
+        if store.add(CertificateDer::from(der.to_vec())).is_ok() {
+            installed += 1;
+        }
+    }
+    if installed == 0 {
+        return Err("系统根证书一个都没装进去".into());
+    }
+    install_roots(store)?;
+    Ok(installed)
 }
 
 /// 每个 ECH 配置对应一个 ClientConfig（配置本身烧在 config 里），所以按次构建
@@ -26,7 +57,7 @@ pub fn client_config(ech_config: &[u8]) -> Result<Arc<rustls::ClientConfig>, Str
         builder
             .with_safe_default_protocol_versions()
             .map_err(|e| format!("TLS 版本初始化失败: {e:?}"))?
-            .with_root_certificates(roots())
+            .with_root_certificates(roots()?)
             .with_no_client_auth()
     } else {
         let ech = EchConfig::new(EchConfigListBytes::from(ech_config.to_vec()), ECH_HPKE_SUITE)
@@ -34,7 +65,7 @@ pub fn client_config(ech_config: &[u8]) -> Result<Arc<rustls::ClientConfig>, Str
         builder
             .with_ech(EchMode::from(ech))
             .map_err(|e| format!("ECH 初始化失败: {e:?}"))?
-            .with_root_certificates(roots())
+            .with_root_certificates(roots()?)
             .with_no_client_auth()
     };
     // ECH 前端门只认 h2/h3；实测 HTTP/1.1 会被拒（少数带 ? 的路径才被放行）

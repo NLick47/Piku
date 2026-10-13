@@ -1,8 +1,11 @@
 package com.piku.client.source.pixiv.data.ech
 
+import android.util.Log
 import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.security.KeyStore
+import java.security.cert.X509Certificate
 
 /** 原生传输返回的一次响应 */
 internal class NativeEchResponse(
@@ -22,7 +25,30 @@ internal object NativeEch {
 
     init {
         System.loadLibrary("piku_ech")
+        loadSystemRoots()
     }
+
+    private fun loadSystemRoots() {
+        runCatching {
+            val keyStore = KeyStore.getInstance("AndroidCAStore")
+            keyStore.load(null, null)
+            val aliases = java.util.Collections.list(keyStore.aliases())
+            val total = aliases.sumOf { alias ->
+                (keyStore.getCertificate(alias) as? X509Certificate)
+                    ?.encoded?.size?.plus(Int.SIZE_BYTES) ?: 0
+            }
+            val buffer = ByteBuffer.allocate(total).order(ByteOrder.BIG_ENDIAN)
+            aliases.forEach { alias ->
+                val der = (keyStore.getCertificate(alias) as? X509Certificate)?.encoded
+                    ?: return@forEach
+                buffer.putInt(der.size)
+                buffer.put(der)
+            }
+            setSystemRoots(buffer.array())
+        }.onFailure { Log.w(TAG, "系统根证书装载失败，直连不可用", it) }
+    }
+
+    private external fun setSystemRoots(roots: ByteArray)
 
     /**
      * 失败时原生侧直接抛 IOException（连不上、握手失败、超时……）。
@@ -83,3 +109,5 @@ private fun readFrameString(buffer: ByteBuffer): String {
 }
 
 internal const val ECH_FRAME_VERSION = 1
+
+private const val TAG = "PikuEch"

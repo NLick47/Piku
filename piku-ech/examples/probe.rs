@@ -17,6 +17,10 @@ fn main() {
     let ech_config = std::fs::read(config_path).expect("读 ECH 配置失败");
     println!("[ech] 配置 {} 字节", ech_config.len());
 
+    let mut store = rustls::RootCertStore::empty();
+    store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    piku_ech::tls::install_roots(store).expect("装根证书失败");
+
     let result = fetch(&FetchSpec {
         url: format!("https://www.pixiv.net{path}"),
         method: "GET".into(),

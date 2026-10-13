@@ -73,6 +73,25 @@ fn throw(env: &mut JNIEnv, message: &str) {
     let _ = env.throw_new("java/io/IOException", message);
 }
 
+#[no_mangle]
+pub extern "system" fn Java_com_piku_client_source_pixiv_data_ech_NativeEch_setSystemRoots<'local>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    roots: JByteArray<'local>,
+) {
+    let outcome = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        let blob = env
+            .convert_byte_array(&roots)
+            .map_err(|e| format!("读系统根证书失败: {e}"))?;
+        crate::tls::install_der_roots(&blob)
+    }));
+    match outcome {
+        Ok(Ok(_)) => {}
+        Ok(Err(message)) => throw(&mut env, &message),
+        Err(_) => throw(&mut env, "系统根证书装载内部错误"),
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn handle(
     env: &mut JNIEnv,
