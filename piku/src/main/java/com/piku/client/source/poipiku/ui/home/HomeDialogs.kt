@@ -25,7 +25,7 @@ import com.piku.client.core.ui.sheets.HomeSourceSheet
 import com.piku.client.core.ui.sheets.ImageRouteSheet
 import com.piku.client.core.ui.sheets.LanguageSheet
 import com.piku.client.core.ui.sheets.PixivMirrorSheet
-import com.piku.client.core.ui.sheets.NetworkDiagDialog
+import com.piku.client.core.ui.sheets.DiagnosticsDialog
 import com.piku.client.core.ui.sheets.RetentionSheet
 import com.piku.client.core.ui.sheets.ThemeModeSheet
 import com.piku.client.core.ui.sheets.WebDavSettingsScreen
@@ -144,7 +144,7 @@ internal fun HomeDialogs(
     val context = LocalContext.current
     // 模型目录只在 AI 翻译弹层里打开，诊断只在关于页里打开：开关是本宿主的私有状态
     var showCatalogSource by rememberSaveable { mutableStateOf(false) }
-    var showNetworkDiag by rememberSaveable { mutableStateOf(false) }
+    var showDiagnostics by rememberSaveable { mutableStateOf(false) }
 
     if (dialogs.showCategories) {
         CategorySheet(
@@ -303,23 +303,23 @@ internal fun HomeDialogs(
             onOpenFeedback = {
                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(GITHUB_ISSUES_URL)))
             },
-            onOpenNetworkDiag = {
-                viewModel.refreshNetworkReport(live = false)
-                showNetworkDiag = true
+            onOpenDiagnostics = {
+                viewModel.refreshDiagnosticsReport(live = false)
+                showDiagnostics = true
             },
             onDismiss = { dialogs.showAboutSheet = false },
             dark = dark,
         )
     }
 
-    if (showNetworkDiag) {
-        val report by viewModel.networkReport.collectAsStateWithLifecycle()
-        NetworkDiagDialog(
+    if (showDiagnostics) {
+        val report by viewModel.diagnosticsReport.collectAsStateWithLifecycle()
+        DiagnosticsDialog(
             text = report.text,
             loading = report.loading,
-            onRefresh = { viewModel.refreshNetworkReport(live = true) },
-            onClear = { viewModel.clearNetworkDiagnostics() },
-            onDismiss = { showNetworkDiag = false },
+            onRefresh = { viewModel.refreshDiagnosticsReport(live = true) },
+            onClear = { viewModel.clearDiagnosticsRecords() },
+            onDismiss = { showDiagnostics = false },
             dark = dark,
         )
     }

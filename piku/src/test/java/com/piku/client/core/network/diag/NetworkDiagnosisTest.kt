@@ -110,7 +110,7 @@ class NetworkDiagnosisTest {
         val dns = dns(probe)
         dns.lookup(HOST)
 
-        val report = diagnosis(dns, probe).report("9.9.9", environment, live = false)
+        val report = diagnosis(dns, probe).report(environment, live = false)
 
         assertTrue(report.contains("网络 WIFI（已验证）"))
         assertTrue(report.contains("系统 DNS 192.168.1.1"))
@@ -130,7 +130,7 @@ class NetworkDiagnosisTest {
         val dns = dns(probe)
         runCatching { dns.lookup(HOST) }
 
-        val report = diagnosis(dns, probe).report("9.9.9", environment.copy(metered = true), live = false)
+        val report = diagnosis(dns, probe).report(environment.copy(metered = true), live = false)
 
         assertTrue(report.contains("判定"))
         assertTrue(report.contains("全部连不上"))
@@ -168,7 +168,7 @@ class NetworkDiagnosisTest {
         runCatching { dns.lookup(HOST) }
         val probe = AddressProbe { _, _ -> ProbeReport.ok() }
 
-        val report = diagnosis(dns, probe).report("9.9.9", environment, live = false)
+        val report = diagnosis(dns, probe).report(environment, live = false)
 
         assertTrue(report.contains("cloudflare  0 条"))
         assertTrue(
@@ -196,7 +196,7 @@ class NetworkDiagnosisTest {
         runCatching { dns.lookup(HOST) }
 
         val report = diagnosis(dns, AddressProbe { _, _ -> ProbeReport.ok() })
-            .report("9.9.9", environment, live = false)
+            .report(environment, live = false)
 
         assertTrue(report.contains("—— 图片线路 ——"))
         assertTrue(report.contains("模式 自动（AUTO）"))
@@ -214,7 +214,7 @@ class NetworkDiagnosisTest {
         val probe = AddressProbe { _, _ -> ProbeReport.ok() }
         val dns = dns(probe)
 
-        val report = diagnosis(dns, probe).report("9.9.9", environment, live = true)
+        val report = diagnosis(dns, probe).report(environment, live = true)
 
         assertTrue(report.contains("—— 图片线路（实时探测）——"))
         assertTrue(report.contains("直连 ${ImageUpstream.POIPIKU.host}  可用"))
@@ -253,7 +253,7 @@ class NetworkDiagnosisTest {
         runCatching { dns.lookup(HOST) }
         val probe = AddressProbe { _, _ -> ProbeReport.ok() }
 
-        val report = diagnosis(dns, probe).report("9.9.9", environment, live = false)
+        val report = diagnosis(dns, probe).report(environment, live = false)
 
         assertTrue(report.contains("alidns  0 条"))
         assertTrue(report.contains("已取消（其他来源先返回，本次没有结论）"))
@@ -295,10 +295,10 @@ class NetworkDiagnosisTest {
 
         // 打开诊断时迟到的 DoH 已经回来：链路里要能看到它给出的地址，不是只在事件流里
         val deadline = System.currentTimeMillis() + 2_000
-        var report = diagnosis(dns, probe).report("9.9.9", environment, live = false)
+        var report = diagnosis(dns, probe).report(environment, live = false)
         while (System.currentTimeMillis() < deadline && !report.contains("alidns  1 条")) {
             Thread.sleep(10)
-            report = diagnosis(dns, probe).report("9.9.9", environment, live = false)
+            report = diagnosis(dns, probe).report(environment, live = false)
         }
 
         assertTrue(report.contains("alidns  1 条"))
@@ -312,7 +312,7 @@ class NetworkDiagnosisTest {
         val probe = AddressProbe { _, _ -> ProbeReport.ok() }
         val dns = dns(probe)
 
-        val report = diagnosis(dns, probe).report("9.9.9", environment, live = false)
+        val report = diagnosis(dns, probe).report(environment, live = false)
 
         assertTrue(report.contains("—— 事件（最新在前，共 0 条）——"))
         assertTrue(report.contains("清空只清这里"))
@@ -339,7 +339,7 @@ class NetworkDiagnosisTest {
         val probe = AddressProbe { _, _ -> ProbeReport.ok() }
         val dns = dns(probe)
 
-        val report = diagnosis(dns, probe).report("9.9.9", environment, live = false)
+        val report = diagnosis(dns, probe).report(environment, live = false)
 
         assertTrue(report.contains("—— 图片请求（网络层，本次进程）——"))
         assertTrue(report.contains("请求 2 次：成功 0  失败 2  取消 0"))

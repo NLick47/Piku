@@ -48,14 +48,12 @@ class NetworkDiagnosis internal constructor(
         imageDiagnostics,
     )
 
-    fun report(appVersion: String, environment: NetworkEnvironment, live: Boolean): String {
+    /** 只出网络这一段正文：报告头（版本/时间/设备）与异常段由 core/diag 的合成层负责 */
+    fun report(environment: NetworkEnvironment, live: Boolean): String {
         val deadline = runtime.now() + LIVE_BUDGET_MS
         val liveLines = if (live) liveProbe(deadline) else emptyList()
         val imageLiveLines = if (live) liveImageProbe(deadline) else emptyList()
         return buildString {
-            appendLine("Piku $appVersion 网络诊断")
-            appendLine("生成时间 ${stamp(runtime.now())}")
-            appendLine()
             appendLine("—— 环境 ——")
             val state = if (environment.validated) "已验证" else "未验证"
             val metered = if (environment.metered) "  计费" else ""

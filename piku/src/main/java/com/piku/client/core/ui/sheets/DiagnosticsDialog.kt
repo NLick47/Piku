@@ -48,8 +48,9 @@ import com.piku.client.R
 import com.piku.client.core.ui.theme.PikuColors
 import kotlinx.coroutines.launch
 
+/** 诊断与日志：一份报告里，异常段在前、网络段在后，用户整份复制贴给作者 */
 @Composable
-internal fun NetworkDiagDialog(
+internal fun DiagnosticsDialog(
     text: String,
     loading: Boolean,
     onRefresh: () -> Unit,
@@ -60,8 +61,8 @@ internal fun NetworkDiagDialog(
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
-    val copied = stringResource(R.string.network_diag_copied)
-    val cleared = stringResource(R.string.network_diag_cleared)
+    val copied = stringResource(R.string.diag_copied)
+    val cleared = stringResource(R.string.diag_cleared)
     var field by remember { mutableStateOf(TextFieldValue(text)) }
 
     // 报告更新时保持用户已有的选区不跳走
@@ -91,7 +92,7 @@ internal fun NetworkDiagDialog(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = stringResource(R.string.about_network_diag),
+                        text = stringResource(R.string.about_diagnostics),
                         color = PikuColors.textPrimary,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -107,7 +108,7 @@ internal fun NetworkDiagDialog(
                     }
                     Text(
                         text = stringResource(
-                            if (loading) R.string.network_diag_running else R.string.network_diag_done,
+                            if (loading) R.string.diag_running else R.string.diag_done,
                         ),
                         color = PikuColors.textFaint,
                         fontSize = 11.sp,
@@ -139,16 +140,16 @@ internal fun NetworkDiagDialog(
                 }
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    DiagAction(stringResource(R.string.network_diag_copy), dark) {
+                    DiagAction(stringResource(R.string.diag_copy), dark) {
                         clipboard.setText(AnnotatedString(field.text))
                         scope.launch { snackbarHostState.showSnackbar(copied) }
                     }
-                    DiagAction(stringResource(R.string.network_diag_clear), dark) {
+                    DiagAction(stringResource(R.string.diag_clear), dark) {
                         onClear()
                         scope.launch { snackbarHostState.showSnackbar(cleared) }
                     }
                     DiagAction(
-                        text = stringResource(R.string.network_diag_refresh),
+                        text = stringResource(R.string.diag_refresh),
                         dark = dark,
                         enabled = !loading,
                         onClick = onRefresh,

@@ -62,7 +62,7 @@ internal fun AboutSheet(
     onOpenUpdate: () -> Unit,
     onOpenGithub: () -> Unit,
     onOpenFeedback: () -> Unit,
-    onOpenNetworkDiag: () -> Unit,
+    onOpenDiagnostics: () -> Unit,
     onDismiss: () -> Unit,
     dark: Boolean,
 ) {
@@ -114,8 +114,8 @@ internal fun AboutSheet(
                 dark = dark,
             )
             AboutLinkRow(
-                text = stringResource(R.string.about_network_diag),
-                onClick = onOpenNetworkDiag,
+                text = stringResource(R.string.about_diagnostics),
+                onClick = onOpenDiagnostics,
                 dark = dark,
                 icon = Icons.Outlined.NetworkCheck,
             )

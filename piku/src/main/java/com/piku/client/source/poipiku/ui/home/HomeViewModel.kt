@@ -9,6 +9,10 @@ import com.piku.client.core.data.SyncState
 import com.piku.client.core.data.TestConnectionState
 import com.piku.client.core.data.ThumbnailResolver
 import com.piku.client.core.data.WebDavSyncRepository
+import com.piku.client.core.diag.CrashLogStore
+import com.piku.client.core.diag.buildDiagnosticsReport
+import com.piku.client.core.diag.deviceInfo
+import com.piku.client.core.diag.reportStamp
 import com.piku.client.core.model.AppLanguage
 import com.piku.client.core.model.AuthStatus
 import com.piku.client.core.model.ImageRouteMode
@@ -247,12 +251,13 @@ class HomeViewModel @Inject constructor(
     private val networkDiagnostics: NetworkDiagnostics,
     private val networkDiagnosis: NetworkDiagnosis,
     private val environmentReader: NetworkEnvironmentReader,
+    private val crashLogStore: CrashLogStore,
     /** 抽屉插件注册表：外壳按当前源取插件交给抽屉渲染，宿主不解释插件条目 */
     private val drawerPlugins: SourceDrawerRegistry,
 ) : ViewModel() {
 
-    /** 网络诊断弹窗的内容与忙碌状态 */
-    data class NetworkReportState(val text: String = "", val loading: Boolean = false)
+    /** 诊断弹窗的内容与忙碌状态（忙碌只管网络段：异常段是本地文件直读） */
+    data class DiagnosticsReportState(val text: String = "", val loading: Boolean = false)
 
     /** 当前源的抽屉插件；查不到 = 该源没有独有功能 */
     fun drawerPlugin(source: WorkSource): SourceDrawerPlugin? = drawerPlugins.byIdOrNull(source)
@@ -643,35 +648,37 @@ class HomeViewModel @Inject constructor(
     private fun obtainLoader(key: FeedKey): FeedLoader<FeedKey, Work> =
         loaders.getOrPut(key) { createLoader(key) }
 
-    private val _networkReport = MutableStateFlow(NetworkReportState())
-    val networkReport: StateFlow<NetworkReportState> = _networkReport.asStateFlow()
+    private val _diagnosticsReport = MutableStateFlow(DiagnosticsReportState())
+    val diagnosticsReport: StateFlow<DiagnosticsReportState> = _diagnosticsReport.asStateFlow()
 
     /**
-     * 生成网络诊断报告。[live] 会强制重新解析并对候选逐个做 TCP/TLS 探测，有真实网络
-     * 开销，所以跑在 IO 上、由用户点「重新诊断」触发；打开弹窗时只出静态快照。
+     * 生成诊断报告＝异常记录 + 网络两段。[live] 会强制重新解析并对候选逐个做 TCP/TLS
+     * 探测，有真实网络开销，所以跑在 IO 上、由用户点「重新诊断」触发；打开弹窗时只出静态快照。
      */
-    fun refreshNetworkReport(live: Boolean) {
-        _networkReport.value = _networkReport.value.copy(loading = true)
+    fun refreshDiagnosticsReport(live: Boolean) {
+        _diagnosticsReport.value = _diagnosticsReport.value.copy(loading = true)
         viewModelScope.launch {
             val report = withContext(Dispatchers.IO) {
                 runCatching {
-                    networkDiagnosis.report(
-                        appVersion = BuildConfig.VERSION_NAME,
-                        environment = environmentReader.read(),
-                        live = live,
+                    buildDiagnosticsReport(
+                        device = deviceInfo(displayVersionName()),
+                        stamp = reportStamp(System.currentTimeMillis()),
+                        crashSection = crashLogStore.sectionText(),
+                        networkSection = networkDiagnosis.report(environmentReader.read(), live),
                     )
                 }.getOrElse { error ->
                     "诊断生成失败：${error.javaClass.simpleName}: ${error.message}"
                 }
             }
-            _networkReport.value = NetworkReportState(text = report, loading = false)
+            _diagnosticsReport.value = DiagnosticsReportState(text = report, loading = false)
         }
     }
 
-    /** 清空事件缓冲后立刻重出报告（不重新探测） */
-    fun clearNetworkDiagnostics() {
+    /** 清空记录：异常记录与网络事件缓冲一起清，随后重出报告（不重新探测） */
+    fun clearDiagnosticsRecords() {
+        crashLogStore.clear()
         networkDiagnostics.clear()
-        refreshNetworkReport(live = false)
+        refreshDiagnosticsReport(live = false)
     }
 
     private fun createLoader(key: FeedKey): FeedLoader<FeedKey, Work> {

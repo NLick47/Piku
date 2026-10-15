@@ -13,6 +13,7 @@ import coil3.serviceLoaderEnabled
 import coil3.size.Precision
 import com.piku.client.core.network.image.ImageRetryInterceptor
 import com.piku.client.core.network.image.ImageRouteProbe
+import com.piku.client.core.diag.CrashLogStore
 import com.piku.client.core.translation.ModelCatalogRepository
 import com.piku.client.source.poipiku.data.repository.BlockListSync
 import dagger.hilt.EntryPoint
@@ -34,6 +35,13 @@ class PoipikuApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         val entryPoint = EntryPointAccessors.fromApplication(this, AppEntryPoint::class.java)
+
+        // 崩溃记录要从这里就装上：之后任何一步初始化崩了都要留得下痕迹。
+        // 系统退出记录（原生崩溃/ANR/被杀）的搬运放 IO，不给启动路径加负担
+        val crashLog = entryPoint.crashLogStore()
+        crashLog.install()
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch { crashLog.importRecentExits() }
+
         SingletonImageLoader.setUnsafe { context ->
             ImageLoader.Builder(context)
                 // 与 API 共用同一 OkHttpClient，图片 CDN（cdn.poipiku.com）
@@ -99,6 +107,8 @@ class PoipikuApplication : Application() {
     @InstallIn(SingletonComponent::class)
     interface AppEntryPoint {
         fun okHttpClient(): OkHttpClient
+
+        fun crashLogStore(): CrashLogStore
 
         @Named("image")
         fun imageOkHttpClient(): OkHttpClient
