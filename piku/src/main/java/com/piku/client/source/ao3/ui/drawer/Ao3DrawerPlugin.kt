@@ -19,6 +19,11 @@ class Ao3DrawerPlugin @Inject constructor() : SourceDrawerPlugin {
 
     override val source = WorkSource.AO3
 
+    /** 成人开关不参与 AO3 的任何过滤（站点对访客全开放），纯文字站也没有图片线路可调 */
+    override val ownsAdultRow: Boolean = true
+
+    override val ownsImageRouteRow: Boolean = true
+
     /** AO3 不过登录：账号区空着，只给一条圈层入口（它独有的资料库概念） */
     @Composable
     override fun contributions(scope: DrawerScope): List<DrawerContribution> = listOf(

@@ -22,6 +22,8 @@ import javax.inject.Inject
 data class SourceAccountRow(
     val source: WorkSource,
     @StringRes val labelRes: Int,
+    /** 本源注册了登录插件；false = 该源没有账号这回事（AO3），账号区与账号管理行都不出 */
+    val hasAuth: Boolean,
     /** 该源的登录页路由；null = 还没接入应用内登录 */
     val loginRoute: String?,
     /** 退出前的确认文案（`%1$s` = 源名）；null = 该源没有退出动作（如还没接插件） */
@@ -89,6 +91,7 @@ class AccountsViewModel @Inject constructor(
         return SourceAccountRow(
             source = this,
             labelRes = content.labelRes,
+            hasAuth = false,
             loginRoute = null,
             logoutMessageRes = null,
             profileId = null,
@@ -115,6 +118,7 @@ class AccountsViewModel @Inject constructor(
         return SourceAccountRow(
             source = source,
             labelRes = sourceRegistry.byId(source).labelRes,
+            hasAuth = true,
             loginRoute = loginRoute,
             logoutMessageRes = logoutMessageRes,
             profileId = current?.let { profileId(it) },

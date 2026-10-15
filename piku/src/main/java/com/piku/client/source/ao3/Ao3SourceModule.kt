@@ -2,12 +2,14 @@ package com.piku.client.source.ao3
 
 import android.content.Context
 import com.piku.client.core.source.ContentSource
+import com.piku.client.core.source.SourceContentBackup
 import com.piku.client.core.source.SourceLinkParser
 import com.piku.client.core.source.SourceScopes
 import com.piku.client.core.source.SourceSearch
 import com.piku.client.core.ui.drawer.SourceDrawerPlugin
 import com.piku.client.source.ao3.data.link.Ao3LinkParser
 import com.piku.client.source.ao3.data.local.Ao3ScopeStore
+import com.piku.client.source.ao3.data.source.Ao3ContentBackup
 import com.piku.client.source.ao3.data.source.Ao3ContentSource
 import com.piku.client.source.ao3.data.source.Ao3Scopes
 import com.piku.client.source.ao3.data.source.Ao3SearchSource
@@ -27,6 +29,11 @@ object Ao3SourceModule {
     @Provides
     @IntoSet
     fun ao3ContentSource(impl: Ao3ContentSource): ContentSource = impl
+
+    /** 内容备份能力按源登记：收藏+读过的作品由它把正文整篇交给 WebDAV 同步 */
+    @Provides
+    @IntoSet
+    fun ao3ContentBackup(impl: Ao3ContentBackup): SourceContentBackup = impl
 
     /** 检索插件按源登记：没登记的源会落到 poipiku 链路，AO3 的查询词会被当 poipiku 搜 */
     @Provides

@@ -13,9 +13,16 @@ interface SourceDrawerPlugin {
 
     /**
      * 本源接管外壳设置区的「成人内容」行：true 时外壳不再渲染通用 R-18 开关。
-     * 用于开关对本源无效的源（如 pixiv：R-18/敏感的下发由账号侧表示设置在服务端管控）。
+     * 开关对本源不起作用的源都算接管——pixiv 的 R-18 由账号侧服务端管控，
+     * AO3 对访客全开放、开关不参与它的任何过滤。
      */
     val ownsAdultRow: Boolean get() = false
+
+    /**
+     * 本源接管外壳设置区的「图片线路」行：true 时外壳不再渲染它。
+     * AO3 是纯文字站，站内一张图都没有，档位调不到它的取图行为。
+     */
+    val ownsImageRouteRow: Boolean get() = false
 
     /**
      * 本源接管外壳设置区的「pixiv 收藏镜像」行：true 时外壳才在设置展开区渲染它。

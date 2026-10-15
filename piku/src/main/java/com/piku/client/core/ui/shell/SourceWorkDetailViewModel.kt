@@ -143,7 +143,7 @@ class SourceWorkDetailViewModel @Inject constructor(
         val followQuiet: Boolean = false,
         /** 关注请求在途：防连点，与 poipiku 详情同语义 */
         val followSending: Boolean = false,
-        /** 已加入个人标签的标签名（PIXIV 那一份） */
+        /** 已加入个人标签的标签名（作品所属源那一份） */
         val customTags: List<String> = emptyList(),
         /** 小说正文：点阅读才拉（体量大，不跟详情一起取） */
         val novelText: String = "",
@@ -190,8 +190,9 @@ class SourceWorkDetailViewModel @Inject constructor(
     /** 收藏/关注操作的对象；VM 按作品驻留，进来就不变 */
     private var currentWork: Work? = null
 
-    /** 本页只承载 pixiv 作品，个人标签记在 PIXIV 名下 */
-    private val tagSource = WorkSource.PIXIV
+    /** 个人标签记在作品自己所属的源名下：AO3 的标签不写进 pixiv 那份，[load] 时落定 */
+    private var tagSource = WorkSource.PIXIV
+    private var tagSourceJob: Job? = null
     private var favoriteCollectorsWired = false
     private var pixivStateLoadedForWork: Long = -1
     /** 云端收藏镜像串行化：两次快速点击必须按先加后删落云端，乱序会让云端与本地相反 */
@@ -253,11 +254,6 @@ class SourceWorkDetailViewModel @Inject constructor(
                 _ui.update { it.copy(autoTranslateTags = enabled) }
             }
         }
-        viewModelScope.launch {
-            observeCustomTagsUseCase(tagSource).collect { tags ->
-                _ui.update { it.copy(customTags = tags) }
-            }
-        }
         // pixiv 登录态：登录/登出实时改关注按钮显隐；刚登录时补拉一次关注状态回显
         sourceAuthRegistry.byId(WorkSource.PIXIV)?.let { pixivAuth ->
             viewModelScope.launch {
@@ -285,6 +281,18 @@ class SourceWorkDetailViewModel @Inject constructor(
         }
     }
 
+    /** 订阅作品所属源的标签池；同源重复 load 不重开流 */
+    private fun observeCustomTagsOf(source: WorkSource) {
+        if (tagSource == source && tagSourceJob != null) return
+        tagSource = source
+        tagSourceJob?.cancel()
+        tagSourceJob = viewModelScope.launch {
+            observeCustomTagsUseCase(source).collect { tags ->
+                _ui.update { it.copy(customTags = tags) }
+            }
+        }
+    }
+
     /** 打开作品时加载一次；[force] 供失败重试强制重拉 */
     fun load(work: Work, force: Boolean = false) {
         val sameWork = loadedWorkKey == work.key.toString()
@@ -294,6 +302,7 @@ class SourceWorkDetailViewModel @Inject constructor(
         val cloudBookmarkedCarried = if (sameWork) _ui.value.cloudBookmarked else false
         loadedWorkKey = work.key.toString()
         currentWork = work
+        observeCustomTagsOf(work.source)
         translatedImages.clear()
         imageTranslateJob?.cancel()
         wireFavoriteCollectors(work)
@@ -539,7 +548,7 @@ class SourceWorkDetailViewModel @Inject constructor(
      */
     fun onToggleTagsTranslation() = tagsTranslation.toggle()
 
-    /** 把作品标签加入/移出个人标签（存进 PIXIV 那份，与 poipiku 详情页同语义） */
+    /** 把作品标签加入/移出个人标签，池子按作品所属源走 */
     fun toggleCustomTag(tag: String) {
         val added = tag in _ui.value.customTags
         viewModelScope.launch {

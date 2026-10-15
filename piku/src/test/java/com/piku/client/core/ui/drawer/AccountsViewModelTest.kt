@@ -169,6 +169,9 @@ class AccountsViewModelTest {
 
         assertEquals("login", poipikuRow.loginRoute)
         assertEquals("pixiv_login", pixivRow.loginRoute)
+        // 注册了登录插件的源才有账号区（抽屉头部与账号管理行）
+        assertTrue(poipikuRow.hasAuth)
+        assertTrue(pixivRow.hasAuth)
         // 有主页的源才给得出 profileId（外壳据此决定头部点哪里）
         assertEquals("42", poipikuRow.profileId)
         assertNull(pixivRow.profileId)
@@ -251,6 +254,7 @@ class AccountsViewModelTest {
         assertFalse(row.loggedIn)
         assertNull(row.loginRoute)
         assertNull("未登录时不该给出主页", row.profileId)
+        assertFalse("没有登录插件就没有账号区（AO3 抽屉头部只报源名）", row.hasAuth)
         // 账号页里也不该出现这种源（它没有账号可管）
         assertEquals(listOf(WorkSource.POIPIKU), viewModel.rows.value.map { it.source })
     }

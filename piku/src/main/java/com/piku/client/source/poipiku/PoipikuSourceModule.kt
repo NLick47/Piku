@@ -11,12 +11,15 @@ import com.piku.client.source.poipiku.data.link.PoipikuLinkParser
 import com.piku.client.source.poipiku.data.source.PoipikuContentBackup
 import com.piku.client.source.poipiku.data.source.PoipikuContentSource
 import com.piku.client.source.poipiku.data.source.PoipikuFollowsSource
+import com.piku.client.source.poipiku.domain.usecase.LoadTagFeedUseCase
+import com.piku.client.source.poipiku.domain.usecase.PoipikuTagFeed
 import com.piku.client.source.poipiku.ui.drawer.PoipikuDrawerPlugin
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoSet
+import javax.inject.Singleton
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -50,4 +53,10 @@ object PoipikuSourceModule {
     @Provides
     @IntoSet
     fun poipikuLinkParser(impl: PoipikuLinkParser): SourceLinkParser = impl
+
+    /** 标签页在无检索插件的源上的回退取数：真链路包一层，分派层才换得掉 */
+    @Provides
+    @Singleton
+    fun poipikuTagFeed(useCase: LoadTagFeedUseCase): PoipikuTagFeed =
+        PoipikuTagFeed { tag, page -> useCase(tag, page) }
 }

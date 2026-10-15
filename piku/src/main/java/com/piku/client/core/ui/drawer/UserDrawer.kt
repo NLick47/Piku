@@ -14,6 +14,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -290,16 +291,19 @@ private fun DrawerPanel(
                 .fillMaxWidth()
                 .verticalScroll(scrollState),
         ) {
-            DrawerMenuRow(
-                icon = Icons.Outlined.ManageAccounts,
-                label = stringResource(R.string.account_title),
-                onClick = onAccountsClick,
-                dark = dark,
-                accent = iconAccent,
-            )
-            Spacer(Modifier.height(2.dp))
+            // 账号管理只在当前源有登录能力时出现：AO3 没有账号可管，那一行连同它的间隔都撤掉
+            if (headerAccount?.hasAuth == true) {
+                DrawerMenuRow(
+                    icon = Icons.Outlined.ManageAccounts,
+                    label = stringResource(R.string.account_title),
+                    onClick = onAccountsClick,
+                    dark = dark,
+                    accent = iconAccent,
+                )
+                Spacer(Modifier.height(2.dp))
+            }
             // 源专属的账号动作区（如 poipiku 的投稿/编辑资料）：
-            // 头行后的 2dp 间隔无条件保留，条目各自再垫 2dp——未登录时排版与原版逐像素一致
+            // 账号头行后的 2dp 间隔保留，条目各自再垫 2dp——未登录时排版与原版逐像素一致
             accountEntries.forEach { entry ->
                 Spacer(Modifier.height(2.dp))
                 DrawerMenuRow(
@@ -465,14 +469,17 @@ private fun DrawerPanel(
                         dark = dark,
                         accent = iconAccent,
                     )
-                    DrawerMenuRow(
-                        icon = Icons.AutoMirrored.Outlined.AltRoute,
-                        label = stringResource(R.string.menu_image_route),
-                        trailing = stringResource(imageRouteMode.labelRes()),
-                        onClick = onImageRouteClick,
-                        dark = dark,
-                        accent = iconAccent,
-                    )
+                    // 图片线路行同理：纯文字源（AO3）没有取图档位可调，抽屉里不出现
+                    if (sourceDrawer?.ownsImageRouteRow != true) {
+                        DrawerMenuRow(
+                            icon = Icons.AutoMirrored.Outlined.AltRoute,
+                            label = stringResource(R.string.menu_image_route),
+                            trailing = stringResource(imageRouteMode.labelRes()),
+                            onClick = onImageRouteClick,
+                            dark = dark,
+                            accent = iconAccent,
+                        )
+                    }
                     // 收藏镜像行由本源声明接管才渲染（pixiv）：poipiku 抽屉不出现
                     if (sourceDrawer?.ownsBookmarkMirrorRow == true) {
                         DrawerMenuRow(
@@ -570,9 +577,27 @@ private fun DrawerHeader(
 ) {
     val faint = PikuColors.textFaint
     val titleColor = PikuColors.textPrimary
-    val blobPurple = if (dark) Color(0x409A7FC9) else Color(0x4D9A7FC9)
-    val blobPink = if (dark) Color(0x30D8A8B8) else Color(0x3DD8A8B8)
     val ring = if (dark) Color(0x66FFFFFF) else AccentDark.copy(alpha = 0.5f)
+
+    // 没有登录能力的源（AO3）：头部只报源名——没有人可展示，也没有账号页可去
+    if (row != null && !row.hasAuth) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 22.dp, vertical = 22.dp),
+        ) {
+            DrawerHeaderBlobs(dark)
+            Text(
+                text = stringResource(row.labelRes),
+                color = titleColor,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        return
+    }
 
     // 三态：未登录 / 骨架（已登录但资料未到，或行还没算出来）/ 就绪
     val loggedIn = row?.loggedIn == true
@@ -598,26 +623,7 @@ private fun DrawerHeader(
             .fillMaxWidth()
             .padding(horizontal = 22.dp, vertical = 22.dp),
     ) {
-        Canvas(Modifier.matchParentSize()) {
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(blobPurple, Color.Transparent),
-                    center = Offset(size.width * 0.92f, 0f),
-                    radius = size.width * 0.7f,
-                ),
-                radius = size.width * 0.7f,
-                center = Offset(size.width * 0.92f, 0f),
-            )
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(blobPink, Color.Transparent),
-                    center = Offset(0f, size.height * 0.85f),
-                    radius = size.width * 0.55f,
-                ),
-                radius = size.width * 0.55f,
-                center = Offset(0f, size.height * 0.85f),
-            )
-        }
+        DrawerHeaderBlobs(dark)
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -738,6 +744,33 @@ private fun DrawerHeader(
                 )
             }
         }
+    }
+}
+
+/** 头部背景的两个色斑：账号头部与源名头部共用 */
+@Composable
+private fun BoxScope.DrawerHeaderBlobs(dark: Boolean) {
+    val blobPurple = if (dark) Color(0x409A7FC9) else Color(0x4D9A7FC9)
+    val blobPink = if (dark) Color(0x30D8A8B8) else Color(0x3DD8A8B8)
+    Canvas(Modifier.matchParentSize()) {
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(blobPurple, Color.Transparent),
+                center = Offset(size.width * 0.92f, 0f),
+                radius = size.width * 0.7f,
+            ),
+            radius = size.width * 0.7f,
+            center = Offset(size.width * 0.92f, 0f),
+        )
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(blobPink, Color.Transparent),
+                center = Offset(0f, size.height * 0.85f),
+                radius = size.width * 0.55f,
+            ),
+            radius = size.width * 0.55f,
+            center = Offset(0f, size.height * 0.85f),
+        )
     }
 }
 

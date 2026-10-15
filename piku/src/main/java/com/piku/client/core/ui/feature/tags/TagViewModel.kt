@@ -9,7 +9,6 @@ import com.piku.client.core.model.Work
 import com.piku.client.core.model.WorkKey
 import com.piku.client.core.model.WorkSource
 import com.piku.client.core.usecase.AddCustomTagUseCase
-import com.piku.client.source.poipiku.domain.usecase.LoadTagFeedUseCase
 import com.piku.client.core.usecase.ObserveCustomTagsUseCase
 import com.piku.client.core.usecase.ObserveFavoriteIdsUseCase
 import com.piku.client.core.usecase.RemoveCustomTagUseCase
@@ -47,7 +46,7 @@ class TagViewModel @Inject constructor(
     private val observeCustomTagsUseCase: ObserveCustomTagsUseCase,
     private val addCustomTagUseCase: AddCustomTagUseCase,
     private val removeCustomTagUseCase: RemoveCustomTagUseCase,
-    private val loadTagFeedUseCase: LoadTagFeedUseCase,
+    private val tagFeedSource: TagFeedSource,
     private val observeFavoriteIdsUseCase: ObserveFavoriteIdsUseCase,
     private val toggleFavoriteUseCase: ToggleFavoriteUseCase,
     private val settingsRepository: SettingsRepository,
@@ -181,7 +180,7 @@ class TagViewModel @Inject constructor(
             else it.copy(loading = true, errorRes = null, loadMoreErrorRes = null)
         }
         viewModelScope.launch {
-            loadTagFeedUseCase(tag, targetPage)
+            tagFeedSource.works(currentSource, tag, targetPage)
                 .onSuccess { list ->
                     if (generation != gen) return@launch
                     page = targetPage
