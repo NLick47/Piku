@@ -129,9 +129,15 @@ import com.piku.client.app.navigation.sharedWorkBounds
 import com.piku.client.app.navigation.workSharedKey
 import androidx.compose.material.icons.outlined.LocalOffer
 import androidx.compose.ui.text.style.TextAlign
+import com.piku.client.core.ui.theme.GlassBarBgDark
+import com.piku.client.core.ui.theme.GlassBarBgLight
 import com.piku.client.core.ui.theme.PikuColors
 import com.piku.client.core.ui.theme.PikuLayout
 import com.piku.client.core.ui.theme.RankGoldBorder
+import com.piku.client.core.ui.theme.ShadowAmbient
+import com.piku.client.core.ui.theme.ShadowSpot
+import com.piku.client.core.ui.theme.SoftBorderDark
+import com.piku.client.core.ui.theme.SoftBorderLight
 import com.piku.client.core.ui.theme.WorkCardBgDark
 import com.piku.client.core.ui.theme.WorkCardPlaceholderDark
 
@@ -312,6 +318,7 @@ internal fun SourceFeedContent(
                             onManageScopes = { onManageScopes(state.source) },
                             onPickSort = viewModel::selectFeed,
                             onPickFilter = viewModel::selectFacet,
+                            dark = dark,
                             onClearFilter = { groupId ->
                                 val group = currentFacets.firstOrNull { it.id == groupId } ?: return@SummaryRow
                                 val defaultId = group.options.firstOrNull { it.selectedByDefault }?.id
@@ -449,6 +456,7 @@ private fun SummaryRow(
     onManageScopes: () -> Unit,
     onPickSort: (String) -> Unit,
     onPickFilter: (groupId: String, optionId: String) -> Unit,
+    dark: Boolean,
     onClearFilter: (groupId: String) -> Unit,
 ) {
     Row(
@@ -465,6 +473,7 @@ private fun SummaryRow(
                 active = activeScope,
                 onPick = onPickScope,
                 onManage = onManageScopes,
+                dark = dark,
             )
         }
         Spacer(Modifier.weight(1f))
@@ -487,7 +496,8 @@ private fun SummaryRow(
 
 /**
  * 圈层折叠条：当前圈层名 + 订阅计数，点开弹出全部圈层（当前项打勾）与管理入口。
- * 折叠条的宽度有上限——圈层名再长也不能把右侧的排序胶囊挤出屏幕。
+ * 头部主控件，走玻璃胶囊那套材质，与右侧纯文字的排序分主次；
+ * 名字先让位（weight + 省略），计数与箭头永远在——名字长到把箭头挤没，这条就不像能点的了
  */
 @Composable
 private fun ScopeFoldPill(
@@ -496,17 +506,25 @@ private fun ScopeFoldPill(
     active: SourceScope?,
     onPick: (SourceScope) -> Unit,
     onManage: () -> Unit,
+    dark: Boolean,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     var anchorHeightPx by remember { mutableIntStateOf(0) }
     val activeLabel = active?.let { labels[it.id] ?: it.name }.orEmpty()
+    val shape = RoundedCornerShape(999.dp)
     Box(Modifier.onSizeChanged { anchorHeightPx = it.height }) {
         Row(
             modifier = Modifier
-                .widthIn(max = 200.dp)
-                .clip(RoundedCornerShape(999.dp))
+                .widthIn(max = 220.dp)
+                .shadow(4.dp, shape, ambientColor = ShadowAmbient, spotColor = ShadowSpot)
+                .clip(shape)
+                .background(if (dark) GlassBarBgDark else GlassBarBgLight)
+                .border(
+                    BorderStroke(0.5.dp, if (dark) SoftBorderDark else SoftBorderLight),
+                    shape,
+                )
                 .clickable { menuOpen = true }
-                .padding(horizontal = 4.dp, vertical = 5.dp),
+                .padding(start = 10.dp, end = 8.dp, top = 5.dp, bottom = 5.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
@@ -516,6 +534,7 @@ private fun ScopeFoldPill(
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
             )
             Spacer(Modifier.width(4.dp))
             Text(
@@ -561,7 +580,7 @@ private fun ScopeFoldPill(
     }
 }
 
-/** 排序胶囊：点开锚定在正下方的三项菜单，当前项打勾 */
+/** 排序入口：文字 + ▾，点开锚定在正下方的三项菜单，当前项打勾。无底色，主控件让给左侧圈层 */
 @Composable
 private fun SortPill(
     feeds: List<SourceFeed>,
@@ -575,9 +594,8 @@ private fun SortPill(
         Row(
             modifier = Modifier
                 .clip(RoundedCornerShape(999.dp))
-                .background(PikuColors.surfaceMuted)
                 .clickable { menuOpen = true }
-                .padding(horizontal = 11.dp, vertical = 6.dp),
+                .padding(horizontal = 4.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
