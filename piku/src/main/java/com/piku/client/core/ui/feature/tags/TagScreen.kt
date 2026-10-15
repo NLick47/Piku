@@ -49,6 +49,7 @@ import com.piku.client.core.model.Work
 import com.piku.client.core.ui.common.GlassCard
 import com.piku.client.core.ui.common.LoaderDots
 import com.piku.client.core.ui.common.PikuBackButton
+import com.piku.client.core.ui.common.TextWorkCard
 import com.piku.client.core.ui.common.WorkCard
 import com.piku.client.source.poipiku.ui.home.CustomTagSection
 import com.piku.client.core.ui.theme.ContentCardBgDark
@@ -282,7 +283,12 @@ private fun TagWorkGrid(
     }
 
     LazyVerticalStaggeredGrid(
-        columns = if (isTablet) StaggeredGridCells.Adaptive(220.dp) else StaggeredGridCells.Fixed(2),
+        columns = when {
+            // 纯文字源（AO3）：整行宽的 blurb，格子数不参与，与收藏/历史同款
+            state.singleColumn -> StaggeredGridCells.Fixed(1)
+            isTablet -> StaggeredGridCells.Adaptive(220.dp)
+            else -> StaggeredGridCells.Fixed(2)
+        },
         state = gridState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
@@ -290,13 +296,22 @@ private fun TagWorkGrid(
         verticalItemSpacing = 12.dp,
     ) {
         items(state.works, key = { it.id }) { work ->
-            WorkCard(
-                work = work,
-                isFavorite = work.key in state.favoriteIds,
-                onToggleFavorite = onToggleFavorite,
-                onClick = onWorkClick,
-                dark = dark,
-            )
+            if (state.singleColumn) {
+                TextWorkCard(
+                    work = work,
+                    onToggleFavorite = onToggleFavorite,
+                    onClick = onWorkClick,
+                    dark = dark,
+                )
+            } else {
+                WorkCard(
+                    work = work,
+                    isFavorite = work.key in state.favoriteIds,
+                    onToggleFavorite = onToggleFavorite,
+                    onClick = onWorkClick,
+                    dark = dark,
+                )
+            }
         }
         when {
             state.loadMoreErrorRes != null -> {

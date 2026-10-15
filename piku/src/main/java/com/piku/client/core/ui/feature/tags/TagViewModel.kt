@@ -13,6 +13,8 @@ import com.piku.client.core.usecase.ObserveCustomTagsUseCase
 import com.piku.client.core.usecase.ObserveFavoriteIdsUseCase
 import com.piku.client.core.usecase.RemoveCustomTagUseCase
 import com.piku.client.core.usecase.ToggleFavoriteUseCase
+import com.piku.client.core.source.SourceListLayout
+import com.piku.client.core.source.SourceRegistry
 import com.piku.client.core.ui.common.toFeedErrorRes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -37,6 +39,8 @@ data class TagsUiState(
     val errorRes: Int? = null,
     val loadMoreErrorRes: Int? = null,
     val endReached: Boolean = false,
+    /** 本源的列表形态：纯文字源（AO3）走整行宽的 blurb，与收藏/历史同款 */
+    val singleColumn: Boolean = false,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -50,6 +54,7 @@ class TagViewModel @Inject constructor(
     private val observeFavoriteIdsUseCase: ObserveFavoriteIdsUseCase,
     private val toggleFavoriteUseCase: ToggleFavoriteUseCase,
     private val settingsRepository: SettingsRepository,
+    private val sourceRegistry: SourceRegistry,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TagsUiState())
@@ -71,6 +76,9 @@ class TagViewModel @Inject constructor(
         viewModelScope.launch {
             sourceFlow.collect { source ->
                 currentSource = source
+                _uiState.update {
+                    it.copy(singleColumn = sourceRegistry.byIdOrNull(source)?.listLayout == SourceListLayout.List)
+                }
                 resetOnSourceChange()
             }
         }
