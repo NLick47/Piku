@@ -24,8 +24,8 @@ interface FavoriteFolderDao {
     @Query("SELECT * FROM favorite_folders ORDER BY isDefault DESC, createdAt ASC")
     fun observeFolders(): Flow<List<FavoriteFolderEntity>>
 
-    @Query("SELECT folderId, COUNT(*) AS count FROM favorite_memberships GROUP BY folderId")
-    fun observeFolderCounts(): Flow<List<FolderCount>>
+    @Query("SELECT folderId, COUNT(*) AS count FROM favorite_memberships WHERE source IN (:sources) GROUP BY folderId")
+    fun observeFolderCounts(sources: List<WorkSource>): Flow<List<FolderCount>>
 
     /**
      * 收藏夹卡片的预览缩略图。空缩略图（小说等）在 SQL 里就滤掉——卡片上留个空框比少一张更难看。
@@ -39,36 +39,38 @@ interface FavoriteFolderDao {
         SELECT m.folderId AS folderId, f.thumbnailUrl AS thumbnailUrl
         FROM favorite_memberships m
         INNER JOIN favorites f ON f.source = m.source AND f.workId = m.workId
-        WHERE f.thumbnailUrl != ''
+        WHERE f.thumbnailUrl != '' AND f.source IN (:sources)
         ORDER BY m.addedAt DESC
         """,
     )
-    fun observeFolderPreviews(): Flow<List<FolderPreview>>
+    fun observeFolderPreviews(sources: List<WorkSource>): Flow<List<FolderPreview>>
 
     /** 夹内列表默认顺序：加入时间倒序 */
     @Query(
         "SELECT f.* FROM favorites f INNER JOIN favorite_memberships m " +
             "ON f.source = m.source AND f.workId = m.workId " +
-            "WHERE m.folderId = :folderId ORDER BY m.addedAt DESC",
+            "WHERE m.folderId = :folderId AND m.source IN (:sources) ORDER BY m.addedAt DESC",
     )
-    fun observeWorksInFolder(folderId: Long): Flow<List<FavoriteEntity>>
+    fun observeWorksInFolder(folderId: Long, sources: List<WorkSource>): Flow<List<FavoriteEntity>>
 
     /** 其余排序各自一条 SQL，而不是动态拼 ORDER BY 字符串：Room 在编译期校验语句。 */
     /** 按标题升序；同标题时用加入时间倒序兜底，保证顺序稳定不跳动 */
     @Query(
         "SELECT f.* FROM favorites f INNER JOIN favorite_memberships m " +
             "ON f.source = m.source AND f.workId = m.workId " +
-            "WHERE m.folderId = :folderId ORDER BY f.title COLLATE NOCASE ASC, m.addedAt DESC",
+            "WHERE m.folderId = :folderId AND m.source IN (:sources) " +
+            "ORDER BY f.title COLLATE NOCASE ASC, m.addedAt DESC",
     )
-    fun observeWorksInFolderByTitle(folderId: Long): Flow<List<FavoriteEntity>>
+    fun observeWorksInFolderByTitle(folderId: Long, sources: List<WorkSource>): Flow<List<FavoriteEntity>>
 
     /** 按作者升序（作者名相同的作品自然相邻，可直接据此分组显示） */
     @Query(
         "SELECT f.* FROM favorites f INNER JOIN favorite_memberships m " +
             "ON f.source = m.source AND f.workId = m.workId " +
-            "WHERE m.folderId = :folderId ORDER BY f.authorName COLLATE NOCASE ASC, m.addedAt DESC",
+            "WHERE m.folderId = :folderId AND m.source IN (:sources) " +
+            "ORDER BY f.authorName COLLATE NOCASE ASC, m.addedAt DESC",
     )
-    fun observeWorksInFolderByAuthor(folderId: Long): Flow<List<FavoriteEntity>>
+    fun observeWorksInFolderByAuthor(folderId: Long, sources: List<WorkSource>): Flow<List<FavoriteEntity>>
 
     @Query("SELECT folderId FROM favorite_memberships WHERE source = :source AND workId = :workId")
     fun observeFolderIdsForWork(source: WorkSource, workId: String): Flow<List<Long>>

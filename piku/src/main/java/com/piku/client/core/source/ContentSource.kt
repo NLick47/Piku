@@ -26,6 +26,12 @@ interface ContentSource {
     val listLayout: SourceListLayout get() = SourceListLayout.Grid
 
     /**
+     * 资料库池：同池的源在收藏/历史里混排，异池互相看不见。默认自成一池——
+     * 新源天然与既有源隔离；图文源（poipiku + pixiv）声明同一个 [LIBRARY_POOL_MEDIA] 共池。
+     */
+    val libraryPool: String get() = id.name
+
+    /**
      * 打开成人作品前是否拦一道 R-18 门（跟随全局"成人内容显示"开关）。
      * 默认拦；站点本身对访客全开放、卡片徽标已足够的源（AO3）声明 false，
      * 否则热门列表里大半作品点不开。

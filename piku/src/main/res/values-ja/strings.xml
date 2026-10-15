@@ -796,7 +796,6 @@
     <string name="ao3_complete_no">連載中</string>
     <string name="ao3_scope_title">マイ同人</string>
     <string name="ao3_scope_hint">同人・カップリング・タグを選ぶ</string>
-    <string name="ao3_scope_picker_title">同人を選ぶ</string>
     <string name="ao3_scope_search_hint">同人・タグを検索</string>
     <string name="ao3_scope_fandom">同人</string>
     <string name="ao3_scope_relationship">カップリング</string>
@@ -812,6 +811,7 @@
     <string name="ao3_scope_search_failed">検索に失敗しました</string>
     <string name="ao3_scope_fold_count">・%1$d件</string>
     <string name="ao3_scope_manage">追加・管理…</string>
+    <string name="ao3_scope_row_hint">タップで切り替え</string>
     <string name="ao3_scope_limit_reached">登録できるのは%1$d件までです。削除してから追加してください</string>
     <string name="ao3_tab_updated">最近更新</string>
     <string name="ao3_sort_best">ベストマッチ</string>

@@ -86,6 +86,7 @@ import com.piku.client.core.ui.shell.SourceOpenViewModel
 import com.piku.client.core.ui.shell.SourceWorkOpenHost
 import com.piku.client.core.model.WorkKey
 import com.piku.client.core.model.WorkSource
+import com.piku.client.core.ui.common.CardProgress
 import com.piku.client.core.ui.common.LoaderDots
 import com.piku.client.core.ui.common.labelRes
 import com.piku.client.core.ui.common.PikuBackButton
@@ -93,7 +94,9 @@ import com.piku.client.core.ui.common.PikuBottomSheet
 import com.piku.client.core.ui.common.PikuSegmented
 import com.piku.client.core.ui.common.PikuSheetSubtitle
 import com.piku.client.core.ui.common.PikuSheetTitle
+import com.piku.client.core.ui.common.TextWorkBlurb
 import com.piku.client.core.ui.common.TextWorkCard
+import com.piku.client.core.ui.common.toCardProgress
 import com.piku.client.core.ui.common.WorkCard
 import com.piku.client.core.ui.theme.GlassHeaderTintDark
 import com.piku.client.core.ui.theme.GlassHeaderTintLight
@@ -104,6 +107,7 @@ import com.piku.client.core.ui.theme.HomeBgBottomLight
 import com.piku.client.core.ui.theme.HomeBgTopDark
 import com.piku.client.core.ui.theme.HomeBgTopLight
 import com.piku.client.core.ui.theme.PikuColors
+import com.piku.client.core.ui.theme.PikuLayout
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -206,10 +210,11 @@ fun HistoryScreen(
                     }
                     Box(Modifier.fillMaxSize()) {
                         LazyVerticalStaggeredGrid(
-                            columns = if (isTablet) {
-                                StaggeredGridCells.Adaptive(220.dp)
-                            } else {
-                                StaggeredGridCells.Fixed(2)
+                            columns = when {
+                                // 纯文字池（AO3）：整行宽的 blurb，格子数不参与
+                                state.singleColumn -> StaggeredGridCells.Fixed(1)
+                                isTablet -> StaggeredGridCells.Adaptive(220.dp)
+                                else -> StaggeredGridCells.Fixed(2)
                             },
                             state = gridState,
                             modifier = Modifier.fillMaxSize(),
@@ -251,6 +256,13 @@ fun HistoryScreen(
                                             if (sourceOpen.opensInNativeShell(work)) onWorkClick(work)
                                             else openHostWork = work
                                         },
+                                        // 图文池的历史维持原样，只有文字池（AO3 书架）显示读到哪
+                                        progress = if (state.singleColumn) {
+                                            state.progress[entry.work.key].toCardProgress(entry.work)
+                                        } else {
+                                            null
+                                        },
+                                        singleColumn = state.singleColumn,
                                     )
                                 }
                             }
@@ -302,6 +314,12 @@ fun HistoryScreen(
             selected = state.selectedRange,
             selectedSource = state.selectedSource,
             count = state.count,
+            // 单源池（AO3）没有"筛来源"可言：整段不渲染
+            sources = if (state.showSourceFilter) {
+                WorkSource.entries.filter { it in state.poolSources }
+            } else {
+                emptyList()
+            },
             dark = dark,
             onSelect = { range ->
                 armedWorkId = null
@@ -624,6 +642,10 @@ private fun RemovableHistoryCard(
     onRemove: () -> Unit,
     onToggleFavorite: (Work) -> Unit,
     onClick: (Work) -> Unit,
+    /** 阅读进度；只有文字池（单列 blurb）用它——图文池的历史维持原样 */
+    progress: CardProgress? = null,
+    /** 单列 blurb 形态（纯文字池） */
+    singleColumn: Boolean = false,
 ) {
     val scale by animateFloatAsState(
         targetValue = if (armed) 0.97f else 1f,
@@ -631,7 +653,11 @@ private fun RemovableHistoryCard(
         label = "armedCardScale",
     )
     val hapticView = LocalView.current
-    val cardShape = RoundedCornerShape(12.dp)
+    val cardShape = if (singleColumn) {
+        RoundedCornerShape(PikuLayout.CardCorner)
+    } else {
+        RoundedCornerShape(12.dp)
+    }
     Box(
         modifier = Modifier
             .graphicsLayer {
@@ -647,7 +673,19 @@ private fun RemovableHistoryCard(
     ) {
         // 无封面小说（AO3）：网格里没有图可放，用文字卡，否则是一格灰锁占位
         val textOnly = entry.work.kind == WorkKind.NOVEL && entry.work.thumbnailUrl.isBlank()
-        if (textOnly) {
+        if (singleColumn) {
+            TextWorkBlurb(
+                work = entry.work,
+                onToggleFavorite = onToggleFavorite,
+                onClick = { if (armed) onDisarm() else onClick(it) },
+                dark = dark,
+                onLongClick = {
+                    hapticView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                    onArm()
+                },
+                progress = progress,
+            )
+        } else if (textOnly) {
             TextWorkCard(
                 work = entry.work,
                 onToggleFavorite = onToggleFavorite,
@@ -809,6 +847,8 @@ private fun HistoryFilterSheet(
     selected: HistoryTimeRange,
     selectedSource: WorkSource?,
     count: Int,
+    /** 池里可筛的源；空表 = 单源池，整段不渲染 */
+    sources: List<WorkSource>,
     dark: Boolean,
     onSelect: (HistoryTimeRange) -> Unit,
     onSelectSource: (WorkSource?) -> Unit,
@@ -828,19 +868,21 @@ private fun HistoryFilterSheet(
             selectedIndex = ranges.indexOf(selected),
             onSelect = { onSelect(ranges[it]) },
         )
-        Spacer(Modifier.height(14.dp))
-        SheetSectionLabel(text = stringResource(R.string.history_filter_source))
-        Spacer(Modifier.height(8.dp))
-        // 从枚举生成，全部打头：将来接新源这里自动多一段
-        val sources: List<WorkSource?> = listOf(null) + WorkSource.entries
-        PikuSegmented(
-            labels = sources.map { source ->
-                if (source == null) stringResource(R.string.history_source_all)
-                else stringResource(source.labelRes())
-            },
-            selectedIndex = sources.indexOf(selectedSource),
-            onSelect = { onSelectSource(sources[it]) },
-        )
+        if (sources.isNotEmpty()) {
+            Spacer(Modifier.height(14.dp))
+            SheetSectionLabel(text = stringResource(R.string.history_filter_source))
+            Spacer(Modifier.height(8.dp))
+            // 全部打头，其余只列池里的源：池外那些在这儿本来就没有记录
+            val rows: List<WorkSource?> = listOf(null) + sources
+            PikuSegmented(
+                labels = rows.map { source ->
+                    if (source == null) stringResource(R.string.history_source_all)
+                    else stringResource(source.labelRes())
+                },
+                selectedIndex = rows.indexOf(selectedSource),
+                onSelect = { onSelectSource(rows[it]) },
+            )
+        }
         Spacer(Modifier.height(14.dp))
         Text(
             text = stringResource(R.string.history_long_press_hint),

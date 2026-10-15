@@ -19,11 +19,14 @@ import com.piku.client.core.model.key
 import com.piku.client.core.model.WorkKey
 import com.piku.client.core.model.WorkSource
 import com.piku.client.core.source.SourceAuthRegistry
+import com.piku.client.core.source.LibraryPool
 import com.piku.client.core.ui.common.FeedbackChannel
 import com.piku.client.core.ui.common.FeedbackText
+import com.piku.client.core.usecase.ObserveLibraryPoolUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -31,6 +34,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -90,6 +94,10 @@ data class CollectionUiState(
     val sort: FolderSort = FolderSort.ADDED,
     /** 按源筛选：null 表示不筛。会话内有效，换视图就重置，与检索词同款语义 */
     val sourceFilter: WorkSource? = null,
+    /** 当前资料库池的源：池外的作品不出现在这里（池定义见 ContentSource.libraryPool） */
+    val poolSources: Set<WorkSource> = WorkSource.entries.toSet(),
+    /** 池里全是纯文字源（AO3）：列表走单列 blurb，不是网格 */
+    val singleColumn: Boolean = false,
     val query: String = "",
     val loaded: Boolean = false,
     /** 多选模式：仅在收藏夹详情内有效 */
@@ -113,6 +121,9 @@ data class CollectionUiState(
 ) {
     val searching: Boolean get() = query.isNotBlank()
 
+    /** 单源池没有"筛来源"可言：来源段随池的源数显隐 */
+    val showSourceFilter: Boolean get() = poolSources.size > 1
+
     /** 只看当前显示的这批：全选只作用于筛选后的结果，隐藏的投稿不会被选中 */
     val allSelected: Boolean get() = works.isNotEmpty() && works.all { it.key in selectedIds }
 
@@ -130,9 +141,21 @@ class CollectionViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val pixivRepository: PixivRepository,
     private val sourceAuthRegistry: SourceAuthRegistry,
+    observeLibraryPoolUseCase: ObserveLibraryPoolUseCase,
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(CollectionUiState())
+    private val initialPool = observeLibraryPoolUseCase.current()
+
+    /** 资料库池：取数、计数、排版都从它推导，换首页源就整页换一边 */
+    private val pool: StateFlow<LibraryPool> = observeLibraryPoolUseCase()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, initialPool)
+
+    private val _uiState = MutableStateFlow(
+        CollectionUiState(
+            poolSources = initialPool.sources,
+            singleColumn = initialPool.singleColumn,
+        ),
+    )
     val uiState: StateFlow<CollectionUiState> = _uiState.asStateFlow()
 
     /** 一次性反馈（仅用于操作失败；移出/移动的结果由撤销条承载，不再弹 Snackbar） */
@@ -158,30 +181,56 @@ class CollectionViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            favoriteRepository.observeFolders().collect { folders ->
-                _uiState.update { it.copy(folders = folders, loaded = true) }
+            pool.collect { current ->
+                _uiState.update { state ->
+                    if (state.poolSources == current.sources &&
+                        state.singleColumn == current.singleColumn
+                    ) {
+                        state
+                    } else {
+                        state.copy(
+                            poolSources = current.sources,
+                            singleColumn = current.singleColumn,
+                            // 池换了等于换了个世界：来源筛选不能跨池带过去
+                            sourceFilter = state.sourceFilter?.takeIf { it in current.sources },
+                        )
+                    }
+                }
             }
         }
         viewModelScope.launch {
-            favoriteRepository.observeFavoriteCount().collect { count ->
+            pool.flatMapLatest { current -> favoriteRepository.observeFolders(current.sources.toList()) }
+                .collect { folders ->
+                    _uiState.update { it.copy(folders = folders, loaded = true) }
+                }
+        }
+        viewModelScope.launch {
+            pool.flatMapLatest { current ->
+                favoriteRepository.observeFavoriteCount(current.sources.toList())
+            }.collect { count ->
                 _uiState.update { it.copy(totalWorks = count) }
             }
         }
         viewModelScope.launch {
             // 键用原始值而不是 view 对象：InFolder 带名字，改名会被误判成换视图而重新订阅
-            _uiState.map { ListKey(it.currentFolderId, it.allScope, it.sort) }
-                .distinctUntilChanged()
-                .flatMapLatest { key ->
-                    when {
-                        key.all -> favoriteRepository.observeAllWorks(key.sort)
-                        key.folderId == null -> flowOf(emptyList())
-                        else -> favoriteRepository.observeFolderWorks(key.folderId, key.sort)
+            pool.flatMapLatest { current ->
+                _uiState.map { ListKey(it.currentFolderId, it.allScope, it.sort) }
+                    .distinctUntilChanged()
+                    .flatMapLatest { key ->
+                        when {
+                            key.all -> favoriteRepository.observeAllWorks(key.sort, current.sources.toList())
+                            key.folderId == null -> flowOf(emptyList())
+                            else -> favoriteRepository.observeFolderWorks(
+                                key.folderId,
+                                key.sort,
+                                current.sources.toList(),
+                            )
+                        }
                     }
-                }
-                .collect { works ->
-                    rawWorks = works
-                    publish()
-                }
+            }.collect { works ->
+                rawWorks = works
+                publish()
+            }
         }
         viewModelScope.launch {
             settingsRepository.readingProgress.collect { progress ->
@@ -270,6 +319,8 @@ class CollectionViewModel @Inject constructor(
 
     fun setSourceFilter(source: WorkSource?) {
         if (_uiState.value.sourceFilter == source) return
+        // 池外的源不给选：筛出一片空白不是"筛选"，是数据源没这个源
+        if (source != null && source !in _uiState.value.poolSources) return
         _uiState.update { it.copy(sourceFilter = source) }
         publish()
     }

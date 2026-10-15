@@ -56,6 +56,8 @@ fun TextWorkBlurb(
     onClick: (Work) -> Unit,
     dark: Boolean,
     onLongClick: ((Work) -> Unit)? = null,
+    /** 阅读进度；null 表示不显示（首页/搜索等没有"读到哪"语义的场景） */
+    progress: CardProgress? = null,
 ) {
     val shape = RoundedCornerShape(PikuLayout.CardCorner)
     var heartVisible by remember { mutableStateOf(false) }
@@ -163,6 +165,10 @@ fun TextWorkBlurb(
                     maxLines = 1,
                 )
             }
+        }
+        if (progress != null) {
+            Spacer(Modifier.height(8.dp))
+            CardProgressLine(progress = progress, dark = dark, labelFontSize = 11.sp)
         }
     }
 }

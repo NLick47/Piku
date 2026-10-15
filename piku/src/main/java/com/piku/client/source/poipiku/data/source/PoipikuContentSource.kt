@@ -5,6 +5,7 @@ import com.piku.client.source.poipiku.data.model.PoipikuCategory
 import com.piku.client.core.model.Work
 import com.piku.client.core.model.WorkSource
 import com.piku.client.core.source.ContentSource
+import com.piku.client.core.source.LIBRARY_POOL_MEDIA
 import com.piku.client.core.source.SourceAuthorOpen
 import com.piku.client.core.source.SourceFacet
 import com.piku.client.core.source.SourceFacetGroup
@@ -32,6 +33,9 @@ class PoipikuContentSource @Inject constructor(
     override val id = WorkSource.POIPIKU
 
     override val labelRes = R.string.home_source_poipiku
+
+    /** 与 pixiv 共用图文资料库：收藏/历史里两边混排 */
+    override val libraryPool = LIBRARY_POOL_MEDIA
 
     override val feeds = FEEDS
 

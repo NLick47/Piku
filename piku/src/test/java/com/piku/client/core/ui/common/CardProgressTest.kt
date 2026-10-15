@@ -1,4 +1,4 @@
-package com.piku.client.core.ui.feature.collection
+package com.piku.client.core.ui.common
 
 import com.piku.client.core.model.ReadingProgress
 import com.piku.client.core.model.Work

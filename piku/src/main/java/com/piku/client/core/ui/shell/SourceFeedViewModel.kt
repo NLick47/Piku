@@ -12,7 +12,6 @@ import com.piku.client.core.source.SourceListLayout
 import com.piku.client.core.source.SourceScope
 import com.piku.client.core.source.SourceScopeKind
 import com.piku.client.core.source.SourceScopeRegistry
-import com.piku.client.core.source.SourceScopeSuggestion
 import com.piku.client.core.source.SourceScopes
 import com.piku.client.core.source.scopeChipLabels
 import com.piku.client.core.source.sanitizeFacetChoices
@@ -243,16 +242,6 @@ class SourceFeedViewModel @Inject constructor(
     fun selectScope(scope: SourceScope) {
         scopeRegistry.byId(_ui.value.source)?.setActive(scope)
     }
-
-    /** 订阅/取消订阅（选择器里增删） */
-    fun setScopes(scopes: List<SourceScope>) {
-        scopeRegistry.byId(_ui.value.source)?.setScopes(scopes)
-    }
-
-    /** 圈层联想（选择器搜索框）：失败原样交给选择器，它要区分"没找到"与"没问成" */
-    suspend fun suggestScopes(kind: String, term: String): Result<List<SourceScopeSuggestion>> =
-        scopeRegistry.byId(_ui.value.source)?.suggest(kind, term)
-            ?: Result.success(emptyList())
 
     /**
      * 跟住当前源的登录态：登录页回来、令牌失效登出都要让门屏/内容立刻换一态。

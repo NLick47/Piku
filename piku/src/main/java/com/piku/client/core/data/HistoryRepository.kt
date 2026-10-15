@@ -9,6 +9,7 @@ import com.piku.client.core.model.HistoryItem
 import com.piku.client.core.model.HistoryTimeRange
 import com.piku.client.core.model.Work
 import com.piku.client.core.model.WorkKey
+import com.piku.client.core.model.WorkSource
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
@@ -19,8 +20,15 @@ class HistoryRepository @Inject constructor(
     private val historyDao: HistoryDao,
 ) {
 
-    fun observeHistory(range: HistoryTimeRange = HistoryTimeRange.ALL): Flow<List<HistoryItem>> =
-        historyDao.observeSince(range.cutoffMillis()).map { list ->
+    /**
+     * [sources] 是资料库池：只有池里的源会出现在列表里（默认全源）。
+     * 池外的记录仍留在库里，切回那个源就看得到。
+     */
+    fun observeHistory(
+        range: HistoryTimeRange = HistoryTimeRange.ALL,
+        sources: List<WorkSource> = WorkSource.entries,
+    ): Flow<List<HistoryItem>> =
+        historyDao.observeSince(range.cutoffMillis(), sources).map { list ->
             list.map { HistoryItem(it.toWork(), it.visitedAt) }
         }
 
@@ -38,8 +46,9 @@ class HistoryRepository @Inject constructor(
         historyDao.deleteByWorkId(key.source, key.workId)
     }
 
-    suspend fun clear() {
-        historyDao.clearAll()
+    /** 清空只作用于池内的源：在 AO3 侧点清空不该把图文侧的记录一起抹掉 */
+    suspend fun clear(sources: List<WorkSource> = WorkSource.entries) {
+        historyDao.clear(sources)
     }
 
     /** 清理超过 [days] 天的记录；days <= 0 表示永久保留，不执行清理 */

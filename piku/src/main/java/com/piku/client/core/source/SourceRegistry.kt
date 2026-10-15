@@ -25,4 +25,18 @@ class SourceRegistry @Inject constructor(
 
     /** 供换源控件列出可选源 */
     val all: List<ContentSource> get() = byId.values.toList()
+
+    /**
+     * 与 [id] 同资料库池的全部源；未注册的源只有自己。
+     * singleColumn 取「池里所有源都声明单列」——池里图文混着时按网格排。
+     */
+    fun libraryPoolOf(id: WorkSource): LibraryPool {
+        val self = byIdOrNull(id) ?: return LibraryPool(setOf(id), singleColumn = false)
+        val samePool = byId.values.filter { it.libraryPool == self.libraryPool }
+        return LibraryPool(
+            sources = samePool.mapTo(mutableSetOf()) { it.id },
+            singleColumn = samePool.isNotEmpty() &&
+                samePool.all { it.listLayout == SourceListLayout.List },
+        )
+    }
 }

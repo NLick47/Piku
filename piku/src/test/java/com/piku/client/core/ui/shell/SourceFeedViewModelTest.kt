@@ -625,7 +625,7 @@ class SourceFeedViewModelTest {
         val vm = build(fake, scopes = scopes)
 
         val hp = SourceScope("fandom", "Harry Potter - J. K. Rowling")
-        vm.setScopes(listOf(hp))
+        scopes.setScopes(listOf(hp))
         dispatcher.scheduler.advanceUntilIdle()
 
         val state = vm.ui.value
@@ -643,7 +643,7 @@ class SourceFeedViewModelTest {
 
         val hp = SourceScope("fandom", "Harry Potter - J. K. Rowling")
         val st = SourceScope("fandom", "Stranger Things (TV 2016)")
-        vm.setScopes(listOf(hp, st))
+        scopes.setScopes(listOf(hp, st))
         dispatcher.scheduler.advanceUntilIdle()
         vm.selectScope(st)
         dispatcher.scheduler.advanceUntilIdle()

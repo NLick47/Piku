@@ -123,7 +123,6 @@ import coil3.compose.AsyncImage
 import com.piku.client.R
 import com.piku.client.core.model.FavoriteFolder
 import com.piku.client.core.model.FolderSort
-import com.piku.client.core.model.ReadingProgress
 import com.piku.client.core.model.Work
 import com.piku.client.core.model.WorkKind
 import com.piku.client.core.source.SourceAuthorOpen
@@ -136,7 +135,9 @@ import com.piku.client.core.ui.common.LoaderDots
 import com.piku.client.core.ui.common.labelRes
 import com.piku.client.core.ui.common.PikuBackButton
 import com.piku.client.core.ui.common.UserAvatar
+import com.piku.client.core.ui.common.TextWorkBlurb
 import com.piku.client.core.ui.common.TextWorkCard
+import com.piku.client.core.ui.common.toCardProgress
 import com.piku.client.core.ui.common.WorkCard
 import com.piku.client.core.ui.common.resolve
 import com.piku.client.core.ui.theme.ContentCardBgDark
@@ -147,6 +148,7 @@ import com.piku.client.core.ui.theme.HomeBgBottomLight
 import com.piku.client.core.ui.theme.HomeBgTopDark
 import com.piku.client.core.ui.theme.HomeBgTopLight
 import com.piku.client.core.ui.theme.PikuColors
+import com.piku.client.core.ui.theme.PikuLayout
 
 /**
  * 玻璃卡片顶部的高光渐变，增强玻璃质感。
@@ -269,6 +271,7 @@ fun CollectionScreen(
                 stringResource(R.string.collection_sync_progress, done, total)
             } ?: stringResource(R.string.collection_sync_short),
             onSync = viewModel::syncSelectedToPixiv,
+            showSync = WorkSource.PIXIV in state.poolSources,
             onMove = { pickMode = FolderPickMode.MOVE },
             onRemove = viewModel::removeSelected,
             modifier = Modifier
@@ -1126,10 +1129,11 @@ private fun FolderDetailContent(
             }
             else -> {
                 LazyVerticalStaggeredGrid(
-                    columns = if (isTablet) {
-                        StaggeredGridCells.Adaptive(220.dp)
-                    } else {
-                        StaggeredGridCells.Fixed(2)
+                    columns = when {
+                        // 纯文字池（AO3）：整行宽的 blurb，格子数不参与
+                        state.singleColumn -> StaggeredGridCells.Fixed(1)
+                        isTablet -> StaggeredGridCells.Adaptive(220.dp)
+                        else -> StaggeredGridCells.Fixed(2)
                     },
                     state = gridState,
                     modifier = Modifier.fillMaxSize(),
@@ -1172,6 +1176,7 @@ private fun FolderDetailContent(
                                 selectionMode = state.selectionMode,
                                 progress = state.progress[work.key].toCardProgress(work),
                                 dark = dark,
+                                singleColumn = state.singleColumn,
                                 onOpen = { onWorkClick(work) },
                                 // 长按直接进多选并带上这张：单件操作走底部工具条，
                                 // 不再为一件作品弹一个四选项的面板
@@ -1188,6 +1193,11 @@ private fun FolderDetailContent(
             SortSheet(
                 current = state.sort,
                 sourceFilter = state.sourceFilter,
+                sources = if (state.showSourceFilter) {
+                    WorkSource.entries.filter { it in state.poolSources }
+                } else {
+                    emptyList()
+                },
                 dark = dark,
                 onSelect = {
                     sortSheetOpen = false
@@ -1218,8 +1228,14 @@ private fun SelectableWorkCard(
     onLongPress: () -> Unit,
     onToggleSelect: () -> Unit,
     onAuthorClick: ((Work) -> Unit)?,
+    /** 单列 blurb 形态（纯文字池）：整行宽的简介卡，不是网格卡 */
+    singleColumn: Boolean = false,
 ) {
-    val shape = RoundedCornerShape(12.dp)
+    val shape = if (singleColumn) {
+        RoundedCornerShape(PikuLayout.CardCorner)
+    } else {
+        RoundedCornerShape(12.dp)
+    }
     val reduced = rememberReducedMotion()
     val accent = PikuColors.accent
     val checkedTint = if (dark) Color(0xFF1C1B19) else Color.White
@@ -1236,7 +1252,16 @@ private fun SelectableWorkCard(
     Box(modifier = Modifier.graphicsLayer { scaleX = scale; scaleY = scale }) {
         // 无封面小说（AO3）：网格里没有图可放，用文字卡，否则是一格灰锁占位
         val textOnly = work.kind == WorkKind.NOVEL && work.thumbnailUrl.isBlank()
-        if (textOnly) {
+        if (singleColumn) {
+            TextWorkBlurb(
+                work = work,
+                onToggleFavorite = {},
+                onClick = { if (selectionMode) onToggleSelect() else onOpen() },
+                dark = dark,
+                onLongClick = { if (!selectionMode) onLongPress() },
+                progress = progress,
+            )
+        } else if (textOnly) {
             TextWorkCard(
                 work = work,
                 onToggleFavorite = {},
@@ -1315,6 +1340,8 @@ private fun SelectionActionBar(
     onSync: () -> Unit,
     onMove: () -> Unit,
     onRemove: () -> Unit,
+    /** 池里没有 pixiv 时（AO3 书架）不摆这颗钮：它对着一堆作品却永远无事可做 */
+    showSync: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val hasSelection = selectedCount > 0
@@ -1343,15 +1370,17 @@ private fun SelectionActionBar(
                     modifier = Modifier.weight(1f),
                 )
                 // 只同步 pixiv 源的未同步项：混选或重复点都安全，VM 里筛过一遍
-                BarAction(
-                    icon = Icons.Outlined.CloudUpload,
-                    label = syncLabel,
-                    dark = dark,
-                    enabled = hasSelection && !syncing,
-                    loading = syncing,
-                    onClick = onSync,
-                    modifier = Modifier.weight(1f),
-                )
+                if (showSync) {
+                    BarAction(
+                        icon = Icons.Outlined.CloudUpload,
+                        label = syncLabel,
+                        dark = dark,
+                        enabled = hasSelection && !syncing,
+                        loading = syncing,
+                        onClick = onSync,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
                 BarAction(
                     icon = Icons.AutoMirrored.Outlined.DriveFileMove,
                     label = stringResource(R.string.collection_move_short),
@@ -1728,21 +1757,6 @@ private fun SheetActionRow(
     }
 }
 
-internal fun ReadingProgress?.toCardProgress(work: Work): CardProgress? = when {
-    this == null -> null
-    hasImage && imagePage > 1 -> {
-        val total = work.imageCount.takeIf { it > 1 }
-        if (total == null) {
-            null
-        } else {
-            val page = imagePage.coerceAtMost(total)
-            CardProgress(page.toFloat() / total, "$page/$total")
-        }
-    }
-    hasNovel -> CardProgress(novelPercent / 100f, "$novelPercent%")
-    else -> null
-}
-
 /** 排序 chip 与排序面板共用的短标签 */
 @Composable
 private fun sortLabel(sort: FolderSort): String = stringResource(
@@ -1879,6 +1893,8 @@ private fun CollectionSearchPill(
 private fun SortSheet(
     current: FolderSort,
     sourceFilter: WorkSource?,
+    /** 池里可筛的源；空表 = 单源池，没有"筛来源"可言，整段不渲染 */
+    sources: List<WorkSource>,
     dark: Boolean,
     onSelect: (FolderSort) -> Unit,
     onSelectSource: (WorkSource?) -> Unit,
@@ -1890,7 +1906,13 @@ private fun SortSheet(
         // 来源段把行数翻了一倍，小屏放不下
         scrollable = true,
     ) {
-        PikuSheetTitle(text = stringResource(R.string.collection_sort_source_title))
+        PikuSheetTitle(
+            text = stringResource(
+                // 没有来源段的池（单源）别把标题写成"排序与来源"
+                if (sources.isEmpty()) R.string.source_view_sort
+                else R.string.collection_sort_source_title,
+            ),
+        )
         Spacer(Modifier.height(12.dp))
         FolderSort.entries.forEachIndexed { index, sort ->
             if (index > 0) Spacer(Modifier.height(6.dp))
@@ -1902,26 +1924,28 @@ private fun SortSheet(
                 onClick = { onSelect(sort) },
             )
         }
-        Spacer(Modifier.height(16.dp))
-        PikuSheetSubtitle(text = stringResource(R.string.collection_filter_source))
-        Spacer(Modifier.height(8.dp))
-        SortRow(
-            label = stringResource(R.string.collection_source_all),
-            subtitle = null,
-            selected = sourceFilter == null,
-            dark = dark,
-            onClick = { onSelectSource(null) },
-        )
-        // 从枚举生成：将来接新源，这里自动多出一行
-        WorkSource.entries.forEach { source ->
-            Spacer(Modifier.height(6.dp))
+        if (sources.isNotEmpty()) {
+            Spacer(Modifier.height(16.dp))
+            PikuSheetSubtitle(text = stringResource(R.string.collection_filter_source))
+            Spacer(Modifier.height(8.dp))
             SortRow(
-                label = stringResource(source.labelRes()),
+                label = stringResource(R.string.collection_source_all),
                 subtitle = null,
-                selected = sourceFilter == source,
+                selected = sourceFilter == null,
                 dark = dark,
-                onClick = { onSelectSource(source) },
+                onClick = { onSelectSource(null) },
             )
+            // 只列池里的源：池外那些在这儿本来就没有作品
+            sources.forEach { source ->
+                Spacer(Modifier.height(6.dp))
+                SortRow(
+                    label = stringResource(source.labelRes()),
+                    subtitle = null,
+                    selected = sourceFilter == source,
+                    dark = dark,
+                    onClick = { onSelectSource(source) },
+                )
+            }
         }
     }
 }

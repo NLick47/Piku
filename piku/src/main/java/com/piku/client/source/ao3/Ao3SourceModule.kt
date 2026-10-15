@@ -5,11 +5,13 @@ import com.piku.client.core.source.ContentSource
 import com.piku.client.core.source.SourceLinkParser
 import com.piku.client.core.source.SourceScopes
 import com.piku.client.core.source.SourceSearch
+import com.piku.client.core.ui.drawer.SourceDrawerPlugin
 import com.piku.client.source.ao3.data.link.Ao3LinkParser
 import com.piku.client.source.ao3.data.local.Ao3ScopeStore
 import com.piku.client.source.ao3.data.source.Ao3ContentSource
 import com.piku.client.source.ao3.data.source.Ao3Scopes
 import com.piku.client.source.ao3.data.source.Ao3SearchSource
+import com.piku.client.source.ao3.ui.drawer.Ao3DrawerPlugin
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -46,4 +48,9 @@ object Ao3SourceModule {
     @Provides
     @IntoSet
     fun ao3Scopes(impl: Ao3Scopes): SourceScopes = impl
+
+    /** 抽屉插件按源登记：给 AO3 一条「我的圈层」入口，抽屉外壳不认站点名 */
+    @Provides
+    @IntoSet
+    fun ao3DrawerPlugin(impl: Ao3DrawerPlugin): SourceDrawerPlugin = impl
 }

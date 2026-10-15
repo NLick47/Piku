@@ -8,8 +8,8 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface FavoriteDao {
-    @Query("SELECT * FROM favorites ORDER BY addedAt DESC")
-    fun observeAll(): Flow<List<FavoriteEntity>>
+    @Query("SELECT * FROM favorites WHERE source IN (:sources) ORDER BY addedAt DESC")
+    fun observeAll(sources: List<WorkSource>): Flow<List<FavoriteEntity>>
 
     @Upsert
     suspend fun upsert(entity: FavoriteEntity)
@@ -20,19 +20,19 @@ interface FavoriteDao {
     @Query("DELETE FROM favorites WHERE source = :source AND workId = :workId")
     suspend fun delete(source: WorkSource, workId: String)
 
-    @Query("SELECT COUNT(*) FROM favorites")
-    fun observeCount(): Flow<Int>
+    @Query("SELECT COUNT(*) FROM favorites WHERE source IN (:sources)")
+    fun observeCount(sources: List<WorkSource>): Flow<Int>
 
     /**
      * 「全部收藏」视图的排序。作用在 favorites 表上，不需要 JOIN 归属表：
      * 作品行只有在失去全部归属时才会被删除，所以每行都至少属于一个收藏夹。
      * observeAll() 就是这里的「加入时间」顺序，不再重复定义。
      */
-    @Query("SELECT * FROM favorites ORDER BY title COLLATE NOCASE ASC, addedAt DESC")
-    fun observeAllByTitle(): Flow<List<FavoriteEntity>>
+    @Query("SELECT * FROM favorites WHERE source IN (:sources) ORDER BY title COLLATE NOCASE ASC, addedAt DESC")
+    fun observeAllByTitle(sources: List<WorkSource>): Flow<List<FavoriteEntity>>
 
-    @Query("SELECT * FROM favorites ORDER BY authorName COLLATE NOCASE ASC, addedAt DESC")
-    fun observeAllByAuthor(): Flow<List<FavoriteEntity>>
+    @Query("SELECT * FROM favorites WHERE source IN (:sources) ORDER BY authorName COLLATE NOCASE ASC, addedAt DESC")
+    fun observeAllByAuthor(sources: List<WorkSource>): Flow<List<FavoriteEntity>>
 
     /** 单源一批作品的全部归属（取消收藏、收拢到单个夹时取快照）；跨源由仓库层按源分组后拼调 */
     @Query("SELECT * FROM favorite_memberships WHERE source = :source AND workId IN (:workIds)")

@@ -55,10 +55,12 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.piku.client.R
+import com.piku.client.core.model.ReadingProgress
 import com.piku.client.core.model.Work
 import com.piku.client.core.model.WorkSource
 import com.piku.client.core.ui.theme.PikuColors
@@ -101,6 +103,60 @@ internal fun heroFeedThumbUrl(url: String): String =
  * 由调用方（收藏夹）算出后传入，WorkCard 只负责画。
  */
 data class CardProgress(val fraction: Float, val label: String)
+
+/** 卡片底部的进度细线 + 标签；三种卡片（图/网格文字/单列 blurb）共用一条 */
+@Composable
+fun CardProgressLine(
+    progress: CardProgress,
+    dark: Boolean,
+    labelFontSize: TextUnit = 9.sp,
+    modifier: Modifier = Modifier,
+) {
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            Modifier
+                .weight(1f)
+                .height(3.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(if (dark) Color(0x33FFFFFF) else Color(0x1A000000))
+                // 没有语义时读屏只会念旁边的 "5/12"，念不出这是个进度
+                .progressSemantics(progress.fraction),
+        ) {
+            Box(
+                Modifier
+                    .fillMaxWidth(progress.fraction.coerceIn(0.02f, 1f))
+                    .fillMaxHeight()
+                    .background(PikuColors.accent),
+            )
+        }
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = progress.label,
+            color = PikuColors.textFaint,
+            fontSize = labelFontSize,
+            maxLines = 1,
+        )
+    }
+}
+
+/**
+ * 阅读进度 → 卡片进度条。图集看页码、小说看百分比；两样都没有就不画。
+ * 收藏、历史、AO3 书架共用这一份换算。
+ */
+fun ReadingProgress?.toCardProgress(work: Work): CardProgress? = when {
+    this == null -> null
+    hasImage && imagePage > 1 -> {
+        val total = work.imageCount.takeIf { it > 1 }
+        if (total == null) {
+            null
+        } else {
+            val page = imagePage.coerceAtMost(total)
+            CardProgress(page.toFloat() / total, "$page/$total")
+        }
+    }
+    hasNovel -> CardProgress(novelPercent / 100f, "$novelPercent%")
+    else -> null
+}
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -270,31 +326,7 @@ fun WorkCard(
             )
             if (progress != null) {
                 Spacer(Modifier.height(6.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        Modifier
-                            .weight(1f)
-                            .height(3.dp)
-                            .clip(RoundedCornerShape(2.dp))
-                            .background(if (dark) Color(0x33FFFFFF) else Color(0x1A000000))
-                            // 没有语义时读屏只会念旁边的 "5/12"，念不出这是个进度
-                            .progressSemantics(progress.fraction),
-                    ) {
-                        Box(
-                            Modifier
-                                .fillMaxWidth(progress.fraction.coerceIn(0.02f, 1f))
-                                .fillMaxHeight()
-                                .background(PikuColors.accent),
-                        )
-                    }
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        text = progress.label,
-                        color = PikuColors.textFaint,
-                        fontSize = 9.sp,
-                        maxLines = 1,
-                    )
-                }
+                CardProgressLine(progress = progress, dark = dark)
             }
             // 热区自带 8dp 上下内距，标题与头像之间留 0dp 即可（实际 = 8dp）；不可点时维持 6dp
             Spacer(Modifier.height(if (onAuthorClick != null) 0.dp else 6.dp))

@@ -205,7 +205,7 @@ class WebDavSyncRepository @Inject constructor(
         Log.d(TAG, "executeSync: ensureDirectory piku/")
         webDavClient.ensureDirectory(url, "piku", credentials)
         val localFolders = favoriteFolderDao.observeFolders().first()
-        val localFavorites = favoriteDao.observeAll().first()
+        val localFavorites = favoriteDao.observeAll(WorkSource.entries).first()
         val allMemberships = readAllMemberships(localFolders)
         Log.d(TAG, "executeSync: local folders=${localFolders.size} favorites=${localFavorites.size} memberships=${allMemberships.size}")
 
@@ -471,10 +471,10 @@ class WebDavSyncRepository @Inject constructor(
         credentials: String,
         data: FavoriteSyncData,
     ): Int {
-        val historyKeys = historyDao.observeSince(0).first()
+        val historyKeys = historyDao.observeSince(0, WorkSource.entries).first()
             .mapTo(mutableSetOf()) { WorkKey(it.source, it.workId) }
         // 本地 contentBackedUp = false 才需要尝试，避免对已经备份过的作品再发请求
-        val localBackedUp = favoriteDao.observeAll().first()
+        val localBackedUp = favoriteDao.observeAll(WorkSource.entries).first()
             .associate { WorkKey(it.source, it.workId) to it.contentBackedUp }
         val workFolders = buildWorkFolderIndex(data)
 

@@ -796,7 +796,6 @@
     <string name="ao3_complete_no">In progress</string>
     <string name="ao3_scope_title">My fandoms</string>
     <string name="ao3_scope_hint">Pick fandoms, ships or tags</string>
-    <string name="ao3_scope_picker_title">Pick fandoms</string>
     <string name="ao3_scope_search_hint">Search fandoms or tags</string>
     <string name="ao3_scope_fandom">Fandom</string>
     <string name="ao3_scope_relationship">Ship</string>
@@ -812,6 +811,7 @@
     <string name="ao3_scope_search_failed">Search failed</string>
     <string name="ao3_scope_fold_count">· %1$d fandoms</string>
     <string name="ao3_scope_manage">Add / manage fandoms…</string>
+    <string name="ao3_scope_row_hint">Tap a row to switch</string>
     <string name="ao3_scope_limit_reached">Up to %1$d fandoms — remove one to add another</string>
     <string name="ao3_tab_updated">Recently updated</string>
     <string name="ao3_sort_best">Best match</string>

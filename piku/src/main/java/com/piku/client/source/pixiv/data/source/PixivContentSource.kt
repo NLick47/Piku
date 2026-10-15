@@ -9,6 +9,7 @@ import com.piku.client.core.model.WorkSource
 import com.piku.client.core.model.WorkKind
 import com.piku.client.core.source.ContentSource
 import com.piku.client.core.source.AuthorPageStyle
+import com.piku.client.core.source.LIBRARY_POOL_MEDIA
 import com.piku.client.core.source.SourceAuthorOpen
 import com.piku.client.core.source.SourceFacet
 import com.piku.client.core.source.SourceFacetGroup
@@ -33,6 +34,9 @@ class PixivContentSource @Inject constructor(
     override val labelRes = R.string.home_source_pixiv
 
     override val loginPromptRes = R.string.pixiv_need_login
+
+    /** 与 poipiku 共用图文资料库：收藏/历史里两边混排 */
+    override val libraryPool = LIBRARY_POOL_MEDIA
 
     override val feeds = FEEDS
 

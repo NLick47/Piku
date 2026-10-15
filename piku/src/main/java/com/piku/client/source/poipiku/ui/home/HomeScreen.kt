@@ -80,6 +80,10 @@ fun HomeScreen(
     onProfileOpen: (WorkSource, Long, String) -> Unit,
     onFollowUsersOpen: (WorkSource) -> Unit,
     onBlockUsersOpen: (WorkSource) -> Unit,
+    /** 抽屉那条「我的圈层」：库页语义，返回首页时抽屉重开 */
+    onScopesOpen: (WorkSource) -> Unit,
+    /** 首页胶囊菜单/首次引导进的同一个页面：不是从抽屉来的，返回就回首页，不弹抽屉 */
+    onScopesFromFeed: (WorkSource) -> Unit,
 ) {
     val viewModel: HomeViewModel = hiltViewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -198,6 +202,8 @@ fun HomeScreen(
         override fun openFollowUsers(source: WorkSource) = onFollowUsersOpen(source)
 
         override fun openBlockUsers(source: WorkSource) = onBlockUsersOpen(source)
+
+        override fun openScopes(source: WorkSource) = onScopesOpen(source)
 
         // 应用内没有对应页时的去向：交给系统浏览器
         override fun openExternal(url: String) {
@@ -324,6 +330,7 @@ fun HomeScreen(
                         onDismissUpdateBanner = viewModel::dismissUpdateBanner,
                         onOpenWork = onWorkClick,
                         onLoginClick = onSourceLoginClick,
+                        onManageScopes = onScopesFromFeed,
                     )
                 } else {
                     PoipikuHomeShell(

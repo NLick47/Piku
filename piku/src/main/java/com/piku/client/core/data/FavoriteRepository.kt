@@ -110,15 +110,18 @@ class FavoriteRepository @Inject constructor(
             .shareIn(scope, SharingStarted.WhileSubscribed(FAVORITE_IDS_KEEP_ALIVE_MS), replay = 1)
 
     fun observeFavorites(): Flow<List<Work>> =
-        favoriteDao.observeAll().map { list -> list.map { it.toWork() } }
+        favoriteDao.observeAll(WorkSource.entries).map { list -> list.map { it.toWork() } }
 
-    fun observeFolders(): Flow<List<FavoriteFolder>> = flow {
+    /**
+     * [sources] 是资料库池：夹的件数与预览图都只算池内的源，否则池外作品会让计数虚高。
+     */
+    fun observeFolders(sources: List<WorkSource> = WorkSource.entries): Flow<List<FavoriteFolder>> = flow {
         ensureDefaultFolder()
         emitAll(
             combine(
                 favoriteFolderDao.observeFolders(),
-                favoriteFolderDao.observeFolderCounts(),
-                favoriteFolderDao.observeFolderPreviews(),
+                favoriteFolderDao.observeFolderCounts(sources),
+                favoriteFolderDao.observeFolderPreviews(sources),
             ) { folders, counts, previews ->
                 val countByFolder = counts.associate { it.folderId to it.count }
                 val previewsByFolder = previews
@@ -141,11 +144,12 @@ class FavoriteRepository @Inject constructor(
     fun observeFolderWorks(
         folderId: Long,
         sort: FolderSort = FolderSort.ADDED,
+        sources: List<WorkSource> = WorkSource.entries,
     ): Flow<List<Work>> {
         val source = when (sort) {
-            FolderSort.ADDED -> favoriteFolderDao.observeWorksInFolder(folderId)
-            FolderSort.TITLE -> favoriteFolderDao.observeWorksInFolderByTitle(folderId)
-            FolderSort.AUTHOR -> favoriteFolderDao.observeWorksInFolderByAuthor(folderId)
+            FolderSort.ADDED -> favoriteFolderDao.observeWorksInFolder(folderId, sources)
+            FolderSort.TITLE -> favoriteFolderDao.observeWorksInFolderByTitle(folderId, sources)
+            FolderSort.AUTHOR -> favoriteFolderDao.observeWorksInFolderByAuthor(folderId, sources)
         }
         return source.map { list -> list.map { it.toWork() } }
     }
@@ -154,11 +158,14 @@ class FavoriteRepository @Inject constructor(
      * 「全部收藏」视图：跨收藏夹的全部作品。
      * observeAll() 本身就是按 addedAt 倒序，正好是「加入时间」这一档，不用再写一条 SQL。
      */
-    fun observeAllWorks(sort: FolderSort = FolderSort.ADDED): Flow<List<Work>> {
+    fun observeAllWorks(
+        sort: FolderSort = FolderSort.ADDED,
+        sources: List<WorkSource> = WorkSource.entries,
+    ): Flow<List<Work>> {
         val source = when (sort) {
-            FolderSort.ADDED -> favoriteDao.observeAll()
-            FolderSort.TITLE -> favoriteDao.observeAllByTitle()
-            FolderSort.AUTHOR -> favoriteDao.observeAllByAuthor()
+            FolderSort.ADDED -> favoriteDao.observeAll(sources)
+            FolderSort.TITLE -> favoriteDao.observeAllByTitle(sources)
+            FolderSort.AUTHOR -> favoriteDao.observeAllByAuthor(sources)
         }
         return source.map { list -> list.map { it.toWork() } }
     }
@@ -476,7 +483,8 @@ class FavoriteRepository @Inject constructor(
     suspend fun countExclusiveWorks(folderId: Long): Int =
         favoriteFolderDao.countExclusiveWorks(folderId)
 
-    fun observeFavoriteCount(): Flow<Int> = favoriteDao.observeCount()
+    fun observeFavoriteCount(sources: List<WorkSource> = WorkSource.entries): Flow<Int> =
+        favoriteDao.observeCount(sources)
 
     // IN 子句分片：SQLite 的变量上限在旧系统上只有 999（API 26 对应 SQLite 3.18），
     // 「全选」一个大收藏夹会一次塞进上千个 workId，不分片会直接抛 too many SQL variables。

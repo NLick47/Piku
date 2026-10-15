@@ -51,6 +51,7 @@ import com.piku.client.source.poipiku.ui.myposts.MyPostsScreen
 import com.piku.client.source.pixiv.ui.login.PixivLoginScreen
 import com.piku.client.source.poipiku.ui.publish.PublishScreen
 import com.piku.client.core.ui.feature.search.SearchScreen
+import com.piku.client.core.ui.feature.scopes.ScopesScreen
 import com.piku.client.core.ui.shell.SourceWorkDetailScreen
 import com.piku.client.core.ui.shell.SourceWorkOpenHost
 import com.piku.client.core.ui.shell.SourceOpenViewModel
@@ -76,6 +77,7 @@ object Routes {
     const val FOLLOW_USERS = "follow_users/{source}"
     const val BLOCK_USERS = "block_users"
     const val TAGS = "tags?source={source}"
+    const val SCOPES = "scopes/{source}"
     const val USER_WORKS = "user_works/{userId}?userName={userName}"
     const val MY_POSTS = "my_posts/{userId}?userName={userName}"
 
@@ -89,6 +91,9 @@ object Routes {
     fun tags(source: WorkSource? = null) = "tags?source=${source?.name.orEmpty()}"
 
     fun followUsers(source: WorkSource) = "follow_users/$source"
+
+    /** 圈层管理页：只有声明了圈层的源会有入口 */
+    fun scopes(source: WorkSource) = "scopes/${source.name}"
 
     /**
      * 统一搜索页：keyword 为空串表示待机态（搜索历史 + 热门标签）；
@@ -402,6 +407,15 @@ fun AppNavHost(
                         backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = true
                         navController.navigate(Routes.BLOCK_USERS)
                     },
+                    onScopesOpen = { source ->
+                        // 抽屉里点的：库页路由，返回首页时抽屉重开
+                        backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = true
+                        navController.navigate(Routes.scopes(source))
+                    },
+                    onScopesFromFeed = { source ->
+                        // 首页胶囊/引导里点的：同一页，但用户没开过抽屉，返回就回首页
+                        navController.navigate(Routes.scopes(source))
+                    },
                 )
             }
         }
@@ -581,6 +595,14 @@ fun AppNavHost(
                         source?.let { openAuthor(it, user.userId, user.name) }
                     },
                 )
+            }
+        }
+        composable(
+            route = Routes.SCOPES,
+            arguments = listOf(navArgument("source") { type = NavType.StringType }),
+        ) {
+            ProvideNavSharedScope(sharedScope, this) {
+                ScopesScreen(onBack = safePopBack)
             }
         }
         composable(Routes.BLOCK_USERS) {

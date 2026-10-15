@@ -794,7 +794,6 @@
     <string name="ao3_complete_no">连载中</string>
     <string name="ao3_scope_title">我的圈层</string>
     <string name="ao3_scope_hint">选你追的同人、配对或标签</string>
-    <string name="ao3_scope_picker_title">选择圈层</string>
     <string name="ao3_scope_search_hint">搜索同人或标签</string>
     <string name="ao3_scope_fandom">同人</string>
     <string name="ao3_scope_relationship">配对</string>
@@ -810,6 +809,7 @@
     <string name="ao3_scope_search_failed">搜索失败</string>
     <string name="ao3_scope_fold_count">· %1$d 个圈层</string>
     <string name="ao3_scope_manage">添加 / 管理圈层…</string>
+    <string name="ao3_scope_row_hint">点一行设为当前</string>
     <string name="ao3_scope_limit_reached">最多订阅 %1$d 个圈层，先移除一些再添加</string>
     <string name="ao3_tab_updated">最近更新</string>
     <string name="ao3_sort_best">最佳匹配</string>

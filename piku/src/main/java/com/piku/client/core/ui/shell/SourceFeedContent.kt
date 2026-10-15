@@ -87,6 +87,7 @@ import com.piku.client.R
 import com.piku.client.core.data.GitHubRelease
 import com.piku.client.core.model.Work
 import com.piku.client.core.model.WorkKind
+import com.piku.client.core.model.WorkSource
 import com.piku.client.core.model.key
 import com.piku.client.core.source.SourceFacetGroup
 import com.piku.client.core.source.SourceFacetStyle
@@ -117,7 +118,6 @@ import com.piku.client.core.ui.background.LiquidGlassBackdrop
 import com.piku.client.core.ui.shell.RefreshNoticeBar
 import com.piku.client.core.ui.shell.SearchMenuButton
 import com.piku.client.core.ui.shell.SkeletonGrid
-import com.piku.client.core.ui.sheets.SourceScopeSheet
 import com.piku.client.core.ui.background.TabBand
 import com.piku.client.core.ui.shell.ThumbnailPrefetchEffect
 import com.piku.client.core.ui.shell.UpdateBannerBar
@@ -156,12 +156,13 @@ internal fun SourceFeedContent(
     /** 作品点击的通用分流去向：NativeDetail/External 直接交它，InAppViewer 过完 R-18 门也交它 */
     onOpenWork: (Work) -> Unit,
     onLoginClick: (String) -> Unit = {},
+    /** 圈层增删的唯一入口：宿主把它接到圈层管理页（路由），本壳不再自带选择面板 */
+    onManageScopes: (WorkSource) -> Unit = {},
     viewModel: SourceFeedViewModel = hiltViewModel(),
 ) {
     val state by viewModel.ui.collectAsState()
     val scope = rememberCoroutineScope()
     var detailWork by remember { mutableStateOf<Work?>(null) }
-    var scopeSheetOpen by remember { mutableStateOf(false) }
 
     LaunchedEffect(gridState) {
         snapshotFlow { gridState.isScrollInProgress }.collect { isScrolling.value = it }
@@ -304,7 +305,7 @@ internal fun SourceFeedContent(
                             scopeLabels = state.scopeLabels,
                             activeScope = state.activeScope,
                             onPickScope = viewModel::selectScope,
-                            onManageScopes = { scopeSheetOpen = true },
+                            onManageScopes = { onManageScopes(state.source) },
                             onPickSort = viewModel::selectFeed,
                             onPickFilter = viewModel::selectFacet,
                             onClearFilter = { groupId ->
@@ -346,7 +347,7 @@ internal fun SourceFeedContent(
         Box(Modifier.fillMaxSize()) {
             when {
                 // 圈层式首页还没订阅：引导去选圈层，而不是给一屏全站作品
-                state.needsScopeSetup -> ScopeSetupGuide(onAdd = { scopeSheetOpen = true })
+                state.needsScopeSetup -> ScopeSetupGuide(onAdd = { onManageScopes(state.source) })
                 // 占位流（如登录后的能力未到）：明说能力未到，而不是给个空态让人以为没内容
                 state.comingSoon -> CenteredMessage(text = stringResource(R.string.home_coming_soon))
                 state.needLogin -> CenteredMessage(
@@ -412,24 +413,6 @@ internal fun SourceFeedContent(
                 )
             }
         }
-    }
-
-    if (scopeSheetOpen) {
-        SourceScopeSheet(
-            kinds = state.scopeKinds,
-            scopes = state.scopes,
-            labels = state.scopeLabels,
-            dark = dark,
-            suggest = viewModel::suggestScopes,
-            onAdd = { scope ->
-                val next = state.scopes + scope
-                viewModel.setScopes(next)
-                // 加完就切过去：刚选中的圈层多半就是现在想看的
-                viewModel.selectScope(scope)
-            },
-            onRemove = { scope -> viewModel.setScopes(state.scopes - scope) },
-            onDismiss = { scopeSheetOpen = false },
-        )
     }
 
     // InAppViewer 的第二段：R-18 门判定在 [SourceWorkOpenHost] 里，过门后导航进共用详情壳

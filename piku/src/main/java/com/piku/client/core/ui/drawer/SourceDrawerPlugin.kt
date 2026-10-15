@@ -80,6 +80,9 @@ interface DrawerScope {
     /** 外壳导航：打开本源的屏蔽列表（poipiku 专属；与关注列表同走路由） */
     fun openBlockUsers(source: WorkSource)
 
+    /** 外壳导航：打开本源的圈层管理页（只有声明了圈层的源会被调到） */
+    fun openScopes(source: WorkSource)
+
     /** 外壳导航：出站打开网页——应用内没有对应页时的去向（如 pixiv 用户主页） */
     fun openExternal(url: String)
 

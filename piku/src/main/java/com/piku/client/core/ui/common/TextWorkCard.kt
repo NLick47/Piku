@@ -7,9 +7,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.progressSemantics
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -169,30 +167,7 @@ fun TextWorkCard(
         }
         if (progress != null) {
             Spacer(Modifier.height(7.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier
-                        .weight(1f)
-                        .height(3.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(if (dark) Color(0x33FFFFFF) else Color(0x1A000000))
-                        .progressSemantics(progress.fraction),
-                ) {
-                    Box(
-                        Modifier
-                            .fillMaxWidth(progress.fraction.coerceIn(0.02f, 1f))
-                            .fillMaxHeight()
-                            .background(PikuColors.accent),
-                    )
-                }
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text = progress.label,
-                    color = PikuColors.textFaint,
-                    fontSize = 9.sp,
-                    maxLines = 1,
-                )
-            }
+            CardProgressLine(progress = progress, dark = dark)
         }
     }
 }
