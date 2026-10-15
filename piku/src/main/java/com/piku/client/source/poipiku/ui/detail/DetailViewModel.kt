@@ -427,6 +427,10 @@ class DetailViewModel @Inject constructor(
         onFailed = { feedback.show(R.string.detail_translate_failed) },
     )
 
+    // 必须声明在 init 之前：init 里的收集器会被 Main.immediate 内联进构造函数，那时这些字段还没初始化
+    private val _translatedImages = mutableMapOf<Int, android.graphics.Bitmap>()
+    private var imageTranslateJob: Job? = null
+
     init {
         // “已显示”标记在展示前就写入：之前是自动隐藏完成才写，用户提前离开详情页
         // 或进程被杀（如卡死后强杀）会导致标记永远存不上，每篇详情页都重复弹（历史 bug）
@@ -827,9 +831,6 @@ class DetailViewModel @Inject constructor(
     // =====================================================================
     // 图片翻译
     // =====================================================================
-
-    private val _translatedImages = mutableMapOf<Int, android.graphics.Bitmap>()
-    private var imageTranslateJob: Job? = null
 
     /**
      * 详情页内嵌图集翻页：更新翻译按钮状态，同时记下阅读进度。
