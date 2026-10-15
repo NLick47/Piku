@@ -2,6 +2,7 @@ package com.piku.client.source.poipiku.ui.shell
 import com.piku.client.core.ui.shell.FeedKey
 import com.piku.client.core.ui.shell.FeedLoader
 import com.piku.client.core.ui.shell.FeedTab
+import com.piku.client.core.ui.shell.FetchedPage
 import com.piku.client.core.ui.shell.backfillThumbnail
 import com.piku.client.core.ui.shell.sourceId
 
@@ -47,6 +48,9 @@ class FeedLoaderTest {
         private val pageData = mutableMapOf<Int, List<Work>>()
         private val gates = mutableMapOf<Int, CompletableDeferred<Unit>>()
 
+        /** 站点自己给的"还有下一页"信号；null = 源没给（按空页判定到底） */
+        var hasNext: Boolean? = null
+
         suspend fun fetch(page: Int): Result<List<Work>> {
             pages += page
             gates[page]?.let { it.await() }
@@ -80,15 +84,17 @@ class FeedLoaderTest {
         tab: FeedTab = FeedTab.LATEST,
         loggedIn: Boolean = true,
         prefetch: Boolean = false,
+        knownTotalPages: (() -> Int?)? = null,
     ): FeedLoader<FeedKey, Work> = FeedLoader(
         key = FeedKey(tab, PoipikuCategory.ALL),
         // 行为标志（分页/要登录/时间序）来自源声明，测试不再依赖 FeedTab 的隐含语义
         feed = PoipikuContentSource.FEEDS.first { it.id == tab.sourceId },
         scope = CoroutineScope(StandardTestDispatcher(testScheduler)),
-        fetchPage = api::fetch,
+        fetchPage = { page -> api.fetch(page).map { FetchedPage(it, api.hasNext) } },
         isLoggedIn = { loggedIn },
         idOf = { it.id },
         prefetchEnabled = prefetch,
+        knownTotalPages = knownTotalPages ?: { null },
     )
 
     @Test
@@ -446,5 +452,51 @@ class FeedLoaderTest {
         advanceUntilIdle()
 
         assertNull("随机流无时间序，不应产生新增提示", loader.state.value.refreshNotice)
+    }
+
+    /** 站点自己说了没有下一页：首屏即到底，不必再多发一次空请求 */
+    @Test
+    fun sourceDeclaredLastPageEndsImmediately() = runTest {
+        val api = FakeApi().apply {
+            enqueue(listOf(work(1), work(2)))
+            hasNext = false
+        }
+        val loader = newLoader(api)
+
+        loader.refresh(countNotice = false)
+        advanceUntilIdle()
+
+        assertTrue("站点说没有下一页就该到底", loader.state.value.endReached)
+        assertEquals(listOf(1L, 2L), loader.state.value.items.map { it.id })
+
+        loader.loadMore()
+        advanceUntilIdle()
+        assertEquals("到底后不再发请求", listOf(0), api.pages)
+    }
+
+    /**
+     * 已知总页数只挡"往后翻"：翻页不再请求，刷新必须真拉第 0 页。
+     * 反过来说，刷新永远不会被这个缓存短路成空列表
+     */
+    @Test
+    fun knownTotalPagesStopsLaterPagesButNeverRefresh() = runTest {
+        val api = FakeApi().apply {
+            enqueue(listOf(work(1)), listOf(work(1), work(2)))
+        }
+        val loader = newLoader(api, knownTotalPages = { 1 })
+
+        loader.refresh(countNotice = false)
+        advanceUntilIdle()
+        assertEquals(listOf(0), api.pages)
+
+        loader.loadMore()
+        advanceUntilIdle()
+        assertTrue(loader.state.value.endReached)
+        assertEquals("越过末页的翻页不发请求", listOf(0), api.pages)
+
+        loader.refresh(countNotice = false)
+        advanceUntilIdle()
+        assertEquals("刷新永远真拉", listOf(0, 0), api.pages)
+        assertEquals(listOf(1L, 2L), loader.state.value.items.map { it.id })
     }
 }

@@ -81,7 +81,7 @@ class Ao3SearchSource @Inject constructor(
             // 外壳的页码从 0 起，AO3 从 1 起
             page = page + 1,
         ).map { (items, hasNext) ->
-            SourcePage(items = items, totalPages = if (hasNext) null else page)
+            SourcePage(items = items, hasNext = hasNext)
         }
     }
 

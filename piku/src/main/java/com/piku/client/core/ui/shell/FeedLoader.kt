@@ -43,17 +43,25 @@ internal data class FeedSnapshot<T : Any>(
 
 private const val MAX_ITEMS = 600
 
+/** 一次取页的结果：条目 + 站点给的"还有没有下一页"（null = 源没给，按空页判定到底） */
+internal data class FetchedPage<T : Any>(
+    val items: List<T>,
+    val hasNext: Boolean? = null,
+)
+
 internal class FeedLoader<K : Any, T : Any>(
     val key: K,
     private val feed: SourceFeed,
     private val scope: CoroutineScope,
-    /** 拉取指定页 */
-    private val fetchPage: suspend (page: Int) -> Result<List<T>>,
+    /** 拉取指定页；永远是真实请求（"省一次注定为空的请求"那条短路在 loadMore 里，不在取页路径上） */
+    private val fetchPage: suspend (page: Int) -> Result<FetchedPage<T>>,
     private val isLoggedIn: () -> Boolean,
     /** 条目身份，用于去重、上限裁剪与「新增 N 条」的基准比对 */
     private val idOf: (T) -> Long,
     /** 预取下一页开关；单测可关闭以便确定性编排 */
     private val prefetchEnabled: Boolean = true,
+    /** 站点已探明的总页数（null = 未知）：只用来挡住"往后翻越过末页"的空请求 */
+    private val knownTotalPages: () -> Int? = { null },
 ) {
     private val _state = MutableStateFlow(FeedSnapshot<T>())
     val state: StateFlow<FeedSnapshot<T>> = _state.asStateFlow()
@@ -62,7 +70,7 @@ internal class FeedLoader<K : Any, T : Any>(
     private var refreshJob: Job? = null
     private var loadMoreJob: Job? = null
     private var prefetchJob: Job? = null
-    private var prefetched: List<T>? = null
+    private var prefetched: FetchedPage<T>? = null
     /** 下拉刷新是否要计算“新增 N 条”提示，以及对比基准（刷新前的首条 id） */
     private var pendingNoticeRequested = false
     private var pendingNoticeBaselineId: Long? = null
@@ -84,6 +92,13 @@ internal class FeedLoader<K : Any, T : Any>(
     fun loadMore() {
         val s = _state.value
         if (s.loading || s.loadingMore || s.endReached || s.error != null || s.loadMoreError != null) return
+        // 总页数已探明：下一页注定为空，就地到底省一次请求。
+        // 只作用于"往后翻"——刷新/重试（第 0 页）必须看新内容，永远真拉
+        val known = knownTotalPages()
+        if (known != null && page + 1 >= known) {
+            _state.update { it.copy(endReached = true) }
+            return
+        }
         val next = prefetched
         if (next != null) {
             cancelPrefetch()
@@ -145,14 +160,14 @@ internal class FeedLoader<K : Any, T : Any>(
         }
         refreshJob = scope.launch {
             fetchPage(0)
-                .onSuccess { list ->
+                .onSuccess { fetched ->
                     page = 0
-                    val notice = takePendingNotice(list)
+                    val notice = takePendingNotice(fetched.items)
                     _state.update {
                         it.copy(
-                            items = capItems(list),
+                            items = capItems(fetched.items),
                             page = 0,
-                            endReached = !feed.paginated || list.isEmpty(),
+                            endReached = reachedEnd(fetched),
                             loading = false,
                             loadingMore = false,
                             error = null,
@@ -193,11 +208,11 @@ internal class FeedLoader<K : Any, T : Any>(
         val targetPage = page + 1
         loadMoreJob = scope.launch {
             fetchPage(targetPage)
-                .onSuccess { list ->
+                .onSuccess { fetched ->
                     // 中途若发生 refresh（loading 标记已被重置），丢弃过期追加结果
                     if (!_state.value.loadingMore) return@launch
                     page = targetPage
-                    appendPage(page, list)
+                    appendPage(page, fetched)
                     maybePrefetch()
                 }
                 .onFailure { error ->
@@ -209,16 +224,20 @@ internal class FeedLoader<K : Any, T : Any>(
         }
     }
 
-    private fun appendPage(newPage: Int, list: List<T>) {
+    private fun appendPage(newPage: Int, fetched: FetchedPage<T>) {
         _state.update {
             it.copy(
-                items = capItems(it.items + list),
+                items = capItems(it.items + fetched.items),
                 page = newPage,
-                endReached = list.isEmpty(),
+                endReached = reachedEnd(fetched),
                 loadingMore = false,
             )
         }
     }
+
+    /** 到底与否：站点明说没有下一页，或这一页本来就是空的（非分页流一律到底） */
+    private fun reachedEnd(fetched: FetchedPage<T>): Boolean =
+        !feed.paginated || fetched.hasNext == false || fetched.items.isEmpty()
 
     private fun cancelPrefetch() {
         prefetchJob?.cancel()
@@ -232,13 +251,15 @@ internal class FeedLoader<K : Any, T : Any>(
         if (feed.requiresLogin && !isLoggedIn()) return
         if (_state.value.endReached) return
         val nextPage = page + 1
+        val known = knownTotalPages()
+        if (known != null && nextPage >= known) return
         prefetchJob?.cancel()
         prefetchJob = scope.launch {
             fetchPage(nextPage)
-                .onSuccess { list ->
+                .onSuccess { fetched ->
                     // 期间发生过 refresh（page 已变），预取结果作废
                     if (page != nextPage - 1) return@launch
-                    prefetched = list
+                    prefetched = fetched
                 }
         }
     }

@@ -322,26 +322,22 @@ class SourceFeedViewModel @Inject constructor(
         loaders.getOrPut(key) { createLoader(key, declaration) }
 
     private fun createLoader(key: SourceKey, declaration: ContentSource): FeedLoader<SourceKey, Work> {
+        // 站点探明的总页数只喂给"往后翻"的短路（FeedLoader.knownTotalPages），
+        // 取页本身永远是真请求——刷新不看它，结构上不可能再出现"刷新把列表清空"
         var totalPages: Int? = null
         val loader = FeedLoader(
             key = key,
             feed = declaration.feed(key.feedId),
             scope = viewModelScope,
             fetchPage = { page ->
-                // 第 0 页永远真拉：刷新与重试都要看新内容，缓存只用来挡住越过分页末页的空请求。
-                // 少了这个前提，"单页结果"（AO3 圈层只有一页时总页数探明为 0）会让刷新自撞短路、
-                // 不发请求就把列表清成"暂无投稿"
-                if (page > 0 && totalPages != null && page >= totalPages!!) {
-                    Result.success(emptyList())
-                } else {
-                    declaration.page(key.feedId, key.facets, page, scopeOf(key))
-                        .onSuccess { totalPages = it.totalPages }
-                        .map { it.items }
-                }
+                declaration.page(key.feedId, key.facets, page, scopeOf(key))
+                    .onSuccess { totalPages = it.totalPages }
+                    .map { FetchedPage(items = it.items, hasNext = it.hasNext) }
             },
             isLoggedIn = { sourceAuth.isLoggedIn(key.source) },
             idOf = { it.id },
             prefetchEnabled = config.prefetchEnabled,
+            knownTotalPages = { totalPages },
         )
         loader.refresh(countNotice = false)
         return loader

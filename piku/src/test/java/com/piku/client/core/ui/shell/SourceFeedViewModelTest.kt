@@ -128,6 +128,7 @@ class SourceFeedViewModelTest {
         val requestedScopes = mutableListOf<String?>()
         var items: List<Work> = emptyList()
         var totalPages: Int? = null
+        var hasNext: Boolean? = null
         var outcome: Result<Unit> = Result.success(Unit)
         var openRoute: SourceWorkOpen = SourceWorkOpen.InAppViewer
         var viewerPages: List<String> = listOf("https://img.example/1.jpg")
@@ -140,7 +141,7 @@ class SourceFeedViewModelTest {
         ): Result<SourcePage> {
             pages.add(Triple(feedId, facets, page))
             requestedScopes.add(scope?.id)
-            return outcome.map { SourcePage(items = items, totalPages = totalPages) }
+            return outcome.map { SourcePage(items = items, hasNext = hasNext, totalPages = totalPages) }
         }
 
         override fun open(work: Work): SourceWorkOpen = openRoute
@@ -330,6 +331,24 @@ class SourceFeedViewModelTest {
         assertFalse(s.endReached)
         // 首屏 1 次 + 刷新 1 次：刷新确实发了请求
         assertEquals(2, fake.pages.size)
+    }
+
+    /** 站点自己说了没有下一页（AO3 的 rel="next" 缺失）：首屏即到底，不必再多发一次空请求 */
+    @Test
+    fun sourceDeclaredLastPageEndsImmediately() {
+        val fake = FakeSource().apply {
+            items = listOf(work(1), work(2))
+            hasNext = false
+        }
+        val vm = build(fake)
+
+        assertTrue("站点说没有下一页就该到底", vm.ui.value.endReached)
+        assertEquals(listOf(1L, 2L), vm.ui.value.items.map { it.id })
+
+        vm.loadMore()
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("到底后不再发请求", 1, fake.pages.size)
     }
 
     @Test

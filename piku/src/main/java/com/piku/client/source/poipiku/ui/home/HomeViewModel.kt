@@ -43,6 +43,7 @@ import com.piku.client.core.translation.TranslationRepository
 import com.piku.client.core.ui.common.toFeedErrorRes
 import com.piku.client.core.ui.drawer.SourceDrawerPlugin
 import com.piku.client.core.ui.drawer.SourceDrawerRegistry
+import com.piku.client.core.ui.shell.FetchedPage
 import com.piku.client.core.ui.shell.FeedKey
 import com.piku.client.core.ui.shell.FeedLoader
 import com.piku.client.core.ui.shell.FeedSnapshot
@@ -695,14 +696,14 @@ class HomeViewModel @Inject constructor(
         return loader
     }
 
-    private suspend fun fetchPageFor(key: FeedKey, page: Int): Result<List<Work>> =
+    private suspend fun fetchPageFor(key: FeedKey, page: Int): Result<FetchedPage<Work>> =
         sourceRegistry.byId(WorkSource.POIPIKU)
             .page(
                 feedId = key.tab.sourceId,
                 facets = mapOf(PoipikuContentSource.FACET_CATEGORY to key.category.cd.toString()),
                 page = page,
             )
-            .map { result -> result.items }
+            .map { result -> FetchedPage(items = result.items, hasNext = result.hasNext) }
 
     /**
      * 把当前 loader 的快照合并进对外 UI 状态（错误在此处映射成文案资源）。

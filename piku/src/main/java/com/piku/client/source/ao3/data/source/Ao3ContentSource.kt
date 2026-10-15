@@ -76,8 +76,8 @@ class Ao3ContentSource @Inject constructor(
             extra = Ao3ScopeParams.of(scope) + Ao3FacetParams.of(facets),
         )
             .map { (items, hasNext) ->
-                // 末页靠有无 rel="next" 判定：AO3 的 page 从 1 起、不给总数
-                SourcePage(items = items, totalPages = if (hasNext) null else page)
+                // 到底与否由站点自己的 rel="next" 说了算：不再把页号塞进 totalPages（那是展示字段）
+                SourcePage(items = items, hasNext = hasNext)
             }
     }
 

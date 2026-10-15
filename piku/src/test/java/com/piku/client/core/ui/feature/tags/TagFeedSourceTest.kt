@@ -72,9 +72,9 @@ class TagFeedSourceTest {
         assertEquals("有插件的源不该碰 poipiku 链路", 0, fallbackCalls)
     }
 
-    /** 没注册检索插件的源维持原样：回退到 poipiku，不误用别的源的插件 */
+    /** poipiku 是唯一允许落到内置链路的源（它的检索还没抽成插件） */
     @Test
-    fun sourceWithoutPluginFallsBackToPoipiku() = runBlocking {
+    fun unregisteredPoipikuFallsBackToBuiltInChain() = runBlocking {
         val search = FakeSearch(WorkSource.AO3)
         val fallbackCalls = mutableListOf<Pair<String, Int>>()
         val feed = build(search) { tag, page -> fallbackCalls += tag to page }
@@ -83,5 +83,19 @@ class TagFeedSourceTest {
 
         assertEquals(listOf("百合" to 0), fallbackCalls)
         assertTrue("不该去问别的源的插件", search.tagCalls.isEmpty())
+    }
+
+    /** 未登记的源（新源忘了注册插件）：明确"没有内容"，绝不静默拿 poipiku 的作品顶替 */
+    @Test
+    fun unregisteredSourceRefusesInsteadOfBorrowingPoipikuData() = runBlocking {
+        val search = FakeSearch(WorkSource.PIXIV)
+        var fallbackCalls = 0
+        val feed = build(search) { _, _ -> fallbackCalls++ }
+
+        val result = feed.works(WorkSource.AO3, tag = "Fluff", page = 0)
+
+        assertTrue("未登记的源必须失败", result.isFailure)
+        assertEquals("不该碰内置链路", 0, fallbackCalls)
+        assertTrue("也不该去问别的源的插件", search.tagCalls.isEmpty())
     }
 }
