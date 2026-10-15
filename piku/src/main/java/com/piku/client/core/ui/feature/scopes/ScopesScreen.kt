@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -32,6 +33,7 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -70,6 +72,9 @@ import com.piku.client.core.ui.theme.HomeBgTopLight
 import com.piku.client.core.ui.theme.LocalDarkTheme
 import com.piku.client.core.ui.theme.PikuColors
 
+/** 搜索条高度：整条都是输入区，点哪都能进输入 */
+private val SEARCH_PILL_HEIGHT = 42.dp
+
 @Composable
 fun ScopesScreen(
     onBack: () -> Unit,
@@ -96,6 +101,7 @@ fun ScopesScreen(
             )
             ScopeSearchPill(
                 query = state.query,
+                kindLabel = kindLabel(state),
                 dark = dark,
                 onQueryChange = viewModel::setQuery,
                 onClear = viewModel::clearQuery,
@@ -115,18 +121,22 @@ fun ScopesScreen(
                     onRetry = viewModel::retry,
                 )
 
-                state.scopes.isEmpty() -> EmptyScopes()
-
-                else -> SubscribedList(
+                else -> ManageContent(
                     state = state,
                     dark = dark,
                     onPick = viewModel::setActive,
                     onRemove = viewModel::remove,
+                    onAdd = viewModel::add,
                 )
             }
         }
     }
 }
+
+/** 当前维度的显示名；维度还没加载出来时给空串，占位退化成"搜索" */
+@Composable
+private fun kindLabel(state: ScopesUiState): String =
+    state.kinds.firstOrNull { it.id == state.kind }?.let { stringResource(it.labelRes) }.orEmpty()
 
 @Composable
 private fun ScopesTopBar(
@@ -168,6 +178,8 @@ private fun ScopesTopBar(
 @Composable
 private fun ScopeSearchPill(
     query: String,
+    /** 当前维度名，占位文案按它走：搜的到底是同人还是配对/标签，一眼看出来 */
+    kindLabel: String,
     dark: Boolean,
     onQueryChange: (String) -> Unit,
     onClear: () -> Unit,
@@ -175,61 +187,69 @@ private fun ScopeSearchPill(
     val shape = RoundedCornerShape(14.dp)
     val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp)
             .clip(shape)
-            .background(if (dark) Color(0x14FFFFFF) else PikuColors.surfaceMuted)
-            // 点空白处也聚焦输入框，而不是毫无反应
-            .clickable { focusRequester.requestFocus() }
-            .padding(horizontal = 12.dp, vertical = 11.dp),
+            .background(if (dark) Color(0x14FFFFFF) else PikuColors.surfaceMuted),
     ) {
-        Icon(
-            imageVector = Icons.Outlined.Search,
-            contentDescription = null,
-            tint = PikuColors.textFaint,
-            modifier = Modifier.size(16.dp),
+        // 输入框铺满整条：点图标、边距任何一处都能进输入，占位文字与光标也在同一条基线上
+        BasicTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            singleLine = true,
+            textStyle = TextStyle(fontSize = 14.sp, color = PikuColors.textPrimary),
+            cursorBrush = SolidColor(PikuColors.accent),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(SEARCH_PILL_HEIGHT)
+                .focusRequester(focusRequester),
+            decorationBox = { innerTextField ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(start = 12.dp, end = 6.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Search,
+                        contentDescription = null,
+                        tint = PikuColors.textFaint,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                        if (query.isEmpty()) {
+                            Text(
+                                text = stringResource(R.string.ao3_scope_search_kind, kindLabel),
+                                color = PikuColors.textFaint,
+                                fontSize = 14.sp,
+                            )
+                        }
+                        innerTextField()
+                    }
+                    if (query.isNotEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .size(30.dp)
+                                .clip(CircleShape)
+                                .clickable(onClick = onClear),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Close,
+                                contentDescription = stringResource(R.string.collection_search_clear),
+                                tint = PikuColors.textFaint,
+                                modifier = Modifier.size(15.dp),
+                            )
+                        }
+                    }
+                }
+            },
         )
-        Spacer(Modifier.width(8.dp))
-        Box(Modifier.weight(1f)) {
-            if (query.isEmpty()) {
-                Text(
-                    text = stringResource(R.string.ao3_scope_search_hint),
-                    color = PikuColors.textFaint,
-                    fontSize = 14.sp,
-                )
-            }
-            BasicTextField(
-                value = query,
-                onValueChange = onQueryChange,
-                singleLine = true,
-                textStyle = TextStyle(fontSize = 14.sp, color = PikuColors.textPrimary),
-                cursorBrush = SolidColor(PikuColors.accent),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(focusRequester),
-            )
-        }
-        if (query.isNotEmpty()) {
-            Box(
-                modifier = Modifier
-                    .size(24.dp)
-                    .clip(CircleShape)
-                    .clickable(onClick = onClear),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Close,
-                    contentDescription = stringResource(R.string.collection_search_clear),
-                    tint = PikuColors.textFaint,
-                    modifier = Modifier.size(15.dp),
-                )
-            }
-        }
     }
 }
 
@@ -261,43 +281,141 @@ private fun KindChips(
     }
 }
 
-/** 订阅管理：点一行设为当前（打勾那行），右侧 × 退订 */
+/**
+ * 管理态：我的订阅 + 当前维度的热门榜。
+ * 不输入也有东西可点——热门榜就是发现入口，换维度（同人/配对/标签）换的是这一块
+ */
 @Composable
-private fun SubscribedList(
+private fun ManageContent(
     state: ScopesUiState,
     dark: Boolean,
     onPick: (SourceScope) -> Unit,
     onRemove: (SourceScope) -> Unit,
+    onAdd: (SourceScope) -> Unit,
 ) {
+    val popular = state.popularCandidates
+    val listState = rememberLazyListState()
+    // 换维度换的是整张榜：停在上一张榜的滚动位置会看到新榜的中段
+    LaunchedEffect(state.kind) { listState.scrollToItem(0) }
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        item(key = "added-label") {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = stringResource(R.string.ao3_scope_added),
-                    color = PikuColors.textSecondary,
-                    fontSize = 12.sp,
+        if (state.scopes.isEmpty()) {
+            item(key = "empty") { EmptyHint() }
+        } else {
+            item(key = "added-label") {
+                SectionLabel(
+                    title = stringResource(R.string.ao3_scope_added),
+                    hint = stringResource(R.string.ao3_scope_row_hint),
                 )
-                Spacer(Modifier.weight(1f))
-                Text(
-                    text = stringResource(R.string.ao3_scope_row_hint),
-                    color = PikuColors.textFaint,
-                    fontSize = 11.sp,
+            }
+            items(state.scopes, key = { it.id }) { scope ->
+                SubscribedRow(
+                    scope = scope,
+                    kinds = state.kinds,
+                    active = scope.id == state.active?.id,
+                    onPick = { onPick(scope) },
+                    onRemove = { onRemove(scope) },
                 )
             }
         }
-        items(state.scopes, key = { it.id }) { scope ->
-            SubscribedRow(
-                scope = scope,
-                kinds = state.kinds,
-                active = scope.id == state.active?.id,
-                onPick = { onPick(scope) },
-                onRemove = { onRemove(scope) },
+        if (!state.canAdd) {
+            item(key = "limit-notice") {
+                Text(
+                    text = stringResource(R.string.ao3_scope_limit_reached, MAX_SCOPES),
+                    color = PikuColors.textFaint,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(vertical = 8.dp),
+                )
+            }
+        }
+        if (state.popularLoading || popular.isNotEmpty()) {
+            item(key = "popular-label") {
+                SectionLabel(
+                    title = stringResource(R.string.ao3_scope_popular, kindLabel(state)),
+                    hint = null,
+                )
+            }
+            if (state.popularLoading) {
+                item(key = "popular-loading") {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 24.dp),
+                        contentAlignment = Alignment.Center,
+                    ) { LoaderDots(dark = dark) }
+                }
+            } else {
+                items(popular, key = { it.name }) { item ->
+                    SuggestionRow(
+                        item = item,
+                        enabled = state.canAdd,
+                        onAdd = { onAdd(SourceScope(state.kind, item.name)) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** 段标题：左标题 + 右提示（提示可为空） */
+@Composable
+private fun SectionLabel(title: String, hint: String?) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(top = 6.dp),
+    ) {
+        Text(
+            text = title,
+            color = PikuColors.textSecondary,
+            fontSize = 12.sp,
+        )
+        if (hint != null) {
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = hint,
+                color = PikuColors.textFaint,
+                fontSize = 11.sp,
             )
         }
+    }
+}
+
+/** 一个圈层都没有时的引导：图标 + 一行说明，正下方就是热门榜 */
+@Composable
+private fun EmptyHint() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 10.dp, bottom = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(56.dp)
+                .clip(CircleShape)
+                .background(PikuColors.controlAccent.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.LocalOffer,
+                contentDescription = null,
+                tint = PikuColors.controlAccent,
+                modifier = Modifier.size(26.dp),
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+        Text(
+            text = stringResource(R.string.ao3_scope_hint),
+            color = PikuColors.textSecondary,
+            fontSize = 12.sp,
+            lineHeight = 18.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 24.dp),
+        )
     }
 }
 
@@ -425,7 +543,7 @@ private fun SearchResults(
                     }
                 }
                 items(state.candidates, key = { it.name }) { item ->
-                    ResultRow(
+                    SuggestionRow(
                         item = item,
                         enabled = state.canAdd,
                         onAdd = { onAdd(SourceScope(state.kind, item.name)) },
@@ -436,8 +554,9 @@ private fun SearchResults(
     }
 }
 
+/** 一条候选：整行可点即订阅，右侧作品数与加号（订阅满了置灰） */
 @Composable
-private fun ResultRow(
+private fun SuggestionRow(
     item: SourceScopeSuggestion,
     enabled: Boolean,
     onAdd: () -> Unit,
@@ -494,42 +613,3 @@ private fun RetryChip(onRetry: () -> Unit) {
     )
 }
 
-@Composable
-private fun EmptyScopes() {
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Box(
-            modifier = Modifier
-                .size(72.dp)
-                .clip(CircleShape)
-                .background(PikuColors.controlAccent.copy(alpha = 0.12f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.LocalOffer,
-                contentDescription = null,
-                tint = PikuColors.controlAccent,
-                modifier = Modifier.size(32.dp),
-            )
-        }
-        Spacer(Modifier.height(18.dp))
-        Text(
-            text = stringResource(R.string.ao3_scope_title),
-            color = PikuColors.textPrimary,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.SemiBold,
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = stringResource(R.string.ao3_scope_hint),
-            color = PikuColors.textSecondary,
-            fontSize = 13.sp,
-            lineHeight = 19.sp,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 44.dp),
-        )
-    }
-}

@@ -43,7 +43,10 @@ class ScopesViewModelTest {
         override val sourceId: WorkSource = WorkSource.AO3,
         private val results: List<SourceScopeSuggestion> = emptyList(),
         private val failing: Boolean = false,
+        /** 各维度的热门榜；没配的维度给空 */
+        private val popularByKind: Map<String, List<SourceScopeSuggestion>> = emptyMap(),
     ) : SourceScopes {
+        val popularKinds = mutableListOf<String>()
         override val kinds = listOf(
             SourceScopeKind("fandom", R.string.ao3_scope_fandom),
             SourceScopeKind("relationship", R.string.ao3_scope_relationship),
@@ -60,6 +63,11 @@ class ScopesViewModelTest {
             } else {
                 Result.success(results.filter { it.name.contains(term, ignoreCase = true) })
             }
+
+        override suspend fun popular(kind: String): Result<List<SourceScopeSuggestion>> {
+            popularKinds += kind
+            return Result.success(popularByKind[kind].orEmpty())
+        }
 
         override fun setScopes(scopes: List<SourceScope>) {
             _scopes.value = scopes.distinctBy { it.id }
@@ -181,5 +189,71 @@ class ScopesViewModelTest {
         assertTrue(vm.uiState.value.kinds.isEmpty())
         assertTrue(vm.uiState.value.scopes.isEmpty())
         assertNull(vm.uiState.value.active)
+    }
+
+    /** 热门榜是空查询时的发现入口，进页面就该有；维度是它的入参 */
+    @Test
+    fun popularListLoadsForTheCurrentKindOnOpen() = runTest(dispatcher) {
+        val fake = FakeScopes(
+            popularByKind = mapOf(
+                "fandom" to listOf(SourceScopeSuggestion(hp.name, count = 100)),
+                "relationship" to listOf(SourceScopeSuggestion("Draco Malfoy/Harry Potter", count = 50)),
+            ),
+        )
+        val vm = build(fake)
+        advanceUntilIdle()
+
+        assertEquals(listOf(hp.name), vm.uiState.value.popular.map { it.name })
+        assertEquals(listOf("fandom"), fake.popularKinds)
+    }
+
+    /** 换维度换的是热门榜——chips 点了要看得见效果 */
+    @Test
+    fun switchingKindReloadsThePopularList() = runTest(dispatcher) {
+        val fake = FakeScopes(
+            popularByKind = mapOf(
+                "fandom" to listOf(SourceScopeSuggestion(hp.name, count = 100)),
+                "relationship" to listOf(SourceScopeSuggestion("Draco Malfoy/Harry Potter", count = 50)),
+            ),
+        )
+        val vm = build(fake)
+        advanceUntilIdle()
+
+        vm.selectKind("relationship")
+        advanceUntilIdle()
+
+        assertEquals(listOf("Draco Malfoy/Harry Potter"), vm.uiState.value.popular.map { it.name })
+        assertEquals(listOf("fandom", "relationship"), fake.popularKinds)
+    }
+
+    /** 订过的从热门榜上消失，退订又回来（与联想同一套实时过滤） */
+    @Test
+    fun popularHidesSubscribedScopes() = runTest(dispatcher) {
+        val fake = FakeScopes(
+            popularByKind = mapOf(
+                "fandom" to listOf(SourceScopeSuggestion(hp.name, count = 100)),
+            ),
+        )
+        val vm = build(fake)
+        advanceUntilIdle()
+        assertEquals(1, vm.uiState.value.popularCandidates.size)
+
+        vm.add(hp)
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.popularCandidates.isEmpty())
+
+        vm.remove(hp)
+        advanceUntilIdle()
+        assertEquals(1, vm.uiState.value.popularCandidates.size)
+    }
+
+    /** 站点不给热门榜的维度：这一块整段不出现，不留一个空标题 */
+    @Test
+    fun kindWithoutPopularListStaysEmpty() = runTest(dispatcher) {
+        val vm = build(FakeScopes())
+        advanceUntilIdle()
+
+        assertTrue(vm.uiState.value.popularCandidates.isEmpty())
+        assertFalse(vm.uiState.value.popularLoading)
     }
 }

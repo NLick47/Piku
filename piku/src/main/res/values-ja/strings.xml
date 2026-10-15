@@ -798,7 +798,8 @@
     <string name="ao3_complete_no">連載中</string>
     <string name="ao3_scope_title">マイ同人</string>
     <string name="ao3_scope_hint">同人・カップリング・タグを選ぶ</string>
-    <string name="ao3_scope_search_hint">同人・タグを検索</string>
+    <string name="ao3_scope_search_kind">%1$sを検索</string>
+    <string name="ao3_scope_popular">人気の%1$s</string>
     <string name="ao3_scope_fandom">同人</string>
     <string name="ao3_scope_relationship">カップリング</string>
     <string name="ao3_scope_freeform">タグ</string>

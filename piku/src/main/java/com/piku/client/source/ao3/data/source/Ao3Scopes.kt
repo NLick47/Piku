@@ -46,6 +46,14 @@ class Ao3Scopes @Inject constructor(
             .map { found -> found.map { SourceScopeSuggestion(it.name, it.count) } }
     }
 
+    /** 空名 + 该维度的类型 = 站点按使用量排的榜：同人是作品出处、配对是 A/B、标签是题材 */
+    override suspend fun popular(kind: String): Result<List<SourceScopeSuggestion>> {
+        val type = Ao3ScopeParams.tagTypeOf(kind)
+        if (type.isEmpty()) return Result.success(emptyList())
+        return repository.tagSuggestions(name = null, type = type)
+            .map { found -> found.take(POPULAR_LIMIT).map { SourceScopeSuggestion(it.name, it.count) } }
+    }
+
     override fun setScopes(scopes: List<SourceScope>) = store.setScopes(scopes)
 
     override fun setActive(scope: SourceScope) = store.setActive(scope)
@@ -54,6 +62,9 @@ class Ao3Scopes @Inject constructor(
         const val KIND_FANDOM = "fandom"
         const val KIND_RELATIONSHIP = "relationship"
         const val KIND_FREEFORM = "freeform"
+
+        /** 站点一页 50 条热门，这一页只摆够翻两屏的量 */
+        const val POPULAR_LIMIT = 20
     }
 }
 

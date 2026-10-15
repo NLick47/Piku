@@ -798,7 +798,8 @@
     <string name="ao3_complete_no">In progress</string>
     <string name="ao3_scope_title">My fandoms</string>
     <string name="ao3_scope_hint">Pick fandoms, ships or tags</string>
-    <string name="ao3_scope_search_hint">Search fandoms or tags</string>
+    <string name="ao3_scope_search_kind">Search %1$s</string>
+    <string name="ao3_scope_popular">Popular %1$s</string>
     <string name="ao3_scope_fandom">Fandom</string>
     <string name="ao3_scope_relationship">Ship</string>
     <string name="ao3_scope_freeform">Tag</string>

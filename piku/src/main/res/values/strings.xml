@@ -796,7 +796,8 @@
     <string name="ao3_complete_no">连载中</string>
     <string name="ao3_scope_title">我的圈层</string>
     <string name="ao3_scope_hint">选你追的同人、配对或标签</string>
-    <string name="ao3_scope_search_hint">搜索同人或标签</string>
+    <string name="ao3_scope_search_kind">搜索%1$s</string>
+    <string name="ao3_scope_popular">热门%1$s</string>
     <string name="ao3_scope_fandom">同人</string>
     <string name="ao3_scope_relationship">配对</string>
     <string name="ao3_scope_freeform">标签</string>

@@ -26,7 +26,7 @@ const val ARG_SCOPE_SOURCE = "source"
 
 data class ScopesUiState(
     val kinds: List<SourceScopeKind> = emptyList(),
-    /** 当前查的维度（同人/配对/标签），决定联想打哪一类 */
+    /** 当前查的维度（同人/配对/标签），决定联想与热门榜打哪一类 */
     val kind: String = "",
     val scopes: List<SourceScope> = emptyList(),
     val active: SourceScope? = null,
@@ -35,15 +35,25 @@ data class ScopesUiState(
     val searching: Boolean = false,
     val searched: Boolean = false,
     val failed: Boolean = false,
+    /** 当前维度的热门榜：空查询时的发现入口，不输入也能直接订 */
+    val popular: List<SourceScopeSuggestion> = emptyList(),
+    val popularLoading: Boolean = false,
 ) {
-    /** 输入了才把整页让给结果；空查询时这页是"我的订阅" */
+    /** 输入了才把整页让给结果；空查询时这页是"我的订阅 + 热门榜" */
     val searchMode: Boolean get() = query.isNotBlank()
 
     /** 已订阅的不进结果，且实时滤：点过一条它立刻消失 */
     val candidates: List<SourceScopeSuggestion>
-        get() = results.filterNot { item -> scopes.any { it.kind == kind && it.name == item.name } }
+        get() = results.filterNot(::subscribed)
+
+    /** 热门榜同理滤掉已订阅的：订过的从榜上消失，退订又回来 */
+    val popularCandidates: List<SourceScopeSuggestion>
+        get() = popular.filterNot(::subscribed)
 
     val canAdd: Boolean get() = canAddScope(scopes, MAX_SCOPES)
+
+    private fun subscribed(item: SourceScopeSuggestion): Boolean =
+        scopes.any { it.kind == kind && it.name == item.name }
 }
 
 /**
@@ -68,6 +78,7 @@ class ScopesViewModel @Inject constructor(
     val uiState: StateFlow<ScopesUiState> = _uiState.asStateFlow()
 
     private var searchJob: Job? = null
+    private var popularJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -76,11 +87,13 @@ class ScopesViewModel @Inject constructor(
         viewModelScope.launch {
             store?.active?.collect { current -> _uiState.update { it.copy(active = current) } }
         }
+        loadPopular()
     }
 
     fun selectKind(kind: String) {
         if (_uiState.value.kind == kind) return
         _uiState.update { it.copy(kind = kind) }
+        loadPopular()
         search(_uiState.value.query)
     }
 
@@ -99,6 +112,19 @@ class ScopesViewModel @Inject constructor(
 
     /** 搜索失败后的重试：把同一次查询再跑一遍 */
     fun retry() = search(_uiState.value.query)
+
+    /** 热门榜随维度走：换维度先清空再拉，免得旧维度的榜挂在新维度标题下面 */
+    private fun loadPopular() {
+        val store = store ?: return
+        val kind = _uiState.value.kind
+        popularJob?.cancel()
+        _uiState.update { it.copy(popular = emptyList(), popularLoading = true) }
+        popularJob = viewModelScope.launch {
+            store.popular(kind)
+                .onSuccess { found -> _uiState.update { it.copy(popular = found, popularLoading = false) } }
+                .onFailure { _uiState.update { it.copy(popular = emptyList(), popularLoading = false) } }
+        }
+    }
 
     /** 添加。首次订阅时顺手设为当前，用户回去不用再点一次 */
     fun add(scope: SourceScope) {

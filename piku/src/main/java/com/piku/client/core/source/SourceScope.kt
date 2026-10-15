@@ -53,6 +53,12 @@ interface SourceScopes {
     /** 联想：按维度找圈层名（AO3 走站点的标签搜索，客户端不维护名单） */
     suspend fun suggest(kind: String, term: String): Result<List<SourceScopeSuggestion>>
 
+    /**
+     * 该维度的热门榜：空查询时的发现入口。站点给不出或没实现就给空，外壳据此隐藏这一块
+     */
+    suspend fun popular(kind: String): Result<List<SourceScopeSuggestion>> =
+        Result.success(emptyList())
+
     /** 已订阅的圈层（落盘）；顺序即 chips 顺序 */
     val scopes: StateFlow<List<SourceScope>>
 
