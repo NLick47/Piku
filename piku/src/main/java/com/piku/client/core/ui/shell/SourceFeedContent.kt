@@ -215,9 +215,13 @@ internal fun SourceFeedContent(
     // 首屏可见（改设定先看得见），下滑阅读时收起让位，任意上滑即滑回——
     // 改排序/筛选几乎总发生在往回翻的时候，控件在用户打算操作的那一刻出现。
     val compact = state.compactControls
+    val chipGroups = currentFacets.filter { it.style == SourceFacetStyle.Chips }
+    val collapsibleControls = compact || chipGroups.isNotEmpty()
     var summaryVisible by remember { mutableStateOf(true) }
-    if (compact) {
-        LaunchedEffect(gridState) {
+    if (collapsibleControls) {
+        // 键带上控件组成：换流/换筛选后这一行重新出现时必须先摆回可见（此时列表已归零）
+        LaunchedEffect(gridState, collapsibleControls) {
+            summaryVisible = true
             var lastFirstIndex = 0
             var lastFirstOffset = 0
             var downRun = 0
@@ -335,13 +339,20 @@ internal fun SourceFeedContent(
             }
         }
 
-        // 维度行：剩下的片选不进 tab 行（tab 多了会挤掉它），只随所属流出现
-        if (!compact) {
-            FacetRow(
-                groups = currentFacets,
-                choices = state.facetChoices,
-                onSelect = viewModel::selectFacet,
-            )
+        // 维度行：剩下的片选不进 tab 行（tab 多了会挤掉它），只随所属流出现；
+        // 带片选的流（pixiv 榜单/关注）这一行下滑时收起，任意上滑滑回
+        if (!compact && chipGroups.isNotEmpty()) {
+            AnimatedVisibility(
+                visible = summaryVisible,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut(),
+            ) {
+                FacetRow(
+                    groups = currentFacets,
+                    choices = state.facetChoices,
+                    onSelect = viewModel::selectFacet,
+                )
+            }
         }
 
         Box(Modifier.fillMaxSize()) {
