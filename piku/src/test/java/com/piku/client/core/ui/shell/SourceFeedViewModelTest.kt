@@ -192,6 +192,11 @@ class SourceFeedViewModelTest {
         override fun setActive(scope: SourceScope) {
             _active.value = scope
         }
+
+        /** 真实 store 的两步写入：先落列表，激活项随后才写（中间态会短暂不一致） */
+        fun publishScopesOnly(scopes: List<SourceScope>) {
+            _scopes.value = scopes.distinctBy { it.id }
+        }
     }
 
     @Test
@@ -673,6 +678,26 @@ class SourceFeedViewModelTest {
         val state = vm.ui.value
         assertFalse("有圈层后不再引导", state.needsScopeSetup)
         assertEquals(hp, state.activeScope)
+        assertEquals(listOf(hp.id), fake.requestedScopes)
+    }
+
+    /**
+     * 订阅第一个圈层时真实 store 是两步写入（列表先、激活项后）：中间态那对不一致，
+     * 不得用它拼键先拉一次未收窄的内容（模拟器实测到的多余请求）
+     */
+    @Test
+    fun subscribingAScopeWaitsForConsistentSnapshot() {
+        val fake = FakeSource().apply { items = listOf(work(1)) }
+        val scopes = FakeScopes()
+        val vm = build(fake, scopes = scopes)
+
+        val hp = SourceScope("fandom", "Harry Potter - J. K. Rowling")
+        scopes.publishScopesOnly(listOf(hp))
+        dispatcher.scheduler.advanceUntilIdle()
+        assertTrue("列表已到但激活项还没落定：不该发请求", fake.pages.isEmpty())
+
+        scopes.setActive(hp)
+        dispatcher.scheduler.advanceUntilIdle()
         assertEquals(listOf(hp.id), fake.requestedScopes)
     }
 

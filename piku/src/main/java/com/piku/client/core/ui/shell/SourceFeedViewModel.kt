@@ -265,10 +265,14 @@ class SourceFeedViewModel @Inject constructor(
         val facets = declaration.sanitizeFacetChoices(feedId, facetsByFeed[FeedKey(source, feedId)])
         facetsByFeed[FeedKey(source, feedId)] = facets
         val store = scopeRegistry.byId(source)
+        // 圈层列表与激活项必须来自同一份快照：订阅/增删的中间态（列表已到、激活项还没落定）
+        // 会给出不匹配的一对，用它拼键就会先用未收窄的键拉一次内容。等下一次一致的发射
+        val scopes = store?.scopes?.value.orEmpty()
         val active = store?.active?.value
+        if (store != null && scopes.isNotEmpty() && scopes.none { it.id == active?.id }) return
         val key = SourceKey(source, feedId, facets, scopeId = active?.id)
         // 圈层式首页但还没订阅：不发请求，UI 出"选圈层"的引导
-        if (store != null && store.kinds.isNotEmpty() && store.scopes.value.isEmpty()) {
+        if (store != null && store.kinds.isNotEmpty() && scopes.isEmpty()) {
             currentKey = key
             currentCollectJob?.cancel()
             currentCollectJob = null
