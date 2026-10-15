@@ -2,6 +2,7 @@ package com.piku.client.core.data
 
 import com.piku.client.core.storage.db.FavoriteEntity
 import com.piku.client.core.model.Work
+import com.piku.client.core.model.WorkKind
 import com.piku.client.core.model.WorkSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -68,5 +69,16 @@ class FavoriteRowForTest {
         assertEquals(9_999L, row.addedAt)
         assertEquals("123", row.workId)
         assertFalse(row.cloudSynced)
+    }
+
+    @Test
+    fun membershipKeyMatchesFavoriteRowForNovels() {
+        val novel = work.copy(id = 123L, kind = WorkKind.NOVEL)
+
+        val row = favoriteRowFor(novel, existing = null)
+        val membership = favoriteMembershipFor(novel, folderId = 1L, addedAt = 0L)
+
+        assertEquals("n123", row.workId)
+        assertEquals("归属行的键与收藏行不是同一个", row.workId, membership.workId)
     }
 }

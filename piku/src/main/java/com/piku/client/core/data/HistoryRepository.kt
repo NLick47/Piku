@@ -10,6 +10,7 @@ import com.piku.client.core.model.HistoryTimeRange
 import com.piku.client.core.model.Work
 import com.piku.client.core.model.WorkKey
 import com.piku.client.core.model.WorkSource
+import com.piku.client.core.model.key
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
@@ -39,7 +40,7 @@ class HistoryRepository @Inject constructor(
     }
 
     suspend fun remove(work: Work) {
-        historyDao.deleteByWorkId(work.source, work.id.toString())
+        historyDao.deleteByWorkId(work.source, work.key.workId)
     }
 
     suspend fun remove(key: WorkKey) {

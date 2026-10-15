@@ -194,10 +194,11 @@ class FavoriteRepository @Inject constructor(
 
     suspend fun toggleFavorite(work: Work): Boolean {
         val defaultFolderId = ensureDefaultFolder()
+        val workId = work.key.workId
         // 判定与写入必须在同一个事务里：否则两次快速点击会各自读到旧状态，双双走同一条分支
         val added = database.withTransaction {
-            if (defaultFolderId in favoriteFolderDao.folderIdsForWork(work.source, work.id.toString())) {
-                removeFromFolder(work.source, work.id.toString(), defaultFolderId)
+            if (defaultFolderId in favoriteFolderDao.folderIdsForWork(work.source, workId)) {
+                removeFromFolder(work.source, workId, defaultFolderId)
                 false
             } else {
                 addToFolder(work, defaultFolderId)
@@ -210,8 +211,9 @@ class FavoriteRepository @Inject constructor(
 
     suspend fun ensureFavorite(work: Work): Boolean {
         val defaultFolderId = ensureDefaultFolder()
+        val workId = work.key.workId
         val added = database.withTransaction {
-            if (defaultFolderId in favoriteFolderDao.folderIdsForWork(work.source, work.id.toString())) {
+            if (defaultFolderId in favoriteFolderDao.folderIdsForWork(work.source, workId)) {
                 false
             } else {
                 addToFolder(work, defaultFolderId)
@@ -223,9 +225,10 @@ class FavoriteRepository @Inject constructor(
     }
 
     suspend fun toggleFolder(work: Work, folderId: Long) {
+        val workId = work.key.workId
         database.withTransaction {
-            if (folderId in favoriteFolderDao.folderIdsForWork(work.source, work.id.toString())) {
-                removeFromFolder(work.source, work.id.toString(), folderId)
+            if (folderId in favoriteFolderDao.folderIdsForWork(work.source, workId)) {
+                removeFromFolder(work.source, workId, folderId)
             } else {
                 addToFolder(work, folderId)
             }
@@ -283,16 +286,9 @@ class FavoriteRepository @Inject constructor(
     }
 
     private suspend fun addToFolder(work: Work, folderId: Long) {
-        val existing = favoriteDao.favoriteById(work.source, work.id.toString())
+        val existing = favoriteDao.favoriteById(work.source, work.key.workId)
         favoriteDao.upsert(favoriteRowFor(work, existing))
-        favoriteFolderDao.upsertMembership(
-            FavoriteMembershipEntity(
-                folderId = folderId,
-                source = work.source,
-                workId = work.id.toString(),
-                addedAt = System.currentTimeMillis(),
-            ),
-        )
+        favoriteFolderDao.upsertMembership(favoriteMembershipFor(work, folderId, System.currentTimeMillis()))
     }
 
     private suspend fun removeFromFolder(source: WorkSource, workId: String, folderId: Long) {
@@ -326,12 +322,7 @@ class FavoriteRepository @Inject constructor(
             for ((index, work) in targets.withIndex()) {
                 favoriteDao.upsert(favoriteRowFor(work, existingFavorites[work.key], now + index))
                 // 同一批内 addedAt 递增，保证批量添加后夹内顺序稳定（列表按 addedAt 倒序）
-                val membership = FavoriteMembershipEntity(
-                    folderId = folderId,
-                    source = work.source,
-                    workId = work.id.toString(),
-                    addedAt = now + index,
-                )
+                val membership = favoriteMembershipFor(work, folderId, now + index)
                 favoriteFolderDao.upsertMembership(membership)
                 added += membership
             }
@@ -456,12 +447,7 @@ class FavoriteRepository @Inject constructor(
             val now = System.currentTimeMillis()
             val inserted = mutableListOf<FavoriteMembershipEntity>()
             for ((index, work) in works.filterNot { it.key in alreadyInTarget }.withIndex()) {
-                val membership = FavoriteMembershipEntity(
-                    folderId = toFolderId,
-                    source = work.source,
-                    workId = work.id.toString(),
-                    addedAt = now + index,
-                )
+                val membership = favoriteMembershipFor(work, toFolderId, now + index)
                 favoriteFolderDao.upsertMembership(membership)
                 inserted += membership
             }
@@ -604,3 +590,18 @@ internal fun favoriteRowFor(
         cloudSynced = existing.cloudSynced,
     )
 }
+
+/**
+ * 归属行。键必须与 [favoriteRowFor] 写的收藏行完全相同——归属表对收藏行有 (source, workId)
+ * 复合外键，小说作品的键带 WorkKind 前缀（`n123`），写成 `123` 会 FOREIGN KEY constraint failed。
+ */
+internal fun favoriteMembershipFor(
+    work: Work,
+    folderId: Long,
+    addedAt: Long,
+): FavoriteMembershipEntity = FavoriteMembershipEntity(
+    folderId = folderId,
+    source = work.source,
+    workId = work.key.workId,
+    addedAt = addedAt,
+)
