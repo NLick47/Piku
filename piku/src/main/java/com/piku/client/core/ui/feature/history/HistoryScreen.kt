@@ -81,6 +81,7 @@ import com.piku.client.core.model.HistoryItem
 import com.piku.client.core.model.HistoryTimeRange
 import com.piku.client.core.model.key
 import com.piku.client.core.model.Work
+import com.piku.client.core.model.WorkKind
 import com.piku.client.core.ui.shell.SourceOpenViewModel
 import com.piku.client.core.ui.shell.SourceWorkOpenHost
 import com.piku.client.core.model.WorkKey
@@ -92,6 +93,7 @@ import com.piku.client.core.ui.common.PikuBottomSheet
 import com.piku.client.core.ui.common.PikuSegmented
 import com.piku.client.core.ui.common.PikuSheetSubtitle
 import com.piku.client.core.ui.common.PikuSheetTitle
+import com.piku.client.core.ui.common.TextWorkCard
 import com.piku.client.core.ui.common.WorkCard
 import com.piku.client.core.ui.theme.GlassHeaderTintDark
 import com.piku.client.core.ui.theme.GlassHeaderTintLight
@@ -643,18 +645,33 @@ private fun RemovableHistoryCard(
                 if (armed) drawRect(Color.Black.copy(alpha = 0.45f))
             },
     ) {
-        WorkCard(
-            work = entry.work,
-            isFavorite = isFavorite,
-            onToggleFavorite = onToggleFavorite,
-            onClick = { if (armed) onDisarm() else onClick(it) },
-            dark = dark,
-            showSourceLabel = true,
-            onLongClick = {
-                hapticView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                onArm()
-            },
-        )
+        // 无封面小说（AO3）：网格里没有图可放，用文字卡，否则是一格灰锁占位
+        val textOnly = entry.work.kind == WorkKind.NOVEL && entry.work.thumbnailUrl.isBlank()
+        if (textOnly) {
+            TextWorkCard(
+                work = entry.work,
+                onToggleFavorite = onToggleFavorite,
+                onClick = { if (armed) onDisarm() else onClick(it) },
+                dark = dark,
+                onLongClick = {
+                    hapticView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                    onArm()
+                },
+            )
+        } else {
+            WorkCard(
+                work = entry.work,
+                isFavorite = isFavorite,
+                onToggleFavorite = onToggleFavorite,
+                onClick = { if (armed) onDisarm() else onClick(it) },
+                dark = dark,
+                showSourceLabel = true,
+                onLongClick = {
+                    hapticView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                    onArm()
+                },
+            )
+        }
         if (armed) {
             Row(
                 modifier = Modifier

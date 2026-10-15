@@ -3,6 +3,7 @@ package com.piku.client.core.source
 import androidx.annotation.StringRes
 import com.piku.client.R
 import com.piku.client.core.model.AppError
+import com.piku.client.core.model.NovelChapter
 import com.piku.client.core.model.Work
 import com.piku.client.core.model.WorkSource
 import com.piku.client.core.model.WorkStats
@@ -21,11 +22,35 @@ interface ContentSource {
     /** 第一维：流。外壳按声明顺序渲染成 tab 行 */
     val feeds: List<SourceFeed>
 
+    /** 列表页版式；纯文字源覆写成 [SourceListLayout.List] */
+    val listLayout: SourceListLayout get() = SourceListLayout.Grid
+
+    /**
+     * 打开成人作品前是否拦一道 R-18 门（跟随全局"成人内容显示"开关）。
+     * 默认拦；站点本身对访客全开放、卡片徽标已足够的源（AO3）声明 false，
+     * 否则热门列表里大半作品点不开。
+     */
+    val gatesAdultContent: Boolean get() = true
+
+    /**
+     * 排序与筛选的承载：true = 收进列表首行的一颗摘要控件（点开面板改），头部只留圈层行；
+     * false = 常驻 tab 行与维度行。排序/筛选是"设定"不是"状态"，圈层式首页不为此常驻两行。
+     */
+    val compactControls: Boolean get() = false
+
     /** 第二维：流之上的收窄（pixiv 的周期/内容类型、poipiku 的分类）。空 = 该源没有这一维 */
     val facets: List<SourceFacetGroup>
 
-    /** 取一页。[facets] 是各维度组的当前选项 id，外壳只负责透传 */
-    suspend fun page(feedId: String, facets: Map<String, String>, page: Int): Result<SourcePage>
+    /**
+     * 取一页。[facets] 是各维度组的当前选项 id，外壳只负责透传。
+     * [scope] 是圈层式首页（[SourceScopes]）当前的圈层；不声明圈层的源恒为 null。
+     */
+    suspend fun page(
+        feedId: String,
+        facets: Map<String, String>,
+        page: Int,
+        scope: SourceScope? = null,
+    ): Result<SourcePage>
 
     /** 按 id 取流声明。行为标志（分页/登录/时间序）只声明一份，引擎与 UI 都从这里拿 */
     fun feed(feedId: String): SourceFeed = feeds.first { it.id == feedId }
@@ -64,10 +89,20 @@ interface ContentSource {
      * 不跟详情一起拉。没有小说的源维持默认，调用方据此判定该作品不可读。
      */
     suspend fun novelBody(work: Work): Result<String> = Result.failure(AppError.NotFound)
+
+    /**
+     * 分章正文：源能分章时（AO3）返回每章的标题与正文，阅读器按章渲染并给章节导航；
+     * null = 本源不分章，阅读器走 [novelBody] 的单篇路径。默认 null，
+     * 已接的分章源之外零影响。
+     */
+    suspend fun novelChapters(work: Work): Result<List<NovelChapter>?> = Result.success(null)
 }
 
 /** 详情页的源补充文本 */
 data class SourceWorkText(
+    /** 标题/作者：深链进来时列表没带，详情页用它补全（列表点击时以已上屏的为准） */
+    val title: String = "",
+    val authorName: String = "",
     val description: String = "",
     val tags: List<String> = emptyList(),
     /**
@@ -75,6 +110,11 @@ data class SourceWorkText(
      * poipiku 的作品页没有这些数据，恒为 null（详情 UI 据此跳过整块）。
      */
     val stats: WorkStats? = null,
+    /**
+     * 作品状态徽标（AO3：已完结/连载中），详情页展示成一枚 chip；
+     * 0 = 该源没有这个状态，UI 不渲染。
+     */
+    @StringRes val statusRes: Int = 0,
 )
 
 data class SourceWorkPage(
@@ -153,6 +193,8 @@ data class SourceFacetGroup(
     val id: String,
     val style: SourceFacetStyle,
     val options: List<SourceFacet>,
+    /** 面板里的分组标题；null = 不显示（头部常驻的维度自带上下文，不需要标题） */
+    @StringRes val labelRes: Int? = null,
     /** 只在指定流显示（pixiv 的周期/内容只属于榜单）；null = 该源所有流共用 */
     val feedId: String? = null,
     /** 显示条件：条件组的选中项不在允许集内时整组隐藏（榜单周期 chips 只在综合族显示）；null = 恒显示 */

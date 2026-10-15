@@ -35,6 +35,14 @@ object PoipikuNetworkPolicy {
             sni = null,
             trustedSans = setOf("pximg.net", "*.pximg.net"),
         ),
+        // AO3：带 SNI 的握手在 TLS 阶段被 RST（2026-10 实测，写完 ClientHello 即 errno 10054）。
+        // 清空 SNI 后 Cloudflare 按 IP 给出 CN=archiveofourown.org、SAN 含
+        // archiveofourown.org/*.archiveofourown.org 的证书，校验无需放宽；
+        // 该空 SNI 会话上实测取回首页 200。伪装域名（www.baidu.com）反而握手失败，用不上。
+        "archiveofourown.org" to SniRule(
+            sni = null,
+            trustedSans = setOf("archiveofourown.org", "*.archiveofourown.org"),
+        ),
     )
 
     /**

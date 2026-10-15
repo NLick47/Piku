@@ -11,6 +11,7 @@ import com.piku.client.core.source.SourceFacetGroup
 import com.piku.client.core.source.SourceFacetStyle
 import com.piku.client.core.source.SourceFeed
 import com.piku.client.core.source.SourcePage
+import com.piku.client.core.source.SourceScope
 import com.piku.client.core.source.SourceWorkOpen
 import com.piku.client.core.source.SourceWorkPage
 import com.piku.client.source.poipiku.domain.usecase.LoadFeedUseCase
@@ -48,7 +49,12 @@ class PoipikuContentSource @Inject constructor(
         ),
     )
 
-    override suspend fun page(feedId: String, facets: Map<String, String>, page: Int): Result<SourcePage> {
+    override suspend fun page(
+        feedId: String,
+        facets: Map<String, String>,
+        page: Int,
+        scope: SourceScope?,
+    ): Result<SourcePage> {
         val works = when (feedId) {
             FEED_HOT -> loadPopularFeedUseCase(page)
             FEED_FOLLOW -> loadFollowFeedUseCase(page)

@@ -58,6 +58,7 @@ import com.piku.client.R
 import com.piku.client.core.model.FollowUser
 import com.piku.client.core.model.TagCard
 import com.piku.client.core.model.WorkKey
+import com.piku.client.core.source.SourceListLayout
 import com.piku.client.core.model.WorkKind
 import com.piku.client.core.model.key
 import com.piku.client.core.model.Work
@@ -68,6 +69,8 @@ import com.piku.client.core.ui.common.PikuBackButton
 import com.piku.client.core.ui.common.PikuSegmented
 import com.piku.client.core.ui.common.LoginPrompt
 import com.piku.client.core.ui.common.UserAvatar
+import com.piku.client.core.ui.common.TextWorkBlurb
+import com.piku.client.core.ui.common.TextWorkCard
 import com.piku.client.core.ui.common.WorkCard
 import com.piku.client.source.pixiv.ui.novel.NovelWorkCard
 import com.piku.client.core.ui.shell.ProportionalWorkCard
@@ -161,6 +164,7 @@ internal fun WorksTabContent(
                     onWorkClick = onWorkClick,
                     dark = dark,
                     proportional = state.proportional,
+                    singleColumn = state.listLayout == SourceListLayout.List,
                 )
             }
         }
@@ -297,6 +301,7 @@ internal fun TagsTabContent(
                             onWorkClick = onWorkClick,
                             dark = dark,
                             proportional = state.proportional,
+                    singleColumn = state.listLayout == SourceListLayout.List,
                         )
                     }
                 }
@@ -525,6 +530,8 @@ private fun SearchWorkGrid(
     onWorkClick: (Work) -> Unit,
     dark: Boolean,
     proportional: Boolean = false,
+    /** 文字源单列 blurb：整行一张，简介/标签有地方放 */
+    singleColumn: Boolean = false,
 ) {
     val gridState = rememberLazyStaggeredGridState()
     val currentEndReached by rememberUpdatedState(endReached)
@@ -546,7 +553,11 @@ private fun SearchWorkGrid(
     }
 
     LazyVerticalStaggeredGrid(
-        columns = if (isTablet) StaggeredGridCells.Adaptive(220.dp) else StaggeredGridCells.Fixed(2),
+        columns = when {
+            singleColumn -> StaggeredGridCells.Fixed(1)
+            isTablet -> StaggeredGridCells.Adaptive(220.dp)
+            else -> StaggeredGridCells.Fixed(2)
+        },
         state = gridState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
@@ -554,14 +565,30 @@ private fun SearchWorkGrid(
         verticalItemSpacing = 12.dp,
     ) {
         items(works, key = { it.key.toString() }) { work ->
-            // 小说档整个列表都是小说：竖版封面卡片，其余照旧
-            if (work.kind == WorkKind.NOVEL) {
-                NovelWorkCard(
+            if (singleColumn) {
+                TextWorkBlurb(
                     work = work,
                     onToggleFavorite = onToggleFavorite,
                     onClick = onWorkClick,
                     dark = dark,
                 )
+            } else if (work.kind == WorkKind.NOVEL) {
+                // 小说档整个列表都是小说：有封面走竖版封面卡，纯文字站（AO3）没有封面走文字卡
+                if (work.thumbnailUrl.isBlank()) {
+                    TextWorkCard(
+                        work = work,
+                        onToggleFavorite = onToggleFavorite,
+                        onClick = onWorkClick,
+                        dark = dark,
+                    )
+                } else {
+                    NovelWorkCard(
+                        work = work,
+                        onToggleFavorite = onToggleFavorite,
+                        onClick = onWorkClick,
+                        dark = dark,
+                    )
+                }
             } else if (proportional) {
                 ProportionalWorkCard(
                     work = work,

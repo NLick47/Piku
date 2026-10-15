@@ -7,8 +7,10 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
@@ -16,6 +18,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,6 +34,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
@@ -39,6 +45,11 @@ import androidx.compose.foundation.lazy.staggeredgrid.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -81,12 +92,18 @@ import com.piku.client.core.source.SourceFacetGroup
 import com.piku.client.core.source.SourceFacetStyle
 import com.piku.client.core.source.isVisibleWith
 import com.piku.client.core.source.SourceFeed
+import com.piku.client.core.source.SourceListLayout
+import com.piku.client.core.source.SourceScope
 import com.piku.client.core.source.SourceWorkOpen
 import coil3.compose.AsyncImage
 import com.piku.client.core.ui.common.FavoriteHeartBurst
 import com.piku.client.core.ui.common.EffectOnChange
 import com.piku.client.core.ui.common.LoaderDots
+import com.piku.client.core.ui.common.MenuPopup
+import com.piku.client.core.ui.common.MenuPopupItem
 import com.piku.client.core.ui.common.RankMedal
+import com.piku.client.core.ui.common.TextWorkBlurb
+import com.piku.client.core.ui.common.TextWorkCard
 import com.piku.client.core.ui.common.heroFeedThumbUrl
 import com.piku.client.core.ui.common.WorkCard
 import com.piku.client.core.ui.shell.BackToTopFab
@@ -100,6 +117,7 @@ import com.piku.client.core.ui.background.LiquidGlassBackdrop
 import com.piku.client.core.ui.shell.RefreshNoticeBar
 import com.piku.client.core.ui.shell.SearchMenuButton
 import com.piku.client.core.ui.shell.SkeletonGrid
+import com.piku.client.core.ui.sheets.SourceScopeSheet
 import com.piku.client.core.ui.background.TabBand
 import com.piku.client.core.ui.shell.ThumbnailPrefetchEffect
 import com.piku.client.core.ui.shell.UpdateBannerBar
@@ -109,6 +127,8 @@ import com.piku.client.core.ui.shell.reportTabBand
 import com.piku.client.core.ui.shell.scrollToTopSmart
 import com.piku.client.app.navigation.sharedWorkBounds
 import com.piku.client.app.navigation.workSharedKey
+import androidx.compose.material.icons.outlined.LocalOffer
+import androidx.compose.ui.text.style.TextAlign
 import com.piku.client.core.ui.theme.PikuColors
 import com.piku.client.core.ui.theme.PikuLayout
 import com.piku.client.core.ui.theme.RankGoldBorder
@@ -141,6 +161,7 @@ internal fun SourceFeedContent(
     val state by viewModel.ui.collectAsState()
     val scope = rememberCoroutineScope()
     var detailWork by remember { mutableStateOf<Work?>(null) }
+    var scopeSheetOpen by remember { mutableStateOf(false) }
 
     LaunchedEffect(gridState) {
         snapshotFlow { gridState.isScrollInProgress }.collect { isScrolling.value = it }
@@ -189,6 +210,44 @@ internal fun SourceFeedContent(
     val currentFacets = state.facets.filter {
         (it.feedId == null || it.feedId == state.feedId) && it.isVisibleWith(state.facetChoices)
     }
+    // 折叠式头部（源声明）：排序与筛选收成固定头里的一颗摘要控件。
+    // 首屏可见（改设定先看得见），下滑阅读时收起让位，任意上滑即滑回——
+    // 改排序/筛选几乎总发生在往回翻的时候，控件在用户打算操作的那一刻出现。
+    val compact = state.compactControls
+    var summaryVisible by remember { mutableStateOf(true) }
+    if (compact) {
+        LaunchedEffect(gridState) {
+            var lastFirstIndex = 0
+            var lastFirstOffset = 0
+            var downRun = 0
+            snapshotFlow {
+                val info = gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset
+                info
+            }
+                .distinctUntilChanged()
+                .collect { (index, offset) ->
+                    val scrolledDown = index > lastFirstIndex || (index == lastFirstIndex && offset > lastFirstOffset + 4)
+                    val scrolledUp = index < lastFirstIndex || (index == lastFirstIndex && offset < lastFirstOffset - 4)
+                    if (scrolledDown) {
+                        // 顶部附近不触发：一进列表就收会让首屏的改筛选变两步
+                        downRun += if (index == 0) 0 else 1
+                        if (downRun >= 3 && index > 0) summaryVisible = false
+                    } else if (scrolledUp) {
+                        downRun = 0
+                        summaryVisible = true
+                    }
+                    lastFirstIndex = index
+                    lastFirstOffset = offset
+                }
+        }
+    }
+    // 只列非默认的筛选：默认档不占摘要，摘要才有信息量
+    val activeFilters = currentFacets.mapNotNull { group ->
+        val chosen = state.facetChoices[group.id]
+        val defaultId = group.options.firstOrNull { it.selectedByDefault }?.id ?: group.options.firstOrNull()?.id
+        if (chosen == null || chosen == defaultId) null
+        else group to chosen
+    }
 
     Column(Modifier.fillMaxSize()) {
         Box(
@@ -228,32 +287,67 @@ internal fun SourceFeedContent(
                     Spacer(Modifier.weight(1f))
                     SearchMenuButton(onClick = onSearchClick, dark = dark)
                 }
-                Box(Modifier.reportTabBand(onTabBand)) {
-                    SourceTabBand(
-                        feeds = state.feeds,
-                        showFeedTabs = showFeedTabs,
-                        selectedFeedId = state.feedId,
-                        onSelectFeed = viewModel::selectFeed,
-                        tabColors = tabColors,
-                        dark = dark,
-                        dropdownFacets = currentFacets.filter { it.style == SourceFacetStyle.Dropdown },
-                        facetChoices = state.facetChoices,
-                        onSelectFacet = viewModel::selectFacet,
-                    )
+                if (compact) {
+                    // 摘要行在固定头里：高度动画收放，列表视口随之变化但不重排内容。
+                    // 空态/失败态也在这个头里，筛出空结果时用户仍能改回来，不会被困住
+                    AnimatedVisibility(
+                        visible = summaryVisible,
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut(),
+                    ) {
+                        SummaryRow(
+                            feeds = state.feeds,
+                            selectedFeedId = state.feedId,
+                            filters = activeFilters,
+                            // 圈层段：有订阅才显示折叠条；空 = 还没订阅（引导态另给入口）
+                            scopes = state.scopes,
+                            scopeLabels = state.scopeLabels,
+                            activeScope = state.activeScope,
+                            onPickScope = viewModel::selectScope,
+                            onManageScopes = { scopeSheetOpen = true },
+                            onPickSort = viewModel::selectFeed,
+                            onPickFilter = viewModel::selectFacet,
+                            onClearFilter = { groupId ->
+                                val group = currentFacets.firstOrNull { it.id == groupId } ?: return@SummaryRow
+                                val defaultId = group.options.firstOrNull { it.selectedByDefault }?.id
+                                    ?: group.options.firstOrNull()?.id
+                                if (defaultId != null) viewModel.selectFacet(group.id, defaultId)
+                            },
+                        )
+                    }
+                }
+                if (!compact) {
+                    Box(Modifier.reportTabBand(onTabBand)) {
+                        SourceTabBand(
+                            feeds = state.feeds,
+                            showFeedTabs = showFeedTabs,
+                            selectedFeedId = state.feedId,
+                            onSelectFeed = viewModel::selectFeed,
+                            tabColors = tabColors,
+                            dark = dark,
+                            dropdownFacets = currentFacets.filter { it.style == SourceFacetStyle.Dropdown },
+                            facetChoices = state.facetChoices,
+                            onSelectFacet = viewModel::selectFacet,
+                        )
+                    }
                 }
             }
         }
 
         // 维度行：剩下的片选不进 tab 行（tab 多了会挤掉它），只随所属流出现
-        FacetRow(
-            groups = currentFacets,
-            choices = state.facetChoices,
-            onSelect = viewModel::selectFacet,
-        )
+        if (!compact) {
+            FacetRow(
+                groups = currentFacets,
+                choices = state.facetChoices,
+                onSelect = viewModel::selectFacet,
+            )
+        }
 
         Box(Modifier.fillMaxSize()) {
             when {
-                // 占位流（如登录后的推荐）：明说能力未到，而不是给个空态让人以为没内容
+                // 圈层式首页还没订阅：引导去选圈层，而不是给一屏全站作品
+                state.needsScopeSetup -> ScopeSetupGuide(onAdd = { scopeSheetOpen = true })
+                // 占位流（如登录后的能力未到）：明说能力未到，而不是给个空态让人以为没内容
                 state.comingSoon -> CenteredMessage(text = stringResource(R.string.home_coming_soon))
                 state.needLogin -> CenteredMessage(
                     text = stringResource(state.loginPromptRes),
@@ -261,13 +355,16 @@ internal fun SourceFeedContent(
                     action = state.loginRoute?.let { stringResource(R.string.login_button) },
                     onAction = state.loginRoute?.let { route -> { onLoginClick(route) } },
                 )
-                state.loading && state.items.isEmpty() -> SkeletonGrid(dark = dark)
+                state.loading && state.items.isEmpty() -> SkeletonGrid(
+                    dark = dark,
+                    singleColumn = state.listLayout == SourceListLayout.List,
+                )
                 state.failed && state.items.isEmpty() -> CenteredMessage(
                     text = stringResource(R.string.home_error_network),
                     action = stringResource(R.string.common_retry),
                     onAction = viewModel::retry,
                 )
-                state.items.isEmpty() -> CenteredMessage(stringResource(R.string.home_empty))
+                state.items.isEmpty() -> CenteredMessage(text = stringResource(R.string.home_empty))
                 else -> Box(Modifier.fillMaxSize()) {
                     PullToRefreshBox(
                         isRefreshing = state.loading,
@@ -317,6 +414,24 @@ internal fun SourceFeedContent(
         }
     }
 
+    if (scopeSheetOpen) {
+        SourceScopeSheet(
+            kinds = state.scopeKinds,
+            scopes = state.scopes,
+            labels = state.scopeLabels,
+            dark = dark,
+            suggest = viewModel::suggestScopes,
+            onAdd = { scope ->
+                val next = state.scopes + scope
+                viewModel.setScopes(next)
+                // 加完就切过去：刚选中的圈层多半就是现在想看的
+                viewModel.selectScope(scope)
+            },
+            onRemove = { scope -> viewModel.setScopes(state.scopes - scope) },
+            onDismiss = { scopeSheetOpen = false },
+        )
+    }
+
     // InAppViewer 的第二段：R-18 门判定在 [SourceWorkOpenHost] 里，过门后导航进共用详情壳
     detailWork?.let { work ->
         SourceWorkOpenHost(
@@ -325,6 +440,242 @@ internal fun SourceFeedContent(
             onDismiss = { detailWork = null },
             onOpenInApp = onOpenWork,
         )
+    }
+}
+
+@Composable
+private fun SummaryRow(
+    feeds: List<SourceFeed>,
+    selectedFeedId: String,
+    filters: List<Pair<SourceFacetGroup, String>>,
+    scopes: List<SourceScope>,
+    scopeLabels: Map<String, String>,
+    activeScope: SourceScope?,
+    onPickScope: (SourceScope) -> Unit,
+    onManageScopes: () -> Unit,
+    onPickSort: (String) -> Unit,
+    onPickFilter: (groupId: String, optionId: String) -> Unit,
+    onClearFilter: (groupId: String) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = PikuLayout.ScreenInset, end = PikuLayout.ScreenInset, top = 2.dp, bottom = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (scopes.isNotEmpty()) {
+            ScopeFoldPill(
+                scopes = scopes,
+                labels = scopeLabels,
+                active = activeScope,
+                onPick = onPickScope,
+                onManage = onManageScopes,
+            )
+        }
+        Spacer(Modifier.weight(1f))
+        SortPill(
+            feeds = feeds.filter { !it.comingSoon },
+            selectedId = selectedFeedId,
+            label = feeds.firstOrNull { it.id == selectedFeedId }?.let { stringResource(it.labelRes) }.orEmpty(),
+            onPick = onPickSort,
+        )
+        filters.forEach { entry ->
+            FilterPill(
+                group = entry.first,
+                chosenId = entry.second,
+                onPick = onPickFilter,
+                onClear = onClearFilter,
+            )
+        }
+    }
+}
+
+/**
+ * 圈层折叠条：当前圈层名 + 订阅计数，点开弹出全部圈层（当前项打勾）与管理入口。
+ * 折叠条的宽度有上限——圈层名再长也不能把右侧的排序胶囊挤出屏幕。
+ */
+@Composable
+private fun ScopeFoldPill(
+    scopes: List<SourceScope>,
+    labels: Map<String, String>,
+    active: SourceScope?,
+    onPick: (SourceScope) -> Unit,
+    onManage: () -> Unit,
+) {
+    var menuOpen by remember { mutableStateOf(false) }
+    var anchorHeightPx by remember { mutableIntStateOf(0) }
+    val activeLabel = active?.let { labels[it.id] ?: it.name }.orEmpty()
+    Box(Modifier.onSizeChanged { anchorHeightPx = it.height }) {
+        Row(
+            modifier = Modifier
+                .widthIn(max = 200.dp)
+                .clip(RoundedCornerShape(999.dp))
+                .clickable { menuOpen = true }
+                .padding(horizontal = 4.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = activeLabel,
+                color = PikuColors.textPrimary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(
+                text = stringResource(R.string.ao3_scope_fold_count, scopes.size),
+                color = PikuColors.textFaint,
+                fontSize = 11.sp,
+                maxLines = 1,
+            )
+            Icon(
+                imageVector = Icons.Filled.KeyboardArrowDown,
+                contentDescription = stringResource(R.string.ao3_scope_title),
+                tint = PikuColors.textFaint,
+                modifier = Modifier.size(14.dp),
+            )
+        }
+        if (menuOpen) {
+            MenuPopup(
+                groups = listOf(
+                    scopes.map { scope ->
+                        MenuPopupItem(
+                            label = labels[scope.id] ?: scope.name,
+                            selected = scope.id == active?.id,
+                            onClick = {
+                                menuOpen = false
+                                onPick(scope)
+                            },
+                        )
+                    } + MenuPopupItem(
+                        label = stringResource(R.string.ao3_scope_manage),
+                        onClick = {
+                            menuOpen = false
+                            onManage()
+                        },
+                    ),
+                ),
+                dark = false,
+                anchorHeightPx = anchorHeightPx,
+                // 圈层名比排序项长得多（配对名尤甚）：默认 150dp 会折行，加宽到一行放得下
+                width = 240.dp,
+                onDismiss = { menuOpen = false },
+            )
+        }
+    }
+}
+
+/** 排序胶囊：点开锚定在正下方的三项菜单，当前项打勾 */
+@Composable
+private fun SortPill(
+    feeds: List<SourceFeed>,
+    selectedId: String,
+    label: String,
+    onPick: (String) -> Unit,
+) {
+    var menuOpen by remember { mutableStateOf(false) }
+    var anchorHeightPx by remember { mutableIntStateOf(0) }
+    Box(Modifier.onSizeChanged { anchorHeightPx = it.height }) {
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(999.dp))
+                .background(PikuColors.surfaceMuted)
+                .clickable { menuOpen = true }
+                .padding(horizontal = 11.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = label,
+                color = PikuColors.textPrimary,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+            )
+            Spacer(Modifier.width(3.dp))
+            Icon(
+                imageVector = Icons.Filled.KeyboardArrowDown,
+                contentDescription = stringResource(R.string.source_view_sort),
+                tint = PikuColors.textFaint,
+                modifier = Modifier.size(14.dp),
+            )
+        }
+        if (menuOpen) {
+            MenuPopup(
+                groups = listOf(
+                    feeds.map { feed ->
+                        MenuPopupItem(
+                            label = stringResource(feed.labelRes),
+                            selected = feed.id == selectedId,
+                            onClick = {
+                                menuOpen = false
+                                onPick(feed.id)
+                            },
+                        )
+                    },
+                ),
+                dark = false,
+                anchorHeightPx = anchorHeightPx,
+                onDismiss = { menuOpen = false },
+            )
+        }
+    }
+}
+
+/** 筛选生效中才出现的胶囊：描边（临时意图，地位低于排序），✕ 原地清除不进菜单 */
+@Composable
+private fun FilterPill(
+    group: SourceFacetGroup,
+    chosenId: String,
+    onPick: (groupId: String, optionId: String) -> Unit,
+    onClear: (groupId: String) -> Unit,
+) {
+    val chosenLabel = group.options.firstOrNull { it.id == chosenId }?.let { stringResource(it.labelRes) } ?: chosenId
+    var menuOpen by remember { mutableStateOf(false) }
+    var anchorHeightPx by remember { mutableIntStateOf(0) }
+    Box(Modifier.onSizeChanged { anchorHeightPx = it.height }) {
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(999.dp))
+                .border(1.dp, PikuColors.controlAccent, RoundedCornerShape(999.dp))
+                .clickable { menuOpen = true }
+                .padding(start = 11.dp, end = 5.dp, top = 5.dp, bottom = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = chosenLabel,
+                color = PikuColors.controlAccent,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+            )
+            Spacer(Modifier.width(4.dp))
+            Icon(
+                imageVector = Icons.Filled.Close,
+                contentDescription = stringResource(R.string.ao3_scope_remove),
+                tint = PikuColors.textFaint,
+                modifier = Modifier
+                    .size(14.dp)
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() },
+                    ) { onClear(group.id) },
+            )
+        }
+        if (menuOpen) {
+            FacetMenuPopup(
+                options = group.options,
+                selectedId = chosenId,
+                dark = false,
+                anchorHeightPx = anchorHeightPx,
+                onSelect = { optionId ->
+                    menuOpen = false
+                    onPick(group.id, optionId)
+                },
+                onDismiss = { menuOpen = false },
+            )
+        }
     }
 }
 
@@ -423,6 +774,8 @@ private fun SourceGrid(
     state: SourceFeedViewModel.UiState,
     gridState: LazyStaggeredGridState,
     dark: Boolean,
+    /** 折叠式头部的视图摘要：列表首行，随内容滚走 */
+    summary: (@Composable () -> Unit)? = null,
     onRetryLoadMore: () -> Unit,
     onWorkClick: (Work) -> Unit,
     onToggleFavorite: (Work) -> Unit,
@@ -431,9 +784,20 @@ private fun SourceGrid(
     // 榜单流：rank 1 给通栏聚光卡；第 2 名起在卡片上挂名次（前三奖章、4 名起小片）
     val heroCount = if (state.ranked) minOf(HERO_COUNT, state.items.size) else 0
     val gridItems = if (heroCount > 0) state.items.drop(heroCount) else state.items
-    ThumbnailPrefetchEffect(works = gridItems, gridState = gridState, itemOffset = heroCount)
+    // 纯文字源声明单列：走 blurb（简介/标签/分级），格子数不参与（每项都是通栏）
+    val singleColumn = state.listLayout == SourceListLayout.List
+    ThumbnailPrefetchEffect(
+        works = gridItems,
+        gridState = gridState,
+        // 摘要占一格，名次卡的位置随之+1
+        itemOffset = heroCount + if (summary != null) 1 else 0,
+    )
     LazyVerticalStaggeredGrid(
-        columns = if (isTablet) StaggeredGridCells.Adaptive(220.dp) else StaggeredGridCells.Fixed(2),
+        columns = when {
+            singleColumn -> StaggeredGridCells.Fixed(1)
+            isTablet -> StaggeredGridCells.Adaptive(220.dp)
+            else -> StaggeredGridCells.Fixed(2)
+        },
         state = gridState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -445,6 +809,9 @@ private fun SourceGrid(
         horizontalArrangement = Arrangement.spacedBy(PikuLayout.GridGap),
         verticalItemSpacing = PikuLayout.GridGap,
     ) {
+        if (summary != null) {
+            item(span = StaggeredGridItemSpan.FullLine, key = "view-summary") { summary() }
+        }
         if (heroCount > 0) {
             item(span = StaggeredGridItemSpan.FullLine, key = "ranking-hero") {
                 Box(
@@ -463,14 +830,29 @@ private fun SourceGrid(
             }
         }
         itemsIndexed(gridItems, key = { _, work -> work.key.toString() }) { index, work ->
-            // 小说是另一种作品：竖版封面 + 字数，没有页数与真实比例
-            if (work.kind == WorkKind.NOVEL) {
-                NovelWorkCard(
+            if (singleColumn) {
+                TextWorkBlurb(
                     work = work,
                     onToggleFavorite = onToggleFavorite,
                     onClick = onWorkClick,
                     dark = dark,
                 )
+            } else if (work.kind == WorkKind.NOVEL) {
+                if (work.thumbnailUrl.isBlank()) {
+                    TextWorkCard(
+                        work = work,
+                        onToggleFavorite = onToggleFavorite,
+                        onClick = onWorkClick,
+                        dark = dark,
+                    )
+                } else {
+                    NovelWorkCard(
+                        work = work,
+                        onToggleFavorite = onToggleFavorite,
+                        onClick = onWorkClick,
+                        dark = dark,
+                    )
+                }
             } else if (state.proportional) {
                 // 源给了原作宽高：按真实比例排版，竖图不再被裁成方图
                 ProportionalWorkCard(
@@ -698,21 +1080,26 @@ private fun CenteredMessage(
     text: String,
     action: String? = null,
     onAction: (() -> Unit)? = null,
+    /** 折叠式头部的摘要控件：空态/失败态下它仍要在，否则用户被筛出空结果后没法改回来 */
+    header: (@Composable () -> Unit)? = null,
 ) {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(text = text, color = PikuColors.textSecondary, fontSize = 13.sp)
-            if (action != null && onAction != null) {
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    text = action,
-                    color = PikuColors.accent,
-                    fontSize = 13.sp,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable(onClick = onAction)
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                )
+    Box(Modifier.fillMaxSize()) {
+        header?.invoke()
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(text = text, color = PikuColors.textSecondary, fontSize = 13.sp)
+                if (action != null && onAction != null) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        text = action,
+                        color = PikuColors.accent,
+                        fontSize = 13.sp,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(onClick = onAction)
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                    )
+                }
             }
         }
     }
@@ -794,3 +1181,69 @@ private fun FacetChip(label: String, selected: Boolean, onClick: () -> Unit) {
 }
 
 private val FacetIndicatorHeight = 2.dp
+
+
+@Composable
+private fun ScopeSetupGuide(onAdd: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(72.dp)
+                .clip(CircleShape)
+                .background(PikuColors.controlAccent.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.LocalOffer,
+                contentDescription = null,
+                tint = PikuColors.controlAccent,
+                modifier = Modifier.size(32.dp),
+            )
+        }
+        Spacer(Modifier.height(18.dp))
+        Text(
+            text = stringResource(R.string.ao3_scope_title),
+            color = PikuColors.textPrimary,
+            fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = stringResource(R.string.ao3_scope_hint),
+            color = PikuColors.textSecondary,
+            fontSize = 13.sp,
+            lineHeight = 19.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .padding(horizontal = 44.dp)
+                .widthIn(max = 280.dp),
+        )
+        Spacer(Modifier.height(24.dp))
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(999.dp))
+                .background(PikuColors.controlAccent)
+                .clickable(onClick = onAdd)
+                .padding(horizontal = 24.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Add,
+                contentDescription = null,
+                tint = PikuColors.surface,
+                modifier = Modifier.size(16.dp),
+            )
+            Text(
+                text = stringResource(R.string.ao3_scope_add),
+                color = PikuColors.surface,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+            )
+        }
+    }
+}

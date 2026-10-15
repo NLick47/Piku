@@ -8,6 +8,13 @@ import com.piku.client.core.model.WorkSource
 import com.piku.client.core.source.ContentSource
 import com.piku.client.core.source.SourceFacetGroup
 import com.piku.client.core.source.SourceFeed
+import com.piku.client.core.source.SourceListLayout
+import com.piku.client.core.source.SourceScope
+import com.piku.client.core.source.SourceScopeKind
+import com.piku.client.core.source.SourceScopeRegistry
+import com.piku.client.core.source.SourceScopeSuggestion
+import com.piku.client.core.source.SourceScopes
+import com.piku.client.core.source.scopeChipLabels
 import com.piku.client.core.source.sanitizeFacetChoices
 import com.piku.client.core.model.Work
 import com.piku.client.core.source.ShellFavorites
@@ -23,6 +30,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -35,6 +43,8 @@ internal data class SourceKey(
     val source: WorkSource,
     val feedId: String,
     val facets: Map<String, String>,
+    /** 圈层式首页当前的圈层 id；不声明圈层的源恒为 null */
+    val scopeId: String? = null,
 )
 
 /**
@@ -50,6 +60,8 @@ class SourceFeedViewModel @Inject constructor(
     private val favorites: ShellFavorites,
     /** 按源问登录态：poipiku 与 pixiv 是两套账号体系，互不放行 */
     private val sourceAuth: SourceAuthRegistry,
+    /** 圈层式首页的能力表：没登记的源不渲染圈层行，行为与从前一致 */
+    private val scopeRegistry: SourceScopeRegistry,
     private val config: SourceFeedConfig,
 ) : ViewModel() {
 
@@ -65,6 +77,20 @@ class SourceFeedViewModel @Inject constructor(
         val ranked: Boolean = false,
         /** 当前流带原作宽高：卡片按原图比例排版，不裁方 */
         val proportional: Boolean = false,
+        /** 列表版式（源声明）：文字源单列 blurb，其余双列网格 */
+        val listLayout: SourceListLayout = SourceListLayout.Grid,
+        /** 圈层维度（源声明）；空 = 该源不是圈层式首页 */
+        val scopeKinds: List<SourceScopeKind> = emptyList(),
+        /** 已订阅的圈层（chips） */
+        val scopes: List<SourceScope> = emptyList(),
+        /** 圈层 → chips 显示名（源可收短；撞名回退全名由引擎兜底） */
+        val scopeLabels: Map<String, String> = emptyMap(),
+        /** 当前圈层 */
+        val activeScope: SourceScope? = null,
+        /** 圈层式首页但一个都没订阅：UI 出引导而不是空列表 */
+        val needsScopeSetup: Boolean = false,
+        /** 排序/筛选收进列表首行的摘要控件（源声明），头部不渲染 tab 行与维度行 */
+        val compactControls: Boolean = false,
         /** 当前流是占位流：能力未到，外壳展示"即将上线"而不是空态 */
         val comingSoon: Boolean = false,
         val items: List<Work> = emptyList(),
@@ -92,6 +118,9 @@ class SourceFeedViewModel @Inject constructor(
 
     /** 当前源的登录态订阅：登录/登出后缓存里的页（含 needLogin 标记）全脏了 */
     private var authJob: Job? = null
+
+    /** 当前源的圈层订阅（已订阅列表 + 当前圈层） */
+    private var scopeJob: Job? = null
 
     /** 每个源记住当前流 */
     private val feedBySource = mutableMapOf<WorkSource, String>()
@@ -164,8 +193,66 @@ class SourceFeedViewModel @Inject constructor(
         }
         _ui.update { it.copy(source = source) }
         observeSourceAuth(source)
+        observeScopes(source)
         switchLoader()
     }
+
+    /**
+     * 跟住当前源的圈层：订阅列表与当前项任一变化都要重取内容（换了圈层就是换了内容）。
+     * 没登记圈层能力的源整个跳过。
+     */
+    private fun observeScopes(source: WorkSource) {
+        scopeJob?.cancel()
+        scopeJob = null
+        val store = scopeRegistry.byId(source) ?: run {
+            _ui.update {
+                it.copy(
+                    scopeKinds = emptyList(),
+                    scopes = emptyList(),
+                    scopeLabels = emptyMap(),
+                    activeScope = null,
+                    needsScopeSetup = false,
+                )
+            }
+            return
+        }
+        _ui.update {
+            it.copy(
+                scopeKinds = store.kinds,
+                scopes = store.scopes.value,
+                scopeLabels = labelsOf(store, store.scopes.value),
+                activeScope = store.active.value,
+            )
+        }
+        scopeJob = viewModelScope.launch {
+            // 列表增删与手动切换都要跟：任一变 = 内容变了，重新切加载器
+            combine(store.scopes, store.active) { list, act -> list to act }
+                .collect { (list, act) ->
+                    _ui.update { it.copy(scopes = list, scopeLabels = labelsOf(store, list), activeScope = act) }
+                    switchLoader()
+                }
+        }
+    }
+
+    /** chips 显示名：源收短，撞名的回退全名 */
+    private fun labelsOf(store: SourceScopes, scopes: List<SourceScope>): Map<String, String> =
+        scopeChipLabels(scopes) { store.chipLabel(it) }
+            .let { labels -> scopes.mapIndexed { index, scope -> scope.id to labels[index] }.toMap() }
+
+    /** 选中某个圈层（chips 点击） */
+    fun selectScope(scope: SourceScope) {
+        scopeRegistry.byId(_ui.value.source)?.setActive(scope)
+    }
+
+    /** 订阅/取消订阅（选择器里增删） */
+    fun setScopes(scopes: List<SourceScope>) {
+        scopeRegistry.byId(_ui.value.source)?.setScopes(scopes)
+    }
+
+    /** 圈层联想（选择器搜索框）：失败原样交给选择器，它要区分"没找到"与"没问成" */
+    suspend fun suggestScopes(kind: String, term: String): Result<List<SourceScopeSuggestion>> =
+        scopeRegistry.byId(_ui.value.source)?.suggest(kind, term)
+            ?: Result.success(emptyList())
 
     /**
      * 跟住当前源的登录态：登录页回来、令牌失效登出都要让门屏/内容立刻换一态。
@@ -188,7 +275,31 @@ class SourceFeedViewModel @Inject constructor(
         val feedId = feedBySource[source] ?: defaultFeedId(declaration).also { feedBySource[source] = it }
         val facets = declaration.sanitizeFacetChoices(feedId, facetsByFeed[FeedKey(source, feedId)])
         facetsByFeed[FeedKey(source, feedId)] = facets
-        val key = SourceKey(source, feedId, facets)
+        val store = scopeRegistry.byId(source)
+        val active = store?.active?.value
+        val key = SourceKey(source, feedId, facets, scopeId = active?.id)
+        // 圈层式首页但还没订阅：不发请求，UI 出"选圈层"的引导
+        if (store != null && store.kinds.isNotEmpty() && store.scopes.value.isEmpty()) {
+            currentKey = key
+            currentCollectJob?.cancel()
+            currentCollectJob = null
+            _ui.update {
+                it.copy(
+                    source = source,
+                    feeds = declaration.feeds,
+                    feedId = feedId,
+                    items = emptyList(),
+                    loading = false,
+                    failed = false,
+                    endReached = false,
+                    needsScopeSetup = true,
+                    listLayout = declaration.listLayout,
+                    compactControls = declaration.compactControls,
+                )
+            }
+            return
+        }
+        _ui.update { it.copy(needsScopeSetup = false) }
         currentKey = key
         // 占位流（能力未到，或"登录后才接得上"且已登录）：不建加载器、不发请求，
         // UI 展示"即将上线"；未登录时它仍是登录门，由 loader 判定
@@ -232,7 +343,7 @@ class SourceFeedViewModel @Inject constructor(
                     // 榜单页数已探明：本地短路成空页，省一次注定为空的请求
                     Result.success(emptyList())
                 } else {
-                    declaration.page(key.feedId, key.facets, page)
+                    declaration.page(key.feedId, key.facets, page, scopeOf(key))
                         .onSuccess { totalPages = it.totalPages }
                         .map { it.items }
                 }
@@ -256,9 +367,13 @@ class SourceFeedViewModel @Inject constructor(
 
     private fun currentLoader(): FeedLoader<SourceKey, Work>? {
         val state = _ui.value
-        val key = SourceKey(state.source, state.feedId, state.facetChoices)
+        val key = SourceKey(state.source, state.feedId, state.facetChoices, scopeId = state.activeScope?.id)
         return loaders[key]
     }
+
+    /** loader 键里的圈层 id → 圈层对象（键是可序列化的，页面取数要完整对象） */
+    private fun scopeOf(key: SourceKey): SourceScope? =
+        key.scopeId?.let { id -> scopeRegistry.byId(key.source)?.scopes?.value?.firstOrNull { it.id == id } }
 
     private fun applySnapshot(
         key: SourceKey,
@@ -274,6 +389,8 @@ class SourceFeedViewModel @Inject constructor(
                 facetChoices = key.facets,
                 ranked = declaration.feed(key.feedId).ranked,
                 proportional = declaration.feed(key.feedId).proportional,
+                listLayout = declaration.listLayout,
+                compactControls = declaration.compactControls,
                 comingSoon = isComingSoon(declaration, key.feedId),
                 items = snap.items,
                 loading = snap.loading,

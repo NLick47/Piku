@@ -353,15 +353,15 @@ class FavoriteSyncMergeTest {
         // 更高版本客户端写入的源（本机枚举里没有）：本地写不进去，但也不能误删，原样留在云端
         val remote = payload(
             folders = listOf(remoteFolder(1L, "A")),
-            works = listOf(remoteWork("9", source = "AO3")),
-            memberships = listOf(remoteMembership(1L, "9", source = "AO3")),
+            works = listOf(remoteWork("9", source = "FUTURE_SOURCE")),
+            memberships = listOf(remoteMembership(1L, "9", source = "FUTURE_SOURCE")),
         )
 
         val result = merge(localFolders = listOf(folder(1L, "A")), remote = remote, snapshot = remote)
 
         assertTrue("未知源的缺失不能判成删除", result.tombstones.isEmpty())
-        assertEquals(listOf("AO3" to "9"), result.memberships.map { it.source to it.workId })
-        assertEquals(listOf("AO3" to "9"), result.works.map { it.source to it.workId })
+        assertEquals(listOf("FUTURE_SOURCE" to "9"), result.memberships.map { it.source to it.workId })
+        assertEquals(listOf("FUTURE_SOURCE" to "9"), result.works.map { it.source to it.workId })
     }
 
     @Test

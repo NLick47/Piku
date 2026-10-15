@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -33,15 +34,22 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -71,6 +79,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.piku.client.R
+import com.piku.client.core.model.NovelChapter
 import com.piku.client.core.storage.prefs.NovelReaderSettings
 import com.piku.client.core.ui.common.PikuBackButton
 import com.piku.client.core.ui.theme.NovelReaderTheme
@@ -787,4 +796,175 @@ internal fun readerStep(fraction: Float, min: Float, max: Float, step: Float): F
 private fun lineHeightText(lineHeight: Float): String {
     val tenths = (lineHeight * 10).roundToInt()
     return "${tenths / 10}.${tenths % 10}"
+}
+
+/**
+ * 章节导航条：上一章 / 第 x/y 章 · 章名（点开目录）/ 下一章。
+ * 只在分章作品显示，压在阅读控制栏上方。
+ */
+@Composable
+internal fun NovelChapterBar(
+    theme: NovelReaderTheme,
+    index: Int,
+    count: Int,
+    chapterTitle: String,
+    onPrev: () -> Unit,
+    onNext: () -> Unit,
+    onOpenList: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp)
+            .readerCard(theme, ReaderPillShape)
+            .padding(horizontal = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onPrev, enabled = index > 0) {
+            Icon(
+                imageVector = Icons.Filled.ChevronLeft,
+                contentDescription = stringResource(R.string.reader_chapter_prev),
+                tint = if (index > 0) theme.fg else theme.fg.copy(alpha = 0.3f),
+            )
+        }
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .clip(ReaderChipShape)
+                .clickable(onClick = onOpenList)
+                .padding(vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                text = stringResource(R.string.reader_chapter_position, index + 1, count),
+                color = theme.fg,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+            )
+            if (chapterTitle.isNotBlank()) {
+                Text(
+                    text = chapterTitle,
+                    color = theme.fg.copy(alpha = 0.6f),
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        IconButton(onClick = onNext, enabled = index < count - 1) {
+            Icon(
+                imageVector = Icons.Filled.ChevronRight,
+                contentDescription = stringResource(R.string.reader_chapter_next),
+                tint = if (index < count - 1) theme.fg else theme.fg.copy(alpha = 0.3f),
+            )
+        }
+    }
+}
+
+/** 章节目录：当前章高亮，点一条跳过去 */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun NovelChapterSheet(
+    theme: NovelReaderTheme,
+    chapters: List<NovelChapter>,
+    currentIndex: Int,
+    onSelect: (Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = theme.card,
+        shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp),
+        dragHandle = null,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(top = 14.dp, bottom = 8.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 10.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(34.dp)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(theme.fg.copy(alpha = 0.3f)),
+                )
+            }
+            Text(
+                text = stringResource(R.string.reader_chapter_list),
+                color = theme.fg,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = stringResource(R.string.reader_chapter_position, currentIndex + 1, chapters.size),
+                color = theme.fg.copy(alpha = 0.6f),
+                fontSize = 12.sp,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 460.dp)
+                .navigationBarsPadding(),
+        ) {
+            itemsIndexed(chapters) { index, chapter ->
+                val current = index == currentIndex
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            onSelect(index)
+                            onDismiss()
+                        }
+                        .background(
+                            if (current) theme.accent.copy(alpha = 0.14f) else Color.Transparent,
+                        )
+                        .padding(horizontal = 20.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.reader_chapter_number, index + 1),
+                        color = if (current) theme.accent else theme.fg.copy(alpha = 0.55f),
+                        fontSize = 12.sp,
+                        modifier = Modifier.width(52.dp),
+                    )
+                    Text(
+                        text = readerChapterLabel(
+                            title = chapter.title,
+                            fallback = stringResource(R.string.reader_chapter_number, index + 1),
+                        ),
+                        color = if (current) theme.accent else theme.fg,
+                        fontSize = 14.sp,
+                        fontWeight = if (current) FontWeight.SemiBold else FontWeight.Normal,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** 目录行标题：AO3 的章标题形如「Chapter 1: 名字」，行首已有「第 N 章」，去掉重复前缀 */
+internal fun readerChapterLabel(title: String, fallback: String = ""): String {
+    val trimmed = title.trim()
+    if (trimmed.isEmpty()) return fallback
+    if (trimmed.startsWith("Chapter ", ignoreCase = true)) {
+        val colon = trimmed.indexOf(':')
+        if (colon in 1 until trimmed.length) {
+            return trimmed.substring(colon + 1).trim().ifEmpty { fallback }
+        }
+    }
+    return trimmed
 }

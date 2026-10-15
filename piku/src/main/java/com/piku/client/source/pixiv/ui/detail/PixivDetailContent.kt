@@ -388,16 +388,18 @@ internal fun AuthorLine(
             .clickable(onClick = onAuthorClick)
             .padding(vertical = 4.dp),
     ) {
-        AsyncImage(
-            model = detail.authorAvatarUrl,
-            contentDescription = detail.authorName,
-            modifier = Modifier
-                .size(34.dp)
-                .clip(CircleShape)
-                .background(PikuColors.surfaceMuted),
-            contentScale = ContentScale.Crop,
-        )
-        Spacer(Modifier.width(10.dp))
+        if (!detail.authorAvatarUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = detail.authorAvatarUrl,
+                contentDescription = detail.authorName,
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(CircleShape)
+                    .background(PikuColors.surfaceMuted),
+                contentScale = ContentScale.Crop,
+            )
+            Spacer(Modifier.width(10.dp))
+        }
         Column(Modifier.weight(1f)) {
             Text(
                 text = detail.authorName,
@@ -571,7 +573,12 @@ internal fun MetaLine(stats: WorkStats?) {
     } else {
         ""
     }
-    val pages = if (source.pageCount > 1) stringResource(R.string.pixiv_meta_pages, source.pageCount) else ""
+    // 小说按章、插画按张：同一个位置两种量词，章数只有提供它的源会填
+    val pages = when {
+        source.chapters > 0 -> stringResource(R.string.work_chapter_count, source.chapters)
+        source.pageCount > 1 -> stringResource(R.string.pixiv_meta_pages, source.pageCount)
+        else -> ""
+    }
     val postedLabel = if (posted.isNotBlank()) stringResource(R.string.pixiv_meta_posted, posted) else ""
     val parts = listOf(postedLabel, size, pages).filter { it.isNotBlank() }
     if (parts.isEmpty()) return

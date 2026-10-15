@@ -57,6 +57,9 @@
                 <data android:scheme="https" android:host="www.pixiv.net" android:pathPattern="/en/novel/show\\.php" />
                 <data android:scheme="https" android:host="www.pixiv.net" android:pathPattern="/users/.*" />
                 <data android:scheme="https" android:host="www.pixiv.net" android:pathPattern="/en/users/.*" />
+                <!-- AO3：作品页（/works/{id} 与 /works/{id}/chapters/{n}），单章深链由解析器归并到同一作品 -->
+                <data android:scheme="https" android:host="archiveofourown.org" android:pathPattern="/works/.*" />
+                <data android:scheme="https" android:host="www.archiveofourown.org" android:pathPattern="/works/.*" />
             </intent-filter>
         </activity>
 

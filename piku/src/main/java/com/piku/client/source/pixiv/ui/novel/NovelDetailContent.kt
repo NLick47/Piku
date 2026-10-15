@@ -23,6 +23,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -45,6 +46,7 @@ import com.piku.client.core.model.Work
 import com.piku.client.core.model.WorkDetail
 import com.piku.client.core.model.WorkStats
 import com.piku.client.core.ui.common.feedThumbUrl
+import com.piku.client.core.ui.common.formatCount
 import com.piku.client.core.ui.detail.HeadlineTranslateChip
 import com.piku.client.app.navigation.sharedWorkBounds
 import com.piku.client.core.ui.theme.PikuColors
@@ -85,6 +87,8 @@ internal fun NovelDetailContent(
     showTranslatedTags: Boolean,
     tagsTranslating: Boolean,
     onToggleTagsTranslation: () -> Unit,
+    /** 作品状态徽标（AO3：已完结/连载中）；0 = 该源没有，不渲染 */
+    @androidx.annotation.StringRes statusRes: Int = 0,
 ) {
     Column(
         modifier = Modifier
@@ -97,20 +101,22 @@ internal fun NovelDetailContent(
             ),
     ) {
         Spacer(Modifier.height(topInset))
-        AsyncImage(
-            model = feedThumbUrl(work.thumbnailUrl),
-            contentDescription = detail.title,
-            colorFilter = PikuColors.tameWhiteFilter,
-            modifier = Modifier
-                .sharedWorkBounds(sharedKey)
-                .width(140.dp)
-                .aspectRatio(NOVEL_DETAIL_COVER_ASPECT)
-                .align(Alignment.CenterHorizontally)
-                .clip(RoundedCornerShape(PikuLayout.CardCorner))
-                .background(if (dark) WorkCardPlaceholderDark else Color(0xFFF1EFEA)),
-            contentScale = ContentScale.Crop,
-        )
-        Spacer(Modifier.height(14.dp))
+        if (work.thumbnailUrl.isNotBlank()) {
+            AsyncImage(
+                model = feedThumbUrl(work.thumbnailUrl),
+                contentDescription = detail.title,
+                colorFilter = PikuColors.tameWhiteFilter,
+                modifier = Modifier
+                    .sharedWorkBounds(sharedKey)
+                    .width(140.dp)
+                    .aspectRatio(NOVEL_DETAIL_COVER_ASPECT)
+                    .align(Alignment.CenterHorizontally)
+                    .clip(RoundedCornerShape(PikuLayout.CardCorner))
+                    .background(if (dark) WorkCardPlaceholderDark else Color(0xFFF1EFEA)),
+                contentScale = ContentScale.Crop,
+            )
+            Spacer(Modifier.height(14.dp))
+        }
         Row(verticalAlignment = Alignment.Top) {
             Text(
                 text = detail.translated?.title
@@ -143,6 +149,10 @@ internal fun NovelDetailContent(
             followQuiet = followQuiet,
             onFollowClick = onFollowClick,
         )
+        if (statusRes != 0) {
+            Spacer(Modifier.height(8.dp))
+            StatusChip(res = statusRes)
+        }
         Spacer(Modifier.height(10.dp))
         // 收藏开关与作品详情页同一颗星标胶囊，且恒在——数据缺失时只藏两侧纯展示格
         NovelStatsRow(
@@ -200,9 +210,18 @@ private fun NovelStatsRow(
                 modifier = Modifier.weight(1f),
             )
         }
+        // 点赞数：pixiv 接口不给（null 时不占格），AO3 的 kudos 落这一格
+        stats?.likes?.let { likes ->
+            StatCell(
+                icon = Icons.Filled.Favorite,
+                value = compactCount(likes, language),
+                label = stringResource(R.string.pixiv_stat_likes),
+                modifier = Modifier.weight(1f),
+            )
+        }
         if (work.textLength > 0) {
             Text(
-                text = stringResource(R.string.pixiv_novel_length, work.textLength),
+                text = stringResource(R.string.work_word_count, formatCount(work.textLength)),
                 color = PikuColors.textPrimary,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -250,4 +269,20 @@ private fun ReadButton(
             overflow = TextOverflow.Ellipsis,
         )
     }
+}
+
+/** 作品状态徽标：小圆角底 + 强调色文字（AO3 的已完结/连载中） */
+@Composable
+private fun StatusChip(@androidx.annotation.StringRes res: Int) {
+    Text(
+        text = stringResource(res),
+        color = PikuColors.controlAccent,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Medium,
+        maxLines = 1,
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(PikuColors.controlAccent.copy(alpha = 0.12f))
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+    )
 }
