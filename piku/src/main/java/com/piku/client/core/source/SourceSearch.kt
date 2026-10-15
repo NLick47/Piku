@@ -1,6 +1,7 @@
 package com.piku.client.core.source
 
 import androidx.annotation.StringRes
+import com.piku.client.R
 import com.piku.client.core.model.AppError
 import com.piku.client.core.model.FollowUser
 import com.piku.client.core.model.WorkSource
@@ -18,6 +19,15 @@ interface SourceSearch {
 
     /** 用户 tab 可用；不可用的源外壳仍显示 tab，但列表给"本源不支持"终态 */
     val supportsUsers: Boolean get() = false
+
+    /** 联想与热门条目就是站点的精确标签：点按进该标签的作品列表，不当关键词再搜一遍 */
+    val tagEntries: Boolean get() = false
+
+    /** 检索是否需要登录；poipiku 与 pixiv 的联想接口都要登录，AO3 的标签检索是公开页 */
+    val searchNeedsLogin: Boolean get() = true
+
+    /** 待机态底部的用法提示，各源检索口径不同 */
+    @get:StringRes val idleHintRes: Int get() = R.string.search_hint
 
     /**
      * 检索筛选声明：外壳渲染成 chips 行 + 底部面板。空 = 该源没有筛选。
@@ -118,6 +128,8 @@ data class SourceTrendingTag(
     val thumbnailUrl: String,
     val width: Int = 0,
     val height: Int = 0,
+    /** 站点作品数，文字源的行式列表用它区分同名标签 */
+    val count: Int? = null,
 )
 
 /** 输入联想条目：标签名 + 译名（译名缺省 = 该标签没有简中翻译）。缩略图仅标签建议网格消费 */
@@ -125,4 +137,6 @@ data class SourceSuggestion(
     val name: String,
     val translatedName: String? = null,
     val thumbnailUrl: String? = null,
+    /** 站点作品数，文字源的行式列表用它区分同名标签 */
+    val count: Int? = null,
 )

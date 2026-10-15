@@ -8,6 +8,7 @@ import com.piku.client.core.network.http.apiCall
 import com.piku.client.source.ao3.data.remote.Ao3Api
 import com.piku.client.source.ao3.data.remote.Ao3ListingParser
 import com.piku.client.source.ao3.data.remote.Ao3ScopeParams
+import com.piku.client.source.ao3.data.remote.Ao3TagPath
 import com.piku.client.source.ao3.data.remote.Ao3TagSearchParser
 import com.piku.client.source.ao3.data.remote.Ao3WorkParser
 import kotlinx.coroutines.Dispatchers
@@ -37,7 +38,8 @@ class Ao3Repository @Inject constructor(
         query: String?,
         tag: String?,
         user: String?,
-        sortColumn: String,
+        /** null = 不带排序参数，站点按默认排 */
+        sortColumn: String?,
         page: Int,
         /** 除圈层外的附加收窄（完结状态/字数下限），与圈层参数合并后一起发出 */
         extra: Map<String, String> = emptyMap(),
@@ -45,7 +47,12 @@ class Ao3Repository @Inject constructor(
     ): Result<Pair<List<Work>, Boolean>> = paceListing {
         val html = when {
             user != null -> api.getUserWorks(user = user, page = page).string()
-            tag != null -> api.getTagWorks(tag = tag, page = page).string()
+            // 标签名进路径要转成站点的星号转义形态：显示名原样拼会 404
+            tag != null -> api.getTagWorks(
+                tag = Ao3TagPath.of(tag),
+                page = page,
+                sortColumn = sortColumn,
+            ).string()
             else -> api.searchWorks(
                 query = query,
                 scope = extra,
@@ -81,14 +88,15 @@ class Ao3Repository @Inject constructor(
         }
 
     /**
-     * 圈层选择器的标签联想。AO3 的搜索字段不做模糊匹配（`work_search[fandom_names]=harry`
-     * 会被静默忽略、返回全站结果），圈层值必须是精确标签名，所以这一步不可省。
+     * 标签检索。AO3 的搜索字段不做模糊匹配（`work_search[fandom_names]=harry`
+     * 会被静默忽略、返回全站结果），圈层值与标签必须取自这里。
+     * [name] 空白 = 不限名字按使用量给全量，[type] 缺省 = 不限类型
      */
-    suspend fun tagSuggestions(name: String, type: String): Result<List<Ao3TagSearchParser.Suggestion>> =
+    suspend fun tagSuggestions(name: String?, type: String?): Result<List<Ao3TagSearchParser.Suggestion>> =
         pace(::lastSuggestionAt, SUGGESTION_INTERVAL_MS) { lastSuggestionAt = it }
             .let {
                 apiCall {
-                    val html = api.searchTags(name = name, type = type).string()
+                    val html = api.searchTags(name = name?.takeIf { it.isNotBlank() }, type = type).string()
                     withContext(Dispatchers.Default) { Ao3TagSearchParser.parse(html) }
                 }
             }

@@ -84,6 +84,8 @@ data class SearchUiState(
     val usersLoadMoreErrorRes: Int? = null,
     val usersEndReached: Boolean = false,
     val usersNeedLogin: Boolean = false,
+    /** 本源不提供用户检索（supportsUsers=false）：列表给"不支持"终态，别拿通用空态说"没找到" */
+    val usersUnsupported: Boolean = false,
     /** 标签建议（包含关键字的标签卡片，SearchTagByKeywordPcV） */
     val tagSuggestions: List<TagCard> = emptyList(),
     val tagSuggestionsLoading: Boolean = false,
@@ -115,6 +117,10 @@ data class SearchUiState(
     // ---- 检索插件（pixiv 等）声明的能力区；未声明时全部保持默认，外壳走原链路 ----
     val source: WorkSource = WorkSource.POIPIKU,
     val pluginActive: Boolean = false,
+    /** 联想/热门条目是站点的精确标签：点按进该标签的作品列表 */
+    val tagEntries: Boolean = false,
+    /** 待机态底部的用法提示，按源声明 */
+    val idleHintRes: Int = R.string.search_hint,
     /** 结果卡片按原图比例排版 */
     val proportional: Boolean = false,
     /** 列表版式（源声明）：文字源单列 blurb，其余双列网格 */
@@ -203,9 +209,16 @@ class SearchViewModel @Inject constructor(
         }
     }
 
-    private fun isLoggedInForSearch(): Boolean = when (searchPlugin) {
-        null -> authRepository.isLoggedIn()
-        else -> sourceAuthRegistry.isLoggedIn(source)
+    /**
+     * 检索登录态：源声明不要求登录的直接算就绪，否则看本源登录插件，poipiku 走自己的会话
+     */
+    private fun isLoggedInForSearch(): Boolean {
+        val plugin = searchPlugin
+        if (plugin != null && !plugin.searchNeedsLogin) return true
+        return when (plugin) {
+            null -> authRepository.isLoggedIn()
+            else -> sourceAuthRegistry.isLoggedIn(source)
+        }
     }
 
     /** 标签作品模式的可见筛选组：声明组按 [SourceSearch.hiddenTagFilterGroups] 收敛（与选中值无关） */
@@ -218,6 +231,8 @@ class SearchViewModel @Inject constructor(
             tab = initialTab,
             source = source,
             pluginActive = searchPlugin != null,
+            tagEntries = searchPlugin?.tagEntries == true,
+            idleHintRes = searchPlugin?.idleHintRes ?: R.string.search_hint,
             proportional = searchPlugin?.proportional == true,
             listLayout = listLayoutFor(source),
             filterGroups = searchPlugin?.filterGroups ?: emptyList(),
@@ -338,6 +353,8 @@ class SearchViewModel @Inject constructor(
             it.copy(
                 source = newSource,
                 pluginActive = searchPlugin != null,
+                tagEntries = searchPlugin?.tagEntries == true,
+                idleHintRes = searchPlugin?.idleHintRes ?: R.string.search_hint,
                 proportional = searchPlugin?.proportional == true,
                 listLayout = listLayoutFor(newSource),
                 filterGroups = searchPlugin?.filterGroups ?: emptyList(),
@@ -364,6 +381,7 @@ class SearchViewModel @Inject constructor(
                 usersLoadMoreErrorRes = null,
                 usersEndReached = false,
                 usersNeedLogin = false,
+                usersUnsupported = false,
                 tagSuggestions = emptyList(),
                 tagSuggestionsLoading = false,
                 tagSuggestionsLoadingMore = false,
@@ -506,6 +524,16 @@ class SearchViewModel @Inject constructor(
         }
         // tagNeedLogin 由 loadTagWorks 按登录态刷新，这里不碰
         loadTagWorks(append = false)
+    }
+
+    /**
+     * 点精确标签条目：切到标签 tab 直接看该标签的作品，与 [selectTagCard] 只差入口
+     */
+    fun openTag(name: String) {
+        if (name.isEmpty()) return
+        clearSuggestions()
+        _uiState.update { it.copy(tab = SearchTab.TAGS) }
+        selectTagCard(name)
     }
 
     /**
@@ -838,7 +866,12 @@ class SearchViewModel @Inject constructor(
                 loadUsersViaPlugin(plugin, append)
             } else {
                 _uiState.update {
-                    it.copy(usersLoading = false, usersEndReached = true, users = if (append) it.users else emptyList())
+                    it.copy(
+                        usersLoading = false,
+                        usersEndReached = true,
+                        users = if (append) it.users else emptyList(),
+                        usersUnsupported = true,
+                    )
                 }
             }
             return
@@ -1077,7 +1110,7 @@ class SearchViewModel @Inject constructor(
             plugin.suggestTags(base)
                 .onSuccess { list ->
                     if (generation != sourceGeneration) return@onSuccess
-                    val cards = list.map { s -> TagCard(name = s.name, thumbnailUrl = s.thumbnailUrl) }
+                    val cards = list.map { s -> TagCard(name = s.name, thumbnailUrl = s.thumbnailUrl, count = s.count) }
                     _uiState.update {
                         it.copy(
                             tagSuggestionsLoading = false,

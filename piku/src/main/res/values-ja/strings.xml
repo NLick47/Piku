@@ -300,6 +300,7 @@
     <string name="search_works_login">ログインすると投稿を検索できます</string>
     <string name="search_tags_login">ログインするとタグを検索できます</string>
     <string name="search_users_empty">該当するユーザーが見つかりません</string>
+    <string name="search_users_unsupported">%1$s はユーザー検索に対応していません</string>
     <string name="search_tab_works">イラスト</string>
     <string name="search_tab_users">ユーザー</string>
     <string name="search_tab_tags">タグ</string>
@@ -315,6 +316,7 @@
     <string name="search_translate_zh">中国語へ</string>
     <string name="search_manage_tags">タグ管理</string>
     <string name="search_hint_pixiv">キーワードは半角スペースで区切ると AND 検索になります。「訳」で日本語⇔中国語変換もできます</string>
+    <string name="search_hint_ao3">同人・キャラ・カップリングはそのまま検索できます（中国語も可）。タグタブにはサイトの正規タグ名が並び、作品リンクを貼ると直接開きます</string>
     <string name="search_suggest_direct">「%1$s」を検索</string>
     <string name="search_filter">フィルタ</string>
     <string name="search_filter_reset">リセット</string>

@@ -300,6 +300,7 @@
     <string name="search_works_login">Log in to search posts</string>
     <string name="search_tags_login">Log in to search tags</string>
     <string name="search_users_empty">No users found</string>
+    <string name="search_users_unsupported">User search is not available on %1$s</string>
     <string name="search_tab_works">Posts</string>
     <string name="search_tab_users">Users</string>
     <string name="search_tab_tags">Tags</string>
@@ -315,6 +316,7 @@
     <string name="search_translate_zh">To Chinese</string>
     <string name="search_manage_tags">Manage</string>
     <string name="search_hint_pixiv">Separate multiple keywords with spaces; search Chinese directly, or tap the translate chip first</string>
+    <string name="search_hint_ao3">Fandoms, characters and relationships are all searchable (Chinese works too); the tags tab lists the site\'s canonical tag names, and pasting a work link opens it</string>
     <string name="search_suggest_direct">Search "%1$s"</string>
     <string name="search_filter">Filters</string>
     <string name="search_filter_reset">Reset</string>

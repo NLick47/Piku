@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.piku.client.R
 import com.piku.client.core.source.SourceSuggestion
+import com.piku.client.core.ui.common.formatCount
 import com.piku.client.core.ui.theme.MenuPopupBgDark
 import com.piku.client.core.ui.theme.MenuPopupBgLight
 import com.piku.client.core.ui.theme.PikuColors
@@ -110,6 +111,16 @@ internal fun SuggestionPanel(
                         fontSize = 12.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                // 同名标签靠作品数分主次
+                suggestion.count?.let { count ->
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        text = formatCount(count),
+                        color = faint,
+                        fontSize = 12.sp,
+                        maxLines = 1,
                     )
                 }
             }

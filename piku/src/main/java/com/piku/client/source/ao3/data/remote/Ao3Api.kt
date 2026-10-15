@@ -53,41 +53,50 @@ interface Ao3Api {
      * （2026-10 实测；`sort_column` 的合法值是 kudos_count / created_at /
      * revised_at / hits / comments_count / bookmarks_count / word_count / _score，
      * 传 `kudos` 这类短名会回「syntax error」）。
+     *
+     * [sortColumn] 缺省 = 不带排序参数，站点按默认排
      */
     @GET("works/search")
     suspend fun searchWorks(
         @Query("work_search[query]") query: String? = null,
         /** 圈层收窄（fandom_names/relationship_names/freeform_names 等），键含 `work_search[…]` 前缀 */
         @QueryMap scope: Map<String, String> = emptyMap(),
-        @Query("work_search[sort_column]") sortColumn: String,
+        @Query("work_search[sort_column]") sortColumn: String? = null,
         @Query("work_search[sort_direction]") sortDirection: String = "desc",
         @Query("page") page: Int = 1,
     ): ResponseBody
 
     /**
-     * 标签搜索，圈层选择器的联想用（结果页 HTML 见 [Ao3TagSearchParser]）。
+     * 标签搜索，联想与待机态热门榜都用（结果页 HTML 见 [Ao3TagSearchParser]）。
      *
      * 不用搜索表单那个 `/autocomplete/…` JSON 端点：它走 CF 机器人管理，应用里稳定 403
      * （2026-10 实测，主机上却是 200），普通页面 GET 才按页面放行。
      * `wrangling_status=canonical` 只回规范标签——圈层值必须是精确标签名，
      * 因为 `work_search[fandom_names]` 不做模糊匹配（传缩写会被静默忽略、返回全站结果）。
      * 排序按使用量降序：默认按名字母序时「Fluff」这种热门标签要翻到中段才出现。
+     *
+     * [name] 缺省 = 不限名字，站点按排序给该类型的全量；[type] 缺省 = 不限类型，一次回四种标签混排
      */
     @GET("tags/search")
     suspend fun searchTags(
-        @Query("tag_search[name]") name: String,
-        /** Fandom / Relationship / Character / Freeform */
-        @Query("tag_search[type]") type: String,
+        @Query("tag_search[name]") name: String?,
+        /** Fandom / Character / Relationship / Freeform；缺省 = 不限 */
+        @Query("tag_search[type]") type: String?,
         @Query("tag_search[wrangling_status]") status: String = "canonical",
         @Query("tag_search[sort_column]") sortColumn: String = "uses",
         @Query("tag_search[sort_direction]") sortDirection: String = "desc",
     ): ResponseBody
 
-    /** 标签下的作品列表，如 `/tags/Yuri!!! on Ice (Anime)/works` */
+    /**
+     * 标签下的作品列表。排序与搜索端点同一组参数，不带 = 站点默认排法；
+     * 路径里的标签名要的是 [Ao3TagPath] 的转义形态，不是显示名
+     */
     @GET("tags/{tag}/works")
     suspend fun getTagWorks(
         @Path("tag", encoded = true) tag: String,
         @Query("page") page: Int = 1,
+        @Query("work_search[sort_column]") sortColumn: String? = null,
+        @Query("work_search[sort_direction]") sortDirection: String = "desc",
     ): ResponseBody
 
     /** 用户主页的作品列表 */

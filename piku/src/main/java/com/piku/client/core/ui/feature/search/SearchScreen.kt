@@ -99,6 +99,8 @@ private const val FOCUS_DELAY_MS = 300L
 fun SearchScreen(
     onBack: () -> Unit,
     onSearch: (String, WorkSource) -> Unit,
+    /** 打开一个精确标签的作品列表，另起一页并带上标签名 */
+    onOpenTag: (String, WorkSource) -> Unit,
     onWorkClick: (Work) -> Unit,
     onUserClick: (WorkSource, FollowUser) -> Unit,
     onOpenLink: (SourceLink) -> Unit,
@@ -201,6 +203,11 @@ fun SearchScreen(
         }
     }
 
+    // 联想条目的去向：标签源点按直接看该标签的作品，其余源仍当关键词检索
+    val handleEntryClick: (String) -> Unit = { name ->
+        if (state.tagEntries) viewModel.openTag(name) else submit(name)
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -234,14 +241,19 @@ fun SearchScreen(
             )
             Box(Modifier.weight(1f)) {
                 if (!hasQuery) {
-                    val handleTrendingClick: (String) -> Unit =
-                        if (state.pluginActive) ({ tag -> submit(tag) }) else ({ tag -> submit("#$tag") })
+                    // 热门条目的去向：标签源另起一页带标签名过去，待机态没有 tab 行不能就地切
+                    val handleTrendingClick: (String) -> Unit = when {
+                        state.tagEntries -> ({ tag -> onOpenTag(tag, state.source) })
+                        state.pluginActive -> ({ tag -> submit(tag) })
+                        else -> ({ tag -> submit("#$tag") })
+                    }
                     IdleContent(
                         history = state.history,
                         customTags = state.customTags,
                         trending = state.trending,
                         trendingLoading = state.trendingLoading,
-                        pluginHint = state.pluginActive,
+                        hintRes = state.idleHintRes,
+                        listLayout = state.listLayout,
                         onSelect = { submit(it) },
                         onSelectCustomTag = { submit("#$it") },
                         onSelectTrending = handleTrendingClick,
@@ -341,7 +353,7 @@ fun SearchScreen(
                     SuggestionPanel(
                         query = query.trim(),
                         suggestions = state.suggestions,
-                        onSelect = { submit(it) },
+                        onSelect = handleEntryClick,
                         onDirectSearch = { submit(query) },
                         dark = dark,
                     )

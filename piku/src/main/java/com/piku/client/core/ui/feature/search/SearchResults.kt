@@ -69,6 +69,8 @@ import com.piku.client.core.ui.common.PikuBackButton
 import com.piku.client.core.ui.common.PikuSegmented
 import com.piku.client.core.ui.common.LoginPrompt
 import com.piku.client.core.ui.common.UserAvatar
+import com.piku.client.core.ui.common.formatCount
+import com.piku.client.core.ui.common.labelRes
 import com.piku.client.core.ui.common.TextWorkBlurb
 import com.piku.client.core.ui.common.TextWorkCard
 import com.piku.client.core.ui.common.WorkCard
@@ -244,17 +246,30 @@ internal fun TagsTabContent(
                         }
                     }
                     else -> {
-                        TagCardGrid(
-                            cards = state.tagSuggestions,
-                            isTablet = isTablet,
-                            loadingMore = state.tagSuggestionsLoadingMore,
-                            loadMoreErrorRes = state.tagSuggestionsLoadMoreErrorRes,
-                            endReached = state.tagSuggestionsEndReached,
-                            onLoadMore = onLoadMore,
-                            onRetryLoadMore = onRetryLoadMore,
-                            onTagClick = onTagClick,
-                            dark = dark,
-                        )
+                        if (state.listLayout == SourceListLayout.List) {
+                            TagEntryList(
+                                cards = state.tagSuggestions,
+                                loadingMore = state.tagSuggestionsLoadingMore,
+                                loadMoreErrorRes = state.tagSuggestionsLoadMoreErrorRes,
+                                endReached = state.tagSuggestionsEndReached,
+                                onLoadMore = onLoadMore,
+                                onRetryLoadMore = onRetryLoadMore,
+                                onTagClick = onTagClick,
+                                dark = dark,
+                            )
+                        } else {
+                            TagCardGrid(
+                                cards = state.tagSuggestions,
+                                isTablet = isTablet,
+                                loadingMore = state.tagSuggestionsLoadingMore,
+                                loadMoreErrorRes = state.tagSuggestionsLoadMoreErrorRes,
+                                endReached = state.tagSuggestionsEndReached,
+                                onLoadMore = onLoadMore,
+                                onRetryLoadMore = onRetryLoadMore,
+                                onTagClick = onTagClick,
+                                dark = dark,
+                            )
+                        }
                     }
                 }
             }
@@ -356,6 +371,107 @@ private fun TagWorksHeader(
         if (filterEntry != null) {
             Spacer(Modifier.width(8.dp))
             filterEntry()
+        }
+    }
+}
+
+/** 文字源的标签行：整行 `#标签名` + 站点作品数；纯文字源摆图墙只会是一片占位格 */
+@Composable
+internal fun TagEntryRow(
+    name: String,
+    count: Int?,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "#$name",
+            color = PikuColors.textPrimary,
+            fontSize = 14.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        count?.let {
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = formatCount(it),
+                color = PikuColors.textFaint,
+                fontSize = 11.sp,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+/** 文字源的标签建议列表：与图源卡片网格同一条链路，只换排布 */
+@Composable
+private fun TagEntryList(
+    cards: List<TagCard>,
+    loadingMore: Boolean,
+    loadMoreErrorRes: Int?,
+    endReached: Boolean,
+    onLoadMore: () -> Unit,
+    onRetryLoadMore: () -> Unit,
+    onTagClick: (String) -> Unit,
+    dark: Boolean,
+) {
+    val listState = rememberLazyListState()
+    val currentEndReached by rememberUpdatedState(endReached)
+    val currentLoadingMore by rememberUpdatedState(loadingMore)
+    val currentLoadMoreErrorRes by rememberUpdatedState(loadMoreErrorRes)
+
+    LaunchedEffect(listState, cards.size) {
+        snapshotFlow {
+            val info = listState.layoutInfo
+            val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: 0
+            lastVisible >= info.totalItemsCount - 6
+        }
+            .distinctUntilChanged()
+            .collect { nearEnd ->
+                if (nearEnd && !currentEndReached && !currentLoadingMore && currentLoadMoreErrorRes == null) {
+                    onLoadMore()
+                }
+            }
+    }
+
+    LazyColumn(
+        state = listState,
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 96.dp),
+    ) {
+        items(cards, key = { it.name }) { card ->
+            TagEntryRow(name = card.name, count = card.count, onClick = { onTagClick(card.name) })
+        }
+        when {
+            loadMoreErrorRes != null -> {
+                item {
+                    SearchLoadMoreError(errorRes = loadMoreErrorRes, onRetry = onRetryLoadMore, dark = dark)
+                }
+            }
+            loadingMore -> {
+                item {
+                    Box(Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
+                        LoaderDots(dark = dark)
+                    }
+                }
+            }
+            endReached -> {
+                item {
+                    Box(Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
+                        Text(
+                            text = stringResource(R.string.home_no_more),
+                            color = PikuColors.textFaint,
+                            fontSize = 12.sp,
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -668,6 +784,29 @@ internal fun UsersTabContent(
         }
         state.usersErrorRes != null && state.users.isEmpty() -> {
             SearchErrorState(errorRes = state.usersErrorRes, onRetry = onRetry, dark = dark)
+        }
+        // 本源不提供用户检索：说清"不支持"，别用通用空态说成"没找到"
+        state.usersUnsupported -> {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        imageVector = Icons.Outlined.People,
+                        contentDescription = null,
+                        tint = PikuColors.textFaint,
+                        modifier = Modifier.size(32.dp),
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = stringResource(
+                            R.string.search_users_unsupported,
+                            stringResource(state.source.labelRes()),
+                        ),
+                        color = PikuColors.textSecondary,
+                        fontSize = 14.sp,
+                        lineHeight = 22.sp,
+                    )
+                }
+            }
         }
         state.users.isEmpty() -> {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

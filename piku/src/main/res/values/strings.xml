@@ -300,6 +300,7 @@
     <string name="search_works_login">登录后即可搜索投稿</string>
     <string name="search_tags_login">登录后即可搜索标签</string>
     <string name="search_users_empty">未找到相关用户</string>
+    <string name="search_users_unsupported">%1$s 不支持用户检索</string>
     <string name="search_tab_works">投稿</string>
     <string name="search_tab_users">用户</string>
     <string name="search_tab_tags">标签</string>
@@ -315,6 +316,7 @@
     <string name="search_translate_zh">译成中文</string>
     <string name="search_manage_tags">管理</string>
     <string name="search_hint_pixiv">多关键词用空格分隔；中文可直接搜索，或点「译」译成日语再搜</string>
+    <string name="search_hint_ao3">同人、角色、配对都能直接搜（中文也行）；标签页里是站点的规范标签名，粘贴作品链接可直达</string>
     <string name="search_suggest_direct">搜索「%1$s」</string>
     <string name="search_filter">筛选</string>
     <string name="search_filter_reset">重置</string>

@@ -440,6 +440,12 @@ fun AppNavHost(
                             popUpTo(Routes.SEARCH) { inclusive = true }
                         }
                     },
+                    // 待机态里点的精确标签：同样另起一页，带上标签名，落地就是该标签的作品列表
+                    onOpenTag = { tag, source ->
+                        navController.navigate(Routes.search("#$tag", tag = tag, source = source)) {
+                            popUpTo(Routes.SEARCH) { inclusive = true }
+                        }
+                    },
                     onWorkClick = { work: Work ->
                         openWork(work)
                     },

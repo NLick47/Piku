@@ -35,21 +35,25 @@ class Ao3ContentBackupTest {
         override suspend fun searchWorks(
             query: String?,
             scope: Map<String, String>,
-            sortColumn: String,
+            sortColumn: String?,
             sortDirection: String,
             page: Int,
         ): ResponseBody = error("备份不该走列表接口")
 
         override suspend fun searchTags(
-            name: String,
-            type: String,
+            name: String?,
+            type: String?,
             status: String,
             sortColumn: String,
             sortDirection: String,
         ): ResponseBody = error("备份不该走标签接口")
 
-        override suspend fun getTagWorks(tag: String, page: Int): ResponseBody =
-            error("备份不该走标签作品接口")
+        override suspend fun getTagWorks(
+            tag: String,
+            page: Int,
+            sortColumn: String?,
+            sortDirection: String,
+        ): ResponseBody = error("备份不该走标签作品接口")
 
         override suspend fun getUserWorks(user: String, page: Int): ResponseBody =
             error("备份不该走用户作品接口")

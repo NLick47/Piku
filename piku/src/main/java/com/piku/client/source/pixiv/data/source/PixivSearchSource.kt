@@ -32,6 +32,9 @@ class PixivSearchSource @Inject constructor(
 
     override val supportsUsers = true
 
+    /** 检索是日语站口径：中文先译日语再搜 */
+    override val idleHintRes = R.string.search_hint_pixiv
+
     override val filterGroups = FILTER_GROUPS
 
     override val filterToggles = FILTER_TOGGLES

@@ -152,6 +152,42 @@ class Ao3ApiRequestShapeTest {
         }
     }
 
+    /** 不带类型 = 跨全部类型检索；钉死某一个类型会凭空少一半结果 */
+    @Test
+    fun tagSearchAcrossAllTypesOmitsTheTypeParameter() {
+        val captured = AtomicReference("")
+        val server = serveRaw("/tags/search", captured)
+        try {
+            runBlocking {
+                api(server.address.port).searchTags(name = "harry", type = null).string()
+            }
+            val uri = captured.get()
+            assertTrue("搜索词没发出去: $uri", uri.contains("tag_search%5Bname%5D=harry"))
+            assertFalse("类型该缺省成不限: $uri", uri.contains("tag_search%5Btype%5D"))
+            assertTrue("没限定规范标签: $uri", uri.contains("tag_search%5Bwrangling_status%5D=canonical"))
+        } finally {
+            server.stop(0)
+        }
+    }
+
+    /** 热门榜要钉成同人且留空名字；不带类型时站点回的是警告分级那批标签 */
+    @Test
+    fun hotTagListPinsFandomAndOmitsName() {
+        val captured = AtomicReference("")
+        val server = serveRaw("/tags/search", captured)
+        try {
+            runBlocking {
+                api(server.address.port).searchTags(name = null, type = "Fandom").string()
+            }
+            val uri = captured.get()
+            assertTrue("类型没钉成同人: $uri", uri.contains("tag_search%5Btype%5D=Fandom"))
+            assertTrue("没按使用量排序: $uri", uri.contains("tag_search%5Bsort_column%5D=uses"))
+            assertFalse("空名不该发出去: $uri", uri.contains("tag_search%5Bname%5D"))
+        } finally {
+            server.stop(0)
+        }
+    }
+
     /** 标签/用户列表路径（编码后的标签名要原样进 path） */
     @Test
     fun tagWorksPathIsPreserved() {

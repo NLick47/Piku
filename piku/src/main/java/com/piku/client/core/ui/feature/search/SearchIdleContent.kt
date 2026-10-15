@@ -3,6 +3,7 @@ package com.piku.client.core.ui.feature.search
 /** 搜索页待机态：我的标签 / 搜索历史 / 热门标签墙 */
 
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -52,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.piku.client.R
+import com.piku.client.core.source.SourceListLayout
 import com.piku.client.core.source.SourceTrendingTag
 import com.piku.client.core.ui.common.SkeletonBlock
 import com.piku.client.core.ui.common.rememberSkeletonPulse
@@ -76,6 +78,9 @@ private const val TRENDING_GAP_DP = 8
  */
 private const val TRENDING_HINT_DELAY_MS = 400L
 
+/** 行式热门榜占位摆几行，够铺满首屏 */
+private const val TAG_ENTRY_SKELETON_ROWS = 8
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun IdleContent(
@@ -83,7 +88,10 @@ internal fun IdleContent(
     customTags: List<String>,
     trending: List<SourceTrendingTag>,
     trendingLoading: Boolean,
-    pluginHint: Boolean,
+    /** 待机态底部提示，按源声明 */
+    @StringRes hintRes: Int,
+    /** 源声明的版式：整行式不摆图墙 */
+    listLayout: SourceListLayout,
     onSelect: (String) -> Unit,
     onSelectCustomTag: (String) -> Unit,
     onSelectTrending: (String) -> Unit,
@@ -92,6 +100,7 @@ internal fun IdleContent(
     onClearHistory: () -> Unit,
     dark: Boolean,
 ) {
+    val asRows = listLayout == SourceListLayout.List
     val title = PikuColors.textSecondary
     // 空态/加载提示用次级字：faint 的暗色值(#5C5852)在近黑页面上只有 2.4:1，读不出来
     val hint = PikuColors.textSecondary
@@ -200,19 +209,29 @@ internal fun IdleContent(
             value = true
         }
         if (shouldShowTrendingSkeleton(trending, trendingLoading, hintReady)) {
-            TrendingSkeletonGrid()
+            if (asRows) TagEntrySkeleton() else TrendingSkeletonGrid()
         } else if (trending.isEmpty()) {
             Text(
                 text = stringResource(R.string.search_hot_tags_empty),
                 color = hint,
                 fontSize = 12.sp,
             )
+        } else if (asRows) {
+            Column {
+                trending.forEach { tag ->
+                    TagEntryRow(
+                        name = tag.name,
+                        count = tag.count,
+                        onClick = { onSelectTrending(tag.name) },
+                    )
+                }
+            }
         } else {
             TrendingGrid(tags = trending, onSelect = onSelectTrending)
         }
         Spacer(Modifier.height(24.dp))
         Text(
-            text = stringResource(if (pluginHint) R.string.search_hint_pixiv else R.string.search_hint),
+            text = stringResource(hintRes),
             color = hint,
             fontSize = 11.sp,
         )
@@ -253,6 +272,43 @@ private fun TrendingSkeletonGrid() {
                 .semantics { contentDescription = description },
             shape = RoundedCornerShape(12.dp),
         )
+    }
+}
+
+/** 行式热门榜的首屏占位，行高与真行一致 */
+@Composable
+private fun TagEntrySkeleton() {
+    val pulse = rememberSkeletonPulse("searchTagEntries")
+    val description = stringResource(R.string.search_hot_tags_loading)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics { contentDescription = description },
+    ) {
+        repeat(TAG_ENTRY_SKELETON_ROWS) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 13.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                SkeletonBlock(
+                    pulse = pulse.value,
+                    modifier = Modifier
+                        .weight(0.55f)
+                        .height(17.dp),
+                    shape = RoundedCornerShape(4.dp),
+                )
+                Spacer(Modifier.weight(0.45f))
+                SkeletonBlock(
+                    pulse = pulse.value,
+                    modifier = Modifier
+                        .width(56.dp)
+                        .height(12.dp),
+                    shape = RoundedCornerShape(4.dp),
+                )
+            }
+        }
     }
 }
 
