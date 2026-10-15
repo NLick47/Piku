@@ -328,8 +328,10 @@ class SourceFeedViewModel @Inject constructor(
             feed = declaration.feed(key.feedId),
             scope = viewModelScope,
             fetchPage = { page ->
-                if (totalPages != null && page >= totalPages!!) {
-                    // 榜单页数已探明：本地短路成空页，省一次注定为空的请求
+                // 第 0 页永远真拉：刷新与重试都要看新内容，缓存只用来挡住越过分页末页的空请求。
+                // 少了这个前提，"单页结果"（AO3 圈层只有一页时总页数探明为 0）会让刷新自撞短路、
+                // 不发请求就把列表清成"暂无投稿"
+                if (page > 0 && totalPages != null && page >= totalPages!!) {
                     Result.success(emptyList())
                 } else {
                     declaration.page(key.feedId, key.facets, page, scopeOf(key))

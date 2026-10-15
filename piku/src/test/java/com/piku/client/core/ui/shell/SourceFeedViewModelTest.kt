@@ -309,6 +309,29 @@ class SourceFeedViewModelTest {
         assertFalse(vm.ui.value.endReached)
     }
 
+    /**
+     * 单页结果集（总页数探明为 0，如 AO3 圈层只有 10 篇）：刷新必须真拉第 0 页。
+     * 探明页数是为了挡住"往后翻越过了末页"，不能反过来把刷新短路成空列表
+     */
+    @Test
+    fun refreshKeepsSinglePageResults() {
+        val fake = FakeSource().apply {
+            items = listOf(work(1), work(2))
+            totalPages = 0
+        }
+        val vm = build(fake)
+        assertEquals(listOf(1L, 2L), vm.ui.value.items.map { it.id })
+
+        vm.refresh()
+        dispatcher.scheduler.advanceUntilIdle()
+
+        val s = vm.ui.value
+        assertEquals("刷新不该把单页结果清成空", listOf(1L, 2L), s.items.map { it.id })
+        assertFalse(s.endReached)
+        // 首屏 1 次 + 刷新 1 次：刷新确实发了请求
+        assertEquals(2, fake.pages.size)
+    }
+
     @Test
     fun failedFirstPageRecoversOnRetry() {
         val fake = FakeSource().apply {
