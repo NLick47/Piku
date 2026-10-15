@@ -21,7 +21,7 @@ class DoHEventListenerTest {
     private val prefs = InMemorySharedPreferences()
     private val dns = DoHDns(prefs)
     private val diagnostics = NetworkDiagnostics(NetworkRuntime(now = { 0L }, sleeper = {}))
-    private val listener = DoHEventListener(dns, diagnostics)
+    private val listener = DoHEventListener(dns, diagnostics) { false }
 
     private val ipA = InetAddress.getByName("1.1.1.1")
     private val request = Request.Builder().url("https://poipiku.com/").build()
@@ -83,6 +83,23 @@ class DoHEventListenerTest {
         listener.responseFailed(FakeCall(request, canceled = false), IOException("closed"))
 
         assertTrue(diagnostics.snapshot().single().message.contains("response failed host=poipiku.com"))
+    }
+
+    @Test
+    fun relayableHostFailureIsNotChargedToIt() {
+        dns.reportSuccess(HOST, ipA)
+        val relayable = DoHEventListener(dns, diagnostics, mayBeRelayed = { true })
+
+        relayable.connectFailed(
+            FakeCall(request, canceled = false),
+            socketAddress,
+            Proxy.NO_PROXY,
+            null,
+            SSLHandshakeException("handshake failed"),
+        )
+
+        assertEquals(true, persisted()?.startsWith("1.1.1.1|"))
+        assertTrue(diagnostics.snapshot().single().message.contains("不计入地址簿"))
     }
 
     private companion object {

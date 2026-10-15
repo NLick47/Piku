@@ -15,6 +15,7 @@ import com.piku.client.source.pixiv.data.remote.EchConfigStore
 import com.piku.client.core.network.image.ImageDiagnostics
 import com.piku.client.core.network.image.ImageNetworkInterceptor
 import com.piku.client.core.network.image.ImageRelayInterceptor
+import com.piku.client.core.network.image.ImageUpstream
 import com.piku.client.core.network.image.ImageRetryInterceptor
 import com.piku.client.core.network.image.ImageRouteProbe
 import com.piku.client.core.network.image.ImageRouteController
@@ -182,7 +183,11 @@ object NetworkModule {
             .dns(dns)
             .sslSocketFactory(sniFactory, sniFactory.trustManager())
             .hostnameVerifier(PoipikuHostnameVerifier())
-            .eventListenerFactory { DoHEventListener(doHDns, diagnostics) }
+            .eventListenerFactory {
+                DoHEventListener(doHDns, diagnostics) { host ->
+                    ImageUpstream.of(host)?.let(routeController::useRelay) == true
+                }
+            }
             .cookieJar(cookieJar)
             .addInterceptor(ImageRelayInterceptor(routeController, diagnostics))
             .addInterceptor(RefererInterceptor())
@@ -290,7 +295,7 @@ object NetworkModule {
         .dns(doHDns)
         .sslSocketFactory(sniFactory, sniFactory.trustManager())
         .hostnameVerifier(PoipikuHostnameVerifier())
-        .eventListenerFactory { DoHEventListener(doHDns, diagnostics) }
+        .eventListenerFactory { DoHEventListener(doHDns, diagnostics) { false } }
         .addInterceptor(pixivHeaderInterceptor)
         // 与原生通道的 authHeaders 对齐：应用接口域才带令牌，刷新那一发（oauth 域）不带
         .addInterceptor { chain ->
