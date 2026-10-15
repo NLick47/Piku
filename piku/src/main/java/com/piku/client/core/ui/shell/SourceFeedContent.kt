@@ -482,6 +482,7 @@ private fun SummaryRow(
             selectedId = selectedFeedId,
             label = feeds.firstOrNull { it.id == selectedFeedId }?.let { stringResource(it.labelRes) }.orEmpty(),
             onPick = onPickSort,
+            dark = dark,
         )
         filters.forEach { entry ->
             FilterPill(
@@ -489,6 +490,7 @@ private fun SummaryRow(
                 chosenId = entry.second,
                 onPick = onPickFilter,
                 onClear = onClearFilter,
+                dark = dark,
             )
         }
     }
@@ -570,7 +572,7 @@ private fun ScopeFoldPill(
                         },
                     ),
                 ),
-                dark = false,
+                dark = dark,
                 anchorHeightPx = anchorHeightPx,
                 // 圈层名比排序项长得多（配对名尤甚）：默认 150dp 会折行，加宽到一行放得下
                 width = 240.dp,
@@ -587,6 +589,7 @@ private fun SortPill(
     selectedId: String,
     label: String,
     onPick: (String) -> Unit,
+    dark: Boolean,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     var anchorHeightPx by remember { mutableIntStateOf(0) }
@@ -627,7 +630,7 @@ private fun SortPill(
                         )
                     },
                 ),
-                dark = false,
+                dark = dark,
                 anchorHeightPx = anchorHeightPx,
                 onDismiss = { menuOpen = false },
             )
@@ -642,6 +645,7 @@ private fun FilterPill(
     chosenId: String,
     onPick: (groupId: String, optionId: String) -> Unit,
     onClear: (groupId: String) -> Unit,
+    dark: Boolean,
 ) {
     val chosenLabel = group.options.firstOrNull { it.id == chosenId }?.let { stringResource(it.labelRes) } ?: chosenId
     var menuOpen by remember { mutableStateOf(false) }
@@ -679,7 +683,7 @@ private fun FilterPill(
             FacetMenuPopup(
                 options = group.options,
                 selectedId = chosenId,
-                dark = false,
+                dark = dark,
                 anchorHeightPx = anchorHeightPx,
                 onSelect = { optionId ->
                     menuOpen = false
