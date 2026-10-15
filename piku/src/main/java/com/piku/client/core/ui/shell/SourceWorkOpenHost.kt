@@ -48,6 +48,10 @@ class SourceOpenViewModel @Inject constructor(
 
     fun open(work: Work): SourceWorkOpen = sourceRegistry.byId(work.source).open(work)
 
+    /** 该作品打开前要不要过 R-18 门：由源声明，外壳不认站点名 */
+    fun gatesAdultContent(work: Work): Boolean =
+        sourceRegistry.byId(work.source).gatesAdultContent
+
     /** 这一源的作品是否由主壳详情页承载；是的话调用方直接走自家详情路由 */
     fun opensInNativeShell(work: Work): Boolean = open(work) is SourceWorkOpen.NativeDetail
 
@@ -95,8 +99,8 @@ internal fun SourceWorkOpenHost(
             onDismiss()
         }
 
-        // 成人门只对 poipiku 系生效：pixiv 的 R-18 由账号侧表示设置在服务端管控，不再设门
-        SourceWorkOpen.InAppViewer -> if (work.source != WorkSource.PIXIV && work.r18 && !adultEnabled) {
+        // 成人门按源声明：pixiv 由账号侧管控、AO3 站点本身全开放，都不过门
+        SourceWorkOpen.InAppViewer -> if (viewModel.gatesAdultContent(work) && work.r18 && !adultEnabled) {
             AlertDialog(
                 onDismissRequest = onDismiss,
                 title = { Text(stringResource(R.string.detail_gate_adult_title)) },

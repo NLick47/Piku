@@ -16,6 +16,7 @@ import com.piku.client.core.source.SourceFacetStyle
 import com.piku.client.core.source.SourceFacetVisibleWhen
 import com.piku.client.core.source.SourceFeed
 import com.piku.client.core.source.SourcePage
+import com.piku.client.core.source.SourceScope
 import com.piku.client.core.source.SourceWorkOpen
 import com.piku.client.core.source.SourceWorkPage
 import com.piku.client.core.source.SourceWorkText
@@ -37,7 +38,12 @@ class PixivContentSource @Inject constructor(
 
     override val facets = FACETS
 
-    override suspend fun page(feedId: String, facets: Map<String, String>, page: Int): Result<SourcePage> {
+    override suspend fun page(
+        feedId: String,
+        facets: Map<String, String>,
+        page: Int,
+        scope: SourceScope?,
+    ): Result<SourcePage> {
         // 登录门未开前其余流不可达；真到达即实现缺口，给终态而非空页
         if (feedId !in IMPLEMENTED_FEEDS) return Result.failure(AppError.NotFound)
         val offset = page * PixivAppConfig.PAGE_SIZE
@@ -113,6 +119,8 @@ class PixivContentSource @Inject constructor(
     override fun authorPage(work: Work): SourceAuthorOpen = SourceAuthorOpen.NativeProfile
 
     override val authorPageStyle: AuthorPageStyle = AuthorPageStyle.Profile
+
+    override val gatesAdultContent = false
 
     override suspend fun workPages(work: Work): Result<List<SourceWorkPage>> =
         repository.workPages(work.id)

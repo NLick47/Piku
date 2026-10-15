@@ -94,6 +94,7 @@ class AccountsViewModelTest {
             feedId: String,
             facets: Map<String, String>,
             page: Int,
+            scope: com.piku.client.core.source.SourceScope?,
         ): Result<SourcePage> = Result.success(SourcePage(emptyList()))
 
         override fun open(work: Work): SourceWorkOpen = SourceWorkOpen.InAppViewer
@@ -105,6 +106,7 @@ class AccountsViewModelTest {
     private fun labelFor(source: WorkSource): Int = when (source) {
         WorkSource.POIPIKU -> R.string.home_source_poipiku
         WorkSource.PIXIV -> R.string.home_source_pixiv
+        WorkSource.AO3 -> R.string.home_source_ao3
     }
 
     private fun build(

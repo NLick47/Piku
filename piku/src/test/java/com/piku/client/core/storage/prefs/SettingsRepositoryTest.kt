@@ -222,7 +222,7 @@ class SettingsRepositoryTest {
     @Test
     fun readingProgressSkipsUnknownSourceKeys() {
         val prefs = InMemorySharedPreferences()
-        prefs.edit().putInt("novel_progress_AO3_42", 5).apply()
+        prefs.edit().putInt("novel_progress_FUTURE_SOURCE_42", 5).apply()
         prefs.edit().putInt("image_progress_POIPIKU_9", 2).apply()
 
         val repo = SettingsRepository(prefs)

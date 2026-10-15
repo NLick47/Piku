@@ -364,6 +364,7 @@ internal fun SourceWorkDetailScreen(
                     showTranslatedTags = state.showTranslatedTags,
                     tagsTranslating = state.tagsTranslating,
                     onToggleTagsTranslation = viewModel::onToggleTagsTranslation,
+                    statusRes = state.novelStatusRes,
                 )
             } else {
                 // pixiv 走自己的版面：图通栏置顶 + 概览卡（计数/元信息），与 poipiku 互不干涉
@@ -561,7 +562,8 @@ internal fun SourceWorkDetailScreen(
             onReplayHints = viewModel::resetMangaHints,
         )
         // 阅读器盖在顶栏与详情之上，与 poipiku 详情页同级
-        if (state.novelReaderOpen && state.novelText.isNotBlank()) {
+        // 分章源（AO3）的正文在 chapters 里、novelText 为空：两者有一个就够开阅读器
+        if (state.novelReaderOpen && (state.novelText.isNotBlank() || state.novelChapters.isNotEmpty())) {
             FullNovelViewer(
                 text = state.novelText,
                 title = detail?.translated?.title
@@ -573,6 +575,7 @@ internal fun SourceWorkDetailScreen(
                 onSettingsChange = viewModel::setNovelReaderSettings,
                 onClose = viewModel::closeNovelReader,
                 onWorkClick = { _, _, _ -> },
+                chapters = state.novelChapters,
             )
         }
         FeedbackHost(channel = viewModel.feedback, snackbarHostState = snackbarHostState)

@@ -22,7 +22,12 @@ class ContentSourceAuthorPageTest {
         override val feeds = emptyList<SourceFeed>()
         override val facets = emptyList<SourceFacetGroup>()
 
-        override suspend fun page(feedId: String, facets: Map<String, String>, page: Int): Result<SourcePage> =
+        override suspend fun page(
+            feedId: String,
+            facets: Map<String, String>,
+            page: Int,
+            scope: com.piku.client.core.source.SourceScope?,
+        ): Result<SourcePage> =
             Result.success(SourcePage(items = emptyList()))
 
         override fun open(work: Work): SourceWorkOpen = SourceWorkOpen.InAppViewer

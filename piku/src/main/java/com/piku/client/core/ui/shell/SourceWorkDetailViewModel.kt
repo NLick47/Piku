@@ -147,6 +147,10 @@ class SourceWorkDetailViewModel @Inject constructor(
         val customTags: List<String> = emptyList(),
         /** 小说正文：点阅读才拉（体量大，不跟详情一起取） */
         val novelText: String = "",
+        /** 分章正文（AO3 这类分章源）：非空时阅读器按章渲染，[novelText] 留空 */
+        val novelChapters: List<com.piku.client.core.model.NovelChapter> = emptyList(),
+        /** 作品状态徽标（AO3：已完结/连载中）；0 = 不显示 */
+        @androidx.annotation.StringRes val novelStatusRes: Int = 0,
         val novelBodyLoading: Boolean = false,
         val novelReaderOpen: Boolean = false,
         val novelReaderSettings: NovelReaderSettings = NovelReaderSettings(),
@@ -330,10 +334,18 @@ class SourceWorkDetailViewModel @Inject constructor(
             return
         }
         _ui.update {
+            val base = it.detail
             it.copy(
                 loading = false,
-                detail = it.detail?.copy(description = text.description, tags = text.tags),
+                detail = base?.copy(
+                    // 深链进来件只有 id（列表没带标题/作者）：只补空位，不覆盖已上屏的值
+                    title = base.title.ifBlank { text.title },
+                    authorName = base.authorName.ifBlank { text.authorName },
+                    description = text.description,
+                    tags = text.tags,
+                ),
                 stats = text.stats,
+                novelStatusRes = text.statusRes,
             )
         }
         recordHistoryUseCase(work)
@@ -427,13 +439,40 @@ class SourceWorkDetailViewModel @Inject constructor(
 
     fun openNovelReader() {
         val work = currentWork ?: return
-        if (_ui.value.novelText.isNotBlank()) {
+        if (_ui.value.novelText.isNotBlank() || _ui.value.novelChapters.isNotEmpty()) {
             _ui.update { it.copy(novelReaderOpen = true) }
             return
         }
         viewModelScope.launch {
             _ui.update { it.copy(novelBodyLoading = true) }
-            val body = sourceRegistry.byId(work.source).novelBody(work).getOrNull()
+            val source = sourceRegistry.byId(work.source)
+            // 分章源（AO3）走章节路径：阅读器按章渲染并出章节导航
+            val chapters = source.novelChapters(work).getOrNull()
+            if (!chapters.isNullOrEmpty()) {
+                val progress = settingsRepository.getNovelProgress(work.key)
+                if (chapters.size > 1) {
+                    _ui.update {
+                        it.copy(
+                            novelBodyLoading = false,
+                            novelChapters = chapters,
+                            novelReaderOpen = true,
+                            novelProgressPercent = progress,
+                        )
+                    }
+                } else {
+                    // 单章（oneshot）：章节导航对一章没有意义，按普通正文读
+                    _ui.update {
+                        it.copy(
+                            novelBodyLoading = false,
+                            novelText = chapters.first().text,
+                            novelReaderOpen = true,
+                            novelProgressPercent = progress,
+                        )
+                    }
+                }
+                return@launch
+            }
+            val body = source.novelBody(work).getOrNull()
             if (body.isNullOrBlank()) {
                 _ui.update { it.copy(novelBodyLoading = false) }
                 feedback.show(R.string.home_error_network)

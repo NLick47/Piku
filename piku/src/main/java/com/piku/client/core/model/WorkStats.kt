@@ -17,6 +17,8 @@ data class WorkStats(
     val pageCount: Int = 0,
     /** 作者账号（@xxx），展示在作者名下 */
     val authorAccount: String = "",
+    /** 章节数（AO3）；0 = 单章作品或该源不给，详情不单独展示 */
+    val chapters: Int = 0,
 ) {
     /** 计数接口偶发整体缺失（匿名限制、作品被限），全 0 时 UI 不展示数据条 */
     val hasCounts: Boolean get() = views > 0 || (likes ?: 0) > 0 || bookmarks > 0

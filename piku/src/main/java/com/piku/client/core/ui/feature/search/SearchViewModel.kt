@@ -19,6 +19,7 @@ import com.piku.client.core.model.WorkSource
 import com.piku.client.core.source.SearchFilterGroupSpec
 import com.piku.client.core.source.SearchFilterToggleSpec
 import com.piku.client.core.source.SourceAuthorOpen
+import com.piku.client.core.source.SourceListLayout
 import com.piku.client.core.source.SourceSearch
 import com.piku.client.core.source.SourceSearchRegistry
 import com.piku.client.core.source.SourceAuthRegistry
@@ -116,6 +117,8 @@ data class SearchUiState(
     val pluginActive: Boolean = false,
     /** 结果卡片按原图比例排版 */
     val proportional: Boolean = false,
+    /** 列表版式（源声明）：文字源单列 blurb，其余双列网格 */
+    val listLayout: SourceListLayout = SourceListLayout.Grid,
     /** 待机态热门标签墙（带代表作缩略图）：插件源取 trendingTags，poipiku 由热门标签页映射，两路互斥 */
     val trending: List<SourceTrendingTag> = emptyList(),
     /** 热门墙是否有请求在飞；UI 按它 + 宽限期决定出占位还是空态文案 */
@@ -216,6 +219,7 @@ class SearchViewModel @Inject constructor(
             source = source,
             pluginActive = searchPlugin != null,
             proportional = searchPlugin?.proportional == true,
+            listLayout = listLayoutFor(source),
             filterGroups = searchPlugin?.filterGroups ?: emptyList(),
             filterToggles = searchPlugin?.filterToggles ?: emptyList(),
             visibleFilterGroups = searchPlugin?.filterGroups ?: emptyList(),
@@ -335,6 +339,7 @@ class SearchViewModel @Inject constructor(
                 source = newSource,
                 pluginActive = searchPlugin != null,
                 proportional = searchPlugin?.proportional == true,
+                listLayout = listLayoutFor(newSource),
                 filterGroups = searchPlugin?.filterGroups ?: emptyList(),
                 filterToggles = searchPlugin?.filterToggles ?: emptyList(),
                 visibleFilterGroups = searchPlugin?.filterGroups ?: emptyList(),
@@ -586,6 +591,10 @@ class SearchViewModel @Inject constructor(
 
     /** 换源面板的可选源与文案：与首页换源面板完全同一套（声明序即展示序） */
     val sourceOptions: List<WorkSource> get() = sourceRegistry.all.sortedBy { it.id.ordinal }.map { it.id }
+
+    /** 版式是内容源的声明而不是检索插件的：没有检索能力的源也要按源定版式 */
+    private fun listLayoutFor(source: WorkSource): SourceListLayout =
+        sourceRegistry.byId(source)?.listLayout ?: SourceListLayout.Grid
 
     fun sourceLabelRes(id: WorkSource): Int = sourceRegistry.byId(id).labelRes
 

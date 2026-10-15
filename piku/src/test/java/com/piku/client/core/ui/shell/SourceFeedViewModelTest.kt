@@ -17,6 +17,11 @@ import com.piku.client.core.source.SourceFacetGroup
 import com.piku.client.core.source.SourceFacetStyle
 import com.piku.client.core.source.SourceFeed
 import com.piku.client.core.source.SourcePage
+import com.piku.client.core.source.SourceScopes
+import com.piku.client.core.source.SourceScopeKind
+import com.piku.client.core.source.SourceScopeRegistry
+import com.piku.client.core.source.SourceScope
+import com.piku.client.core.source.SourceScopeSuggestion
 import com.piku.client.core.source.SourceRegistry
 import com.piku.client.core.source.SourceWorkPage
 import com.piku.client.core.source.SourceWorkOpen
@@ -118,14 +123,23 @@ class SourceFeedViewModelTest {
 
         /** (feedId, facets, page) 的全部取页请求 */
         val pages = mutableListOf<Triple<String, Map<String, String>, Int>>()
+
+        /** 与 pages 一一对应的圈层 id（不声明圈层的源恒为 null） */
+        val requestedScopes = mutableListOf<String?>()
         var items: List<Work> = emptyList()
         var totalPages: Int? = null
         var outcome: Result<Unit> = Result.success(Unit)
         var openRoute: SourceWorkOpen = SourceWorkOpen.InAppViewer
         var viewerPages: List<String> = listOf("https://img.example/1.jpg")
 
-        override suspend fun page(feedId: String, facets: Map<String, String>, page: Int): Result<SourcePage> {
+        override suspend fun page(
+            feedId: String,
+            facets: Map<String, String>,
+            page: Int,
+            scope: SourceScope?,
+        ): Result<SourcePage> {
             pages.add(Triple(feedId, facets, page))
+            requestedScopes.add(scope?.id)
             return outcome.map { SourcePage(items = items, totalPages = totalPages) }
         }
 
@@ -139,6 +153,7 @@ class SourceFeedViewModelTest {
         fake: FakeSource,
         auth: FakeAuth = FakeAuth(WorkSource.PIXIV, loggedIn = true),
         startSource: WorkSource = WorkSource.PIXIV,
+        scopes: SourceScopes? = null,
     ): SourceFeedViewModel {
         val settings = SettingsRepository(InMemorySharedPreferences())
         settings.setHomeSource(startSource)
@@ -147,10 +162,35 @@ class SourceFeedViewModelTest {
             observeHomeSourceUseCase = ObserveHomeSourceUseCase(settings),
             favorites = FakeFavorites(),
             sourceAuth = SourceAuthRegistry(setOf(auth)),
+            scopeRegistry = SourceScopeRegistry(scopes?.let { setOf(it) } ?: emptySet()),
             config = SourceFeedConfig(prefetchEnabled = false),
         )
         dispatcher.scheduler.advanceUntilIdle()
         return vm
+    }
+
+    /** 圈层式首页的源侧能力：内存版 store（订阅/激活都即时生效） */
+    private class FakeScopes(
+        override val sourceId: WorkSource = WorkSource.PIXIV,
+        override val kinds: List<SourceScopeKind> = listOf(
+            SourceScopeKind("fandom", R.string.ao3_scope_fandom),
+        ),
+    ) : SourceScopes {
+        private val _scopes = MutableStateFlow<List<SourceScope>>(emptyList())
+        private val _active = MutableStateFlow<SourceScope?>(null)
+        override val scopes: StateFlow<List<SourceScope>> = _scopes
+        override val active: StateFlow<SourceScope?> = _active
+        override suspend fun suggest(kind: String, term: String) =
+            Result.success(listOf(SourceScopeSuggestion("$term-1")))
+        override fun setScopes(scopes: List<SourceScope>) {
+            _scopes.value = scopes.distinctBy { it.id }
+            if (_active.value?.id !in _scopes.value.map { it.id }) {
+                _scopes.value.firstOrNull()?.let { _active.value = it }
+            }
+        }
+        override fun setActive(scope: SourceScope) {
+            _active.value = scope
+        }
     }
 
     @Test
@@ -430,6 +470,7 @@ class SourceFeedViewModelTest {
             observeHomeSourceUseCase = ObserveHomeSourceUseCase(settings),
             favorites = favorites,
             sourceAuth = SourceAuthRegistry(setOf(FakeAuth(WorkSource.PIXIV, loggedIn = true))),
+            scopeRegistry = SourceScopeRegistry(emptySet()),
             config = SourceFeedConfig(prefetchEnabled = false),
         )
         dispatcher.scheduler.advanceUntilIdle()
@@ -550,6 +591,7 @@ class SourceFeedViewModelTest {
             observeHomeSourceUseCase = ObserveHomeSourceUseCase(settings),
             favorites = FakeFavorites(),
             sourceAuth = SourceAuthRegistry(emptySet()),
+            scopeRegistry = SourceScopeRegistry(emptySet()),
             config = SourceFeedConfig(prefetchEnabled = false),
         )
         dispatcher.scheduler.advanceUntilIdle()
@@ -559,5 +601,64 @@ class SourceFeedViewModelTest {
 
         assertTrue(vm.ui.value.needLogin)
         assertNull(vm.ui.value.loginRoute)
+    }
+
+    // ---- 圈层式首页 ----
+
+    /** 一个圈层都没订阅：不发请求，状态是"去设置圈层"而不是空列表 */
+    @Test
+    fun scopedSourceWithoutSubscriptionsAsksForSetupInsteadOfFetching() {
+        val fake = FakeSource().apply { items = listOf(work(1)) }
+        val scopes = FakeScopes()
+        val vm = build(fake, scopes = scopes)
+
+        val state = vm.ui.value
+        assertTrue("应进入圈层引导态", state.needsScopeSetup)
+        assertTrue("未订阅时不该发任何取页请求", fake.pages.isEmpty())
+    }
+
+    /** 订阅第一个圈层：按该圈层取数，且默认激活它 */
+    @Test
+    fun subscribingAFandomFetchesInsideThatScope() {
+        val fake = FakeSource().apply { items = listOf(work(1)) }
+        val scopes = FakeScopes()
+        val vm = build(fake, scopes = scopes)
+
+        val hp = SourceScope("fandom", "Harry Potter - J. K. Rowling")
+        vm.setScopes(listOf(hp))
+        dispatcher.scheduler.advanceUntilIdle()
+
+        val state = vm.ui.value
+        assertFalse("有圈层后不再引导", state.needsScopeSetup)
+        assertEquals(hp, state.activeScope)
+        assertEquals(listOf(hp.id), fake.requestedScopes)
+    }
+
+    /** 切圈层：内容换了，必须用新圈层重新取（键不同，不会命中旧缓存） */
+    @Test
+    fun switchingScopeReloadsContentInsideTheNewScope() {
+        val fake = FakeSource().apply { items = listOf(work(1)) }
+        val scopes = FakeScopes()
+        val vm = build(fake, scopes = scopes)
+
+        val hp = SourceScope("fandom", "Harry Potter - J. K. Rowling")
+        val st = SourceScope("fandom", "Stranger Things (TV 2016)")
+        vm.setScopes(listOf(hp, st))
+        dispatcher.scheduler.advanceUntilIdle()
+        vm.selectScope(st)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(listOf(hp.id, st.id), fake.requestedScopes)
+        assertEquals(st, vm.ui.value.activeScope)
+    }
+
+    /** 非圈层式源（没登记能力）：一切照旧，绝不进引导态 */
+    @Test
+    fun feedSourceWithoutScopesKeepsWorking() {
+        val fake = FakeSource().apply { items = listOf(work(1)) }
+        val vm = build(fake)
+        assertFalse(vm.ui.value.needsScopeSetup)
+        assertEquals("照常取第一页", listOf(Triple("popular", mapOf("type" to "all"), 0)), fake.pages)
+        assertEquals("没有圈层能力就不带圈层", listOf<String?>(null), fake.requestedScopes)
     }
 }

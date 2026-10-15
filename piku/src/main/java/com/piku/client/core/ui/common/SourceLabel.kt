@@ -9,4 +9,5 @@ import com.piku.client.core.model.WorkSource
 fun WorkSource.labelRes(): Int = when (this) {
     WorkSource.POIPIKU -> R.string.home_source_poipiku
     WorkSource.PIXIV -> R.string.home_source_pixiv
+    WorkSource.AO3 -> R.string.home_source_ao3
 }

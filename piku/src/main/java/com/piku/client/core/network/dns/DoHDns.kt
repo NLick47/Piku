@@ -88,14 +88,18 @@ class DoHDns internal constructor(
     }
 
     /**
-     * 竞速来源按域名分三套：pixiv 不走系统 DNS（投毒答案对它没有价值，只多花一次探测）；
-     * poipiku 主站内置固定 IP 打头、系统 DNS 只当最后一条退路；其余域名保持系统 DNS 打头。
+     * 竞速来源按域名分四套：pixiv 不走系统 DNS（投毒答案对它没有价值，只多花一次探测）；
+     * poipiku 主站内置固定 IP 打头、系统 DNS 只当最后一条退路；AO3 同 poipiku（系统 DNS
+     * 对它是投毒的 Facebook 段 IP）；其余域名保持系统 DNS 打头。
      * 单测用假来源整体覆盖。
      */
     private val pixivSources: List<AddressSource> by lazy {
         listOf(staticSource, cloudflareSource, workerSource)
     }
     private val poipikuSources: List<AddressSource> by lazy {
+        listOf(staticSource, alidnsSource, cloudflareSource, workerSource, systemSource)
+    }
+    private val ao3Sources: List<AddressSource> by lazy {
         listOf(staticSource, alidnsSource, cloudflareSource, workerSource, systemSource)
     }
     private val otherSources: List<AddressSource> by lazy {
@@ -108,6 +112,7 @@ class DoHDns internal constructor(
     private fun defaultSourcesFor(hostname: String): List<AddressSource> = when {
         isPixivDomain(hostname) -> pixivSources
         hostname == POIPIKU_MAIN_HOST -> poipikuSources
+        hostname == AO3_MAIN_HOST -> ao3Sources
         else -> otherSources
     }
 
@@ -568,7 +573,14 @@ class DoHDns internal constructor(
 
     internal companion object {
         /** 走 DoH 解析与地址固定的域名，含子域；pixiv 主站与图片 CDN 不同 IP 段，分开列 */
-        val BUSINESS_DOMAINS = listOf("poipiku.com", "pixiv.net", "pximg.net", "pages.dev", "pic-relay.cyou")
+        val BUSINESS_DOMAINS = listOf(
+            "poipiku.com",
+            "pixiv.net",
+            "pximg.net",
+            "pages.dev",
+            "pic-relay.cyou",
+            "archiveofourown.org",
+        )
 
         /** 诊断报告里逐条展示的域名，须落在 [BUSINESS_DOMAINS] 之内 */
         val BUSINESS_HOSTS = listOf(
@@ -578,12 +590,15 @@ class DoHDns internal constructor(
             "i.pximg.net",
             "piku-img.pages.dev",
             "pic-relay.cyou",
+            "archiveofourown.org",
         )
 
         val PIXIV_DOMAINS = listOf("pixiv.net", "pximg.net")
 
         /** 有内置固定 IP、且来源名单单独排序的 poipiku 主站域名 */
         const val POIPIKU_MAIN_HOST = "poipiku.com"
+
+        const val AO3_MAIN_HOST = "archiveofourown.org"
 
         val STATIC_ADDRESSES = mapOf(
             "poipiku.com" to listOf("54.199.93.197"),
@@ -599,6 +614,7 @@ class DoHDns internal constructor(
             "www.pixiv.net" to listOf("172.64.145.17", "104.18.42.239"),
             "app-api.pixiv.net" to listOf("172.64.145.17", "104.18.42.239"),
             "i.pximg.net" to listOf("210.140.139.129", "210.140.139.133", "210.140.139.134"),
+            "archiveofourown.org" to listOf("104.20.8.2", "104.20.9.2"),
         )
 
         const val WORKER_RESOLVE_TTL_MS = 10 * 60 * 1000L

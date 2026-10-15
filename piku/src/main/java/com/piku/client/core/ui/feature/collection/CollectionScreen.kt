@@ -125,6 +125,7 @@ import com.piku.client.core.model.FavoriteFolder
 import com.piku.client.core.model.FolderSort
 import com.piku.client.core.model.ReadingProgress
 import com.piku.client.core.model.Work
+import com.piku.client.core.model.WorkKind
 import com.piku.client.core.source.SourceAuthorOpen
 import com.piku.client.core.ui.shell.SourceOpenViewModel
 import com.piku.client.core.ui.shell.SourceWorkOpenHost
@@ -135,6 +136,7 @@ import com.piku.client.core.ui.common.LoaderDots
 import com.piku.client.core.ui.common.labelRes
 import com.piku.client.core.ui.common.PikuBackButton
 import com.piku.client.core.ui.common.UserAvatar
+import com.piku.client.core.ui.common.TextWorkCard
 import com.piku.client.core.ui.common.WorkCard
 import com.piku.client.core.ui.common.resolve
 import com.piku.client.core.ui.theme.ContentCardBgDark
@@ -1232,6 +1234,18 @@ private fun SelectableWorkCard(
         label = "selectionBadge",
     )
     Box(modifier = Modifier.graphicsLayer { scaleX = scale; scaleY = scale }) {
+        // 无封面小说（AO3）：网格里没有图可放，用文字卡，否则是一格灰锁占位
+        val textOnly = work.kind == WorkKind.NOVEL && work.thumbnailUrl.isBlank()
+        if (textOnly) {
+            TextWorkCard(
+                work = work,
+                onToggleFavorite = {},
+                onClick = { if (selectionMode) onToggleSelect() else onOpen() },
+                dark = dark,
+                onLongClick = { if (!selectionMode) onLongPress() },
+                progress = progress,
+            )
+        } else {
         WorkCard(
             work = work,
             isFavorite = true,
@@ -1243,6 +1257,7 @@ private fun SelectableWorkCard(
             progress = progress,
             showSourceLabel = true,
         )
+        }
         if (selectionMode && selected) {
             // 只标记选中的卡：未选中的卡保持原样，避免整片压暗被看成"全都选中了"
             Box(

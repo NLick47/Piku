@@ -710,10 +710,18 @@ private fun ShuffleItem(onShuffle: () -> Unit, dark: Boolean) {
 }
 
 @Composable
-internal fun SkeletonGrid(dark: Boolean) {
+internal fun SkeletonGrid(
+    dark: Boolean,
+    singleColumn: Boolean = false,
+    header: (@Composable () -> Unit)? = null,
+) {
     val isTablet = LocalConfiguration.current.screenWidthDp >= 600
     LazyVerticalStaggeredGrid(
-        columns = if (isTablet) StaggeredGridCells.Adaptive(220.dp) else StaggeredGridCells.Fixed(2),
+        columns = when {
+            singleColumn -> StaggeredGridCells.Fixed(1)
+            isTablet -> StaggeredGridCells.Adaptive(220.dp)
+            else -> StaggeredGridCells.Fixed(2)
+        },
         state = rememberLazyStaggeredGridState(),
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -725,9 +733,65 @@ internal fun SkeletonGrid(dark: Boolean) {
         horizontalArrangement = Arrangement.spacedBy(PikuLayout.GridGap),
         verticalItemSpacing = PikuLayout.GridGap,
     ) {
-        items(6) {
-            SkeletonCard(dark = dark)
+        if (header != null) {
+            item(span = StaggeredGridItemSpan.FullLine) { header() }
         }
+        items(if (singleColumn) 4 else 6) {
+            // 骨架要和真内容同尺寸：单列源摆 blurb 形状，双列源摆方图卡形状
+            if (singleColumn) SkeletonBlurb(dark = dark) else SkeletonCard(dark = dark)
+        }
+    }
+}
+
+@Composable
+private fun SkeletonBlurb(dark: Boolean) {
+    val shape = RoundedCornerShape(PikuLayout.CardCorner)
+    val placeholder = if (dark) WorkCardPlaceholderDark else Color(0xFFE8E4DE)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(if (dark) WorkCardBgDark else Color(0xE6FFFFFF))
+            .border(
+                BorderStroke(0.5.dp, if (dark) WorkCardBorderDark else SoftBorderLight),
+                shape,
+            )
+            .padding(PikuLayout.CardPadding + 2.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .width(34.dp)
+                .height(14.dp)
+                .clip(RoundedCornerShape(999.dp))
+                .background(placeholder),
+        )
+        Spacer(Modifier.height(10.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.66f)
+                .height(13.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(placeholder),
+        )
+        Spacer(Modifier.height(9.dp))
+        repeat(3) { line ->
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(if (line == 2) 0.5f else 1f)
+                    .height(10.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(placeholder),
+            )
+            Spacer(Modifier.height(5.dp))
+        }
+        Spacer(Modifier.height(6.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.4f)
+                .height(10.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(placeholder),
+        )
     }
 }
 

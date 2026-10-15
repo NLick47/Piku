@@ -14,8 +14,11 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -63,7 +66,9 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
@@ -117,6 +122,10 @@ private val CONTENT_PADDING_HORIZONTAL = 20.dp
 /** 正文顶部/底部留白（浮动栏之外），也让正文在栏下淡出 */
 private val CONTENT_PADDING_TOP = 84.dp
 private val CONTENT_PADDING_BOTTOM = 112.dp
+/** 章节导航条的高度：底衬渐变要跟着变高，正文才会在栏下淡出 */
+private val CHAPTER_BAR_HEIGHT = 56.dp
+/** 章末「下一章」按钮的圆角 */
+private val ReaderFooterShape = androidx.compose.foundation.shape.RoundedCornerShape(999.dp)
 
 /**
  * 全屏小说阅读器：
@@ -148,6 +157,11 @@ fun FullNovelViewer(
     /** 小说分块流式翻译进度（百分比）；非 null 时进度行的百分比位置改为显示翻译进度 */
     novelStreamProgress: Int? = null,
     onToggleTranslation: () -> Unit = {},
+    /**
+     * 分章正文（≥2 章时按章渲染并出章节导航：上一章/目录/下一章 + 章末下一章入口）。
+     * 空或单章走 [text] 的单篇路径，与从前一致；进度始终按整部百分比落盘。
+     */
+    chapters: List<com.piku.client.core.model.NovelChapter> = emptyList(),
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -172,6 +186,17 @@ fun FullNovelViewer(
     // 读到的百分比：改字号/行距会重排，靠它把读者送回原处
     val position = remember { ReaderPosition() }
 
+    // 章节模式：≥2 章按章渲染，进度仍是整部百分比（与不分章共用进度键）
+    val chaptered = chapters.size > 1
+    val chapterLengths = remember(chapters) { chapters.map { it.length } }
+    // 首放的落点：整部百分比 → 章 + 章内百分比
+    val startPosition = remember { NovelChapterProgress.locate(chapterLengths, initialPercent) }
+    var chapterIndex by remember { mutableIntStateOf(if (chaptered) startPosition.chapterIndex else 0) }
+    // 待恢复的章内百分比：首放/目录跳转时非零，定位完清零
+    var chapterStartPercent by remember { mutableIntStateOf(if (chaptered) startPosition.localPercent else 0) }
+    var chapterSheetOpen by remember { mutableStateOf(false) }
+    val bodyText = if (chaptered) chapters[chapterIndex].text else text
+
     fun refreshAutoHide() {
         controlsVisible = true
         autoHideJob?.cancel()
@@ -194,16 +219,52 @@ fun FullNovelViewer(
         }
     }
 
+    fun goToChapter(target: Int) {
+        if (!chaptered) return
+        val index = target.coerceIn(0, chapters.lastIndex)
+        if (index == chapterIndex) {
+            scope.launch { scrollState.scrollTo(0) }
+            return
+        }
+        chapterStartPercent = 0
+        chapterIndex = index
+        refreshAutoHide()
+    }
+
+    /** 当前落点换算成整部百分比（章节模式）或章内百分比（单篇） */
+    fun progressToSave(): Int {
+        val local = readerProgressPercent(scrollState.value, scrollState.maxValue)
+        return if (chaptered) NovelChapterProgress.overall(chapterLengths, chapterIndex, local) else local
+    }
+
     LaunchedEffect(Unit) { refreshAutoHide() }
 
     // 恢复进度：内容可滚动后按保存的百分比跳转。百分比与字号/内容长度无关，
     // 字号调整后也不会错位；maxValue 为 0（不足一屏）则保持顶部。
+    // 章节模式的落点由下面的章节定位接管（整部百分比先换算成章 + 章内百分比）
     LaunchedEffect(scrollState, initialPercent) {
+        if (chaptered) return@LaunchedEffect
         if (initialPercent <= 0) return@LaunchedEffect
         val max = snapshotFlow { scrollState.maxValue }
             .filter { it > 0 }
             .first()
         scrollState.scrollTo(readerScrollTarget(initialPercent, max))
+    }
+
+    // 章节定位：首放/换章后按待恢复的章内百分比滚动；换章先回章首。
+    // 正文重排后 maxValue 才有效，等它 > 0 再滚。
+    LaunchedEffect(chaptered, chapterIndex, scrollState) {
+        if (!chaptered) return@LaunchedEffect
+        val local = chapterStartPercent
+        chapterStartPercent = 0
+        // 字号/行距重排的回位逻辑读 position.percent：换章后要对齐本章的落点
+        position.percent = local
+        if (local <= 0) {
+            scrollState.scrollTo(0)
+            return@LaunchedEffect
+        }
+        val max = snapshotFlow { scrollState.maxValue }.filter { it > 0 }.first()
+        scrollState.scrollTo(readerScrollTarget(local, max))
     }
 
     // 排版一变（字号、行距）就按百分比回到原处：像素偏移会在重排后落到别的段落上
@@ -226,18 +287,14 @@ fun FullNovelViewer(
             .debounce(800)
             .collect {
                 if (scrollState.maxValue > 0) {
-                    currentOnProgressSave(
-                        readerProgressPercent(scrollState.value, scrollState.maxValue),
-                    )
+                    currentOnProgressSave(progressToSave())
                 }
             }
     }
     DisposableEffect(Unit) {
         onDispose {
             if (scrollState.maxValue > 0) {
-                currentOnProgressSave(
-                    readerProgressPercent(scrollState.value, scrollState.maxValue),
-                )
+                currentOnProgressSave(progressToSave())
             }
         }
     }
@@ -340,12 +397,24 @@ fun FullNovelViewer(
                     )
                 }
                 // 内嵌图切块：pixiv 正文的 [nimg:URL] token 切成图块独立渲染；
-                // 无 token 的正文（poipiku 全部、纯文字 pixiv 小说）仍是单一文本块，渲染与从前一致
-                val blocks = remember(text) { splitNovelBlocks(text) }
+                // 无 token 的正文（poipiku 全部、纯文字 pixiv 小说、AO3 每章）仍是单一文本块
+                val blocks = remember(bodyText) { splitNovelBlocks(bodyText) }
                 // 图块按视口窗口放行：整章图一次全请求 + 全解码会打满内存与主线程（卡顿根源）
-                val imageTracker = remember(text) { NovelImageTracker(blocks.count { it is NovelBlock.Image }) }
+                val imageTracker = remember(bodyText) { NovelImageTracker(blocks.count { it is NovelBlock.Image }) }
                 LaunchedEffect(scrollState, imageTracker) {
                     imageTracker.pump(scrollState, viewport = { viewportPx })
+                }
+                // 章节模式：章名放在正文开头（页面顶部被浮动栏盖住，标题跟着正文走）
+                if (chaptered && chapters[chapterIndex].title.isNotBlank()) {
+                    Text(
+                        text = chapters[chapterIndex].title,
+                        color = fg,
+                        fontSize = (settings.fontSize + 2).sp,
+                        fontWeight = FontWeight.SemiBold,
+                        lineHeight = ((settings.fontSize + 2) * settings.lineHeight).sp,
+                        fontFamily = if (settings.serif) FontFamily.Serif else FontFamily.Default,
+                        modifier = Modifier.padding(bottom = 14.dp),
+                    )
                 }
                 var imageIndex = 0
                 blocks.forEach { block ->
@@ -369,6 +438,30 @@ fun FullNovelViewer(
                                 placeholderColor = fg.copy(alpha = 0.05f),
                             )
                         }
+                    }
+                }
+                // 章末落点：还有下一章就放「下一章」入口（AO3 网页同款动线），末章标注全文完
+                if (chaptered) {
+                    if (chapterIndex < chapters.lastIndex) {
+                        Text(
+                            text = stringResource(R.string.reader_chapter_next),
+                            color = theme.accent,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier
+                                .padding(top = 32.dp)
+                                .clip(ReaderFooterShape)
+                                .border(BorderStroke(0.5.dp, theme.accent.copy(alpha = 0.5f)), ReaderFooterShape)
+                                .clickable { goToChapter(chapterIndex + 1) }
+                                .padding(horizontal = 22.dp, vertical = 10.dp),
+                        )
+                    } else {
+                        Text(
+                            text = stringResource(R.string.reader_chapter_end),
+                            color = fg.copy(alpha = 0.5f),
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(top = 32.dp),
+                        )
                     }
                 }
             }
@@ -403,28 +496,51 @@ fun FullNovelViewer(
                     Modifier
                         .fillMaxWidth()
                         .align(Alignment.BottomCenter)
-                        .height(navBarInset + CONTENT_PADDING_BOTTOM)
+                        .height(navBarInset + CONTENT_PADDING_BOTTOM + if (chaptered) CHAPTER_BAR_HEIGHT else 0.dp)
                         .background(scrimBottom(bg)),
                 )
-                NovelReaderControls(
-                    settings = settings,
-                    theme = theme,
-                    scrollState = scrollState,
-                    panelOpen = panelOpen,
-                    onTogglePanel = { togglePanel() },
-                    onSettingsChange = onSettingsChange,
-                    onInteract = { refreshAutoHide() },
-                    onSeekStart = { autoHideJob?.cancel() },
-                    onSeekEnd = { refreshAutoHide() },
-                    translationAvailable = translationAvailable,
-                    translating = translating,
-                    busy = busy,
-                    showTranslation = showTranslation,
-                    streamProgress = novelStreamProgress,
-                    onToggleTranslation = onToggleTranslation,
-                    modifier = Modifier.align(Alignment.BottomCenter),
-                )
+                Column(modifier = Modifier.align(Alignment.BottomCenter)) {
+                    if (chaptered) {
+                        NovelChapterBar(
+                            theme = theme,
+                            index = chapterIndex,
+                            count = chapters.size,
+                            chapterTitle = readerChapterLabel(chapters[chapterIndex].title),
+                            onPrev = { goToChapter(chapterIndex - 1) },
+                            onNext = { goToChapter(chapterIndex + 1) },
+                            onOpenList = { chapterSheetOpen = true },
+                            modifier = Modifier.padding(bottom = 8.dp),
+                        )
+                    }
+                    NovelReaderControls(
+                        settings = settings,
+                        theme = theme,
+                        scrollState = scrollState,
+                        panelOpen = panelOpen,
+                        onTogglePanel = { togglePanel() },
+                        onSettingsChange = onSettingsChange,
+                        onInteract = { refreshAutoHide() },
+                        onSeekStart = { autoHideJob?.cancel() },
+                        onSeekEnd = { refreshAutoHide() },
+                        translationAvailable = translationAvailable,
+                        translating = translating,
+                        busy = busy,
+                        showTranslation = showTranslation,
+                        streamProgress = novelStreamProgress,
+                        onToggleTranslation = onToggleTranslation,
+                    )
+                }
             }
+        }
+
+        if (chapterSheetOpen && chaptered) {
+            NovelChapterSheet(
+                theme = theme,
+                chapters = chapters,
+                currentIndex = chapterIndex,
+                onSelect = { goToChapter(it) },
+                onDismiss = { chapterSheetOpen = false },
+            )
         }
     }
 }

@@ -3,6 +3,7 @@ package com.piku.client.core.model
 enum class WorkSource {
     POIPIKU,
     PIXIV,
+    AO3,
 }
 
 /**
