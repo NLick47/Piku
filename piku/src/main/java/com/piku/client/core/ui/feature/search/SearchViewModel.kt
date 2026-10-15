@@ -16,6 +16,7 @@ import com.piku.client.core.model.TagCard
 import com.piku.client.core.model.Work
 import com.piku.client.core.model.WorkKey
 import com.piku.client.core.model.WorkSource
+import com.piku.client.core.model.key
 import com.piku.client.core.source.SearchFilterGroupSpec
 import com.piku.client.core.source.SearchFilterToggleSpec
 import com.piku.client.core.source.SourceAuthorOpen
@@ -41,6 +42,7 @@ import com.piku.client.core.usecase.RecordSearchKeywordUseCase
 import com.piku.client.core.usecase.RemoveSearchKeywordUseCase
 import com.piku.client.core.usecase.ToggleFavoriteUseCase
 import com.piku.client.core.usecase.TranslateSearchKeywordUseCase
+import com.piku.client.core.ui.common.mergePage
 import com.piku.client.core.ui.common.toFeedErrorRes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import com.piku.client.core.ui.common.FeedbackChannel
@@ -722,11 +724,6 @@ class SearchViewModel @Inject constructor(
     }
 
     // 站点作者搜索会返回重复条目，而列表以 userId 作 key，重复 key 会让 LazyColumn 直接崩
-    private fun mergeUsers(current: List<FollowUser>, incoming: List<FollowUser>): List<FollowUser> {
-        val seen = current.mapTo(mutableSetOf()) { it.userId }
-        return current + incoming.filter { seen.add(it.userId) }
-    }
-
     private fun loadWorks(append: Boolean) {
         if (base.isEmpty()) return
         val plugin = searchPlugin
@@ -759,13 +756,15 @@ class SearchViewModel @Inject constructor(
                 .onSuccess { list ->
                     if (generation != sourceGeneration) return@onSuccess
                     worksPage = targetPage
-                    _uiState.update {
-                        it.copy(
+                    _uiState.update { state ->
+                        val merged = if (append) mergePage(state.works, list) { w -> w.key } else list
+                        state.copy(
                             worksLoading = false,
                             worksLoadingMore = false,
                             worksLoadMoreErrorRes = null,
-                            works = if (append) it.works + list else list,
-                            worksEndReached = list.isEmpty(),
+                            works = merged,
+                            // 站点把相邻页返回成同一批（分页飘）时合并后没有新增：视作到底，别再续页
+                            worksEndReached = list.isEmpty() || (append && merged.size == state.works.size),
                         )
                     }
                 }
@@ -816,13 +815,15 @@ class SearchViewModel @Inject constructor(
             request.onSuccess { page ->
                     if (generation != sourceGeneration) return@onSuccess
                     worksPage = targetPage
-                    _uiState.update {
-                        it.copy(
+                    _uiState.update { state ->
+                        val merged = if (append) mergePage(state.works, page.items) { w -> w.key } else page.items
+                        state.copy(
                             worksLoading = false,
                             worksLoadingMore = false,
                             worksLoadMoreErrorRes = null,
-                            works = if (append) it.works + page.items else page.items,
-                            worksEndReached = page.items.isEmpty(),
+                            works = merged,
+                            // 站点把相邻页返回成同一批（分页飘）时合并后没有新增：视作到底，别再续页
+                            worksEndReached = page.items.isEmpty() || (append && merged.size == state.works.size),
                         )
                     }
                 }
@@ -901,7 +902,8 @@ class SearchViewModel @Inject constructor(
                     if (generation != sourceGeneration) return@onSuccess
                     usersPage = targetPage
                     _uiState.update {
-                        val merged = if (append) mergeUsers(it.users, list) else list.distinctBy { u -> u.userId }
+                        val merged = if (append) mergePage(it.users, list) { u -> u.userId }
+                            else list.distinctBy { u -> u.userId }
                         it.copy(
                             usersLoading = false,
                             usersLoadingMore = false,
@@ -965,7 +967,8 @@ class SearchViewModel @Inject constructor(
                     if (generation != sourceGeneration) return@onSuccess
                     usersPage = targetPage
                     _uiState.update {
-                        val merged = if (append) mergeUsers(it.users, list) else list.distinctBy { u -> u.userId }
+                        val merged = if (append) mergePage(it.users, list) { u -> u.userId }
+                            else list.distinctBy { u -> u.userId }
                         it.copy(
                             usersLoading = false,
                             usersLoadingMore = false,
@@ -1043,13 +1046,15 @@ class SearchViewModel @Inject constructor(
                 .onSuccess { list ->
                     if (generation != sourceGeneration) return@onSuccess
                     tagSuggestionsPage = targetPage
-                    _uiState.update {
-                        it.copy(
+                    _uiState.update { state ->
+                        val merged = if (append) mergePage(state.tagSuggestions, list) { c -> c.name } else list
+                        state.copy(
                             tagSuggestionsLoading = false,
                             tagSuggestionsLoadingMore = false,
                             tagSuggestionsLoadMoreErrorRes = null,
-                            tagSuggestions = if (append) it.tagSuggestions + list else list,
-                            tagSuggestionsEndReached = list.isEmpty(),
+                            tagSuggestions = merged,
+                            // 站点把相邻页返回成同一批（分页飘）时合并后没有新增：视作到底，别再续页
+                            tagSuggestionsEndReached = list.isEmpty() || (append && merged.size == state.tagSuggestions.size),
                         )
                     }
                     tagFallbackTarget(base, list, append)?.let(::selectTagCard)
@@ -1159,13 +1164,15 @@ class SearchViewModel @Inject constructor(
                 .onSuccess { list ->
                     if (generation != sourceGeneration || _uiState.value.selectedTagName != tag) return@onSuccess
                     tagWorksPage = targetPage
-                    _uiState.update {
-                        it.copy(
+                    _uiState.update { state ->
+                        val merged = if (append) mergePage(state.tagWorks, list) { w -> w.key } else list
+                        state.copy(
                             tagWorksLoading = false,
                             tagWorksLoadingMore = false,
                             tagWorksLoadMoreErrorRes = null,
-                            tagWorks = if (append) it.tagWorks + list else list,
-                            tagWorksEndReached = list.isEmpty(),
+                            tagWorks = merged,
+                            // 站点把相邻页返回成同一批（分页飘）时合并后没有新增：视作到底，别再续页
+                            tagWorksEndReached = list.isEmpty() || (append && merged.size == state.tagWorks.size),
                         )
                     }
                 }
@@ -1214,13 +1221,15 @@ class SearchViewModel @Inject constructor(
                 .onSuccess { page ->
                     if (generation != sourceGeneration || _uiState.value.selectedTagName != tag) return@onSuccess
                     tagWorksPage = targetPage
-                    _uiState.update {
-                        it.copy(
+                    _uiState.update { state ->
+                        val merged = if (append) mergePage(state.tagWorks, page.items) { w -> w.key } else page.items
+                        state.copy(
                             tagWorksLoading = false,
                             tagWorksLoadingMore = false,
                             tagWorksLoadMoreErrorRes = null,
-                            tagWorks = if (append) it.tagWorks + page.items else page.items,
-                            tagWorksEndReached = page.items.isEmpty(),
+                            tagWorks = merged,
+                            // 站点把相邻页返回成同一批（分页飘）时合并后没有新增：视作到底，别再续页
+                            tagWorksEndReached = page.items.isEmpty() || (append && merged.size == state.tagWorks.size),
                         )
                     }
                 }

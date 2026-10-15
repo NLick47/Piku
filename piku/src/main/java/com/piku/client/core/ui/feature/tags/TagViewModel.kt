@@ -8,6 +8,7 @@ import com.piku.client.core.model.AppError
 import com.piku.client.core.model.Work
 import com.piku.client.core.model.WorkKey
 import com.piku.client.core.model.WorkSource
+import com.piku.client.core.model.key
 import com.piku.client.core.usecase.AddCustomTagUseCase
 import com.piku.client.core.usecase.ObserveCustomTagsUseCase
 import com.piku.client.core.usecase.ObserveFavoriteIdsUseCase
@@ -15,6 +16,7 @@ import com.piku.client.core.usecase.RemoveCustomTagUseCase
 import com.piku.client.core.usecase.ToggleFavoriteUseCase
 import com.piku.client.core.source.SourceListLayout
 import com.piku.client.core.source.SourceRegistry
+import com.piku.client.core.ui.common.mergePage
 import com.piku.client.core.ui.common.toFeedErrorRes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -197,7 +199,7 @@ class TagViewModel @Inject constructor(
                             loading = false,
                             loadingMore = false,
                             loadMoreErrorRes = null,
-                            works = if (append) it.works + list else list,
+                            works = if (append) mergePage(it.works, list) { w -> w.key } else list,
                             endReached = list.isEmpty(),
                         )
                     }
