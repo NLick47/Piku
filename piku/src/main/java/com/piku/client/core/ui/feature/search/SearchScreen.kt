@@ -88,8 +88,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/** 与站点输入框一致的关键词长度上限（仅普通搜索；链接识别不受此限） */
-private const val MAX_KEYWORD_LENGTH = 20
+private const val MAX_KEYWORD_LENGTH = 200
 
 /** 待机态自动聚焦延迟，避免键盘与页面转场动画互相挤压 */
 private const val FOCUS_DELAY_MS = 300L

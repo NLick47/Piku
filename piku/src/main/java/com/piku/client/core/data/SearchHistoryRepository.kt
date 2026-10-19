@@ -19,7 +19,6 @@ class SearchHistoryRepository @Inject constructor(
     suspend fun record(keyword: String) {
         val trimmed = keyword.trim()
         if (trimmed.isEmpty()) return
-        // 与站点一致：关键词上限 20 字符
         searchKeywordDao.upsert(
             SearchKeywordEntity(
                 keyword = trimmed.take(MAX_KEYWORD_LENGTH),
@@ -39,6 +38,6 @@ class SearchHistoryRepository @Inject constructor(
 
     private companion object {
         const val MAX_KEYWORDS = 20
-        const val MAX_KEYWORD_LENGTH = 20
+        const val MAX_KEYWORD_LENGTH = 200
     }
 }
