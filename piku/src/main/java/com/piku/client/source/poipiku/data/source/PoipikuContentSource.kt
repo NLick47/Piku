@@ -70,6 +70,9 @@ class PoipikuContentSource @Inject constructor(
 
     override fun open(work: Work): SourceWorkOpen = SourceWorkOpen.NativeDetail
 
+    override fun webUrl(work: Work): String =
+        "https://poipiku.com/${work.authorId}/${work.id}.html"
+
     // 作者页是主壳的「用户作品」页（它按 poipiku 用户 id 取稿）
     override fun authorPage(work: Work): SourceAuthorOpen = SourceAuthorOpen.NativeDetail
 

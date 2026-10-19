@@ -64,6 +64,8 @@ interface ContentSource {
     /** 点开一个作品的去向，外壳只执行不解释 */
     fun open(work: Work): SourceWorkOpen
 
+    fun webUrl(work: Work): String? = null
+
     /**
      * 点作者的去向；null = 本源在 App 里没有作者页，外壳把作者区做成不可点。
      * 不声明就只能按别的源的作者页开：拿本源的作者 id 去查另一站，看到的是别人的作品。

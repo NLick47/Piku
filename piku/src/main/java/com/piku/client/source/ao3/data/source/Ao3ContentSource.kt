@@ -83,6 +83,9 @@ class Ao3ContentSource @Inject constructor(
 
     override fun open(work: Work): SourceWorkOpen = SourceWorkOpen.InAppViewer
 
+    override fun webUrl(work: Work): String =
+        "https://archiveofourown.org/works/${work.id}"
+
     /**
      * 作者区不可点。AO3 的作者页 URL 要用 URL 里的 username（`/users/{user}/pseuds/{pseud}`），
      * 而 Work 上只有展示用的笔名——笔名与 username 可以不同，拿笔名拼 URL 会指向别人的

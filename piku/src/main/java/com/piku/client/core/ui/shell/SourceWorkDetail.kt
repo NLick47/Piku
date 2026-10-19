@@ -105,6 +105,7 @@ internal fun SourceWorkDetailScreen(
     onOpenAuthor: (Work) -> Unit,
     /** 点相关作品：压栈进新详情；栈深上限由导航层统一把关 */
     onRelatedClick: (Work) -> Unit,
+    onPoipikuWorkClick: (Long, Long) -> Unit,
     onTagClick: (String) -> Unit,
     /** 登录墙的「去登录」：进 pixiv 登录页；登录成功弹回本页后 VM 自动重拉 */
     onLoginClick: () -> Unit,
@@ -131,14 +132,7 @@ internal fun SourceWorkDetailScreen(
     val clipboard = LocalClipboardManager.current
     val linkCopiedMessage = stringResource(R.string.detail_link_copied)
     val descriptionCopiedMessage = stringResource(R.string.detail_description_copied)
-    // 作品链接：插画 /artworks/{id}、小说 /novel/show.php?id={id}；复制与浏览器打开共用
-    val workUrl = remember(work) {
-        if (work.kind == WorkKind.NOVEL) {
-            "https://www.pixiv.net/novel/show.php?id=${work.id}"
-        } else {
-            "https://www.pixiv.net/artworks/${work.id}"
-        }
-    }
+    val workUrl = remember(work) { viewModel.webUrlFor(work) }
 
     // 保存权限（Q 以下）：与 poipiku 详情同一套 launcher + 待办标记
     var pendingSavePage by remember { mutableStateOf(-1) }
@@ -377,6 +371,7 @@ internal fun SourceWorkDetailScreen(
                     scrollState = scrollState,
                     topInset = topInset,
                     sourceThumbnailUrl = work.thumbnailUrl,
+                    initialImagePage = state.imageProgressPage,
                     // 列表卡带了作品真实宽高：图区首帧就按真比例摆，别按方裁缩略图的比例摆
                     knownAspect = work.thumbAspectOrNull(),
                     onImageShown = { page, painter -> shownPainters[page] = painter },
@@ -574,7 +569,7 @@ internal fun SourceWorkDetailScreen(
                 onProgressSave = viewModel::saveNovelProgress,
                 onSettingsChange = viewModel::setNovelReaderSettings,
                 onClose = viewModel::closeNovelReader,
-                onWorkClick = { _, _, _ -> },
+                onWorkClick = { authorId, workId, _ -> onPoipikuWorkClick(authorId, workId) },
                 chapters = state.novelChapters,
             )
         }

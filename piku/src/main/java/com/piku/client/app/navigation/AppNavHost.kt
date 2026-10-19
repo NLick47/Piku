@@ -715,6 +715,9 @@ fun AppNavHost(
                     onHomeClick = safePopToHome,
                     onOpenAuthor = openAuthorOfWork,
                     onRelatedClick = openRelatedSourceWork,
+                    onPoipikuWorkClick = { authorId, workId ->
+                        navController.navigate(Routes.detail(authorId, workId))
+                    },
                     onTagClick = { tag ->
                         navController.navigate(
                             Routes.search("#$tag", tag = tag, source = work.source),

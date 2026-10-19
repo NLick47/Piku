@@ -116,6 +116,7 @@ internal fun PixivDetailContent(
     sharedKey: String = "",
     /** 来源页缩略图：首图到位前的低清打底 */
     sourceThumbnailUrl: String = "",
+    initialImagePage: Int = 0,
     /** 作品真实宽高比（列表卡带的宽高）：图区首帧就按它摆好，不再按缩略图裁切比例"长大" */
     knownAspect: Float? = null,
     onImageClick: (Int) -> Unit,
@@ -179,6 +180,7 @@ internal fun PixivDetailContent(
                     detail = detail,
                     dark = dark,
                     sourceThumbnailUrl = sourceThumbnailUrl,
+                    initialImagePage = initialImagePage,
                     knownAspect = knownAspect,
                     fullBleed = true,
                     onImageClick = onImageClick,

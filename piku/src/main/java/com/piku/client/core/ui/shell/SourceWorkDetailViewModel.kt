@@ -155,6 +155,7 @@ class SourceWorkDetailViewModel @Inject constructor(
         val novelReaderOpen: Boolean = false,
         val novelReaderSettings: NovelReaderSettings = NovelReaderSettings(),
         val novelProgressPercent: Int = 0,
+        val imageProgressPage: Int = 0,
     ) {
         val hasTranslation: Boolean get() = detail?.translated?.hasAny == true
 
@@ -313,6 +314,7 @@ class SourceWorkDetailViewModel @Inject constructor(
             language = observeLanguageUseCase().value,
             hasTextModel = _ui.value.hasTextModel,
             hasImageModel = _ui.value.hasImageModel,
+            imageProgressPage = settingsRepository.getImageProgress(work.key),
             autoTranslateTags = _ui.value.autoTranslateTags,
             // 整表重建不能冲掉登录态：登录/登出才推一次，这里丢了下一次要等状态变化
             loggedIn = _ui.value.loggedIn,
@@ -596,7 +598,8 @@ class SourceWorkDetailViewModel @Inject constructor(
 
     // ---------------- 保存与分享（与 poipiku 详情同款语义，数据换成源的作品页） ----------------
 
-    private val workUrl: String get() = "https://www.pixiv.net/artworks/$workId"
+    fun webUrlFor(work: Work): String =
+        sourceRegistry.byIdOrNull(work.source)?.webUrl(work).orEmpty()
 
     /** 保存单页：有原图存原图，与 poipiku 一致 */
     fun saveImage(page: Int) {
@@ -657,7 +660,7 @@ class SourceWorkDetailViewModel @Inject constructor(
                 _shareRequest.value = ImageShareRequest(
                     uri = uri,
                     targetPackage = targetPackage,
-                    shareText = workUrl,
+                    shareText = currentWork?.let(::webUrlFor).orEmpty(),
                 )
             } catch (e: kotlinx.coroutines.CancellationException) {
                 _ui.update { it.copy(sharingImage = false, sharingTargetPackage = null) }

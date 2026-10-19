@@ -119,6 +119,13 @@ class PixivContentSource @Inject constructor(
 
     override fun open(work: Work): SourceWorkOpen = SourceWorkOpen.InAppViewer
 
+    override fun webUrl(work: Work): String =
+        if (work.kind == WorkKind.NOVEL) {
+            "https://www.pixiv.net/novel/show.php?id=${work.id}"
+        } else {
+            "https://www.pixiv.net/artworks/${work.id}"
+        }
+
     // 画师主页由主壳承载（资料区 + 分类 Tab + 作品墙），不再出站
     override fun authorPage(work: Work): SourceAuthorOpen = SourceAuthorOpen.NativeProfile
 
