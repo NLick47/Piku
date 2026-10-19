@@ -354,6 +354,7 @@ fun DetailScreen(
                     scrollState = scrollState,
                     topInset = topInset,
                     sourceThumbnailUrl = viewModel.sourceThumbnailUrl,
+                    initialImagePage = state.imageProgressPage,
                     onImageShown = { page, painter -> shownPainters[page] = painter },
                     loadingMore = state.detailLoadingMore,
                     onFirstImageLoaded = viewModel::ensureFullImages,

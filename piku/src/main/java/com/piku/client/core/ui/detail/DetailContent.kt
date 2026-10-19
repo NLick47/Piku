@@ -183,6 +183,7 @@ internal fun DetailContent(
     topInset: Dp = 12.dp,
     /** 来源页缩略图（列表卡片的 _360）：首图到位前的低清打底，空串表示没有 */
     sourceThumbnailUrl: String = "",
+    initialImagePage: Int = 0,
     /** 内联图区画哪一档（长度与 [WorkDetail.imageUrls] 一致）；null = 用后者，OCR/分享也取后者 */
     displayImageUrls: List<String>? = null,
     /** 版面：[DetailLayout.AuthorFirst] 记录卡式（作者在图前），[DetailLayout.ImageFirst] p站版（图通栏置顶） */
@@ -253,6 +254,7 @@ internal fun DetailContent(
                 sharedKey = sharedKey,
                 skipEnterMorph = skipEnterMorph,
                 sourceThumbnailUrl = sourceThumbnailUrl,
+                initialImagePage = initialImagePage,
                 displayImageUrls = displayImageUrls,
                 fullBleed = imageFirst,
                 loadingMore = loadingMore,
@@ -638,6 +640,7 @@ internal fun ImagePager(
     skipEnterMorph: Boolean = false,
     /** 来源页缩略图（列表卡片的 _360）：首图到位前的低清打底 */
     sourceThumbnailUrl: String = "",
+    initialImagePage: Int = 0,
     /**
      * 作品真实宽高比（列表卡带来的宽高）。给了就按它摆图区高度，且不再采信量出来的值——
      * 列表缩略图是方裁，量出来的比例不是作品的比例，先按它摆、图到了再"长大"一次。
@@ -682,7 +685,23 @@ internal fun ImagePager(
     onImageShown: ((Int, Painter) -> Unit)? = null,
 ) {
     val urls = displayImageUrls ?: detail.imageUrls
-    val pagerState = rememberPagerState(pageCount = { urls.size })
+    val initialPage = remember(initialImagePage, urls.size) {
+        (initialImagePage - 1).coerceIn(0, urls.lastIndex.coerceAtLeast(0))
+    }
+    val pagerState = rememberPagerState(initialPage = initialPage, pageCount = { urls.size })
+    var resumePending by remember(initialImagePage) { mutableStateOf(initialImagePage > 1) }
+    LaunchedEffect(urls.size, initialImagePage, resumePending) {
+        if (resumePending && initialImagePage in 1..urls.size) {
+            val target = initialImagePage - 1
+            if (pagerState.currentPage != target &&
+                pagerState.currentPage == 0 &&
+                !pagerState.isScrollInProgress
+            ) {
+                pagerState.scrollToPage(target)
+            }
+            resumePending = false
+        }
+    }
     LaunchedEffect(pagerState.currentPage) {
         onPageChanged?.invoke(pagerState.currentPage)
     }

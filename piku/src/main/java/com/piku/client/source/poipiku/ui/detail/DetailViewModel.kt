@@ -147,6 +147,7 @@ data class DetailUiState(
     val novelReaderSettings: NovelReaderSettings = NovelReaderSettings(),
     /** 全屏小说阅读器：该作品已保存的阅读进度（百分比 0~100） */
     val novelProgressPercent: Int = 0,
+    val imageProgressPage: Int = 0,
     /** AI 翻译开关是否开启（只控制自动翻译，不影响手动入口） */
     val aiTranslateEnabled: Boolean = false,
     /** 文本通道可用，顶栏短字段翻译按钮的显示条件 */
@@ -309,6 +310,7 @@ class DetailViewModel @Inject constructor(
             guideVisible = showBottomGuide,
             imageHintVisible = showImageHint,
             novelProgressPercent = settingsRepository.getNovelProgress(work.key),
+            imageProgressPage = settingsRepository.getImageProgress(work.key),
             canTranslate = translationRepository.hasTextModel(),
         ),
     )
