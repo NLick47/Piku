@@ -15,6 +15,7 @@ import com.piku.client.core.model.FolderSort
 import com.piku.client.core.model.PixivBookmarkMirror
 import com.piku.client.core.model.ReadingProgress
 import com.piku.client.core.model.Work
+import com.piku.client.core.model.WorkKind
 import com.piku.client.core.model.key
 import com.piku.client.core.model.WorkKey
 import com.piku.client.core.model.WorkSource
@@ -538,7 +539,9 @@ class CollectionViewModel @Inject constructor(
         val state = _uiState.value
         if (state.syncingToPixiv) return
         val selected = state.works.filter {
-            it.key in state.selectedIds && it.source == WorkSource.PIXIV
+            it.key in state.selectedIds &&
+                it.source == WorkSource.PIXIV &&
+                it.kind != WorkKind.NOVEL
         }
         if (selected.isEmpty()) {
             feedback.show(R.string.collection_sync_none)
