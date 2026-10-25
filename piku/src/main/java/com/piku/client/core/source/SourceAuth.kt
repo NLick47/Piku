@@ -72,4 +72,6 @@ object SourceAuthRoutes {
     const val POIPIKU_WEB_LOGIN = "poipiku_web_login"
 
     const val PIXIV_LOGIN = "pixiv_login"
+
+    const val AO3_LOGIN = "ao3_login"
 }

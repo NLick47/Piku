@@ -300,7 +300,7 @@ private fun DrawerPanel(
                 .fillMaxWidth()
                 .verticalScroll(scrollState),
         ) {
-            // 账号管理只在当前源有登录能力时出现：AO3 没有账号可管，那一行连同它的间隔都撤掉
+            // 账号管理只在当前源有登录能力时出现：没接登录插件的源，那一行连同它的间隔都撤掉
             if (headerAccount?.hasAuth == true) {
                 DrawerMenuRow(
                     icon = Icons.Outlined.ManageAccounts,

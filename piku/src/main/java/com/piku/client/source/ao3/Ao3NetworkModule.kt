@@ -1,18 +1,27 @@
 package com.piku.client.source.ao3
 
+import android.content.Context
 import com.piku.client.core.network.http.LenientJsonConverterFactory
+import com.piku.client.core.network.session.FileCookieStore
+import com.piku.client.core.network.session.PersistentCookieJar
+import com.piku.client.core.network.session.SessionMonitor
+import com.piku.client.source.ao3.data.auth.Ao3AuthApi
 import com.piku.client.source.ao3.data.remote.Ao3Api
 import com.piku.client.source.ao3.data.remote.Ao3Config
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import kotlinx.serialization.json.Json
+import okhttp3.CookieJar
 import okhttp3.Headers
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Response
 import retrofit2.Retrofit
+import java.io.File
+import java.net.CookieStore
 import java.util.concurrent.TimeUnit
 import javax.inject.Named
 import javax.inject.Singleton
@@ -22,25 +31,39 @@ import javax.inject.Singleton
 object Ao3NetworkModule {
 
     /**
-     * AO3 专用 client：复用主 client 的 DoH/SNI 改写/重试（AO3 的空 SNI 规则在
-     * SniStrippingSocketFactory 里生效），但超时按 AO3 的大页面单独调
-     * （全文页 400KB+，代理链路下首页就要 7s）。CookieJar 与主 client 共用：
-     * AO3 的 `__cf_bm` 与登录 cookie 按域隔离，无冲突。
-     */
-    /**
-     * AO3 专用 client：复用主 client 的 DoH/SNI 改写/重试（AO3 的空 SNI 规则在
-     * SniStrippingSocketFactory 里生效），但超时按 AO3 的大页面单独调
-     * （全文页 400KB+，代理链路下首页就要 7s）。CookieJar 与主 client 共用：
-     * AO3 的 `__cf_bm` 与登录 cookie 按域隔离，无冲突。
+     * AO3 用独立的 cookie 罐：主罐是 poipiku 的会话存储，它登出时 `removeAll()` 会把整罐清空，
+     * 共用的话 AO3 的登录会被一起带走。落盘在自己文件里，互不可见。
      */
     @Provides
     @Singleton
-    @Named("ao3")
-    fun provideAo3Client(base: OkHttpClient): OkHttpClient =
+    @Named(Ao3Config.CLIENT_NAME)
+    fun provideAo3CookieStore(@ApplicationContext context: Context): CookieStore =
+        FileCookieStore(File(context.filesDir, "ao3_cookies.txt"))
+
+    /** 会话监听的实例也独立：AO3 的 cookie 不该触发 poipiku 的登录态重建 */
+    @Provides
+    @Singleton
+    @Named(Ao3Config.CLIENT_NAME)
+    fun provideAo3CookieJar(@Named(Ao3Config.CLIENT_NAME) store: CookieStore): CookieJar =
+        PersistentCookieJar(store, SessionMonitor())
+
+    /**
+     * AO3 专用 client：复用主 client 的 DoH/SNI 改写/重试（AO3 的空 SNI 规则在
+     * SniStrippingSocketFactory 里生效），但超时按 AO3 的大页面单独调
+     * （全文页 400KB+，代理链路下首页就要 7s），cookie 换成自己的罐。
+     */
+    @Provides
+    @Singleton
+    @Named(Ao3Config.CLIENT_NAME)
+    fun provideAo3Client(
+        base: OkHttpClient,
+        @Named(Ao3Config.CLIENT_NAME) cookieJar: CookieJar,
+    ): OkHttpClient =
         base.newBuilder()
             .connectTimeout(Ao3Config.TIMEOUT_MS, TimeUnit.MILLISECONDS)
             .readTimeout(Ao3Config.TIMEOUT_MS, TimeUnit.MILLISECONDS)
             .writeTimeout(Ao3Config.TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            .cookieJar(cookieJar)
             .addInterceptor(Ao3RequestHeaders)
             .build()
 
@@ -82,11 +105,27 @@ object Ao3NetworkModule {
 
     @Provides
     @Singleton
-    fun provideAo3Api(@Named("ao3") client: OkHttpClient, json: Json): Ao3Api =
+    fun provideAo3Api(@Named(Ao3Config.CLIENT_NAME) client: OkHttpClient, json: Json): Ao3Api =
         Retrofit.Builder()
             .baseUrl(Ao3Config.BASE_URL)
             .client(client)
             .addConverterFactory(LenientJsonConverterFactory(json))
             .build()
             .create(Ao3Api::class.java)
+
+    /**
+     * 登录链专用：关闭重定向跟随。成功与失败都是 302，要靠 Location 分辨
+     * `/users/<name>` 与 `/auth_error`，跟随后就只剩一页 HTML 看不出来了。
+     */
+    @Provides
+    @Singleton
+    fun provideAo3AuthApi(
+        @Named(Ao3Config.CLIENT_NAME) client: OkHttpClient,
+        json: Json,
+    ): Ao3AuthApi = Retrofit.Builder()
+        .baseUrl(Ao3Config.BASE_URL)
+        .client(client.newBuilder().followRedirects(false).build())
+        .addConverterFactory(LenientJsonConverterFactory(json))
+        .build()
+        .create(Ao3AuthApi::class.java)
 }

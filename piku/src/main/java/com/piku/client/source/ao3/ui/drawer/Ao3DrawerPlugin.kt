@@ -24,7 +24,7 @@ class Ao3DrawerPlugin @Inject constructor() : SourceDrawerPlugin {
 
     override val ownsImageRouteRow: Boolean = true
 
-    /** AO3 不过登录：账号区空着，只给一条圈层入口（它独有的资料库概念） */
+    /** 登录后 AO3 没有投稿/收藏这类站内动作可做；账号头由登录插件自己撑起来，这里只加圈层入口 */
     @Composable
     override fun contributions(scope: DrawerScope): List<DrawerContribution> = listOf(
         DrawerContribution(

@@ -22,7 +22,7 @@ import javax.inject.Inject
 data class SourceAccountRow(
     val source: WorkSource,
     @StringRes val labelRes: Int,
-    /** 本源注册了登录插件；false = 该源没有账号这回事（AO3），账号区与账号管理行都不出 */
+    /** 本源注册了登录插件；false = 该源没有账号这回事，账号区与账号管理行都不出 */
     val hasAuth: Boolean,
     /** 该源的登录页路由；null = 还没接入应用内登录 */
     val loginRoute: String?,

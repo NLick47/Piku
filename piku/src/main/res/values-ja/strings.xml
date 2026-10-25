@@ -791,6 +791,11 @@
     <string name="home_source_select_title">コンテンツソースを選択</string>
     <string name="home_source_pixiv">Pixiv</string>
     <string name="home_source_ao3">AO3</string>
+    <string name="ao3_login_title">AO3 にログイン</string>
+    <string name="ao3_login_subtitle">ログインすると登録ユーザー限定の作品が読めます</string>
+    <string name="ao3_login_account_label">メールまたはユーザー名</string>
+    <string name="ao3_login_error_invalid">ユーザー名またはパスワードが違います</string>
+    <string name="ao3_logout_message">ログアウトすると、登録ユーザー限定の作品は読めなくなります</string>
     <string name="ao3_tab_latest">新着</string>
     <string name="ao3_tab_top">人気順</string>
     <string name="ao3_complete_all">すべて</string>

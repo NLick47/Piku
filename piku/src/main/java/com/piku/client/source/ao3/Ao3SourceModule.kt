@@ -2,11 +2,15 @@ package com.piku.client.source.ao3
 
 import android.content.Context
 import com.piku.client.core.source.ContentSource
+import com.piku.client.core.source.SourceAuth
 import com.piku.client.core.source.SourceContentBackup
 import com.piku.client.core.source.SourceLinkParser
 import com.piku.client.core.source.SourceScopes
 import com.piku.client.core.source.SourceSearch
+import com.piku.client.core.storage.prefs.SharedPreferencesCredentialStorage
 import com.piku.client.core.ui.drawer.SourceDrawerPlugin
+import com.piku.client.source.ao3.data.auth.Ao3Auth
+import com.piku.client.source.ao3.data.auth.Ao3AuthStore
 import com.piku.client.source.ao3.data.link.Ao3LinkParser
 import com.piku.client.source.ao3.data.local.Ao3ScopeStore
 import com.piku.client.source.ao3.data.source.Ao3ContentBackup
@@ -60,4 +64,20 @@ object Ao3SourceModule {
     @Provides
     @IntoSet
     fun ao3DrawerPlugin(impl: Ao3DrawerPlugin): SourceDrawerPlugin = impl
+
+    /** 登录插件按源登记：账号信息落在 AO3 自己的 prefs 文件里，别源不可见 */
+    @Provides
+    @IntoSet
+    fun ao3Auth(impl: Ao3Auth): SourceAuth = impl
+
+    @Provides
+    @Singleton
+    fun ao3AuthStore(@ApplicationContext context: Context): Ao3AuthStore =
+        Ao3AuthStore(
+            SharedPreferencesCredentialStorage(
+                context.getSharedPreferences(AO3_PREFS_NAME, Context.MODE_PRIVATE),
+            ),
+        )
+
+    internal const val AO3_PREFS_NAME = "ao3_credentials"
 }

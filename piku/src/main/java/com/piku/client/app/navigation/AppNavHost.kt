@@ -49,6 +49,7 @@ import com.piku.client.source.poipiku.ui.login.PoipikuWebLoginScreen
 import com.piku.client.source.poipiku.ui.login.RegisterScreen
 import com.piku.client.source.poipiku.ui.myposts.MyPostsScreen
 import com.piku.client.source.pixiv.ui.login.PixivLoginScreen
+import com.piku.client.source.ao3.ui.login.Ao3LoginScreen
 import com.piku.client.core.ui.novelcache.NovelCacheReaderScreen
 import com.piku.client.core.ui.novelcache.NovelCacheScreen
 import com.piku.client.source.poipiku.ui.publish.PublishScreen
@@ -70,6 +71,7 @@ object Routes {
     const val POIPIKU_WEB_LOGIN = SourceAuthRoutes.POIPIKU_WEB_LOGIN
     const val REGISTER = "register"
     const val PIXIV_LOGIN = SourceAuthRoutes.PIXIV_LOGIN
+    const val AO3_LOGIN = SourceAuthRoutes.AO3_LOGIN
     const val NOVEL_CACHE = "novel_cache"
     const val NOVEL_CACHE_READER = "novel_cache_read/{source}/{workId}"
     const val HOME = "home"
@@ -341,6 +343,8 @@ fun AppNavHost(
                 onSuccess = safePopBack,
             )
         }
+        composable(Routes.AO3_LOGIN) {
+            Ao3LoginScreen(
                 onBack = safePopBack,
                 onSuccess = safePopBack,
             )

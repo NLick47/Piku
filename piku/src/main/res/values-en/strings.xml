@@ -791,6 +791,11 @@
     <string name="home_source_select_title">Choose content source</string>
     <string name="home_source_pixiv">Pixiv</string>
     <string name="home_source_ao3">AO3</string>
+    <string name="ao3_login_title">Log in to AO3</string>
+    <string name="ao3_login_subtitle">Log in to read works visible to registered users only</string>
+    <string name="ao3_login_account_label">Email or username</string>
+    <string name="ao3_login_error_invalid">Wrong username or password</string>
+    <string name="ao3_logout_message">After logging out, works visible only to registered users can no longer be read</string>
     <string name="ao3_tab_latest">Newly posted</string>
     <string name="ao3_tab_top">Most kudos</string>
     <string name="ao3_complete_all">Any</string>

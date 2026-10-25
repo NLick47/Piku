@@ -10,6 +10,9 @@ object Ao3Config {
     const val BASE_URL = "https://archiveofourown.org/"
     const val MAIN_HOST = "archiveofourown.org"
 
+    /** 本源的 client / cookie 罐 / 登录接口在 DI 里的限定名 */
+    const val CLIENT_NAME = "ao3"
+
     /**
      * 桌面浏览器 UA。AO3 前端是 Cloudflare Bot Management，实测（2026-10）curl 裸 UA
      * 与自定义 UA 都放行，但站内若干响应带 `__cf_bm` cookie，浏览器形态的头更稳。

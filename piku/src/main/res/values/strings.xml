@@ -789,6 +789,11 @@
     <string name="home_source_select_title">选择内容源</string>
     <string name="home_source_pixiv">Pixiv</string>
     <string name="home_source_ao3">AO3</string>
+    <string name="ao3_login_title">登录 AO3</string>
+    <string name="ao3_login_subtitle">登录后可读仅注册用户可见的作品</string>
+    <string name="ao3_login_account_label">邮箱或用户名</string>
+    <string name="ao3_login_error_invalid">账号或密码错误</string>
+    <string name="ao3_logout_message">退出后，仅注册用户可见的作品将无法读取</string>
     <string name="ao3_tab_latest">最新发布</string>
     <string name="ao3_tab_top">最多赞</string>
     <string name="ao3_complete_all">全部</string>
