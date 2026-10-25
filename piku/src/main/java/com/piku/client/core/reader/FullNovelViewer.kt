@@ -162,6 +162,8 @@ fun FullNovelViewer(
      * 空或单章走 [text] 的单篇路径，与从前一致；进度始终按整部百分比落盘。
      */
     chapters: List<com.piku.client.core.model.NovelChapter> = emptyList(),
+    /** 设置面板底部的只读缓存状态；null = 不显示（图片作品/未缓存） */
+    cacheStatus: String? = null,
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -528,6 +530,7 @@ fun FullNovelViewer(
                         showTranslation = showTranslation,
                         streamProgress = novelStreamProgress,
                         onToggleTranslation = onToggleTranslation,
+                        cacheStatus = cacheStatus,
                     )
                 }
             }

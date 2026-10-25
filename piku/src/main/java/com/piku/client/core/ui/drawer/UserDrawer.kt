@@ -1,6 +1,7 @@
 package com.piku.client.core.ui.drawer
 
 import com.piku.client.core.ui.sheets.ConfirmDestructiveDialog
+import com.piku.client.core.ui.novelcache.novelCacheSize
 
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
@@ -40,6 +41,7 @@ import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.DeleteSweep
+import androidx.compose.material.icons.outlined.DownloadForOffline
 import androidx.compose.material.icons.outlined.GTranslate
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Info
@@ -121,6 +123,9 @@ fun UserDrawer(
     onHistoryClick: () -> Unit,
     onCollectionClick: () -> Unit,
     onTagsClick: () -> Unit,
+    /** 离线正文缓存：库区常显入口，trailing 报占用 */
+    novelCacheBytes: Long = 0L,
+    onNovelCacheClick: () -> Unit = {},
     /** 头部左侧：主源进个人主页、其它源进账号页、未登录进对应源的登录页 */
     onHeaderClick: () -> Unit,
     /** 头部右侧 chevron 与菜单行：进账号管理页 */
@@ -173,6 +178,8 @@ fun UserDrawer(
                 onHistoryClick = onHistoryClick,
                 onCollectionClick = onCollectionClick,
                 onTagsClick = onTagsClick,
+                novelCacheBytes = novelCacheBytes,
+                onNovelCacheClick = onNovelCacheClick,
                 onHeaderClick = onHeaderClick,
                 onAccountsClick = onAccountsClick,
                 onAccountAction = onAccountAction,
@@ -222,6 +229,8 @@ private fun DrawerPanel(
     onHistoryClick: () -> Unit,
     onCollectionClick: () -> Unit,
     onTagsClick: () -> Unit,
+    novelCacheBytes: Long,
+    onNovelCacheClick: () -> Unit,
     onHeaderClick: () -> Unit,
     onAccountsClick: () -> Unit,
     onAccountAction: () -> Unit,
@@ -342,6 +351,18 @@ private fun DrawerPanel(
                 icon = Icons.Outlined.Tag,
                 label = stringResource(R.string.menu_my_tags),
                 onClick = onTagsClick,
+                dark = dark,
+                accent = iconAccent,
+            )
+            DrawerMenuRow(
+                icon = Icons.Outlined.DownloadForOffline,
+                label = stringResource(R.string.novel_cache_title),
+                trailing = if (novelCacheBytes > 0) {
+                    novelCacheSize(novelCacheBytes)
+                } else {
+                    stringResource(R.string.novel_cache_unused)
+                },
+                onClick = onNovelCacheClick,
                 dark = dark,
                 accent = iconAccent,
             )

@@ -11,6 +11,7 @@ import com.piku.client.core.model.AppError
 import com.piku.client.core.model.AppLanguage
 import com.piku.client.core.model.AuthStatus
 import com.piku.client.core.model.FavoriteFolder
+import com.piku.client.core.model.NovelChapter
 import com.piku.client.core.model.PixivBookmarkMirror
 import com.piku.client.core.model.Work
 import com.piku.client.core.model.WorkDetail
@@ -19,6 +20,11 @@ import com.piku.client.core.model.WorkSource
 import com.piku.client.core.model.WorkStats
 import com.piku.client.core.model.key
 import com.piku.client.core.model.mergeTranslatedFields
+import com.piku.client.core.novelcache.NovelCacheRepository
+import com.piku.client.core.novelcache.fetchNovelChapters
+import com.piku.client.core.ui.novelcache.NovelCacheAction
+import com.piku.client.core.ui.novelcache.NovelCacheUiState
+import com.piku.client.core.ui.novelcache.toUiState
 import com.piku.client.core.network.image.ImageRouteController
 import com.piku.client.core.network.image.ImageUpstream
 import com.piku.client.core.reader.ImageShareRequest
@@ -87,6 +93,7 @@ class SourceWorkDetailViewModel @Inject constructor(
     private val observeCustomTagsUseCase: ObserveCustomTagsUseCase,
     private val addCustomTagUseCase: AddCustomTagUseCase,
     private val removeCustomTagUseCase: RemoveCustomTagUseCase,
+    private val novelCache: NovelCacheRepository,
 ) : ViewModel() {
 
     /** 保存/分享结果的就地提示，由宿主 SnackbarHost 呈现（与 poipiku 详情同款通道） */
@@ -148,11 +155,14 @@ class SourceWorkDetailViewModel @Inject constructor(
         /** 小说正文：点阅读才拉（体量大，不跟详情一起取） */
         val novelText: String = "",
         /** 分章正文（AO3 这类分章源）：非空时阅读器按章渲染，[novelText] 留空 */
-        val novelChapters: List<com.piku.client.core.model.NovelChapter> = emptyList(),
+        val novelChapters: List<NovelChapter> = emptyList(),
         /** 作品状态徽标（AO3：已完结/连载中）；0 = 不显示 */
         @androidx.annotation.StringRes val novelStatusRes: Int = 0,
         val novelBodyLoading: Boolean = false,
         val novelReaderOpen: Boolean = false,
+        /** 详情页缓存按钮的状态；图片作品恒为 Hidden */
+        val cache: NovelCacheUiState =
+            NovelCacheUiState.Hidden,
         val novelReaderSettings: NovelReaderSettings = NovelReaderSettings(),
         val novelProgressPercent: Int = 0,
         val imageProgressPage: Int = 0,
@@ -359,6 +369,7 @@ class SourceWorkDetailViewModel @Inject constructor(
                 novelStatusRes = text.statusRes,
             )
         }
+        refreshCacheState(work)
         recordHistoryUseCase(work)
         if (settingsRepository.aiTranslateEnabled.value) translate()
     }
@@ -457,44 +468,102 @@ class SourceWorkDetailViewModel @Inject constructor(
         viewModelScope.launch {
             _ui.update { it.copy(novelBodyLoading = true) }
             val source = sourceRegistry.byId(work.source)
-            // 分章源（AO3）走章节路径：阅读器按章渲染并出章节导航
-            val chapters = source.novelChapters(work).getOrNull()
-            if (!chapters.isNullOrEmpty()) {
-                val progress = settingsRepository.getNovelProgress(work.key)
-                if (chapters.size > 1) {
-                    _ui.update {
-                        it.copy(
-                            novelBodyLoading = false,
-                            novelChapters = chapters,
-                            novelReaderOpen = true,
-                            novelProgressPercent = progress,
-                        )
-                    }
-                } else {
-                    // 单章（oneshot）：章节导航对一章没有意义，按普通正文读
-                    _ui.update {
-                        it.copy(
-                            novelBodyLoading = false,
-                            novelText = chapters.first().text,
-                            novelReaderOpen = true,
-                            novelProgressPercent = progress,
-                        )
-                    }
-                }
-                return@launch
-            }
-            val body = source.novelBody(work).getOrNull()
-            if (body.isNullOrBlank()) {
+            // 有缓存且没落后就直接读缓存；落后或没有才走网络，但都不写缓存
+            val remote = _ui.value.stats?.chapters?.takeIf { it > 0 }
+            val load = novelCache.read(work, remote) { fetchNovel(source, work) }.getOrNull()
+            if (load == null) {
                 _ui.update { it.copy(novelBodyLoading = false) }
                 feedback.show(R.string.home_error_network)
+                refreshCacheState(work)
                 return@launch
             }
+            val progress = settingsRepository.getNovelProgress(work.key)
+            if (load.chapters.size > 1) {
+                _ui.update {
+                    it.copy(
+                        novelBodyLoading = false,
+                        novelChapters = load.chapters,
+                        novelText = "",
+                        novelReaderOpen = true,
+                        novelProgressPercent = progress,
+                    )
+                }
+            } else {
+                _ui.update {
+                    it.copy(
+                        novelBodyLoading = false,
+                        novelChapters = emptyList(),
+                        novelText = load.chapters.first().text,
+                        novelReaderOpen = true,
+                        novelProgressPercent = progress,
+                    )
+                }
+            }
+            if (load.fallback) feedback.show(R.string.novel_cache_offline_toast)
+            refreshCacheState(work)
+        }
+    }
+
+    /** 缓存行上的四种动作：缓存、更新、固定/取消、删除 */
+    fun onCacheAction(action: NovelCacheAction) {
+        val work = currentWork ?: return
+        if (work.kind != WorkKind.NOVEL) return
+        viewModelScope.launch {
+            when (action) {
+                NovelCacheAction.Cache,
+                NovelCacheAction.Update,
+                -> downloadNovel(work)
+
+                NovelCacheAction.Delete -> {
+                    novelCache.delete(work)
+                    _ui.update { it.copy(cache = NovelCacheUiState.NotCached) }
+                    feedback.show(R.string.novel_cache_deleted)
+                }
+            }
+        }
+    }
+
+    private suspend fun downloadNovel(work: Work) {
+        if (_ui.value.cache is NovelCacheUiState.Caching) return
+        _ui.update { it.copy(cache = NovelCacheUiState.Caching) }
+        val source = sourceRegistry.byId(work.source)
+        val result = novelCache.download(work) { fetchNovel(source, work) }
+        if (result.isSuccess) {
+            refreshCacheState(work, allowDuringCaching = true)
+            feedback.show(R.string.novel_cache_saved)
+        } else {
+            _ui.update { it.copy(cache = NovelCacheUiState.Failed) }
+            feedback.show(R.string.home_error_network)
+        }
+    }
+
+    /** 分章源返回章节；单篇源连同 novelBody 一起包成一条，缓存与阅读器共用一个形状 */
+    private suspend fun fetchNovel(
+        source: ContentSource,
+        work: Work,
+    ): Result<List<NovelChapter>> = fetchNovelChapters(source, work)
+
+    private fun refreshCacheState(
+        work: Work? = currentWork,
+        /** 下载路径自己把状态置成了 Caching，收尾时必须允许覆盖 */
+        allowDuringCaching: Boolean = false,
+    ) {
+        val target = work ?: return
+        if (target.kind != WorkKind.NOVEL) return
+        if (!allowDuringCaching &&
+            _ui.value.cache is NovelCacheUiState.Caching
+        ) {
+            return
+        }
+        viewModelScope.launch {
+            val remote = _ui.value.stats?.chapters?.takeIf { it > 0 }
+            val snapshot = novelCache.snapshot(target, remote)
             _ui.update {
-                it.copy(
-                    novelBodyLoading = false,
-                    novelText = body,
-                    novelReaderOpen = true,
-                    novelProgressPercent = settingsRepository.getNovelProgress(work.key),
+                val caching = it.cache is NovelCacheUiState.Caching
+                if (caching && !allowDuringCaching) it
+                else it.copy(
+                    cache = snapshot?.toUiState()
+                        ?: NovelCacheUiState.NotCached,
                 )
             }
         }
@@ -502,6 +571,7 @@ class SourceWorkDetailViewModel @Inject constructor(
 
     fun closeNovelReader() {
         _ui.update { it.copy(novelReaderOpen = false) }
+        refreshCacheState()
     }
 
     fun saveNovelProgress(percent: Int) {

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- 正文缓存可达上百 MB，不能跟着系统备份上传 -->
+    <exclude domain="database" path="novel_cache.db" />
+    <exclude domain="database" path="novel_cache.db-wal" />
+    <exclude domain="database" path="novel_cache.db-shm" />
+</full-backup-content>

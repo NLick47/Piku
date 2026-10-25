@@ -1,5 +1,8 @@
 package com.piku.client.source.pixiv.ui.novel
 import com.piku.client.core.ui.shell.BookmarkStatButton
+import com.piku.client.core.ui.novelcache.NovelCacheAction
+import com.piku.client.core.ui.novelcache.NovelCacheActionChip
+import com.piku.client.core.ui.novelcache.NovelCacheUiState
 import com.piku.client.source.pixiv.ui.detail.AuthorLine
 import com.piku.client.source.pixiv.ui.detail.DescriptionBlock
 import com.piku.client.source.pixiv.ui.detail.MetaLine
@@ -11,6 +14,7 @@ import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -89,6 +93,8 @@ internal fun NovelDetailContent(
     onToggleTagsTranslation: () -> Unit,
     /** 作品状态徽标（AO3：已完结/连载中）；0 = 该源没有，不渲染 */
     @androidx.annotation.StringRes statusRes: Int = 0,
+    cacheState: NovelCacheUiState = NovelCacheUiState.Hidden,
+    onCacheAction: (NovelCacheAction) -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -167,12 +173,22 @@ internal fun NovelDetailContent(
         )
         MetaLine(stats = stats)
         Spacer(Modifier.height(14.dp))
-        ReadButton(
-            loading = novelBodyLoading,
-            dark = dark,
-            onClick = onReadClick,
+        Row(
             modifier = Modifier.fillMaxWidth(),
-        )
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ReadButton(
+                loading = novelBodyLoading,
+                dark = dark,
+                onClick = onReadClick,
+                modifier = Modifier.weight(1f),
+            )
+            NovelCacheActionChip(
+                state = cacheState,
+                onAction = onCacheAction,
+            )
+        }
         DescriptionBlock(detail = detail, dark = dark, showTranslation = showTranslation)
         TagsBlock(
             detail = detail,

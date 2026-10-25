@@ -4,6 +4,9 @@ import com.piku.client.source.poipiku.ui.detail.DetailViewModel
 import com.piku.client.source.poipiku.ui.detail.LockGateCard
 import com.piku.client.source.poipiku.ui.detail.RelatedWorksSection
 import com.piku.client.core.reader.rememberPagerWindowPrefetch
+import com.piku.client.core.ui.novelcache.NovelCacheAction
+import com.piku.client.core.ui.novelcache.NovelCacheActionChip
+import com.piku.client.core.ui.novelcache.NovelCacheUiState
 
 import android.content.Intent
 import android.net.Uri
@@ -238,6 +241,9 @@ internal fun DetailContent(
      * 避免"登录用户被展示登录门卡"这类判定错位。
      */
     restrictionReason: RestrictionReason? = null,
+    /** 文本作品的离线缓存状态；图片作品传 Hidden，不渲染缓存行 */
+    cacheState: NovelCacheUiState = NovelCacheUiState.Hidden,
+    onCacheAction: (NovelCacheAction) -> Unit = {},
 ) {
     val imageFirst = layout == DetailLayout.ImageFirst
     val translated = detail.translated
@@ -272,6 +278,8 @@ internal fun DetailContent(
                 gateLoading = gateLoading,
                 restrictionReason = restrictionReason,
                 onOpenNovelReader = onOpenNovelReader,
+                cacheState = cacheState,
+                onCacheAction = onCacheAction,
                 hasImageModel = hasImageModel,
                 imageTranslated = imageTranslated,
                 imageTranslatingPage = imageTranslatingPage,
@@ -671,6 +679,8 @@ internal fun ImagePager(
     /** 受限门卡类型（ViewModel 统一推导）；null = 无比受限门卡 */
     restrictionReason: RestrictionReason? = null,
     onOpenNovelReader: () -> Unit,
+    cacheState: NovelCacheUiState = NovelCacheUiState.Hidden,
+    onCacheAction: (NovelCacheAction) -> Unit = {},
     hasImageModel: Boolean = false,
     imageTranslated: Boolean = false,
     imageTranslatingPage: Int? = null,
@@ -810,13 +820,22 @@ internal fun ImagePager(
                 }
                 detail.novelText.isNotBlank() -> {
                     NovelPreview(detail = detail, dark = dark, onWorkClick = onWorkClick)
-                    NovelReaderEntryButton(
-                        dark = dark,
-                        onOpen = onOpenNovelReader,
+                    Row(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
                             .padding(8.dp),
-                    )
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        NovelReaderEntryButton(dark = dark, onOpen = onOpenNovelReader)
+                        if (detail.gate == null && !detail.passwordProtected && !detail.unlockBlocked) {
+                            NovelCacheActionChip(
+                                state = cacheState,
+                                onAction = onCacheAction,
+                                compact = true,
+                            )
+                        }
+                    }
                 }
                 detail.passwordProtected -> {
                     PasswordBox(

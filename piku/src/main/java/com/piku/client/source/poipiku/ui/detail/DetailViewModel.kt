@@ -11,6 +11,7 @@ import com.piku.client.core.data.ThumbnailResolver
 import com.piku.client.core.model.AppError
 import com.piku.client.core.model.AuthStatus
 import com.piku.client.core.model.FavoriteFolder
+import com.piku.client.core.model.NovelChapter
 import com.piku.client.core.model.RestrictionReason
 import com.piku.client.core.model.TranslatedFields
 import com.piku.client.core.model.Work
@@ -18,6 +19,10 @@ import com.piku.client.core.model.WorkDetail
 import com.piku.client.core.model.WorkSource
 import com.piku.client.core.model.key
 import com.piku.client.core.model.mergeTranslatedFields
+import com.piku.client.core.novelcache.NovelCacheRepository
+import com.piku.client.core.ui.novelcache.NovelCacheAction
+import com.piku.client.core.ui.novelcache.NovelCacheUiState
+import com.piku.client.core.ui.novelcache.toUiState
 import com.piku.client.core.reader.ImageShareRequest
 import com.piku.client.core.reader.ViewerImage
 import com.piku.client.core.storage.media.ImageSaver
@@ -147,6 +152,9 @@ data class DetailUiState(
     val novelReaderSettings: NovelReaderSettings = NovelReaderSettings(),
     /** 全屏小说阅读器：该作品已保存的阅读进度（百分比 0~100） */
     val novelProgressPercent: Int = 0,
+    /** 文本作品的离线缓存状态；图片作品恒为 Hidden */
+    val cache: NovelCacheUiState =
+        NovelCacheUiState.Hidden,
     val imageProgressPage: Int = 0,
     /** AI 翻译开关是否开启（只控制自动翻译，不影响手动入口） */
     val aiTranslateEnabled: Boolean = false,
@@ -261,6 +269,7 @@ class DetailViewModel @Inject constructor(
     private val observeLanguageUseCase: ObserveLanguageUseCase,
     private val imageTranslateEngine: ImageTranslateEngine,
     private val prefs: SharedPreferences,
+    private val novelCache: NovelCacheRepository,
     savedStateHandle: SavedStateHandle,
     @ApplicationScope private val appScope: CoroutineScope,
 ) : ViewModel() {
@@ -364,6 +373,63 @@ class DetailViewModel @Inject constructor(
     /** 打开/关闭全屏小说阅读器 */
     fun setNovelReaderOpen(open: Boolean) {
         _uiState.update { it.copy(novelReaderOpen = open) }
+    }
+
+    /**
+     * 读取已有缓存状态：只读，不因为打开详情就写缓存。
+     * 写入只发生在用户点缓存按钮时。
+     */
+    private fun refreshCacheState() {
+        val detail = _uiState.value.detail ?: return
+        if (detail.novelText.isBlank()) return
+        viewModelScope.launch {
+            val snapshot = novelCache.snapshot(work, remoteChapterCount = null)
+            _uiState.update {
+                it.copy(
+                    cache = snapshot?.toUiState()
+                        ?: NovelCacheUiState.NotCached,
+                )
+            }
+        }
+    }
+
+    fun onCacheAction(action: NovelCacheAction) {
+        val detail = _uiState.value.detail ?: return
+        if (detail.novelText.isBlank()) return
+        viewModelScope.launch {
+            when (action) {
+                NovelCacheAction.Cache,
+                NovelCacheAction.Update,
+                -> {
+                    _uiState.update {
+                        it.copy(cache = NovelCacheUiState.Caching)
+                    }
+                    val saved = novelCache.save(
+                        work = work.copy(title = detail.title, authorName = detail.authorName),
+                        chapters = listOf(NovelChapter(title = "", text = detail.novelText)),
+                        title = detail.title,
+                        authorName = detail.authorName,
+                    )
+                    if (saved) {
+                        refreshCacheState()
+                        feedback.show(R.string.novel_cache_saved)
+                    } else {
+                        _uiState.update {
+                            it.copy(cache = NovelCacheUiState.Failed)
+                        }
+                        feedback.show(R.string.home_error_network)
+                    }
+                }
+
+                NovelCacheAction.Delete -> {
+                    novelCache.delete(work)
+                    _uiState.update {
+                        it.copy(cache = NovelCacheUiState.NotCached)
+                    }
+                    feedback.show(R.string.novel_cache_deleted)
+                }
+            }
+        }
     }
 
     /** 保存该作品的阅读进度（百分比 0~100） */
@@ -1048,6 +1114,7 @@ class DetailViewModel @Inject constructor(
                     }
                     showServerNoticeOnce(detail)
                     recordHistory(detail)
+                    refreshCacheState()
                     // 解锁成功后后台升级全尺寸原图（不阻塞缩略图展示）；
                     // 匿名时 ShowIllustDetailF 恒 -2、账号受限（-4）时跳过无效请求链
                     if (!detail.passwordError && !detail.unlockBlocked && _uiState.value.loggedIn) {
@@ -1621,6 +1688,7 @@ class DetailViewModel @Inject constructor(
                     }
                     showServerNoticeOnce(detail)
                     recordHistory(detail)
+                    refreshCacheState()
                     // 密码作品的原图要带上解锁口令才拿得到，是保存/查看的前提，照旧即时预热；
                     // 普通作品等首图渲染完再解析（见 ensureFullImages）
                     if (detail.passwordProtected) loadFullImages(retainedPassword)

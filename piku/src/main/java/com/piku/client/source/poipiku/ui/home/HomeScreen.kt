@@ -47,6 +47,7 @@ import com.piku.client.core.ui.drawer.AccountsViewModel
 import com.piku.client.core.ui.drawer.DrawerScope
 import com.piku.client.core.ui.drawer.SourceAccountRow
 import com.piku.client.core.ui.drawer.UserDrawer
+import com.piku.client.core.ui.novelcache.NovelCacheViewModel
 import com.piku.client.source.poipiku.ui.home.PoipikuHomeShell
 import com.piku.client.core.ui.shell.SourceFeedContent
 import com.piku.client.core.ui.theme.LocalDarkTheme
@@ -84,12 +85,16 @@ fun HomeScreen(
     onScopesOpen: (WorkSource) -> Unit,
     /** 首页胶囊菜单/首次引导进的同一个页面：不是从抽屉来的，返回就回首页，不弹抽屉 */
     onScopesFromFeed: (WorkSource) -> Unit,
+    /** 抽屉里的离线缓存：库页语义，返回首页时抽屉重开 */
+    onNovelCacheOpen: () -> Unit = {},
 ) {
     val viewModel: HomeViewModel = hiltViewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     // 抽屉头部显示的是"当前首页源"的账号，所以这里跟的是账号源而不是 poipiku 的登录态
     val accountsViewModel: AccountsViewModel = hiltViewModel()
     val headerAccount by accountsViewModel.current.collectAsStateWithLifecycle()
+    val novelCacheViewModel: NovelCacheViewModel = hiltViewModel()
+    val novelCacheBytes by novelCacheViewModel.totalBytes.collectAsStateWithLifecycle()
     val dark = LocalDarkTheme.current
     val isTablet = LocalConfiguration.current.screenWidthDp >= 600
     val context = LocalContext.current
@@ -245,6 +250,8 @@ fun HomeScreen(
         onHistoryClick = onHistoryClick,
         onCollectionClick = onCollectionClick,
         onTagsClick = onTagsClick,
+        novelCacheBytes = novelCacheBytes,
+        onNovelCacheClick = onNovelCacheOpen,
         // 头部点哪里全看这个源自己声明了什么能力，不看谁是"主源"：
         // 未登录 → 它的登录页；有账号主页 → 主页；没有 → 账号页
         onHeaderClick = {

@@ -49,6 +49,8 @@ import com.piku.client.source.poipiku.ui.login.PoipikuWebLoginScreen
 import com.piku.client.source.poipiku.ui.login.RegisterScreen
 import com.piku.client.source.poipiku.ui.myposts.MyPostsScreen
 import com.piku.client.source.pixiv.ui.login.PixivLoginScreen
+import com.piku.client.core.ui.novelcache.NovelCacheReaderScreen
+import com.piku.client.core.ui.novelcache.NovelCacheScreen
 import com.piku.client.source.poipiku.ui.publish.PublishScreen
 import com.piku.client.core.ui.feature.search.SearchScreen
 import com.piku.client.core.ui.feature.scopes.ScopesScreen
@@ -68,6 +70,8 @@ object Routes {
     const val POIPIKU_WEB_LOGIN = SourceAuthRoutes.POIPIKU_WEB_LOGIN
     const val REGISTER = "register"
     const val PIXIV_LOGIN = SourceAuthRoutes.PIXIV_LOGIN
+    const val NOVEL_CACHE = "novel_cache"
+    const val NOVEL_CACHE_READER = "novel_cache_read/{source}/{workId}"
     const val HOME = "home"
     const val COLLECTION = "collection"
     const val DETAIL = "detail/{authorId}/{workId}?thumb={thumb}"
@@ -116,6 +120,10 @@ object Routes {
 
     /** 编辑已发布作品（发布页编辑模式；类型由页面自己判定，不进路由参数） */
     fun editPost(workId: Long) = "edit_post/$workId"
+
+    /** 从缓存直接打开阅读器：不经过详情页，断网也能用 */
+    fun novelCacheReader(source: WorkSource, workId: String) =
+        "novel_cache_read/${source.name}/$workId"
 
     /** 管理页删除成功后写回用户主页的标记（SavedStateHandle 返回结果模式） */
     const val KEY_POSTS_CHANGED = "my_posts_changed"
@@ -333,6 +341,28 @@ fun AppNavHost(
                 onSuccess = safePopBack,
             )
         }
+                onBack = safePopBack,
+                onSuccess = safePopBack,
+            )
+        }
+        composable(Routes.NOVEL_CACHE) {
+            NovelCacheScreen(
+                onBack = safePopBack,
+                onOpenReader = { source, workId ->
+                    navController.navigate(Routes.novelCacheReader(source, workId))
+                },
+                onOpenWork = { work -> openWork(work) },
+            )
+        }
+        composable(
+            route = Routes.NOVEL_CACHE_READER,
+            arguments = listOf(
+                navArgument("source") { type = NavType.StringType },
+                navArgument("workId") { type = NavType.StringType },
+            ),
+        ) {
+            NovelCacheReaderScreen(onClose = safePopBack)
+        }
         composable(Routes.REGISTER) {
             // 注册页从登录页进入：返回键/去登录都弹回登录页
             val canGoBack = navController.previousBackStackEntry != null
@@ -415,6 +445,10 @@ fun AppNavHost(
                     onScopesFromFeed = { source ->
                         // 首页胶囊/引导里点的：同一页，但用户没开过抽屉，返回就回首页
                         navController.navigate(Routes.scopes(source))
+                    },
+                    onNovelCacheOpen = {
+                        backStackEntry.savedStateHandle[KEY_SHOULD_REOPEN_DRAWER] = true
+                        navController.navigate(Routes.NOVEL_CACHE)
                     },
                 )
             }

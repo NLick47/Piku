@@ -163,6 +163,7 @@ internal fun NovelReaderControls(
     showTranslation: Boolean,
     streamProgress: Int?,
     onToggleTranslation: () -> Unit,
+    cacheStatus: String? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -182,6 +183,7 @@ internal fun NovelReaderControls(
                 theme = theme,
                 onSettingsChange = onSettingsChange,
                 onInteract = onInteract,
+                cacheStatus = cacheStatus,
                 modifier = Modifier.padding(bottom = 8.dp),
             )
         }
@@ -331,6 +333,7 @@ private fun ReaderSettingsPanel(
     theme: NovelReaderTheme,
     onSettingsChange: (NovelReaderSettings, Boolean) -> Unit,
     onInteract: () -> Unit,
+    cacheStatus: String? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -497,6 +500,26 @@ private fun ReaderSettingsPanel(
                         },
                     )
                 }
+            }
+        }
+        if (cacheStatus != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.novel_cache_reader_label),
+                    color = theme.fg.copy(alpha = 0.5f),
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                )
+                Spacer(Modifier.weight(1f))
+                Text(
+                    text = cacheStatus,
+                    color = theme.fg.copy(alpha = 0.8f),
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                )
             }
         }
     }

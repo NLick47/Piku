@@ -1,6 +1,7 @@
 package com.piku.client.core.ui.shell
 import com.piku.client.source.pixiv.ui.detail.PixivDetailContent
 import com.piku.client.source.pixiv.ui.novel.NovelDetailContent
+import com.piku.client.core.ui.novelcache.novelCacheReaderStatus
 
 import android.Manifest
 import android.content.ClipData
@@ -359,6 +360,8 @@ internal fun SourceWorkDetailScreen(
                     tagsTranslating = state.tagsTranslating,
                     onToggleTagsTranslation = viewModel::onToggleTagsTranslation,
                     statusRes = state.novelStatusRes,
+                    cacheState = state.cache,
+                    onCacheAction = viewModel::onCacheAction,
                 )
             } else {
                 // pixiv 走自己的版面：图通栏置顶 + 概览卡（计数/元信息），与 poipiku 互不干涉
@@ -571,6 +574,7 @@ internal fun SourceWorkDetailScreen(
                 onClose = viewModel::closeNovelReader,
                 onWorkClick = { authorId, workId, _ -> onPoipikuWorkClick(authorId, workId) },
                 chapters = state.novelChapters,
+                cacheStatus = novelCacheReaderStatus(state.cache),
             )
         }
         FeedbackHost(channel = viewModel.feedback, snackbarHostState = snackbarHostState)

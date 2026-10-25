@@ -14,6 +14,7 @@ import com.piku.client.core.ui.detail.ModelPickerRow
 import com.piku.client.core.ui.detail.fullBleedMaxHeightDp
 import com.piku.client.core.ui.detail.imageHeightForAspect
 import com.piku.client.core.ui.detail.retranslatePickableModels
+import com.piku.client.core.ui.novelcache.novelCacheReaderStatus
 
 import android.Manifest
 import android.content.ClipData
@@ -396,6 +397,8 @@ fun DetailScreen(
                     onGateAction = viewModel::onUnlockRestriction,
                     gateLoading = state.enablingAdultContent || state.followSending,
                     restrictionReason = state.restrictionReason,
+                    cacheState = state.cache,
+                    onCacheAction = viewModel::onCacheAction,
                 )
             }
         }
@@ -558,6 +561,7 @@ fun DetailScreen(
                     // 只有本轮真的在拉正文才显示加载态，元数据拉取不误标
                     translating = state.fetchingNovelText,
                     busy = state.translating,
+                    cacheStatus = novelCacheReaderStatus(state.cache),
                     novelStreamProgress = state.novelStreamProgress,
                     onToggleTranslation = viewModel::onReaderTranslateToggle,
                 )

@@ -912,6 +912,7 @@ class SettingsRepository @Inject constructor(
         const val KEY_FOLDER_SORT = "folder_sort"
         const val KEY_PIXIV_BOOKMARK_MIRROR = "pixiv_bookmark_mirror"
         const val KEY_HISTORY_RETENTION_DAYS = "history_retention_days"
+
         const val KEY_AUTO_CHECK_ENABLED = "auto_check_update_enabled"
         const val KEY_LAST_UPDATE_CHECK_AT = "last_update_check_at"
         const val KEY_NOVEL_FONT_SIZE = "novel_font_size"
