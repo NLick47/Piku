@@ -2,10 +2,13 @@ package com.piku.client.source.poipiku.ui.login
 
 import android.graphics.Bitmap
 import android.graphics.Color as AndroidColor
+import android.net.http.SslError
 import android.os.SystemClock
 import android.util.Log
+import android.webkit.SslErrorHandler
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.background
@@ -32,16 +35,20 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.piku.client.core.network.webview.WebViewProxy
 import com.piku.client.core.ui.common.PikuBackButton
 import com.piku.client.core.ui.theme.HomeBgBottomDark
 import com.piku.client.core.ui.theme.HomeBgBottomLight
@@ -49,6 +56,7 @@ import com.piku.client.core.ui.theme.HomeBgTopDark
 import com.piku.client.core.ui.theme.HomeBgTopLight
 import com.piku.client.core.ui.theme.PikuColors
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 internal fun loginWebViewClient(
     onNavigate: (String) -> Boolean,
@@ -79,6 +87,28 @@ internal fun loginWebViewClient(
         // 错误码与地址都要打：只有"失败了"这一句，真机上分不出是 DNS、连接被重置还是证书问题
         Log.d(TAG, "resource failed: code=${error.errorCode} '${error.description}' url=${request.url}")
         if (request.isForMainFrame) onMainFrameFailed()
+    }
+
+    override fun onReceivedSslError(
+        view: WebView,
+        handler: SslErrorHandler,
+        error: SslError,
+    ) {
+        // 代理生效但本 App 不信任 hakimi 的用户 CA 时会走到这里。
+        // 先取消（绝不带着错误证书继续），主框架再触发一次直连回退。
+        Log.d(TAG, "ssl failed: primary=${error.primaryError} url=${error.url}")
+        handler.cancel()
+        if (error.url == view.url) onMainFrameFailed()
+    }
+
+    override fun onReceivedHttpError(
+        view: WebView,
+        request: WebResourceRequest,
+        errorResponse: WebResourceResponse,
+    ) {
+        // 代理活着但上游返回 5xx：直连可能还能通，给主框架一次回退机会。
+        Log.d(TAG, "http failed: status=${errorResponse.statusCode} url=${request.url}")
+        if (request.isForMainFrame && errorResponse.statusCode >= 500) onMainFrameFailed()
     }
 }
 
@@ -141,6 +171,20 @@ internal fun LoginWebScreen(
 ) {
     var pageState by remember { mutableStateOf(WebPageState.LOADING) }
 
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val currentUrl by rememberUpdatedState(url)
+    // 先探测 hakimi，再决定 WebView 是否装代理覆盖；没有代理时直接加载。
+    var proxyReady by remember { mutableStateOf(false) }
+    var proxyApplied by remember { mutableStateOf(false) }
+    var directRetryUsed by remember { mutableStateOf(false) }
+
+    suspend fun prepareProxy() {
+        proxyReady = false
+        proxyApplied = WebViewProxy.applyIfAvailable(context)
+        proxyReady = true
+    }
+
     val web = remember { WebViewHandle() }
     var loadEpoch by remember { mutableIntStateOf(0) }
 
@@ -161,7 +205,11 @@ internal fun LoginWebScreen(
         onPageSettled()
     }
 
-    LaunchedEffect(loadEpoch) {
+    LaunchedEffect(Unit) { prepareProxy() }
+
+    LaunchedEffect(loadEpoch, proxyReady) {
+        // 代理探测最多几百毫秒；没就绪前不算页面加载超时。
+        if (!proxyReady) return@LaunchedEffect
         delay(PAGE_LOAD_WATCHDOG_MS)
         if (pageState != WebPageState.LOADING) return@LaunchedEffect
         val drewContent = (web.view?.contentHeight ?: 0) > 0
@@ -248,7 +296,18 @@ internal fun LoginWebScreen(
                                         "login page main frame failed after " +
                                             "${SystemClock.elapsedRealtime() - loadStartedAt}ms, url=$url",
                                     )
-                                    pageState = WebPageState.FAILED
+                                    if (proxyApplied && !directRetryUsed) {
+                                        // 代理活着但页面失败（证书/上游 5xx 等）：
+                                        // 清掉覆盖后直连重试一次，避免登录被代理拖死。
+                                        directRetryUsed = true
+                                        scope.launch {
+                                            WebViewProxy.clear(context)
+                                            proxyApplied = false
+                                            web.view?.reload()
+                                        }
+                                    } else {
+                                        pageState = WebPageState.FAILED
+                                    }
                                 },
                             )
                             // WebView 首次创建要初始化内核，这段开销在低端机上不小，
@@ -260,8 +319,9 @@ internal fun LoginWebScreen(
                         }
                     },
                     update = { view ->
-                        // url 还没准备好（pixiv 生成挑战前是空串）就别动 WebView
-                        if (url.isNotBlank() && web.loadedUrl != url) {
+                        // url 还没准备好（pixiv 生成挑战前是空串）就别动 WebView；
+                        // 代理探测完成前也不要先直连一次，否则会绕过本次加速。
+                        if (proxyReady && url.isNotBlank() && web.loadedUrl != url) {
                             web.loadedUrl = url
                             view.loadUrl(url)
                         }
@@ -279,9 +339,15 @@ internal fun LoginWebScreen(
                 overlay(pageState) {
                     pageState = WebPageState.LOADING
                     onRetry()
-                    // reload 覆盖"地址没变"（poipiku）；地址变了（pixiv 换 PKCE 挑战）
-                    // 则由上面的 update 块按新地址加载
-                    web.view?.reload()
+                    // 每次重试都重新探测 hakimi：上次回退过直连，或代理中途挂掉，
+                    // 这里都能重新接上；没有代理时 prepareProxy 会直接放行直连。
+                    directRetryUsed = false
+                    scope.launch {
+                        prepareProxy()
+                        // 地址没变（poipiku）时 update 不会触发，补一次 reload；
+                        // 地址变了（pixiv 换 PKCE 挑战）由 update 负责。
+                        if (web.loadedUrl == currentUrl) web.view?.reload()
+                    }
                 }
             }
         }

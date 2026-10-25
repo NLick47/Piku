@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- 保留 App 原有的明文放行；不写这一行时 targetSdk 37 会默认禁止明文。 -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <!--
+        只对登录 WebView 会经过 hakimi MITM 的域名信任用户 CA；
+        其余域名仍只信任系统 CA，避免把整个 App 的 TLS 信任面放大。
+    -->
+    <domain-config>
+        <domain includeSubdomains="true">pixiv.net</domain>
+        <domain includeSubdomains="true">pximg.net</domain>
+        <domain includeSubdomains="true">poipiku.com</domain>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </domain-config>
+</network-security-config>

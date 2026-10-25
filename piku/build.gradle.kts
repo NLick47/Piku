@@ -197,6 +197,7 @@ dependencies {
     // 内部按 SDK_INT 选 AnimatedImageDecoder(28+) 或纯 Kotlin 的 GifDecoder
     implementation(libs.coil.gif)
     implementation(libs.androidx.palette.ktx)
+    implementation(libs.androidx.webkit)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
