@@ -3,25 +3,24 @@ package com.piku.client.source.poipiku.data.remote
 import com.piku.client.core.model.FollowUser
 
 /**
- * 作者搜索（SearchUserByKeywordPcV.jsp）结果页解析器。
+ * 作者搜索（SearchUserByKeywordV.jsp）结果页解析器。
  *
- * 结果页由多张用户卡片组成，卡片结构与关注列表（FollowListF）一致：
- * `<a class="UserInfo Thumb" href="/{userId}/"><span class="UserInfoUserThumb" style="background-image:url('...')"></span>...<span class="UserInfoUserName">昵称</span></a>`。
- * 关注状态从卡片所在行的 `UserInfoCmdFollow` 按钮 class 中的 `Selected` 标记解析
- * （与用户主页 UserPageParser 同一约定；页面未携带按钮时视为未关注）。
+ * 结果页由多张用户卡片组成（`<a class="UserInfo ThumbSmall" href="/IllustListAppV.jsp?ID={userId}"`），
+ * 卡片内依次是头像 `UserInfoUserThumb`、昵称 `UserInfoUserName`、简介 `UserInfoProfile`。
+ * 该页不渲染关注按钮（关注态一律 false，以用户主页为准）。
  */
 object UserSearchParser {
 
-    /** 用户卡片起始标签：`<a class="UserInfo Thumb" href="/{userId}/"` */
-    private val ITEM_TAG = Regex("""<a class="UserInfo Thumb" href="/(\d+)/"""")
+    /** 用户卡片起始标签：`<a class="UserInfo ThumbSmall" href="/IllustListAppV.jsp?ID={userId}"` */
+    private val ITEM_TAG = Regex("""<a class="UserInfo ThumbSmall" href="/IllustListAppV\.jsp\?ID=(\d+)"""")
 
-    /** 头像：`UserInfoUserThumb" style="background-image:url('...')"` */
-    private val AVATAR = Regex("""UserInfoUserThumb" style="background-image:url\('([^']*)'\)""")
+    /** 头像：`UserInfoUserThumb " style="background-image:url('...')"`（class 值后有空格） */
+    private val AVATAR = Regex("""UserInfoUserThumb\s*" style="background-image:url\('([^']*)'\)""")
 
-    /** 昵称：`UserInfoUserName">昵称</span>` */
-    private val NAME = Regex("""UserInfoUserName">([^<]+)</span>""")
+    /** 昵称：`UserInfoUserName ">昵称</span>` */
+    private val NAME = Regex("""UserInfoUserName\s*">([^<]+)</span>""")
 
-    /** 关注按钮：`UserInfoCmdFollow` class 含 Selected = 已关注（匿名恒无） */
+    /** 关注按钮：`UserInfoCmdFollow` class 含 Selected = 已关注（该页不渲染按钮，恒 false） */
     private val FOLLOW_BTN = Regex("""class="([^"]*UserInfoCmdFollow[^"]*)"""")
 
     fun parse(html: String): List<FollowUser> {

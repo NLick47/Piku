@@ -262,6 +262,19 @@ class AuthRepository @Inject constructor(
 
     private fun hasSavedCredentials(): Boolean = credentialStore.load() != null
 
+    /**
+     * 会话探活：只发一次 CheckLoginF，不改任何状态。
+     * poipiku 网页端没有主动刷新代码，靠服务端凭 POIPIKU_LK 令牌在任意请求上
+     * 静默重建会话（真机验证：只带令牌、无 JSESSIONID 也能恢复）。
+     * 登录态 -3 / 404 都不能直接判会话失效，判死前用它复核。
+     * 网络失败返回 true，保守不触发重登。
+     */
+    suspend fun isSessionAlive(): Boolean =
+        apiCall { authApi.checkLogin() }.fold(
+            onSuccess = { it.user_id > 0 },
+            onFailure = { true },
+        )
+
     /** 清除 cookie、凭据与登录态 */
     private fun clearSession() {
         val hadSession = isLoggedIn() || uid != null

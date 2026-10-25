@@ -92,8 +92,7 @@ class DetailRepository @Inject constructor(
         val adultEnabled = settingsRepository.showAdultContent.first()
         fun gated(reason: RestrictionReason) = detail.copy(imageUrls = emptyList(), gate = reason)
         // 未识别负值的原文提示（网页端 DispMsg(html) 同款行为）；-2 非密码作品也走这里。
-        // -3 且已登录是会话失效的瞬态（notifySessionInvalidIfNeeded 已触发自动重登），
-        // 不弹原文避免打扰
+        // -3 且已登录多为作品不存在（会话失效已被探活排除），html 为空无可弹内容
         fun serverNotice(code: Int?, html: String?, passwordError: Boolean, unlockBlocked: Boolean): String? {
             if (code == null || code >= 0 || code == -4 || passwordError || unlockBlocked) return null
             if (code == ThumbnailResolver.RESULT_LOGIN_REQUIRED && loggedIn) return null
@@ -352,8 +351,8 @@ class DetailRepository @Inject constructor(
 
     /**
      * append 拒绝码 → 门卡类型（与 poipiku 网页端行为对齐；逆向自 common.js）：
-     * -3 需登录（仅匿名；登录态的 -3 是会话失效，由 [notifySessionInvalidIfNeeded]
-     * 触发自动重登，不给门卡）/ -5 Twitter 关注者限定 / -20 需转推。
+     * -3 需登录（仅匿名；登录态的 -3 多为作品不存在，会话失效已由探活排除，
+     * 不给门卡）/ -5 Twitter 关注者限定 / -20 需转推。
      * 返回 null 表示非门卡类（-2 密码错、-4 受限、成功码）。
      */
     private fun appendGate(code: Int?, loggedIn: Boolean): RestrictionReason? = when {
@@ -365,14 +364,16 @@ class DetailRepository @Inject constructor(
     }
 
     /**
-     * 登录态下收到"需要登录"错误码（-3）时通知 session 失效，触发自动重登。
+     * 登录态下收到"需要登录"错误码（-3）时，复核会话真死了才通知失效。
+     * 真机验证：登录态请求不存在的作品同样回 -3；令牌有效时服务端会借
+     * 任意请求重建会话，不能据此触发重登（网页端对 -3 只是弹未知错误）。
      * -1 为エラー/限流、-2 为密码错误，均不触发，避免限流导致的重登风暴。
      * 未登录时的同类错误属正常现象，不触发。
      */
-    private fun notifySessionInvalidIfNeeded(code: Int) {
-        if (code == ThumbnailResolver.RESULT_LOGIN_REQUIRED && authRepository.isLoggedIn()) {
-            sessionMonitor.notifySessionCleared()
-        }
+    private suspend fun notifySessionInvalidIfNeeded(code: Int) {
+        if (code != ThumbnailResolver.RESULT_LOGIN_REQUIRED || !authRepository.isLoggedIn()) return
+        if (authRepository.isSessionAlive()) return
+        sessionMonitor.notifySessionCleared()
     }
 
     suspend fun sendReaction(workId: Long, emoji: String, userId: Long): ReactionResult = try {

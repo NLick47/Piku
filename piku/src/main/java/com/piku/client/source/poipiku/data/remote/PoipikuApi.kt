@@ -120,8 +120,11 @@ interface PoipikuApi {
         @Query("PG") page: Int,
     ): ResponseBody
 
-    /** 作者搜索（需登录；匿名访问服务端返回 404/登录页，调用前须由业务层先行拦截） */
-    @GET("SearchUserByKeywordPcV.jsp")
+    /**
+     * 作者搜索。真机验证：只有 V 版端点（PcV 不存在，恒 404），匿名/登录态均 200，
+     * 每页 18 条、PG 分页有效，空结果同为 200 无卡片
+     */
+    @GET("SearchUserByKeywordV.jsp")
     suspend fun getUserSearch(
         @Query("KWD") keyword: String,
         @Query("PG") page: Int,
