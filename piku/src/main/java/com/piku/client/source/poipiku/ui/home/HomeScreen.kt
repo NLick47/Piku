@@ -281,7 +281,7 @@ fun HomeScreen(
         aiTranslateEnabled = state.aiTranslateEnabled,
         historyRetentionDays = state.historyRetentionDays,
         onAiTranslateClick = {
-            dialogs.showAiTranslateSheet = true
+            dialogs.showAiTranslateSettings = true
         },
         onLanguageClick = {
             dialogs.showLanguageSheet = true

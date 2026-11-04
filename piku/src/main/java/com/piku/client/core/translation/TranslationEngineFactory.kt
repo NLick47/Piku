@@ -20,12 +20,13 @@ class TranslationEngineFactory @Inject constructor(
 ) {
 
     /**
-     * key 为空返回 null，调用方跳过翻译（避免发出注定 401 的请求）。
+     * 需要鉴权却没有 key 时返回 null，调用方跳过翻译（避免发出注定 401 的请求）；
+     * 手动 API 的 NONE 模式（本地 Ollama / vLLM / llama.cpp）允许空 key。
      *
      * [role] 是该引擎服务的场景（[Role.TEXT]/[Role.NOVEL]）：它决定单条路径的
      * 提示词组并进缓存键，文本与小说两条通道由此彻底隔离。
      *
-     * [catalogEntry] 非空（选中项命中远程目录）时地址与模型名以目录为准：
+     * [catalogEntry] 非空（选中项命中目录或手动 API）时地址与模型名以它为准：
      * 远程改了 baseUrl/换名/下架换新，无需用户重新选择即对所有人生效；
      * 列表外的自定义模型传 null，完全跟随设置里手填的值。
      */
@@ -35,7 +36,9 @@ class TranslationEngineFactory @Inject constructor(
         catalogEntry: ModelEntry? = null,
         defaults: CatalogDefaults? = null,
     ): TranslationEngine? {
-        if (apiKey.isBlank()) return null
+        if (apiKey.isBlank() && (catalogEntry == null || catalogEntry.authMode != AuthMode.NONE)) {
+            return null
+        }
         val cfg = buildConfig(
             apiKey = apiKey,
             role = role,
@@ -65,10 +68,13 @@ class TranslationEngineFactory @Inject constructor(
             fallbackBaseUrl: String,
             fallbackModel: String,
         ): LlmTranslateEngine.LlmConfig {
+            val manual = catalogEntry?.isManual == true
             val params = buildJsonObject {
                 put("temperature", JsonPrimitive(0.2))
                 put("stream", JsonPrimitive(false))
-                defaults?.params?.forEach { (k, v) -> put(k, v) }
+                // 目录全局参数/提示词是给共享模型调的，不能塞给用户自己的服务：
+                // 本地 vLLM / Hunyuan-MT 可能不认 enable_thinking 之类的目录私有字段。
+                if (!manual) defaults?.params?.forEach { (k, v) -> put(k, v) }
                 catalogEntry?.params?.forEach { (k, v) -> put(k, v) }
             }
             return LlmTranslateEngine.LlmConfig(
@@ -80,6 +86,9 @@ class TranslationEngineFactory @Inject constructor(
                 prompts = catalogEntry?.prompts,
                 defaultPrompts = defaults?.prompts,
                 baseUrls = catalogEntry?.baseUrls.orEmpty(),
+                authMode = catalogEntry?.authMode ?: AuthMode.BEARER,
+                authHeader = catalogEntry?.authHeader ?: ManualProvider.DEFAULT_AUTH_HEADER,
+                extraHeaders = catalogEntry?.extraHeaders.orEmpty(),
             )
         }
     }

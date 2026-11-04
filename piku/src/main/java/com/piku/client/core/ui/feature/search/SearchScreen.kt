@@ -417,8 +417,8 @@ private fun SearchTopBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(if (dark) GlassHeaderTintDark else GlassHeaderTintLight)
             .statusBarsPadding()
+            .background(if (dark) GlassHeaderTintDark else GlassHeaderTintLight)
             .padding(start = 4.dp, end = 16.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

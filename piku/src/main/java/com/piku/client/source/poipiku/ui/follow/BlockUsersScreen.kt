@@ -163,9 +163,9 @@ private fun BlockTopBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .statusBarsPadding()
             .background(if (dark) GlassHeaderTintDark else GlassHeaderTintLight)
             .border(BorderStroke(0.5.dp, PikuColors.border))
-            .statusBarsPadding()
             .padding(start = 4.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

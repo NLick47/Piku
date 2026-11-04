@@ -42,7 +42,8 @@ class TranslationRepositoryRoleGateTest {
         models: List<ModelEntry>,
         roles: Map<String, String> = emptyMap(),
     ): TranslationRepository {
-        val settings = SettingsRepository(InMemorySharedPreferences())
+        val prefs = InMemorySharedPreferences()
+        val settings = SettingsRepository(prefs)
         settings.saveCatalogCache(
             json.encodeToString(
                 ModelCatalogDto(
@@ -54,7 +55,12 @@ class TranslationRepositoryRoleGateTest {
             url = "test://catalog",
             version = 1,
         )
-        val catalog = ModelCatalogRepository(settings, OkHttpClient(), json)
+        val catalog = ModelCatalogRepository(
+            settings,
+            OkHttpClient(),
+            json,
+            testManualProviderRepository(prefs, json),
+        )
         assertEquals("目录注入失败，后续断言无意义", models.size, catalog.models.value.size)
         return TranslationRepository(
             FakeTranslationDao,
@@ -150,7 +156,12 @@ private object FakeTranslationDao : TranslationDao {
 private object NoopChatApi : LlmChatApi {
     override suspend fun chat(
         url: String,
-        authorization: String,
+        headers: Map<String, String>,
         body: JsonObject,
     ): ChatResponse = error("闸门测试不应发出翻译请求")
+
+    override suspend fun models(
+        url: String,
+        headers: Map<String, String>,
+    ): LlmModelsResponse = error("闸门测试不应发出请求")
 }

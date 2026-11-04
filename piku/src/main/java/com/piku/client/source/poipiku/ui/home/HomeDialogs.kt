@@ -13,17 +13,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.piku.client.BuildConfig
 import com.piku.client.core.ui.common.AvatarViewerDialog
+import com.piku.client.core.ui.common.PikuFullScreenDialog
 import com.piku.client.core.ui.sheets.AboutSheet
-import com.piku.client.core.ui.sheets.AiTranslateSheet
 import com.piku.client.core.ui.sheets.CatalogSourceScreen
 import com.piku.client.core.ui.sheets.CategorySheet
 import com.piku.client.core.ui.sheets.HomeSourceSheet
 import com.piku.client.core.ui.sheets.ImageRouteSheet
 import com.piku.client.core.ui.sheets.LanguageSheet
+import com.piku.client.core.ui.sheets.LlmConfigScreen
 import com.piku.client.core.ui.sheets.PixivMirrorSheet
 import com.piku.client.core.ui.sheets.DiagnosticsDialog
 import com.piku.client.core.ui.sheets.RetentionSheet
@@ -55,7 +54,7 @@ internal class HomeDialogsState internal constructor(
     private val pixivMirrorSheet: MutableState<Boolean>,
     private val retentionSheet: MutableState<Boolean>,
     private val languageSheet: MutableState<Boolean>,
-    private val aiTranslateSheet: MutableState<Boolean>,
+    private val aiTranslateSettings: MutableState<Boolean>,
     private val aboutSheet: MutableState<Boolean>,
     private val webDavSettings: MutableState<Boolean>,
     private val avatarViewer: MutableState<Boolean>,
@@ -81,9 +80,9 @@ internal class HomeDialogsState internal constructor(
     var showLanguageSheet: Boolean
         get() = languageSheet.value
         set(value) { languageSheet.value = value }
-    var showAiTranslateSheet: Boolean
-        get() = aiTranslateSheet.value
-        set(value) { aiTranslateSheet.value = value }
+    var showAiTranslateSettings: Boolean
+        get() = aiTranslateSettings.value
+        set(value) { aiTranslateSettings.value = value }
     var showAboutSheet: Boolean
         get() = aboutSheet.value
         set(value) { aboutSheet.value = value }
@@ -104,7 +103,7 @@ internal fun rememberHomeDialogsState(): HomeDialogsState {
     val pixivMirrorSheet = rememberSaveable { mutableStateOf(false) }
     val retentionSheet = rememberSaveable { mutableStateOf(false) }
     val languageSheet = rememberSaveable { mutableStateOf(false) }
-    val aiTranslateSheet = rememberSaveable { mutableStateOf(false) }
+    val aiTranslateSettings = rememberSaveable { mutableStateOf(false) }
     val aboutSheet = rememberSaveable { mutableStateOf(false) }
     val webDavSettings = rememberSaveable { mutableStateOf(false) }
     val avatarViewer = rememberSaveable { mutableStateOf(false) }
@@ -117,7 +116,7 @@ internal fun rememberHomeDialogsState(): HomeDialogsState {
             pixivMirrorSheet = pixivMirrorSheet,
             retentionSheet = retentionSheet,
             languageSheet = languageSheet,
-            aiTranslateSheet = aiTranslateSheet,
+            aiTranslateSettings = aiTranslateSettings,
             aboutSheet = aboutSheet,
             webDavSettings = webDavSettings,
             avatarViewer = avatarViewer,
@@ -142,7 +141,7 @@ internal fun HomeDialogs(
     onCloseAndReopenDrawer: () -> Unit,
 ) {
     val context = LocalContext.current
-    // 模型目录只在 AI 翻译弹层里打开，诊断只在关于页里打开：开关是本宿主的私有状态
+    // 模型目录只在 AI 翻译页里打开，诊断只在关于页里打开：开关是本宿主的私有状态
     var showCatalogSource by rememberSaveable { mutableStateOf(false) }
     var showDiagnostics by rememberSaveable { mutableStateOf(false) }
 
@@ -233,35 +232,33 @@ internal fun HomeDialogs(
         )
     }
 
-    if (dialogs.showAiTranslateSheet) {
-        AiTranslateSheet(
-            state = state,
-            onToggleEnabled = viewModel::setAiTranslateEnabled,
-            onToggleTagsAuto = viewModel::setAutoTranslateTags,
-            onSelectModel = viewModel::selectTranslateModel,
-            onSelectNovelModel = viewModel::selectTranslateNovelModel,
-            onSelectImageModel = viewModel::selectTranslateImageModel,
-            onSaveCatalog = viewModel::saveCatalog,
-            onResetCatalog = viewModel::resetCatalogUrl,
-            onActivateSource = viewModel::activateCatalogSource,
-            onSaveAsSource = { url, key -> viewModel.saveCatalogAsSource(null, url, key) },
-            onRenameSource = { source, name -> viewModel.renameCatalogSource(source.id, name) },
-            onDeleteSource = { source -> viewModel.deleteCatalogSource(source.id) },
-            onOpenSources = { showCatalogSource = true },
-            catalogOpen = showCatalogSource,
-            onDismiss = { dialogs.showAiTranslateSheet = false },
-            dark = dark,
-        )
+    if (dialogs.showAiTranslateSettings) {
+        PikuFullScreenDialog(
+            onDismissRequest = { dialogs.showAiTranslateSettings = false },
+        ) {
+            LlmConfigScreen(
+                state = state,
+                onToggleEnabled = viewModel::setAiTranslateEnabled,
+                onToggleTagsAuto = viewModel::setAutoTranslateTags,
+                onSelectEntry = viewModel::selectLlmEntry,
+                onClearSelection = viewModel::clearLlmSelection,
+                onSaveProvider = viewModel::saveManualProvider,
+                onDeleteProvider = viewModel::deleteManualProvider,
+                onTestProvider = viewModel::testManualProvider,
+                onTestDraft = viewModel::testDraftProvider,
+                onClearDraftTest = viewModel::clearDraftProviderTest,
+                onFetchModels = viewModel::fetchDraftModels,
+                onClearModelFetch = viewModel::clearDraftModelFetch,
+                onOpenCatalogSource = { showCatalogSource = true },
+                onBack = { dialogs.showAiTranslateSettings = false },
+                dark = dark,
+            )
+        }
     }
 
     if (showCatalogSource) {
-        Dialog(
+        PikuFullScreenDialog(
             onDismissRequest = { showCatalogSource = false },
-            properties = DialogProperties(
-                usePlatformDefaultWidth = false,
-                decorFitsSystemWindows = false,
-                dismissOnClickOutside = false,
-            ),
         ) {
             CatalogSourceScreen(
                 state = state,
@@ -325,13 +322,8 @@ internal fun HomeDialogs(
     }
 
     if (dialogs.showWebDavSettings) {
-        Dialog(
+        PikuFullScreenDialog(
             onDismissRequest = { dialogs.showWebDavSettings = false },
-            properties = DialogProperties(
-                usePlatformDefaultWidth = false,
-                decorFitsSystemWindows = false,
-                dismissOnClickOutside = false,
-            ),
         ) {
             WebDavSettingsScreen(
                 url = state.webDavUrl,

@@ -41,6 +41,7 @@ class ModelCatalogSourceNameTest {
             }
             .build(),
         json = json,
+        manualProviderRepository = testManualProviderRepository(prefs, json),
     )
 
     /** 预置一个已保存的源并激活它 */

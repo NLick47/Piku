@@ -643,7 +643,7 @@ class SettingsRepository @Inject constructor(
     val llmModel: StateFlow<String> = _llmModel.asStateFlow()
 
     /**
-     * 小说正文专用模型地址：空串表示跟随文本翻译模型（[llmBaseUrl]）。
+     * 小说正文专用模型地址：空串表示未单独选择，走目录的小说默认。
      * 仅长篇正文走此模型，短文本字段仍用 [llmBaseUrl]/[llmModel]。
      */
     private val _llmNovelBaseUrl = MutableStateFlow(
@@ -651,7 +651,7 @@ class SettingsRepository @Inject constructor(
     )
     val llmNovelBaseUrl: StateFlow<String> = _llmNovelBaseUrl.asStateFlow()
 
-    /** 小说正文专用模型 id：空串表示跟随文本翻译模型（[llmModel]） */
+    /** 小说正文专用模型 id：空串表示未单独选择，走目录的小说默认 */
     private val _llmNovelModel = MutableStateFlow(
         prefs.getString(KEY_LLM_NOVEL_MODEL, null)?.takeIf { it.isNotBlank() } ?: "",
     )

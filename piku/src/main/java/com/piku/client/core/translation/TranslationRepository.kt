@@ -129,19 +129,19 @@ class TranslationRepository @Inject constructor(
 
     /** 管线预检：短字段或正文任一通道能开工即可翻译；短字段一侧含跨角色兜底，入口显隐另走各角色闸门 */
     fun hasKey(): Boolean =
-        effectiveTextEntry()?.let { apiKeyFor(it) }?.isNotBlank() == true || hasNovelModel()
+        effectiveTextEntry()?.isUsable() == true || hasNovelModel()
 
     /** 文本通道闸门：只认文本角色内的解析，不拿跨角色兜底当依据，否则顶栏会借别的通道幽灵可用 */
     fun hasTextModel(): Boolean =
-        textEntryWithinRole()?.let { apiKeyFor(it) }?.isNotBlank() == true
+        textEntryWithinRole()?.isUsable() == true
 
     /** 是否有可用于正文翻译的模型，宁缺毋滥：无则正文保留原文，阅读器不提供翻译入口 */
     fun hasNovelModel(): Boolean =
-        effectiveNovelEntry()?.let { apiKeyFor(it) }?.isNotBlank() == true
+        effectiveNovelEntry()?.isUsable() == true
 
     /** 是否有可用于图片翻译的模型，图片入口闸门 */
     fun hasImageModel(): Boolean =
-        effectiveImageEntry()?.let { apiKeyFor(it) }?.isNotBlank() == true
+        effectiveImageEntry()?.isUsable() == true
 
     /**
      * 各角色模型可用性流：目录列表或 defaults.roles 变化时重算，
@@ -520,7 +520,9 @@ class TranslationRepository @Inject constructor(
                 val strippedPending = pending.map { units[it].stripped }
                 var fresh = activeEngine.translate(strippedPending, targetLang)
                 var failedOver = false
-                if (fresh.all { it.isBlank() }) {
+                // 手动 API 失败不回退到目录共享模型：用户明确选了本地/自己的服务，
+                // 悄悄改走别人的 key 既意外又可能泄露正文。目录条目仍保留原有故障转移。
+                if (entry?.isManual != true && fresh.all { it.isBlank() }) {
                     val alternative = ModelCatalog.failoverCandidate(
                         entry, role, modelCatalogRepository.models.value,
                     )
@@ -640,23 +642,24 @@ class TranslationRepository @Inject constructor(
     }
 
     /**
-     * 文本翻译当前生效的模型条目：地址、模型名、key 三者必须同源，所以降级是整条切换。
-     * key 只来自加密远程目录（debug 构建回退注入的调试 key）：
-     * - 选中项带内置共享 key 就用它；
-     * - 否则（如历史遗留的自选模型没有内置 key）降级到文本场景默认，
-     *   再降级到任一带 key 的可用模型，避免整段翻译静默不可用。
+     * 文本翻译当前生效的模型条目：地址、模型名、凭据三者必须同源，所以降级是整条切换。
+     * 凭据来自内置目录共享 key、手动 API 的 Keystore key，或 debug 构建注入的调试 key：
+     * - 选中项可开工就用它（含手动 API 的无鉴权本地服务）；
+     * - 否则（如历史遗留的自选模型没有 key）降级到文本场景默认，
+     *   再降级到任一可开工的内置模型，避免整段翻译静默不可用。
      *
-     * 最后一层兜底不过滤角色，只供管线使用；入口闸门要走 [textEntryWithinRole] 以免借用别的场景
+     * 最后一层兜底只在内置目录里找：手动 API 必须显式选中，不能因为存在就自动接管。
+     * 入口闸门要走 [textEntryWithinRole] 以免借用别的场景。
      */
     internal fun effectiveTextEntry(): ModelEntry? =
         textEntryWithinRole() ?: modelCatalogRepository.models.value.firstOrNull {
-            it.available && !it.apiKey.isNullOrBlank()
+            !it.isManual && it.isUsable()
         }
 
     /** 文本角色内的解析，与 [effectiveTextEntry] 只差最后一层跨角色兜底，闸门用它 */
     private fun textEntryWithinRole(): ModelEntry? {
         val selected = selectedEntry()
-        if (selected != null && !selected.apiKey.isNullOrBlank()) return selected
+        if (selected != null && selected.isUsable()) return selected
         return defaultRoleEntry(Role.TEXT)
     }
 
@@ -671,21 +674,21 @@ class TranslationRepository @Inject constructor(
      */
     internal fun effectiveNovelEntry(): ModelEntry? {
         val novelSelected = selectedNovelEntry()
-        if (novelSelected != null && !novelSelected.apiKey.isNullOrBlank()) return novelSelected
+        if (novelSelected != null && novelSelected.isUsable()) return novelSelected
         return defaultRoleEntry(Role.NOVEL)
     }
 
     /**
      * 图片翻译当前生效的模型条目：
-     * 有选中且带 key 就用选中项，否则走目录图片默认。
+     * 有选中且可开工就用选中项，否则走目录图片默认。
      */
     internal fun effectiveImageEntry(): ModelEntry? {
         val imageSelected = selectedImageEntry()
-        if (imageSelected != null && !imageSelected.apiKey.isNullOrBlank()) return imageSelected
+        if (imageSelected != null && imageSelected.isUsable()) return imageSelected
         return defaultRoleEntry(Role.IMAGE)
     }
 
-    /** 场景默认模型：目录 defaults.roles[role] 优先，退到首个该 role 的可用带 key 条目 */
+    /** 场景默认模型：目录 defaults.roles[role] 优先，退到首个该 role 的可开工内置条目 */
     private fun defaultRoleEntry(role: String): ModelEntry? =
         ModelCatalog.resolveRoleDefault(
             role,
@@ -699,8 +702,11 @@ class TranslationRepository @Inject constructor(
      * （来自环境变量 PIKU_LLM_API_KEY / local.properties，不入库）。
      */
     private fun apiKeyFor(entry: ModelEntry?): String {
+        // NONE 模式显式不需要凭据：不要把 debug key 塞给本地服务。
+        // 手动 API 缺 key 时也不能借用 debug key——那会把共享 key 发到用户自己的服务器。
+        if (entry?.authMode == AuthMode.NONE) return ""
         entry?.apiKey?.takeIf { it.isNotBlank() }?.let { return it }
-        if (BuildConfig.DEBUG) return BuildConfig.DEBUG_LLM_API_KEY
+        if (BuildConfig.DEBUG && entry?.isManual != true) return BuildConfig.DEBUG_LLM_API_KEY
         return ""
     }
 

@@ -34,11 +34,16 @@ import com.piku.client.core.storage.prefs.SampledImage
 import com.piku.client.core.storage.prefs.SettingsRepository
 import com.piku.client.core.storage.prefs.newCatalogSourceId
 import com.piku.client.core.translation.CatalogRefreshResult
+import com.piku.client.core.translation.LlmConnectionTester
+import com.piku.client.core.translation.ManualProvider
+import com.piku.client.core.translation.ManualProviderRepository
 import com.piku.client.core.translation.ModelCatalog
 import com.piku.client.core.translation.ModelCatalogRepository
 import com.piku.client.core.translation.ModelEntry
+import com.piku.client.core.translation.PromptOverrides
 import com.piku.client.core.translation.Role
 import com.piku.client.core.translation.RoleDefaultIds
+import com.piku.client.core.translation.TranslationPrompts
 import com.piku.client.core.translation.TranslationRepository
 import com.piku.client.core.ui.common.toFeedErrorRes
 import com.piku.client.core.ui.drawer.SourceDrawerPlugin
@@ -117,6 +122,30 @@ sealed interface CatalogRefreshState {
 /** 同时驻留的 FeedLoader 上限：每个 loader 兼作该 feed 的内存缓存 */
 private const val MAX_LOADERS = 12
 
+/**
+ * 手动 API 的“测试连接”状态。key 为 provider id；编辑器草稿用
+ * [ProviderTestState.DRAFT_TEST_KEY]，避免把未保存的地址写进 provider 列表。
+ */
+sealed interface ProviderTestState {
+    data object Idle : ProviderTestState
+    data object Testing : ProviderTestState
+    data class Success(val latencyMs: Long) : ProviderTestState
+
+    /** message 为空表示缺 API Key，由 UI 映射成可本地化的提示 */
+    data class Failed(val message: String? = null) : ProviderTestState
+
+    companion object {
+        const val DRAFT_TEST_KEY = "draft"
+    }
+}
+
+sealed interface ModelFetchState {
+    data object Idle : ModelFetchState
+    data object Loading : ModelFetchState
+    data class Success(val models: List<String>) : ModelFetchState
+    data class Failed(val message: String? = null) : ModelFetchState
+}
+
 data class HomeUiState(
     val feedTab: FeedTab = FeedTab.LATEST,
     val category: PoipikuCategory = PoipikuCategory.ALL,
@@ -180,7 +209,17 @@ data class HomeUiState(
     /** 图片翻译专用模型，空串走目录默认 */
     val llmImageBaseUrl: String = "",
     val llmImageModel: String = "",
-    /** 可选模型列表（内置默认 + 远程覆盖） */
+    /** 用户手动填写的 API（密钥不在此结构中） */
+    val manualProviders: List<ManualProvider> = emptyList(),
+    /** 手动 API 的连通性测试状态，key 为 provider id 或草稿键 */
+    val providerTestStates: Map<String, ProviderTestState> = emptyMap(),
+    val modelFetchState: ModelFetchState = ModelFetchState.Idle,
+    val promptLangKey: String = "zh",
+    val builtinTextPrompt: String = "",
+    val builtinTextFromCatalog: Boolean = false,
+    val builtinNovelPrompt: String = "",
+    val builtinNovelFromCatalog: Boolean = false,
+    /** 可选模型列表（内置目录 + 手动 API，手动条目标记 isManual） */
     val translateModels: List<ModelEntry> = emptyList(),
     /** 各场景当前生效的默认模型 id，选择器据此高亮"未手动选择的默认项" */
     val roleDefaultIds: RoleDefaultIds = RoleDefaultIds(),
@@ -238,6 +277,8 @@ class HomeViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val backgroundStore: BackgroundStore,
     private val modelCatalogRepository: ModelCatalogRepository,
+    private val manualProviderRepository: ManualProviderRepository,
+    private val llmConnectionTester: LlmConnectionTester,
     private val translationRepository: TranslationRepository,
     private val selectTranslateModelUseCase: SelectTranslateModelUseCase,
     private val selectTranslateNovelModelUseCase: SelectTranslateNovelModelUseCase,
@@ -322,6 +363,7 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             observeLanguageUseCase().collect { language ->
                 _uiState.update { it.copy(language = language) }
+                refreshPromptState()
             }
         }
         viewModelScope.launch {
@@ -455,6 +497,14 @@ class HomeViewModel @Inject constructor(
             settingsRepository.llmImageModel.collect { model ->
                 _uiState.update { it.copy(llmImageModel = model) }
             }
+        }
+        viewModelScope.launch {
+            manualProviderRepository.providers.collect { providers ->
+                _uiState.update { it.copy(manualProviders = providers) }
+            }
+        }
+        viewModelScope.launch {
+            modelCatalogRepository.catalogDefaults.collect { refreshPromptState() }
         }
         viewModelScope.launch {
             modelCatalogRepository.models.collect { models ->
@@ -899,7 +949,7 @@ class HomeViewModel @Inject constructor(
         selectTranslateModelUseCase(entry)
     }
 
-    /** 小说正文模型：传 null 表示跟随文本翻译模型 */
+    /** 小说正文模型：传 null 表示清空显式选择，回落到目录的小说默认 */
     fun selectTranslateNovelModel(entry: ModelEntry?) {
         selectTranslateNovelModelUseCase(entry)
     }
@@ -907,6 +957,156 @@ class HomeViewModel @Inject constructor(
     /** 图片翻译模型，null 走目录默认 */
     fun selectTranslateImageModel(entry: ModelEntry?) {
         selectTranslateImageModelUseCase(entry)
+    }
+
+    /** 统一的角色选择入口：内置目录和手动 API 走同一套 use case。 */
+    fun selectLlmEntry(role: String, entry: ModelEntry) {
+        if (role !in entry.roles) return
+        when (role) {
+            Role.TEXT -> selectTranslateModel(entry)
+            Role.NOVEL -> selectTranslateNovelModel(entry)
+            Role.IMAGE -> selectTranslateImageModel(entry)
+        }
+    }
+
+    /** 清空显式选择，回到目录默认。 */
+    fun clearLlmSelection(role: String) {
+        when (role) {
+            Role.TEXT -> settingsRepository.setLlmModel("")
+            Role.NOVEL -> selectTranslateNovelModel(null)
+            Role.IMAGE -> selectTranslateImageModel(null)
+        }
+    }
+
+    /** 手动 API 卡片上的角色 chip：按角色绑定该 provider。 */
+    fun bindManualProvider(role: String, providerId: String) {
+        val provider = manualProviderRepository.find(providerId) ?: return
+        if (role !in provider.roles) return
+        selectLlmEntry(role, provider.toModelEntry(manualProviderRepository.apiKey(providerId)))
+    }
+
+    /**
+     * 保存手动 API。新建时自动绑定其声明的用途；编辑时保持用户已有绑定，
+     * 因为选中值存的是 provider id，模型名/地址变化会自动跟随。
+     */
+    fun saveManualProvider(provider: ManualProvider, newKey: String?, clearKey: Boolean) {
+        val isNew = provider.id.isBlank()
+        val saved = manualProviderRepository.upsert(
+            provider = provider,
+            newKey = when {
+                clearKey -> ""
+                !newKey.isNullOrBlank() -> newKey
+                else -> null
+            },
+        )
+        modelCatalogRepository.reloadManualModels()
+        if (isNew) saved.roles.forEach { role -> bindManualProvider(role, saved.id) }
+        _uiState.update {
+            it.copy(
+                providerTestStates = it.providerTestStates -
+                    saved.id - ProviderTestState.DRAFT_TEST_KEY,
+                modelFetchState = ModelFetchState.Idle,
+            )
+        }
+    }
+
+    fun deleteManualProvider(providerId: String) {
+        manualProviderRepository.delete(providerId)
+        modelCatalogRepository.reloadManualModels()
+        _uiState.update {
+            it.copy(
+                providerTestStates = it.providerTestStates -
+                    providerId - ProviderTestState.DRAFT_TEST_KEY,
+                modelFetchState = ModelFetchState.Idle,
+            )
+        }
+    }
+
+    fun testManualProvider(providerId: String) {
+        val provider = manualProviderRepository.find(providerId) ?: return
+        startProviderTest(providerId, provider, manualProviderRepository.apiKey(providerId))
+    }
+
+    /** 编辑器“测试连接”：provider 可能尚未保存，key 取输入框或已保存值。 */
+    fun testDraftProvider(provider: ManualProvider, key: String?) {
+        startProviderTest(ProviderTestState.DRAFT_TEST_KEY, provider, draftApiKey(provider, key))
+    }
+
+    fun fetchDraftModels(provider: ManualProvider, key: String?) {
+        if (_uiState.value.modelFetchState == ModelFetchState.Loading) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(modelFetchState = ModelFetchState.Loading) }
+            val result = llmConnectionTester.listModels(provider, draftApiKey(provider, key))
+            _uiState.update {
+                it.copy(
+                    modelFetchState = result.fold(
+                        onSuccess = { models -> ModelFetchState.Success(models) },
+                        onFailure = { e ->
+                            ModelFetchState.Failed(
+                                e.message?.takeIf {
+                                    it.isNotBlank() && it != LlmConnectionTester.MISSING_KEY
+                                },
+                            )
+                        },
+                    ),
+                )
+            }
+        }
+    }
+
+    fun clearDraftModelFetch() {
+        _uiState.update { it.copy(modelFetchState = ModelFetchState.Idle) }
+    }
+
+    private fun draftApiKey(provider: ManualProvider, key: String?): String? =
+        key?.takeIf { it.isNotBlank() }
+            ?: provider.id.takeIf { it.isNotBlank() }?.let(manualProviderRepository::apiKey)
+
+    fun clearDraftProviderTest() {
+        _uiState.update {
+            it.copy(providerTestStates = it.providerTestStates - ProviderTestState.DRAFT_TEST_KEY)
+        }
+    }
+
+    private fun refreshPromptState() {
+        val langKey = PromptOverrides.langKey(_uiState.value.language)
+        val target = PromptOverrides.targetLang(langKey)
+        val prompts = modelCatalogRepository.catalogDefaults.value?.prompts
+        val catalogSingle = prompts?.single?.get(langKey).orEmpty()
+        val catalogNovel = prompts?.novel?.get(langKey).orEmpty()
+        _uiState.update {
+            it.copy(
+                promptLangKey = langKey,
+                builtinTextPrompt = catalogSingle.ifBlank {
+                    TranslationPrompts.singleSystemPrompt(target)
+                },
+                builtinTextFromCatalog = catalogSingle.isNotBlank(),
+                builtinNovelPrompt = catalogNovel.ifBlank {
+                    TranslationPrompts.novelSystemPrompt(target)
+                },
+                builtinNovelFromCatalog = catalogNovel.isNotBlank(),
+            )
+        }
+    }
+
+    private fun startProviderTest(testKey: String, provider: ManualProvider, apiKey: String?) {
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(providerTestStates = it.providerTestStates + (testKey to ProviderTestState.Testing))
+            }
+            val result = llmConnectionTester.test(provider, apiKey)
+            val state = result.fold(
+                onSuccess = { ProviderTestState.Success(it) },
+                onFailure = { e ->
+                    ProviderTestState.Failed(
+                        e.message?.takeIf { it.isNotBlank() && it != LlmConnectionTester.MISSING_KEY },
+                    )
+                },
+            )
+            _uiState.update {
+                it.copy(providerTestStates = it.providerTestStates + (testKey to state))
+            }
+        }
     }
 
     /**

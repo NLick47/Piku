@@ -392,7 +392,7 @@ private fun HistoryTopBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            // 与详情页 / 收藏页 / 发布页头部一致：半透明玻璃底 + 0.5dp 底分隔线
+            .statusBarsPadding()
             .background(if (dark) GlassHeaderTintDark else GlassHeaderTintLight)
             .drawBehind {
                 drawLine(
@@ -402,7 +402,6 @@ private fun HistoryTopBar(
                     strokeWidth = 0.5.dp.toPx(),
                 )
             }
-            .statusBarsPadding()
             .padding(start = 4.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

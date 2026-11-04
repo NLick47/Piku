@@ -15,7 +15,12 @@ import com.piku.client.core.storage.db.TranslationDao
 import com.piku.client.core.storage.db.WorkPasswordDao
 import com.piku.client.source.poipiku.data.local.WorkPasswordRepository
 import com.piku.client.core.storage.prefs.CredentialCipher
+import com.piku.client.core.storage.prefs.KeystoreCredentialCipher
+import com.piku.client.core.storage.prefs.SharedPreferencesCredentialStorage
 import com.piku.client.core.storage.db.DraftDao
+import com.piku.client.core.translation.LlmSecretStore
+import com.piku.client.core.translation.ManualProviderRepository
+import kotlinx.serialization.json.Json
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -76,6 +81,23 @@ object DatabaseModule {
     @Singleton
     fun provideSettingsRepository(prefs: SharedPreferences): SettingsRepository =
         SettingsRepository(prefs)
+
+    /** 手动大模型 API 的密钥存储：独立 Keystore alias，和账号凭据互不影响 */
+    @Provides
+    @Singleton
+    fun provideLlmSecretStore(prefs: SharedPreferences): LlmSecretStore =
+        LlmSecretStore(
+            SharedPreferencesCredentialStorage(prefs),
+            KeystoreCredentialCipher("piku_llm_provider"),
+        )
+
+    @Provides
+    @Singleton
+    fun provideManualProviderRepository(
+        prefs: SharedPreferences,
+        json: Json,
+        secretStore: LlmSecretStore,
+    ): ManualProviderRepository = ManualProviderRepository(prefs, json, secretStore)
 
     @Provides
     @Singleton

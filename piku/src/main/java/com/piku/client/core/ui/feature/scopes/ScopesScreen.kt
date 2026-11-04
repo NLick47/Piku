@@ -147,8 +147,8 @@ private fun ScopesTopBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(if (dark) GlassHeaderTintDark else GlassHeaderTintLight)
             .statusBarsPadding()
+            .background(if (dark) GlassHeaderTintDark else GlassHeaderTintLight)
             .padding(start = 4.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

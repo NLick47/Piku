@@ -1,8 +1,7 @@
 package com.piku.client.source.poipiku.ui.home
 
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import com.piku.client.core.ui.common.PikuFullScreenDialog
 import com.piku.client.core.ui.drawer.AccountsScreen
 import com.piku.client.core.ui.drawer.SourceAccountRow
 
@@ -14,14 +13,7 @@ internal fun HomeOverlays(
     dark: Boolean,
 ) {
     if (showAccountsPage) {
-        Dialog(
-            onDismissRequest = onAccountsBack,
-            properties = DialogProperties(
-                usePlatformDefaultWidth = false,
-                decorFitsSystemWindows = false,
-                dismissOnClickOutside = false,
-            ),
-        ) {
+        PikuFullScreenDialog(onDismissRequest = onAccountsBack) {
             AccountsScreen(onBack = onAccountsBack, onLogin = onAccountsLogin, dark = dark)
         }
     }

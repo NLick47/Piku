@@ -107,6 +107,7 @@ fun MyPostsScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .statusBarsPadding()
                     .background(if (dark) GlassHeaderTintDark else GlassHeaderTintLight)
                     .drawBehind {
                         drawLine(
@@ -116,7 +117,6 @@ fun MyPostsScreen(
                             strokeWidth = 0.5.dp.toPx(),
                         )
                     }
-                    .statusBarsPadding()
                     .padding(start = 4.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {

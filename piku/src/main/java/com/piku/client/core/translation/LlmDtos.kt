@@ -25,3 +25,13 @@ data class ChatChoice(
     val message: ChatMessage? = null,
     @SerialName("finish_reason") val finishReason: String? = null,
 )
+
+@Serializable
+data class LlmModelsResponse(
+    val data: List<LlmModelItem> = emptyList(),
+)
+
+@Serializable
+data class LlmModelItem(
+    val id: String = "",
+)

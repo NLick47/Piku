@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -50,6 +49,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -59,9 +59,12 @@ import androidx.compose.ui.unit.sp
 import com.piku.client.core.storage.prefs.CatalogSource
 import com.piku.client.core.storage.prefs.SettingsRepository
 import com.piku.client.R
-import com.piku.client.core.ui.common.PikuBackButton
+import com.piku.client.core.ui.common.PikuPageHeader
 import androidx.compose.animation.animateColorAsState
-import com.piku.client.core.ui.theme.LoginBackgroundDark
+import com.piku.client.core.ui.theme.HomeBgBottomDark
+import com.piku.client.core.ui.theme.HomeBgBottomLight
+import com.piku.client.core.ui.theme.HomeBgTopDark
+import com.piku.client.core.ui.theme.HomeBgTopLight
 import com.piku.client.core.ui.theme.PikuColors
 
 private val CATALOG_KEY_HEX = Regex("^[0-9a-fA-F]{64}$")
@@ -118,45 +121,30 @@ fun CatalogSourceScreen(
         errorSupportingTextColor = errorColor,
     )
 
-    Box(
+    Column(
         Modifier
             .fillMaxSize()
-            .background(if (dark) LoginBackgroundDark else Color.White),
+            .background(
+                Brush.verticalGradient(
+                    if (dark) listOf(HomeBgTopDark, HomeBgBottomDark)
+                    else listOf(HomeBgTopLight, HomeBgBottomLight),
+                ),
+            ),
     ) {
+        PikuPageHeader(
+            title = stringResource(R.string.llm_catalog_source),
+            dark = dark,
+            onBack = onBack,
+        )
         Column(
             Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
                 .navigationBarsPadding()
                 .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
-                .padding(bottom = 12.dp),
+                .padding(top = 14.dp, bottom = 12.dp),
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .offset(x = (-16).dp)
-                    .padding(start = 4.dp, top = 8.dp, bottom = 8.dp),
-            ) {
-                PikuBackButton(
-                    onClick = onBack,
-                    dark = dark,
-                    contentDescription = stringResource(R.string.back),
-                )
-                Text(
-                    text = stringResource(R.string.ai_translate_catalog_source),
-                    color = primary,
-                    fontSize = 19.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-            HorizontalDivider(
-                color = PikuColors.border,
-                thickness = 0.5.dp,
-            )
-            Spacer(Modifier.height(14.dp))
-
         Text(
             text = stringResource(R.string.ai_translate_catalog_desc),
             color = secondary,

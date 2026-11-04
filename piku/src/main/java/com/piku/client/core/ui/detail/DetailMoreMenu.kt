@@ -24,13 +24,14 @@ import androidx.compose.ui.unit.sp
 import com.piku.client.R
 import com.piku.client.core.translation.ModelEntry
 import com.piku.client.core.translation.Role
+import com.piku.client.core.translation.isUsable
 import com.piku.client.core.ui.common.MenuPopup
 import com.piku.client.core.ui.common.MenuPopupItem
 import com.piku.client.core.ui.theme.PikuColors
 
 internal fun retranslatePickableModels(models: List<ModelEntry>): List<ModelEntry> =
     models.filter { entry ->
-        entry.available && !entry.apiKey.isNullOrBlank() && Role.TEXT in entry.roles
+        entry.isUsable() && Role.TEXT in entry.roles
     }
 
 @Composable

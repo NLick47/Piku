@@ -399,8 +399,8 @@ private fun UserWorksTopBar(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(if (dark) GlassHeaderTintDark else GlassHeaderTintLight)
-            .statusBarsPadding(),
+            .statusBarsPadding()
+            .background(if (dark) GlassHeaderTintDark else GlassHeaderTintLight),
     ) {
         Row(
             modifier = Modifier.padding(start = 4.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),

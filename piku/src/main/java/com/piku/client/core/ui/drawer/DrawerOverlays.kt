@@ -1,22 +1,15 @@
 package com.piku.client.core.ui.drawer
 
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import com.piku.client.core.ui.common.PikuFullScreenDialog
 
 @Composable
 fun FullscreenDrawerOverlay(
     onDismiss: () -> Unit,
     content: @Composable () -> Unit,
 ) {
-    Dialog(
+    PikuFullScreenDialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false,
-            dismissOnClickOutside = false,
-        ),
-    ) {
-        content()
-    }
+        content = content,
+    )
 }

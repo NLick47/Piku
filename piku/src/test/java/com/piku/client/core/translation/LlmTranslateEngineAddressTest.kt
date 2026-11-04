@@ -19,7 +19,7 @@ class LlmTranslateEngineAddressTest {
     private class AddressAwareApi(private val healthy: Set<String>) : LlmChatApi {
         val urls = mutableListOf<String>()
 
-        override suspend fun chat(url: String, authorization: String, body: JsonObject): ChatResponse {
+        override suspend fun chat(url: String, headers: Map<String, String>, body: JsonObject): ChatResponse {
             urls += url
             val base = url.removeSuffix("/chat/completions")
             if (base !in healthy) throw IOException("connect failed: $base")
@@ -27,6 +27,9 @@ class LlmTranslateEngineAddressTest {
                 choices = listOf(ChatChoice(message = ChatMessage(role = "assistant", content = "初次见面"))),
             )
         }
+
+        override suspend fun models(url: String, headers: Map<String, String>): LlmModelsResponse =
+            LlmModelsResponse()
     }
 
     private val source = "はじめまして"

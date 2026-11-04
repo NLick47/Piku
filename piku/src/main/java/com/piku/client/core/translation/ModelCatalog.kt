@@ -63,7 +63,27 @@ data class ModelEntry(
      * 单独一条地址里写多个可用 "|" 分隔（环境变量下发的多地址就这样写），两种写法等价。
      */
     val baseUrls: List<String> = emptyList(),
-)
+    /** 鉴权方式；内置目录条目默认 Bearer，手动本地服务可声明 NONE */
+    val authMode: AuthMode = AuthMode.BEARER,
+    /** HEADER 模式使用的 Header 名，如 api-key / x-api-key */
+    val authHeader: String = ManualProvider.DEFAULT_AUTH_HEADER,
+    /** 额外请求头（鉴权头由 authMode 生成，同名时鉴权头优先） */
+    val extraHeaders: Map<String, String> = emptyMap(),
+    /** 是否来自“我的 API”。手动条目只参与显式选中，不参与目录默认与故障转移。 */
+    val isManual: Boolean = false,
+) {
+    /** 日志/异常里不得带出共享 key；手动条目本来就不把 key 写进这个对象以外的持久化层。 */
+    override fun toString(): String =
+        "ModelEntry(id=$id, label=$label, model=$model, baseUrl=$baseUrl, " +
+            "apiKey=${if (apiKey.isNullOrBlank()) "none" else "***"}, isManual=$isManual)"
+}
+
+/**
+ * 是否具备开工条件：地址条目标记可用，且要么无需鉴权，要么已有密钥。
+ * 无鉴权的本地服务（Ollama / vLLM / llama.cpp）允许 apiKey 为空。
+ */
+fun ModelEntry.isUsable(): Boolean =
+    available && (authMode == AuthMode.NONE || !apiKey.isNullOrBlank())
 
 /** 提示词集：单条 / 批量 / 小说 / 图片 / 搜索，各目标语言一套。远程下发热更新。 */
 @Serializable
@@ -151,9 +171,11 @@ object ModelCatalog {
 
     /**
      * 场景默认模型的纯解析函数（翻译仓库选路与选择器高亮共用同一语义）：
-     * 1) 目录 [roleDefaults] 指向且可用、自带内置 key 的条目优先；
-     * 2) 否则取首个该 [role] 且可用、带 key 的条目；
+     * 1) 目录 [roleDefaults] 指向且可用、具备鉴权条件的条目优先；
+     * 2) 否则取首个该 [role] 且可用、具备鉴权条件的条目；
      * 3) 都没有返回 null——小说通道据此宁缺毋滥（正文保留原文），绝不向其他场景借模型。
+     *
+     * 手动 API 不参与目录默认：用户没显式选中它时，不能悄悄把翻译切到自己的服务器。
      */
     fun resolveRoleDefault(
         role: String,
@@ -162,8 +184,8 @@ object ModelCatalog {
     ): ModelEntry? {
         val preferred = roleDefaults[role]
         return models.firstOrNull {
-            preferred != null && it.id == preferred && it.available && !it.apiKey.isNullOrBlank()
-        } ?: models.firstOrNull { role in it.roles && it.available && !it.apiKey.isNullOrBlank() }
+            preferred != null && it.id == preferred && !it.isManual && it.isUsable()
+        } ?: models.firstOrNull { role in it.roles && !it.isManual && it.isUsable() }
     }
 
     /**
@@ -186,7 +208,8 @@ object ModelCatalog {
         role: String,
         models: List<ModelEntry>,
     ): ModelEntry? = models.filter {
-        role in it.roles && it.free && it.available && !it.apiKey.isNullOrBlank() && it.id != current?.id
+        // 手动 API 不进故障转移：用户选了本地服务时，不能悄悄改走别人的共享 key
+        role in it.roles && !it.isManual && it.free && it.isUsable() && it.id != current?.id
     }.randomOrNull()
 
     /**
@@ -201,9 +224,10 @@ object ModelCatalog {
         val value = stored.trim()
         if (value.isEmpty()) return null
         return models.firstOrNull {
-            (it.id == value || it.model == value) &&
+            // 手动条目只按 id 匹配：旧版设置里存的是裸模型名，不能因为重名就悄悄绑到用户自己的 API
+            (it.id == value || (!it.isManual && it.model == value)) &&
                 role in it.roles &&
-                it.available && !it.apiKey.isNullOrBlank()
+                it.isUsable()
         }
     }
 }

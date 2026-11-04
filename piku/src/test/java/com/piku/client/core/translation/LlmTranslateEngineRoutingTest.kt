@@ -29,17 +29,20 @@ import org.junit.Test
 class LlmTranslateEngineRoutingTest {
 
     private class CapturingApi : LlmChatApi {
-        data class Call(val url: String, val authorization: String, val body: JsonObject)
+        data class Call(val url: String, val headers: Map<String, String>, val body: JsonObject)
 
         val calls = mutableListOf<Call>()
         var responder: (JsonObject) -> String = { "这是合格的中文译文" }
 
-        override suspend fun chat(url: String, authorization: String, body: JsonObject): ChatResponse {
-            calls += Call(url, authorization, body)
+        override suspend fun chat(url: String, headers: Map<String, String>, body: JsonObject): ChatResponse {
+            calls += Call(url, headers, body)
             return ChatResponse(
                 choices = listOf(ChatChoice(message = ChatMessage(role = "assistant", content = responder(body)))),
             )
         }
+
+        override suspend fun models(url: String, headers: Map<String, String>): LlmModelsResponse =
+            LlmModelsResponse()
     }
 
     private companion object {
@@ -142,7 +145,7 @@ class LlmTranslateEngineRoutingTest {
         assertEquals(1, api.calls.size)
         val call = api.calls.single()
         assertEquals(LlmTranslateEngine.chatUrl(textEntryWithPrompts.baseUrl), call.url)
-        assertEquals("Bearer test-key", call.authorization)
+        assertEquals("Bearer test-key", call.headers["Authorization"])
         assertEquals(MODEL_BATCH, call.body.systemMessage())
         assertTrue(call.body.userMessage().startsWith("[[1]]"))
         assertEquals(textEntryWithPrompts.model, call.body["model"]!!.jsonPrimitive.content)

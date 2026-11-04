@@ -22,9 +22,13 @@ class ModelCatalogRepository @Inject constructor(
     private val settingsRepository: SettingsRepository,
     @Named("translate") private val okHttpClient: OkHttpClient,
     private val json: Json,
+    private val manualProviderRepository: ManualProviderRepository,
 ) {
 
-    private val _models: MutableStateFlow<List<ModelEntry>>
+    /** 远程/内置目录本体；对外暴露的 [models] 是它与手动 API 的合并结果。 */
+    private val _catalogModels: MutableStateFlow<List<ModelEntry>>
+
+    private val _models = MutableStateFlow<List<ModelEntry>>(emptyList())
     val models: StateFlow<List<ModelEntry>> get() = _models.asStateFlow()
 
     private val _defaults = MutableStateFlow<CatalogDefaults?>(null)
@@ -45,7 +49,8 @@ class ModelCatalogRepository @Inject constructor(
         // 启动从缓存加载，秒开
         val cached = settingsRepository.loadCatalogCache()
         val cachedModels = cached?.let { (body, _, _) -> decode(body)?.takeIf { it.models.isNotEmpty() } }
-        _models = MutableStateFlow(cachedModels?.models ?: ModelCatalog.DEFAULTS)
+        _catalogModels = MutableStateFlow(cachedModels?.models ?: ModelCatalog.DEFAULTS)
+        rebuildModels()
         _defaults.value = cachedModels?.defaults
         _sourceId.value = cachedModels?.sourceId.orEmpty()
         cachedVersion = cached?.third ?: 0
@@ -53,6 +58,17 @@ class ModelCatalogRepository @Inject constructor(
         if (cachedModels != null) {
             Log.d(TAG, "catalog loaded from cache v$cachedVersion: ${cachedModels.models.size} entries")
         }
+    }
+
+    /**
+     * 手动 API 的增删改后调用：把最新 provider 合并进对外目录流。
+     * 不在这里反向监听 provider flow，避免仓库之间形成循环，也避免启动期多一条协程。
+     */
+    fun reloadManualModels() = rebuildModels()
+
+    @Synchronized
+    private fun rebuildModels() {
+        _models.value = _catalogModels.value + manualProviderRepository.modelEntries()
     }
 
     /** 拉取远程目录并替换；版本旧则跳过。 */
@@ -64,8 +80,9 @@ class ModelCatalogRepository @Inject constructor(
             Log.d(TAG, "catalog source changed: $cachedUrl -> $url, clearing cache")
             settingsRepository.clearCatalogCache()
             cachedVersion = 0
-            // 回退到内置默认，避免展示旧源数据
-            _models.value = ModelCatalog.DEFAULTS
+            // 回退到内置默认，避免展示旧源数据；手动 API 不受目录源切换影响
+            _catalogModels.value = ModelCatalog.DEFAULTS
+            rebuildModels()
             _defaults.value = null
         }
         val official = url in SettingsRepository.CATALOG_URL_MIRRORS
@@ -91,7 +108,8 @@ class ModelCatalogRepository @Inject constructor(
                 CatalogRefreshResult.FAILED
             }
         }
-        _models.value = pick.dto.models
+        _catalogModels.value = pick.dto.models
+        rebuildModels()
         _defaults.value = pick.dto.defaults
         applySourceIdentity(url, declared)
         cachedVersion = pick.dto.version
@@ -114,7 +132,7 @@ class ModelCatalogRepository @Inject constructor(
     private fun fetch(url: String): String? = runCatching {
         okHttpClient.newCall(Request.Builder().url(url).build()).execute().use { response ->
             if (!response.isSuccessful) error("HTTP ${response.code}")
-            response.body?.string().orEmpty().ifEmpty { error("empty body") }
+            response.body.string().ifEmpty { error("empty body") }
         }
     }.onFailure { Log.d(TAG, "catalog fetch failed ($url): ${it.message}") }.getOrNull()
 

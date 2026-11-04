@@ -99,8 +99,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
@@ -115,6 +113,7 @@ import com.piku.client.core.ui.common.FeedbackHost
 import com.piku.client.core.ui.common.LoaderDots
 import com.piku.client.core.ui.common.PikuBackButton
 import com.piku.client.core.ui.common.PikuBottomSheet
+import com.piku.client.core.ui.common.PikuFullScreenDialog
 import com.piku.client.core.ui.common.PikuSheetHandle
 import com.piku.client.core.ui.common.PikuSheetTitle
 import com.piku.client.core.ui.common.SkeletonBlock
@@ -371,13 +370,8 @@ fun PublishScreen(
     }
 
     if (showDraftBox) {
-        Dialog(
+        PikuFullScreenDialog(
             onDismissRequest = { showDraftBox = false },
-            properties = DialogProperties(
-                usePlatformDefaultWidth = false,
-                decorFitsSystemWindows = false,
-                dismissOnClickOutside = false,
-            ),
         ) {
             DraftBoxScreen(
                 sessionId = sessionId,
@@ -597,7 +591,7 @@ private fun PublishTopBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            // 与详情页 / 收藏页头部一致：半透明玻璃底 + 0.5dp 底分隔线
+            .statusBarsPadding()
             .background(if (dark) GlassHeaderTintDark else GlassHeaderTintLight)
             .drawBehind {
                 drawLine(
@@ -607,7 +601,6 @@ private fun PublishTopBar(
                     strokeWidth = 0.5.dp.toPx(),
                 )
             }
-            .statusBarsPadding()
             .padding(start = 4.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

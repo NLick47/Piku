@@ -406,8 +406,8 @@ private fun HeaderShell(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(if (dark) GlassHeaderTintDark else GlassHeaderTintLight)
-            .statusBarsPadding(),
+            .statusBarsPadding()
+            .background(if (dark) GlassHeaderTintDark else GlassHeaderTintLight),
     ) {
         Row(
             modifier = Modifier

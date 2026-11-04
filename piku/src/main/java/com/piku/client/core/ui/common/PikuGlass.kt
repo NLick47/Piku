@@ -13,13 +13,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
 
-/** 玻璃卡片：半透明底 + 细边框 + 顶部高光 + 阴影 */
+/** 卡片：暖白/深灰底 + 细边框 + 阴影。底色不透明，避免阴影透进卡片内形成一圈深色描边 */
 @Composable
 fun GlassCard(
     dark: Boolean,
     shape: Shape,
     modifier: Modifier = Modifier,
-    bgColor: Color = if (dark) Color(0x8C262421) else Color(0xA6FFFFFF),
+    bgColor: Color = if (dark) Color(0xFF262421) else Color(0xFFFBFAF9),
     content: @Composable BoxScope.() -> Unit,
 ) {
     Box(

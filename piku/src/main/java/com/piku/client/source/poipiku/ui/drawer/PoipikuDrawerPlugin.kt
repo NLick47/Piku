@@ -16,10 +16,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.piku.client.R
+import com.piku.client.core.ui.common.PikuFullScreenDialog
 import com.piku.client.source.poipiku.data.repository.ProfileRepository
 import com.piku.client.core.model.Work
 import com.piku.client.core.model.WorkSource
@@ -139,14 +138,7 @@ private fun PoipikuPublishOverlay(
     onDismiss: () -> Unit,
     onClose: () -> Unit,
 ) {
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false,
-            dismissOnClickOutside = false,
-        ),
-    ) {
+    PikuFullScreenDialog(onDismissRequest = onDismiss) {
         PublishScreen(
             initialDraftId = -1L,
             onBack = onDismiss,

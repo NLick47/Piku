@@ -31,6 +31,12 @@ class LlmTranslateEngine(
         val defaultPrompts: PromptSet? = null,
         /** 备用入口（同模型多地址），主地址 [baseUrl] 连不上时按序回退；主地址始终排第一 */
         val baseUrls: List<String> = emptyList(),
+        /** 鉴权方式；NONE 时允许 apiKey 为空（本地 Ollama / vLLM / llama.cpp） */
+        val authMode: AuthMode = AuthMode.BEARER,
+        /** HEADER 模式的 Header 名 */
+        val authHeader: String = ManualProvider.DEFAULT_AUTH_HEADER,
+        /** 用户额外请求头，鉴权头同名时覆盖它 */
+        val extraHeaders: Map<String, String> = emptyMap(),
     ) {
         /** 可试地址顺序：主地址在前，备用按序在后（"|" 分隔的写法也在这里拆开） */
         fun candidates(): List<String> = ModelCatalog.baseUrlCandidates(baseUrl, baseUrls)
@@ -149,10 +155,17 @@ class LlmTranslateEngine(
 
     private suspend fun request(system: String, user: String): String {
         val cfg = config
-        if (cfg.apiKey.isBlank()) {
-            Log.d(TAG, "translate skipped: api key blank")
+        // 无鉴权本地服务允许空 key；需要鉴权却没 key 时不要发注定 401 的请求
+        if (cfg.authMode != AuthMode.NONE && cfg.apiKey.isBlank()) {
+            Log.d(TAG, "translate skipped: api key blank for ${cfg.authMode}")
             return ""
         }
+        val headers = llmAuthHeaders(
+            authMode = cfg.authMode,
+            authHeader = cfg.authHeader,
+            apiKey = cfg.apiKey,
+            extraHeaders = cfg.extraHeaders,
+        )
         val messages = buildJsonArray {
             add(buildJsonObject { put("role", JsonPrimitive("system")); put("content", JsonPrimitive(system)) })
             add(buildJsonObject { put("role", JsonPrimitive("user")); put("content", JsonPrimitive(user)) })
@@ -170,7 +183,7 @@ class LlmTranslateEngine(
             try {
                 val response = api.chat(
                     url = chatUrl(base),
-                    authorization = "Bearer ${cfg.apiKey}",
+                    headers = headers,
                     body = body,
                 )
                 val content = response.content
