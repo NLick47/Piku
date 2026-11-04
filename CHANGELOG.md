@@ -2,15 +2,13 @@
 
 如遇到问题或有更好的建议可向企鹅群 332491007 反馈
 
-## v3.6.0
+## v3.7.0
 
-- 修复跨源作品链接与共享详情阅读器
-- 修复批量同步 pixiv 收藏误含小说
-- 放宽搜索关键词长度上限
-- 恢复 poipiku 详情漫画阅读进度
-- 加入小说正文下载和离线阅读
-- 修复 poipiku 网页登录被误判掉登录
-- pixiv登录 WebView 接入 hakimi 代理并支持直连回退
-- AO3 加入账号登录与会话隔离
+- AI翻译支持自定义 API 与提示词设置
+- poipiku加入同步到账号书签功能
+- 重构及优化漫画阅读器
+- 修复pixiv部分页面数量角标不显示
+- 优化数量角标样式
 
-本次pixiv登录 WebView 接入 hakimi https://github.com/NLick47/hakimi/releases 可下载这个地址对pixiv直连，在浏览器注册后可在Piku应用中进行登录（不建议安卓系统浏览器，需使用via，edg）
+
+pixiv登录 WebView 已接入 hakimi https://github.com/NLick47/hakimi/releases 可下载这个地址对pixiv直连，在浏览器注册后可在Piku应用中进行登录（不建议安卓系统浏览器，需使用via，edg）
