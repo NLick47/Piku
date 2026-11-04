@@ -66,6 +66,7 @@ import com.piku.client.core.model.Work
 import com.piku.client.core.model.WorkDetail
 import com.piku.client.core.model.WorkStats
 import com.piku.client.core.ui.common.SkeletonBlock
+import com.piku.client.core.ui.common.WorkImageCountBadge
 import com.piku.client.core.ui.common.rememberSkeletonPulse
 import com.piku.client.core.ui.detail.ImagePager
 import com.piku.client.core.ui.detail.HeadlineTranslateChip
@@ -771,16 +772,9 @@ private fun RelatedCard(work: Work, onClick: (Work) -> Unit, modifier: Modifier)
                 contentScale = ContentScale.Crop,
             )
             if (work.imageCount > 1) {
-                Text(
-                    text = "${work.imageCount}",
-                    color = Color.White,
-                    fontSize = 10.sp,
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(6.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(OverlayScrimHeavy)
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                WorkImageCountBadge(
+                    count = work.imageCount,
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp),
                 )
             }
         }

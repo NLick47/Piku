@@ -107,6 +107,7 @@ import com.piku.client.core.ui.common.TextWorkBlurb
 import com.piku.client.core.ui.common.TextWorkCard
 import com.piku.client.core.ui.common.heroFeedThumbUrl
 import com.piku.client.core.ui.common.WorkCard
+import com.piku.client.core.ui.common.WorkImageCountBadge
 import com.piku.client.core.ui.shell.BackToTopFab
 import com.piku.client.core.ui.shell.CategoryEntry
 import com.piku.client.core.ui.shell.FAB_SHOW_AFTER_ITEMS
@@ -987,20 +988,10 @@ private fun RankingSpotlight(
                     .padding(10.dp),
             )
             if (work.imageCount > 1) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(8.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0x99000000))
-                        .padding(horizontal = 7.dp, vertical = 3.dp),
-                ) {
-                    Text(
-                        text = stringResource(R.string.home_image_count, work.imageCount),
-                        color = Color.White,
-                        fontSize = 10.sp,
-                    )
-                }
+                WorkImageCountBadge(
+                    count = work.imageCount,
+                    modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
+                )
             }
             // 底部压暗条：图上千奇百怪，标题永远要读得清。三段而不是两段——
             // 白衬衫、白蕾丝那类图渐变到一半就没了，15sp 的白字压不住

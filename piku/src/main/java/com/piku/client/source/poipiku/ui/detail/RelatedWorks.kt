@@ -30,6 +30,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import com.piku.client.core.ui.common.WorkImageCountBadge
 import com.piku.client.core.ui.common.isAnimatedImage
 import com.piku.client.R
 import com.piku.client.core.model.Work
@@ -122,16 +123,9 @@ private fun RelatedWorkCard(
                 )
             }
             if (work.imageCount > 1) {
-                Text(
-                    text = "${work.imageCount}",
-                    color = Color.White,
-                    fontSize = 10.sp,
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(6.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(OverlayScrimHeavy)
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                WorkImageCountBadge(
+                    count = work.imageCount,
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp),
                 )
             }
         }

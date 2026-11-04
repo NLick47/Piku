@@ -39,6 +39,7 @@ import com.piku.client.R
 import com.piku.client.core.model.Work
 import com.piku.client.core.ui.common.FavoriteHeartBurst
 import com.piku.client.core.ui.common.WorkAiBadge
+import com.piku.client.core.ui.common.WorkImageCountBadge
 import com.piku.client.core.ui.common.feedThumbUrl
 import com.piku.client.app.navigation.sharedWorkBounds
 import com.piku.client.app.navigation.workSharedKey
@@ -64,7 +65,7 @@ internal fun cardAspectRatio(work: Work): Float {
 internal fun Work.thumbAspectOrNull(): Float? =
     if (thumbWidth > 0 && thumbHeight > 0) thumbWidth.toFloat() / thumbHeight else null
 
-// 按原图比例排版的卡片 给带尺寸的源用 不裁方 外观同 WorkCard 但无页数角标
+// 按原图比例排版的卡片 给带尺寸的源用 不裁方 外观同 WorkCard
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun ProportionalWorkCard(
@@ -118,6 +119,13 @@ internal fun ProportionalWorkCard(
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .padding(8.dp),
+                )
+            }
+            // 作者主页那一行已经写了页数，别在图上再挂一个
+            if (work.imageCount > 1 && showAuthor) {
+                WorkImageCountBadge(
+                    count = work.imageCount,
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp),
                 )
             }
             FavoriteHeartBurst(
