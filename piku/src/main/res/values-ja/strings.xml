@@ -214,10 +214,10 @@
     <string name="collection_move_short">移動</string>
     <string name="collection_sync_short">同期</string>
     <string name="collection_sync_progress">同期中 %1$d/%2$d</string>
-    <string name="collection_sync_done">%1$d 件のお気に入りを pixiv に同期しました</string>
+    <string name="collection_sync_done">%1$d 件のお気に入りをアカウントに同期しました</string>
     <string name="collection_sync_partial">%1$d 件同期、%2$d 件失敗</string>
-    <string name="collection_sync_none">選択した内容に同期できる pixiv お気に入りがありません</string>
-    <string name="collection_sync_login_hint">お気に入りを同期するには pixiv にログインしてください</string>
+    <string name="collection_sync_none">選択した内容に同期できるお気に入りがありません</string>
+    <string name="collection_sync_login_hint">お気に入りを同期するには対応するアカウントにログインしてください</string>
     <string name="collection_move_subtitle">移動先を選択、元のコレクションからは外れます</string>
     <string name="collection_rename_subtitle">コレクション名を変更</string>
     <string name="collection_delete_subtitle">中の投稿はお気に入りから削除されます</string>
@@ -784,6 +784,16 @@
     <string name="pixiv_mirror_public_short">公開</string>
     <string name="pixiv_mirror_private_short">非公開</string>
     <string name="pixiv_mirror_local_short">ローカル</string>
+
+    <!-- ブックマーク同期（アカウントのブックマーク） -->
+    <string name="menu_poipiku_bookmark_sync">ブックマーク同期</string>
+    <string name="poipiku_bookmark_sync_title">ブックマーク同期</string>
+    <string name="poipiku_bookmark_sync_hint">オンにすると、スターまたはお気に入りフォルダパネルでのお気に入り/解除時にアカウントのブックマークも更新します（新しいフォルダ作成時に追加した作品も含む）。解除時はブックマークも外れます。既存のお気に入りはコレクションページで全選択して「同期」をタップしてください。</string>
+    <string name="poipiku_bookmark_sync_auto">アカウントのブックマークに同期</string>
+    <string name="poipiku_bookmark_sync_local">ローカルのみ</string>
+    <string name="poipiku_bookmark_sync_short_auto">アカウント</string>
+    <string name="poipiku_bookmark_sync_short_local">ローカル</string>
+    <string name="favorite_mirror_failed">リモートブックマークの同期に失敗しました。後でもう一度お試しください</string>
 
     <string name="home_source_poipiku">Poipiku</string>
     <string name="home_source">コンテンツソース</string>

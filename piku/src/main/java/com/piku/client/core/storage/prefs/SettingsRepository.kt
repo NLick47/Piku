@@ -84,6 +84,12 @@ class SettingsRepository @Inject constructor(
     )
     val pixivBookmarkMirror: StateFlow<PixivBookmarkMirror> = _pixivBookmarkMirror.asStateFlow()
 
+    /** poipiku 收藏自动同步到账号书签；默认开启，未登录时抽屉不显示该设置 */
+    private val _poipikuBookmarkSync = MutableStateFlow(
+        prefs.getBoolean(KEY_POIPIKU_BOOKMARK_SYNC, true),
+    )
+    val poipikuBookmarkSync: StateFlow<Boolean> = _poipikuBookmarkSync.asStateFlow()
+
     /** 浏览记录保留天数，0 表示永久保留 */
     private val _historyRetentionDays = MutableStateFlow(
         prefs.getInt(KEY_HISTORY_RETENTION_DAYS, 0),
@@ -237,6 +243,11 @@ class SettingsRepository @Inject constructor(
     fun setPixivBookmarkMirror(mode: PixivBookmarkMirror) {
         prefs.edit().putString(KEY_PIXIV_BOOKMARK_MIRROR, mode.name).apply()
         _pixivBookmarkMirror.value = mode
+    }
+
+    fun setPoipikuBookmarkSync(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_POIPIKU_BOOKMARK_SYNC, enabled).apply()
+        _poipikuBookmarkSync.value = enabled
     }
 
     fun setHistoryRetentionDays(days: Int) {
@@ -911,6 +922,7 @@ class SettingsRepository @Inject constructor(
         const val KEY_HOME_SOURCE = "home_source"
         const val KEY_FOLDER_SORT = "folder_sort"
         const val KEY_PIXIV_BOOKMARK_MIRROR = "pixiv_bookmark_mirror"
+        const val KEY_POIPIKU_BOOKMARK_SYNC = "poipiku_bookmark_sync"
         const val KEY_HISTORY_RETENTION_DAYS = "history_retention_days"
 
         const val KEY_AUTO_CHECK_ENABLED = "auto_check_update_enabled"

@@ -8,6 +8,7 @@ import com.piku.client.source.pixiv.data.remote.PixivAppConfig
 import com.piku.client.core.data.CollectionEdit
 import com.piku.client.core.data.FavoriteRepository
 import com.piku.client.source.pixiv.data.repository.PixivRepository
+import com.piku.client.source.poipiku.data.repository.PoipikuBookmarkRepository
 import com.piku.client.core.storage.prefs.SettingsRepository
 import com.piku.client.core.model.AuthStatus
 import com.piku.client.core.model.FavoriteFolder
@@ -115,8 +116,8 @@ data class CollectionUiState(
     val actionWorkFolderIds: Set<Long> = emptySet(),
     /** 从放大镜进入「全部收藏」时置位，工具栏聚焦一次检索框后立刻消费掉 */
     val focusSearch: Boolean = false,
-    /** 批量同步所选到 pixiv 进行中：工具条动作防连点 */
-    val syncingToPixiv: Boolean = false,
+    /** 批量同步所选到账号书签进行中：工具条动作防连点 */
+    val syncingToAccount: Boolean = false,
     /** 同步进度（已完成数, 总数）：网慢时给「在动」的观感 */
     val syncProgress: Pair<Int, Int>? = null,
 ) {
@@ -141,6 +142,7 @@ class CollectionViewModel @Inject constructor(
     private val favoriteRepository: FavoriteRepository,
     private val settingsRepository: SettingsRepository,
     private val pixivRepository: PixivRepository,
+    private val poipikuBookmarkRepository: PoipikuBookmarkRepository,
     private val sourceAuthRegistry: SourceAuthRegistry,
     observeLibraryPoolUseCase: ObserveLibraryPoolUseCase,
 ) : ViewModel() {
@@ -532,53 +534,104 @@ class CollectionViewModel @Inject constructor(
     }
 
     /**
-     * 批量「同步所选到 pixiv」：给仅本地档攒下的收藏补上云端。
-     * 只处理 pixiv 源且未同步的；可见性取当前镜像档位（私密档补上去的也是私密）。
+     * 批量「同步所选到账号书签」：把本地收藏补到对应源的远端。
+     *
+     * - pixiv 插画：走 pixiv 收藏，已同步的跳过，可见性取当前镜像档位；
+     * - poipiku 作品：走账号书签，toggle 收敛会自动处理"本来就有"的情况；
+     * - 其它源（AO3）与 pixiv 小说不处理。
+     *
+     * 某个源未登录时只把该源的作品计为失败，不阻塞另一个源。
      */
-    fun syncSelectedToPixiv() {
+    fun syncSelectedToAccount() {
         val state = _uiState.value
-        if (state.syncingToPixiv) return
-        val selected = state.works.filter {
-            it.key in state.selectedIds &&
-                it.source == WorkSource.PIXIV &&
-                it.kind != WorkKind.NOVEL
+        if (state.syncingToAccount) return
+        val selected = state.works.filter { it.key in state.selectedIds }
+        val pixivSelected = selected.filter {
+            it.source == WorkSource.PIXIV && it.kind != WorkKind.NOVEL
         }
-        if (selected.isEmpty()) {
+        val poipikuSelected = selected.filter { it.source == WorkSource.POIPIKU }
+        if (pixivSelected.isEmpty() && poipikuSelected.isEmpty()) {
             feedback.show(R.string.collection_sync_none)
             return
         }
+        // 在 launch 之前占住状态：快速连点两下时第二次直接返回，不会起两个同步循环
+        _uiState.update { it.copy(syncingToAccount = true) }
         viewModelScope.launch {
-            val pixivAuth = sourceAuthRegistry.byId(WorkSource.PIXIV)
-            val loggedIn = pixivAuth != null && pixivAuth.status.first() == AuthStatus.LOGGED_IN
-            if (!loggedIn) {
-                feedback.show(R.string.collection_sync_login_hint)
-                return@launch
-            }
-            val alreadySynced = favoriteRepository.cloudSyncedKeys(selected.map { it.key })
-            val targets = selected.filterNot { it.key in alreadySynced }
-            if (targets.isEmpty()) {
-                feedback.show(R.string.collection_sync_none)
-                return@launch
-            }
-            _uiState.update { it.copy(syncingToPixiv = true, syncProgress = 0 to targets.size) }
-            val restrict = when (settingsRepository.pixivBookmarkMirror.value) {
-                PixivBookmarkMirror.PRIVATE -> PixivAppConfig.RESTRICT_PRIVATE
-                else -> PixivAppConfig.RESTRICT_PUBLIC
-            }
-            var synced = 0
-            var failed = 0
-            for ((index, work) in targets.withIndex()) {
-                pixivRepository.bookmarkIllust(work.id, add = true, restrict = restrict)
-                    .onSuccess { favoriteRepository.setCloudSynced(work.key, true) }
-                    .onSuccess { synced += 1 }
-                    .onFailure { failed += 1 }
-                _uiState.update { it.copy(syncProgress = (index + 1) to targets.size) }
-            }
-            _uiState.update { it.copy(syncingToPixiv = false, syncProgress = null) }
-            when {
-                failed == 0 -> feedback.show(R.string.collection_sync_done, synced)
-                synced == 0 -> feedback.show(R.string.detail_cloud_bookmark_failed)
-                else -> feedback.show(R.string.collection_sync_partial, synced, failed)
+            try {
+                val pixivLoggedIn = sourceAuthRegistry.byId(WorkSource.PIXIV)
+                    ?.status?.first() == AuthStatus.LOGGED_IN
+                val poipikuLoggedIn = sourceAuthRegistry.byId(WorkSource.POIPIKU)
+                    ?.status?.first() == AuthStatus.LOGGED_IN
+                val poipikuAccountKey = poipikuBookmarkRepository.currentAccountKey()
+                val alreadySynced = if (pixivLoggedIn && pixivSelected.isNotEmpty()) {
+                    favoriteRepository.cloudSyncedKeys(pixivSelected.map { it.key })
+                } else {
+                    emptySet()
+                }
+                val pixivTargets = if (pixivLoggedIn) {
+                    pixivSelected.filterNot { it.key in alreadySynced }
+                } else {
+                    emptyList()
+                }
+                val poipikuTargets = if (poipikuLoggedIn) poipikuSelected else emptyList()
+                val targets = pixivTargets + poipikuTargets
+                if (targets.isEmpty()) {
+                    when {
+                        !pixivLoggedIn && pixivSelected.isNotEmpty() ->
+                            feedback.show(R.string.collection_sync_login_hint)
+                        !poipikuLoggedIn && poipikuSelected.isNotEmpty() ->
+                            feedback.show(R.string.collection_sync_login_hint)
+                        else -> feedback.show(R.string.collection_sync_none)
+                    }
+                    return@launch
+                }
+                // 未登录源的作品算失败；pixiv 已同步的旧收藏不算失败
+                var failed = 0
+                if (!pixivLoggedIn) failed += pixivSelected.size
+                if (!poipikuLoggedIn) failed += poipikuSelected.size
+                _uiState.update { it.copy(syncProgress = 0 to targets.size) }
+                val restrict = when (settingsRepository.pixivBookmarkMirror.value) {
+                    PixivBookmarkMirror.PRIVATE -> PixivAppConfig.RESTRICT_PRIVATE
+                    else -> PixivAppConfig.RESTRICT_PUBLIC
+                }
+                var synced = 0
+                for ((index, work) in targets.withIndex()) {
+                    // 批量同步途中用户可能在别的页面取消了收藏；不要把它重新加上去
+                    if (favoriteRepository.isFavorite(work.key)) {
+                        when (work.source) {
+                            WorkSource.PIXIV -> pixivRepository.bookmarkIllust(
+                                work.id,
+                                add = true,
+                                restrict = restrict,
+                            )
+                                .onSuccess { favoriteRepository.setCloudSynced(work.key, true) }
+                                .onSuccess { synced += 1 }
+                                .onFailure { failed += 1 }
+
+                            WorkSource.POIPIKU -> {
+                                // 批量同步途中换了账号：剩余作品不能写到新账号
+                                if (poipikuBookmarkRepository.currentAccountKey() != poipikuAccountKey) {
+                                    failed += 1
+                                } else {
+                                    poipikuBookmarkRepository.setBookmarked(work.id, true)
+                                        .onSuccess { synced += 1 }
+                                        .onFailure { failed += 1 }
+                                }
+                            }
+
+                            WorkSource.AO3 -> Unit
+                        }
+                    }
+                    _uiState.update { it.copy(syncProgress = (index + 1) to targets.size) }
+                }
+                when {
+                    // 全部目标在同步途中被取消收藏：不要报"已同步 0 个"
+                    synced == 0 && failed == 0 -> feedback.show(R.string.collection_sync_none)
+                    failed == 0 -> feedback.show(R.string.collection_sync_done, synced)
+                    else -> feedback.show(R.string.collection_sync_partial, synced, failed)
+                }
+            } finally {
+                _uiState.update { it.copy(syncingToAccount = false, syncProgress = null) }
             }
         }
     }

@@ -257,6 +257,7 @@ private fun DrawerPanel(
     val accountEntries = contributions.entriesIn(DrawerSlot.Account)
     val libraryEntries = contributions.entriesIn(DrawerSlot.Library)
     val settingsEntries = contributions.entriesIn(DrawerSlot.Settings)
+    val settingsExpandedEntries = contributions.entriesIn(DrawerSlot.SettingsExpanded)
 
     // 断开是破坏性动作，先确认；文案由该源自己的插件给
     var confirmDisconnect by remember { mutableStateOf(false) }
@@ -321,6 +322,7 @@ private fun DrawerPanel(
                     onClick = entry.onClick,
                     dark = dark,
                     accent = iconAccent,
+                    trailing = entry.trailing,
                 )
             }
             Spacer(Modifier.height(10.dp))
@@ -374,6 +376,7 @@ private fun DrawerPanel(
                     onClick = entry.onClick,
                     dark = dark,
                     accent = iconAccent,
+                    trailing = entry.trailing,
                 )
             }
             Spacer(Modifier.height(14.dp))
@@ -519,6 +522,17 @@ private fun DrawerPanel(
                         dark = dark,
                         accent = iconAccent,
                     )
+                    // 源特有的展开区设置项（如 poipiku 收藏同步）放在清理行之前
+                    settingsExpandedEntries.forEach { entry ->
+                        DrawerMenuRow(
+                            icon = entry.icon,
+                            label = entry.label,
+                            onClick = entry.onClick,
+                            dark = dark,
+                            accent = iconAccent,
+                            trailing = entry.trailing,
+                        )
+                    }
                     // 数据清理语义的行放展开区末尾：同步在前、保留在最后
                     DrawerMenuRow(
                         icon = Icons.Outlined.DeleteSweep,
@@ -538,6 +552,7 @@ private fun DrawerPanel(
                     onClick = entry.onClick,
                     dark = dark,
                     accent = iconAccent,
+                    trailing = entry.trailing,
                 )
             }
             Spacer(Modifier.height(8.dp))

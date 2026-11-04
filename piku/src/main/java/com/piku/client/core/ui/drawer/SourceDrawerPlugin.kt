@@ -48,6 +48,9 @@ enum class DrawerSlot {
 
     /** 设置区末尾：本源特有的设置项 */
     Settings,
+
+    /** 「更多设置」展开区内：与 pixiv 收藏同步同层的源特有设置项 */
+    SettingsExpanded,
 }
 
 /** 一个抽屉菜单条目。声明式：外壳用与通用行完全同款的组件渲染 */
@@ -55,6 +58,8 @@ data class DrawerEntry(
     val icon: ImageVector,
     val label: String,
     val onClick: () -> Unit,
+    /** 行尾状态文案（如"开/关"）；null = 只显示箭头 */
+    val trailing: String? = null,
 )
 
 /** 插件往一个槽位里放的一组条目 */

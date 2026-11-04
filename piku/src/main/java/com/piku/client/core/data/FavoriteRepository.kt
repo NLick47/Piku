@@ -63,6 +63,8 @@ class FavoriteRepository @Inject constructor(
     private val favoriteFolderDao: FavoriteFolderDao,
     private val settingsRepository: SettingsRepository,
     private val webDavSyncRepository: WebDavSyncRepository,
+    /** 星标切换的远程镜像（poipiku 书签等）；放在仓储里，所有收藏入口都不会漏挂 */
+    private val favoriteMirrorService: FavoriteMirrorService,
     /** 批量归属变更是多条语句，必须包在一个事务里，见 [addWorksToFolder] 等 */
     private val database: AppDatabase,
 ) {
@@ -71,6 +73,14 @@ class FavoriteRepository @Inject constructor(
 
     /** 默认收藏夹「查 → 建」的串行锁，见 [ensureDefaultFolder] */
     private val defaultFolderLock = Mutex()
+
+    /**
+     * 星标/收藏夹切换与镜像提交的串行锁。
+     * 快速连点收藏-取消时，如果本地事务与 [favoriteMirrorService] 的提交顺序交错，
+     * 远端可能最终停在相反状态；把"读整体状态 → 提交镜像"整段串起来，最后一次本地
+     * 操作一定最后提交。
+     */
+    private val favoriteMutationLock = Mutex()
 
     // 自动同步触发源：用 SharedFlow 而不是直接 launch，可以让连续操作被 debounce + conflate 合并。
     private val autoSyncTrigger = MutableSharedFlow<Unit>(
@@ -181,6 +191,10 @@ class FavoriteRepository @Inject constructor(
     suspend fun isCloudSynced(key: WorkKey): Boolean =
         favoriteDao.favoriteById(key.source, key.workId)?.cloudSynced ?: false
 
+    /** 当前是否仍收藏在本地（任一收藏夹）。批量同步途中用户取消收藏时用它兜住。 */
+    suspend fun isFavorite(key: WorkKey): Boolean =
+        favoriteDao.favoriteById(key.source, key.workId) != null
+
     suspend fun cloudSyncedKeys(keys: List<WorkKey>): Set<WorkKey> =
         keys.groupBy { it.source }.flatMap { (source, ks) ->
             ks.map { it.workId }.chunked(SQL_VAR_LIMIT)
@@ -192,9 +206,10 @@ class FavoriteRepository @Inject constructor(
         favoriteDao.setCloudSynced(key.source, key.workId, synced)
     }
 
-    suspend fun toggleFavorite(work: Work): Boolean {
+    suspend fun toggleFavorite(work: Work): Boolean = favoriteMutationLock.withLock {
         val defaultFolderId = ensureDefaultFolder()
         val workId = work.key.workId
+        val wasFavorite = favoriteFolderDao.folderIdsForWork(work.source, workId).isNotEmpty()
         // 判定与写入必须在同一个事务里：否则两次快速点击会各自读到旧状态，双双走同一条分支
         val added = database.withTransaction {
             if (defaultFolderId in favoriteFolderDao.folderIdsForWork(work.source, workId)) {
@@ -205,8 +220,16 @@ class FavoriteRepository @Inject constructor(
                 true
             }
         }
+        // 远程镜像跟随"是否还在任一收藏夹"，不是"是否还在默认夹"：
+        // 从默认夹移出但作品仍留在别的夹时，不能把远端书签删掉
+        val nowFavorite = favoriteFolderDao.folderIdsForWork(work.source, workId).isNotEmpty()
         triggerAutoSync()
-        return added
+        if (wasFavorite != nowFavorite) {
+            // 星标是主要自动镜像入口；收藏页批量整理不镜像，
+            // 由收藏页的手动同步补齐，避免一次整理产生成百上千个远端请求
+            favoriteMirrorService.onFavoriteChanged(work, nowFavorite)
+        }
+        added
     }
 
     suspend fun ensureFavorite(work: Work): Boolean {
@@ -224,8 +247,9 @@ class FavoriteRepository @Inject constructor(
         return added
     }
 
-    suspend fun toggleFolder(work: Work, folderId: Long) {
+    suspend fun toggleFolder(work: Work, folderId: Long) = favoriteMutationLock.withLock {
         val workId = work.key.workId
+        val wasFavorite = favoriteFolderDao.folderIdsForWork(work.source, workId).isNotEmpty()
         database.withTransaction {
             if (folderId in favoriteFolderDao.folderIdsForWork(work.source, workId)) {
                 removeFromFolder(work.source, workId, folderId)
@@ -233,7 +257,12 @@ class FavoriteRepository @Inject constructor(
                 addToFolder(work, folderId)
             }
         }
+        val nowFavorite = favoriteFolderDao.folderIdsForWork(work.source, workId).isNotEmpty()
         triggerAutoSync()
+        // 只在"整体收藏状态"变化时镜像：在多个夹之间挪动不该反复 toggle 远端
+        if (wasFavorite != nowFavorite) {
+            favoriteMirrorService.onFavoriteChanged(work, nowFavorite)
+        }
     }
 
     /**
@@ -242,24 +271,39 @@ class FavoriteRepository @Inject constructor(
      * 重名返回 null：收藏夹在同步里是按名字匹配的（[WebDavSyncRepository]），
      * 两个同名的夹下次同步会被云端并成一个，所以从一开始就不允许重名。
      */
-    suspend fun createFolder(name: String, addCurrentWork: Work? = null): Long? {
-        val folderName = name.trim().ifBlank { UNNAMED_FOLDER }
-        val folderId = database.withTransaction {
-            if (favoriteFolderDao.folderByName(folderName) != null) return@withTransaction null
-            val id = favoriteFolderDao.insertFolder(
-                FavoriteFolderEntity(
-                    name = folderName,
-                    createdAt = System.currentTimeMillis(),
-                ),
-            )
-            if (addCurrentWork != null) {
-                addToFolder(addCurrentWork, id)
+    suspend fun createFolder(name: String, addCurrentWork: Work? = null): Long? =
+        favoriteMutationLock.withLock {
+            val folderName = name.trim().ifBlank { UNNAMED_FOLDER }
+            val workToAdd = addCurrentWork
+            val wasFavorite = workToAdd?.let {
+                favoriteFolderDao.folderIdsForWork(it.source, it.key.workId).isNotEmpty()
+            } ?: false
+            val folderId = database.withTransaction {
+                if (favoriteFolderDao.folderByName(folderName) != null) return@withTransaction null
+                val id = favoriteFolderDao.insertFolder(
+                    FavoriteFolderEntity(
+                        name = folderName,
+                        createdAt = System.currentTimeMillis(),
+                    ),
+                )
+                if (workToAdd != null) {
+                    addToFolder(workToAdd, id)
+                }
+                id
+            } ?: return@withLock null
+            triggerAutoSync()
+            // 「新建收藏夹并收藏当前作品」也是收藏入口；状态真的翻转时同样要镜像
+            if (workToAdd != null) {
+                val nowFavorite = favoriteFolderDao.folderIdsForWork(
+                    workToAdd.source,
+                    workToAdd.key.workId,
+                ).isNotEmpty()
+                if (wasFavorite != nowFavorite) {
+                    favoriteMirrorService.onFavoriteChanged(workToAdd, nowFavorite)
+                }
             }
-            id
-        } ?: return null
-        triggerAutoSync()
-        return folderId
-    }
+            folderId
+        }
 
     /** 重命名收藏夹；与另一个收藏夹重名时返回 false 且不写入，理由同 [createFolder] */
     suspend fun renameFolder(folderId: Long, name: String): Boolean {

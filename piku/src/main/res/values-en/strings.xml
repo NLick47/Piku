@@ -214,10 +214,10 @@
     <string name="collection_move_short">Move</string>
     <string name="collection_sync_short">Sync</string>
     <string name="collection_sync_progress">Syncing %1$d/%2$d</string>
-    <string name="collection_sync_done">Synced %1$d favorites to pixiv</string>
+    <string name="collection_sync_done">Synced %1$d favorites to the account</string>
     <string name="collection_sync_partial">Synced %1$d, %2$d failed</string>
-    <string name="collection_sync_none">No syncable pixiv favorites in the selection</string>
-    <string name="collection_sync_login_hint">Sign in to pixiv to sync favorites</string>
+    <string name="collection_sync_none">No syncable favorites in the selection</string>
+    <string name="collection_sync_login_hint">Sign in to the corresponding account to sync favorites</string>
     <string name="collection_move_subtitle">Pick a target folder; removed from the current one</string>
     <string name="collection_rename_subtitle">Change the collection name</string>
     <string name="collection_delete_subtitle">Posts inside will be removed from favorites</string>
@@ -784,6 +784,16 @@
     <string name="pixiv_mirror_public_short">Public</string>
     <string name="pixiv_mirror_private_short">Private</string>
     <string name="pixiv_mirror_local_short">Local</string>
+
+    <!-- Bookmark sync (account bookmarks) -->
+    <string name="menu_poipiku_bookmark_sync">Bookmark sync</string>
+    <string name="poipiku_bookmark_sync_title">Bookmark sync</string>
+    <string name="poipiku_bookmark_sync_hint">When on, starring or folder-panel favorite changes also update your account bookmarks (including a work added while creating a new folder); un-favoriting removes the bookmark too. To backfill existing favorites, select all on the collection page and tap Sync.</string>
+    <string name="poipiku_bookmark_sync_auto">Sync to account bookmarks</string>
+    <string name="poipiku_bookmark_sync_local">Local only</string>
+    <string name="poipiku_bookmark_sync_short_auto">Account</string>
+    <string name="poipiku_bookmark_sync_short_local">Local</string>
+    <string name="favorite_mirror_failed">Remote bookmark sync failed; try again later</string>
 
     <string name="home_source_poipiku">Poipiku</string>
     <string name="home_source">Content source</string>

@@ -214,10 +214,10 @@
     <string name="collection_move_short">移动</string>
     <string name="collection_sync_short">同步</string>
     <string name="collection_sync_progress">同步中 %1$d/%2$d</string>
-    <string name="collection_sync_done">已同步 %1$d 个收藏到 pixiv</string>
+    <string name="collection_sync_done">已同步 %1$d 个收藏到账号</string>
     <string name="collection_sync_partial">已同步 %1$d 个，%2$d 个失败</string>
-    <string name="collection_sync_none">所选内容里没有可同步的 pixiv 收藏</string>
-    <string name="collection_sync_login_hint">登录 pixiv 后才能同步收藏</string>
+    <string name="collection_sync_none">所选内容里没有可同步的收藏</string>
+    <string name="collection_sync_login_hint">登录对应账号后才能同步收藏</string>
     <string name="collection_move_subtitle">选择目标收藏夹，原位置不再保留</string>
     <string name="collection_rename_subtitle">修改收藏夹名称</string>
     <string name="collection_delete_subtitle">夹内投稿将从收藏中移除</string>
@@ -782,6 +782,16 @@
     <string name="pixiv_mirror_public_short">公开</string>
     <string name="pixiv_mirror_private_short">私密</string>
     <string name="pixiv_mirror_local_short">仅本地</string>
+
+    <!-- 收藏同步（账号书签） -->
+    <string name="menu_poipiku_bookmark_sync">收藏同步</string>
+    <string name="poipiku_bookmark_sync_title">收藏同步</string>
+    <string name="poipiku_bookmark_sync_hint">开启后，星标或收藏夹面板里的收藏/取消会同步到账号书签（新建收藏夹时带入的作品也算）；取消收藏也会取消书签。已有收藏可在收藏页全选后点「同步」补齐。</string>
+    <string name="poipiku_bookmark_sync_auto">同步到账号书签</string>
+    <string name="poipiku_bookmark_sync_local">仅本地</string>
+    <string name="poipiku_bookmark_sync_short_auto">账号书签</string>
+    <string name="poipiku_bookmark_sync_short_local">仅本地</string>
+    <string name="favorite_mirror_failed">远程书签同步失败，可稍后重试</string>
 
     <string name="home_source_poipiku">Poipiku</string>
     <string name="home_source">内容源</string>

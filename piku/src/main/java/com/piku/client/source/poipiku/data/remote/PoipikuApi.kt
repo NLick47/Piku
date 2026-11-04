@@ -39,6 +39,13 @@ data class UpdateFollowUserResponse(val result: Int = 0, val btn_label: String =
 @Serializable
 data class UpdateBlockUserResponse(val result: Int = 0)
 
+/**
+ * 作品书签开关。接口是 toggle：result 1 = 调用后已加书签，0 = 调用后已移除；
+ * 负数为失败（-2 = 未登录），UI 层据此区分"状态"与"错误"。
+ */
+@Serializable
+data class UpdateBookmarkResponse(val result: Int = -1, val msg: String = "")
+
 @Serializable
 data class TagSuggestionResponse(
     val result: Int = 0,
@@ -188,6 +195,17 @@ interface PoipikuApi {
         @Field("IID") targetUserId: Long,
         @Field("CHK") checked: Int,
     ): UpdateBlockUserResponse
+
+    /**
+     * 作品书签开关（网页端 IllustItemBookmarkBtn 同款请求）。
+     * UID 是当前登录账号，IID 是作品 id；接口只翻转状态，不接收目标方向。
+     */
+    @FormUrlEncoded
+    @POST("api/UpdateBookmarkF.jsp")
+    suspend fun updateBookmark(
+        @Field("UID") uid: Long,
+        @Field("IID") workId: Long,
+    ): UpdateBookmarkResponse
 
     /**
      * 屏蔽列表（设置页「ブロックリスト」同款请求，MD 固定 1）。

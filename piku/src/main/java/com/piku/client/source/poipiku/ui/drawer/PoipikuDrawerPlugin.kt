@@ -9,6 +9,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Block
+import androidx.compose.material.icons.outlined.BookmarkAdd
 import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PostAdd
@@ -18,11 +19,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.piku.client.R
+import com.piku.client.core.storage.prefs.SettingsRepository
 import com.piku.client.core.ui.common.PikuFullScreenDialog
 import com.piku.client.source.poipiku.data.repository.ProfileRepository
 import com.piku.client.core.model.Work
 import com.piku.client.core.model.WorkSource
 import com.piku.client.core.model.UserProfile
+import com.piku.client.source.poipiku.ui.bookmarks.PoipikuBookmarkSettingsSheet
 import com.piku.client.source.poipiku.ui.profile.ProfileEditSheet
 import com.piku.client.source.poipiku.ui.publish.PublishScreen
 import com.piku.client.core.ui.theme.LocalDarkTheme
@@ -32,6 +35,7 @@ import javax.inject.Singleton
 @Singleton
 class PoipikuDrawerPlugin @Inject constructor(
     private val profileRepository: ProfileRepository,
+    private val settingsRepository: SettingsRepository,
 ) : SourceDrawerPlugin {
 
     override val source = WorkSource.POIPIKU
@@ -40,6 +44,8 @@ class PoipikuDrawerPlugin @Inject constructor(
     override fun contributions(scope: DrawerScope): List<DrawerContribution> {
         val loggedIn = scope.account?.loggedIn == true
         val profile by profileRepository.userProfile.collectAsStateWithLifecycle()
+        val bookmarkSync by settingsRepository.poipikuBookmarkSync.collectAsStateWithLifecycle()
+        val dark = LocalDarkTheme.current
 
         val account = buildList {
             if (loggedIn) {
@@ -104,9 +110,38 @@ class PoipikuDrawerPlugin @Inject constructor(
             emptyList()
         }
 
+        val settings = if (loggedIn) {
+            listOf(
+                DrawerEntry(
+                    icon = Icons.Outlined.BookmarkAdd,
+                    label = stringResource(R.string.menu_poipiku_bookmark_sync),
+                    trailing = stringResource(
+                        if (bookmarkSync) R.string.poipiku_bookmark_sync_short_auto
+                        else R.string.poipiku_bookmark_sync_short_local,
+                    ),
+                    onClick = {
+                        scope.openOverlay(closeDrawer = false) { onDismiss, _ ->
+                            PoipikuBookmarkSettingsSheet(
+                                selected = bookmarkSync,
+                                onSelect = { enabled ->
+                                    settingsRepository.setPoipikuBookmarkSync(enabled)
+                                    onDismiss()
+                                },
+                                onDismiss = onDismiss,
+                                dark = dark,
+                            )
+                        }
+                    },
+                ),
+            )
+        } else {
+            emptyList()
+        }
+
         return buildList {
             if (account.isNotEmpty()) add(DrawerContribution(DrawerSlot.Account, account))
             if (library.isNotEmpty()) add(DrawerContribution(DrawerSlot.Library, library))
+            if (settings.isNotEmpty()) add(DrawerContribution(DrawerSlot.SettingsExpanded, settings))
         }
     }
 }

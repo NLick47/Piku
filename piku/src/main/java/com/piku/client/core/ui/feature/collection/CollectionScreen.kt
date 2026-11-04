@@ -266,12 +266,13 @@ fun CollectionScreen(
                 viewModel.loadSelectedFolderIds()
                 pickMode = FolderPickMode.ADD
             },
-            syncing = state.syncingToPixiv,
+            syncing = state.syncingToAccount,
             syncLabel = state.syncProgress?.let { (done, total) ->
                 stringResource(R.string.collection_sync_progress, done, total)
             } ?: stringResource(R.string.collection_sync_short),
-            onSync = viewModel::syncSelectedToPixiv,
-            showSync = WorkSource.PIXIV in state.poolSources,
+            onSync = viewModel::syncSelectedToAccount,
+            showSync = WorkSource.PIXIV in state.poolSources ||
+                WorkSource.POIPIKU in state.poolSources,
             onMove = { pickMode = FolderPickMode.MOVE },
             onRemove = viewModel::removeSelected,
             modifier = Modifier
@@ -1340,7 +1341,7 @@ private fun SelectionActionBar(
     onSync: () -> Unit,
     onMove: () -> Unit,
     onRemove: () -> Unit,
-    /** 池里没有 pixiv 时（AO3 书架）不摆这颗钮：它对着一堆作品却永远无事可做 */
+    /** 池里没有可同步的远程收藏源时（AO3 书架）不摆这颗钮：它对着一堆作品却永远无事可做 */
     showSync: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
@@ -1369,7 +1370,7 @@ private fun SelectionActionBar(
                     onClick = onAdd,
                     modifier = Modifier.weight(1f),
                 )
-                // 只同步 pixiv 源的未同步项：混选或重复点都安全，VM 里筛过一遍
+                // 按源同步所选：pixiv 走收藏、poipiku 走账号书签；混选或重复点都安全，VM 里筛过一遍
                 if (showSync) {
                     BarAction(
                         icon = Icons.Outlined.CloudUpload,
