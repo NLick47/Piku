@@ -823,12 +823,20 @@ internal fun ImagePager(
                     Row(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
-                            .padding(8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            .padding(8.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(
+                                if (dark) ViewerBackgroundDark.copy(alpha = 0.8f) else OverlayTipLight,
+                            ),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        NovelReaderEntryButton(dark = dark, onOpen = onOpenNovelReader)
+                        NovelReaderEntryButton(onOpen = onOpenNovelReader)
                         if (detail.gate == null && !detail.passwordProtected && !detail.unlockBlocked) {
+                            Box(
+                                Modifier
+                                    .size(width = 1.dp, height = 14.dp)
+                                    .background(PikuColors.border),
+                            )
                             NovelCacheActionChip(
                                 state = cacheState,
                                 onAction = onCacheAction,
@@ -1078,16 +1086,14 @@ private fun NovelPreview(detail: WorkDetail, dark: Boolean, onWorkClick: (Long, 
 /** 全屏阅读入口按钮：纯文字作品的图区右上角 */
 @Composable
 private fun NovelReaderEntryButton(
-    dark: Boolean,
     onOpen: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(if (dark) ViewerBackgroundDark.copy(alpha = 0.8f) else OverlayTipLight)
+            .height(30.dp)
             .clickable(onClick = onOpen)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(

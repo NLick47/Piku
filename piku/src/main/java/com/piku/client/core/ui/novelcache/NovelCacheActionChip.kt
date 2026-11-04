@@ -67,25 +67,34 @@ internal fun NovelCacheActionChip(
         cached == null || hasUpdate -> PikuColors.accent
         else -> PikuColors.textSecondary
     }
-    val shape = RoundedCornerShape(if (compact) 14.dp else 22.dp)
+    val shape = RoundedCornerShape(12.dp)
 
     Box(modifier) {
         Row(
             modifier = Modifier
-                .height(if (compact) 28.dp else 44.dp)
-                .clip(shape)
-                .background(PikuColors.surfaceSoft)
-                .border(0.5.dp, PikuColors.border, shape)
+                .then(
+                    if (compact) {
+                        // 外层浮层条已经画了底和圆角，这里只留点击区
+                        Modifier.height(30.dp)
+                    } else {
+                        Modifier
+                            .width(96.dp)
+                            .height(46.dp)
+                            .clip(shape)
+                            .background(PikuColors.surfaceSoft)
+                            .border(0.5.dp, PikuColors.border, shape)
+                    },
+                )
                 .clickable(enabled = state !is NovelCacheUiState.Caching) {
                     if (cached != null) sheetOpen = true else onAction(NovelCacheAction.Cache)
                 }
-                .padding(horizontal = if (compact) 8.dp else 12.dp),
+                .padding(horizontal = if (compact) 12.dp else 8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            horizontalArrangement = Arrangement.Center,
         ) {
             if (state is NovelCacheUiState.Caching) {
                 CircularProgressIndicator(
-                    modifier = Modifier.size(14.dp),
+                    modifier = Modifier.size(15.dp),
                     color = PikuColors.textSecondary,
                     strokeWidth = 1.5.dp,
                 )
@@ -94,10 +103,11 @@ internal fun NovelCacheActionChip(
                     imageVector = chipIcon(state),
                     contentDescription = if (compact) label else null,
                     tint = tint,
-                    modifier = Modifier.size(15.dp),
+                    modifier = Modifier.size(16.dp),
                 )
             }
             if (!compact) {
+                Spacer(Modifier.width(5.dp))
                 Text(
                     text = label,
                     color = tint,

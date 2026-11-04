@@ -8,15 +8,12 @@ import android.content.ContextWrapper
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -40,7 +37,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -58,8 +58,12 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import coil3.size.Size as CoilSize
 import com.piku.client.core.storage.prefs.MangaReaderSettings
+import com.piku.client.core.ui.theme.LocalDarkTheme
 import com.piku.client.core.ui.theme.ViewerBackgroundDark
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -71,6 +75,28 @@ private const val AUTO_HIDE_DELAY_MS = 2600L
 
 /** 未测到真实比例前的占位：竖漫常见宽高比 */
 private const val DEFAULT_PAGE_ASPECT = 1f / 1.42f
+
+/** 页表未回来时 fullUrl 为空，原图比例回调不会来；用详情页已上屏那张先定高 */
+private fun previewAspect(previews: Map<Int, Painter>, index: Int): Float? {
+    val size = previews[index]?.intrinsicSize ?: return null
+    if (!size.width.isFinite() || !size.height.isFinite()) return null
+    if (size.width <= 0f || size.height <= 0f) return null
+    return size.width / size.height
+}
+
+/** 页高与滚动位置同寿：位置可保存，比例丢了会让内容变短、留白整片回来 */
+private val AspectMapSaver = listSaver<SnapshotStateMap<Int, Float>, Float>(
+    save = { map -> map.entries.flatMap { listOf(it.key.toFloat(), it.value) } },
+    restore = { flat ->
+        mutableStateMapOf<Int, Float>().apply {
+            var i = 0
+            while (i + 1 < flat.size) {
+                put(flat[i].toInt(), flat[i + 1])
+                i += 2
+            }
+        }
+    },
+)
 
 /**
  * 漫画阅读器。翻页与滚动共用一套控制栏、设置与进度回调。
@@ -111,6 +137,7 @@ fun MangaReader(
     var controlsVisible by remember { mutableStateOf(true) }
     var panelOpen by remember { mutableStateOf(false) }
     var overviewOpen by remember { mutableStateOf(false) }
+    var sliderDragging by remember { mutableStateOf(false) }
     var autoHideJob by remember { mutableStateOf<Job?>(null) }
     // 1 基页码：界面口径，0 基转换只在这一层做
     var page by remember {
@@ -127,6 +154,13 @@ fun MangaReader(
     // 一次性手势提示：形态各看一次；nonce 只用于让提示重新计时
     var hintVisible by remember { mutableStateOf(false) }
     var hintNonce by remember { mutableIntStateOf(0) }
+    var resumeVisible by remember { mutableStateOf(startPage > 0) }
+    LaunchedEffect(Unit) {
+        if (startPage > 0) {
+            delay(3200)
+            resumeVisible = false
+        }
+    }
     LaunchedEffect(settings.scrollMode) {
         if (!hintSeen(settings.scrollMode)) {
             markHintSeen(settings.scrollMode)
@@ -142,7 +176,8 @@ fun MangaReader(
     fun refreshAutoHide() {
         controlsVisible = true
         autoHideJob?.cancel()
-        if (panelOpen || overviewOpen) return
+        // 拖进度条时不重启计时，否则手指还在滑块上菜单就淡出了
+        if (panelOpen || overviewOpen || sliderDragging) return
         autoHideJob = scope.launch {
             delay(AUTO_HIDE_DELAY_MS)
             controlsVisible = false
@@ -209,6 +244,25 @@ fun MangaReader(
     DisposableEffect(settings.keepScreenOn) {
         view.keepScreenOn = settings.keepScreenOn
         onDispose { view.keepScreenOn = false }
+    }
+
+    val appDark by rememberUpdatedState(LocalDarkTheme.current)
+    DisposableEffect(activity) {
+        val controller = activity?.window?.let { WindowCompat.getInsetsController(it, view) }
+        controller?.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        controller?.apply {
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
+        }
+        controller?.hide(WindowInsetsCompat.Type.systemBars())
+        onDispose {
+            controller?.show(WindowInsetsCompat.Type.systemBars())
+            controller?.apply {
+                isAppearanceLightStatusBars = !appDark
+                isAppearanceLightNavigationBars = !appDark
+            }
+        }
     }
 
     // 没拿到焦点的 Composable 收不到按键，音量键翻页要靠它；
@@ -288,7 +342,7 @@ fun MangaReader(
             )
         }
 
-        // 区域提示画在内容之上、控制栏之下：顶/底栏压着色带，边缘保持干净
+        // 区域提示画在内容之上、控制栏之下
         if (hintVisible) {
             key(hintNonce) {
                 MangaZoneHint(
@@ -299,8 +353,6 @@ fun MangaReader(
             }
         }
 
-        // 亮度只走窗口（applyWindowBrightness），不再叠一层遮罩：
-        // 两者同时生效是相乘的关系，用户拉到 50% 实际会暗到三成左右
         AnimatedVisibility(
             visible = controlsVisible && !overviewOpen,
             modifier = Modifier.align(Alignment.TopCenter),
@@ -309,56 +361,73 @@ fun MangaReader(
         ) {
             MangaReaderTopBar(
                 title = title,
-                panelOpen = panelOpen,
                 onClose = onClose,
                 onOverview = { openOverview(true) },
-                onTogglePanel = ::togglePanel,
                 modifier = Modifier.blockInputsWhen(!controlsVisible),
             )
         }
 
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 8.dp),
+        Box(
+            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+            contentAlignment = Alignment.BottomCenter,
         ) {
             AnimatedVisibility(
-                visible = panelOpen && controlsVisible && !overviewOpen,
-                enter = expandVertically(expandFrom = Alignment.Bottom) + fadeIn(tween(160)),
-                exit = shrinkVertically(shrinkTowards = Alignment.Bottom) + fadeOut(tween(120)),
-            ) {
-                MangaReaderSettingsPanel(
-                    settings = settings,
-                    onChange = onSettingsChange,
-                    onReplayHint = ::replayHints,
-                    modifier = Modifier
-                        .padding(horizontal = 12.dp)
-                        .padding(bottom = 8.dp)
-                        .blockInputsWhen(!panelOpen || !controlsVisible),
-                )
-            }
-            AnimatedVisibility(
-                visible = controlsVisible && !overviewOpen,
+                visible = controlsVisible && !overviewOpen && !panelOpen,
                 enter = fadeIn(tween(150)),
                 exit = fadeOut(tween(400)),
             ) {
                 MangaReaderBottomBar(
                     page = page,
                     total = images.size,
-                    scrollMode = settings.scrollMode,
                     hdAvailable = images.getOrNull(page - 1)?.hdUrl != null,
                     hdOn = (page - 1) in hdPages,
                     translateAvailable = hasImageModel,
                     translating = imageTranslating,
                     translated = imageTranslated,
                     onSeek = { jumpTo(it) },
-                    onModeChange = { onSettingsChange(settings.copy(scrollMode = it), true) },
+                    onSeekStart = {
+                        sliderDragging = true
+                        autoHideJob?.cancel()
+                        controlsVisible = true
+                    },
+                    onSeekEnd = {
+                        sliderDragging = false
+                        refreshAutoHide()
+                    },
                     onHdToggle = { onHdToggle(page - 1) },
                     onTranslate = { onImageTranslateClick(page - 1) },
+                    onOpenSettings = ::togglePanel,
                     onInteract = ::refreshAutoHide,
-                    modifier = Modifier.blockInputsWhen(!controlsVisible),
+                    modifier = Modifier.blockInputsWhen(!controlsVisible || panelOpen),
                 )
             }
+            AnimatedVisibility(
+                visible = panelOpen && controlsVisible && !overviewOpen,
+                enter = fadeIn(tween(150)),
+                exit = fadeOut(tween(400)),
+            ) {
+                MangaReaderSettingsPanel(
+                    settings = settings,
+                    onChange = onSettingsChange,
+                    onClose = ::togglePanel,
+                    onReplayHint = ::replayHints,
+                    modifier = Modifier.blockInputsWhen(!panelOpen || !controlsVisible),
+                )
+            }
+        }
+
+        if (resumeVisible && controlsVisible && !overviewOpen && !panelOpen) {
+            MangaResumeHint(
+                page = startPage + 1,
+                onRestart = {
+                    resumeVisible = false
+                    jumpTo(1)
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(bottom = 116.dp),
+            )
         }
 
         if (overviewOpen) {
@@ -407,7 +476,7 @@ private fun PagedReader(
             ?.let { CoilSize(it.width, it.height) },
     )
     // 铺满宽时每页要能上下滚：比例也在这里测，容器高度正好等于图的高度
-    val aspects = remember { mutableStateMapOf<Int, Float>() }
+    val aspects = rememberSaveable(saver = AspectMapSaver) { mutableStateMapOf<Int, Float>() }
     val currentOnPageChanged by rememberUpdatedState(onPageChanged)
 
     // 外部翻页走一次性请求，消费即清空；pager 自己滑出来的变化走 onPageChanged 回传，
@@ -466,7 +535,7 @@ private fun PagedReader(
                 modifier = if (settings.fillWidth) {
                     Modifier
                         .fillMaxWidth()
-                        .aspectRatio(aspects[index] ?: DEFAULT_PAGE_ASPECT)
+                        .aspectRatio(aspects[index] ?: previewAspect(previews, index) ?: DEFAULT_PAGE_ASPECT)
                 } else {
                     Modifier.fillMaxSize()
                 },
@@ -489,7 +558,16 @@ internal fun centerItemIndex(
     visible: List<VisibleSpan>,
 ): Int? {
     val center = (viewportStart + viewportEnd) / 2
-    return visible.firstOrNull { center >= it.offset && center < it.offset + it.size }?.index
+    val hit = visible.firstOrNull { center >= it.offset && center < it.offset + it.size }
+    if (hit != null) return hit.index
+    // 留缝时中心会落在两页之间的空隙里，退回第一个可见项会让页码、进度、翻译一起跳错
+    return visible.minByOrNull { span ->
+        when {
+            center < span.offset -> span.offset - center
+            center >= span.offset + span.size -> center - (span.offset + span.size)
+            else -> 0
+        }
+    }?.index
 }
 
 /** 视口中心页；layoutInfo 是快照状态，在 snapshotFlow 里读能正确随滚动重算 */
@@ -527,7 +605,7 @@ private fun ScrollReader(
         initialFirstVisibleItemIndex = initialPage.coerceIn(0, images.lastIndex.coerceAtLeast(0)),
     )
     // 每页真实宽高比：测到之前先按竖漫常见比例占位，落地时不会先跳一下
-    val aspects = remember { mutableStateMapOf<Int, Float>() }
+    val aspects = rememberSaveable(saver = AspectMapSaver) { mutableStateMapOf<Int, Float>() }
     val currentOnPageChanged by rememberUpdatedState(onPageChanged)
 
     LaunchedEffect(jumpTarget) {
@@ -545,7 +623,12 @@ private fun ScrollReader(
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(if (pageGap) 8.dp else 0.dp),
+        // 单页内容不满一屏时贴顶会留大片空白；长图超出视口时 Center 自然失效
+        verticalArrangement = if (images.size <= 1) {
+            Arrangement.Center
+        } else {
+            Arrangement.spacedBy(if (pageGap) 8.dp else 0.dp)
+        },
     ) {
         items(count = images.size, key = { it }) { index ->
             PageCell(
@@ -561,7 +644,7 @@ private fun ScrollReader(
                 onIntrinsicAspect = { aspects[index] = it },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(aspects[index] ?: DEFAULT_PAGE_ASPECT),
+                    .aspectRatio(aspects[index] ?: previewAspect(previews, index) ?: DEFAULT_PAGE_ASPECT),
             )
         }
     }

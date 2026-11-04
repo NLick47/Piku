@@ -268,10 +268,10 @@ private fun ReadButton(
 ) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(22.dp))
+            .height(46.dp)
+            .clip(RoundedCornerShape(12.dp))
             .background(PikuColors.controlAccent)
-            .clickable(enabled = !loading, onClick = onClick)
-            .padding(vertical = 11.dp),
+            .clickable(enabled = !loading, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -279,8 +279,8 @@ private fun ReadButton(
                 if (loading) R.string.pixiv_novel_loading else R.string.pixiv_novel_read,
             ),
             color = PikuColors.surface,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )

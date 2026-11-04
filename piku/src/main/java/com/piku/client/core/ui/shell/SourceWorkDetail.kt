@@ -79,6 +79,7 @@ import com.piku.client.core.ui.detail.PixivMirrorActions
 import com.piku.client.core.reader.ViewerOverlay
 import com.piku.client.core.reader.FullNovelViewer
 import com.piku.client.core.reader.ImageActionSheet
+import com.piku.client.core.reader.ReaderImageActionSheet
 import com.piku.client.app.navigation.workSharedKey
 import com.piku.client.core.ui.theme.BlobPinkDark
 import com.piku.client.core.ui.theme.BlobPinkLight
@@ -432,39 +433,63 @@ internal fun SourceWorkDetailScreen(
             val qqInstalled = remember(context) { ShareTargets.isInstalled(context, ShareTargets.QQ) }
             val wechatIcon = remember(context) { ShareTargets.appIcon(context, ShareTargets.WECHAT) }
             val qqIcon = remember(context) { ShareTargets.appIcon(context, ShareTargets.QQ) }
-            ImageActionSheet(
-                dark = dark,
-                imageCount = state.pages.size,
-                sharingImage = state.sharingImage,
-                sharingTargetPackage = state.sharingTargetPackage,
-                wechatInstalled = wechatInstalled,
-                qqInstalled = qqInstalled,
-                wechatIcon = wechatIcon,
-                qqIcon = qqIcon,
-                // 用户中途划掉面板 = 取消分享：中断下载，避免关了面板分享面板又弹出来
-                onDismiss = {
-                    if (state.sharingImage) viewModel.cancelShare()
-                    imageActionPage = -1
-                },
-                onSave = {
-                    val page = imageActionPage
-                    imageActionPage = -1
-                    requestSaveImage(page)
-                },
-                onShareToWechat = {
-                    if (imageActionPage >= 0) viewModel.shareImage(imageActionPage, ShareTargets.WECHAT)
-                },
-                onShareToQQ = {
-                    if (imageActionPage >= 0) viewModel.shareImage(imageActionPage, ShareTargets.QQ)
-                },
-                onShareMore = {
-                    if (imageActionPage >= 0) viewModel.shareImage(imageActionPage, null)
-                },
-                onSaveAll = {
-                    imageActionPage = -1
-                    requestSaveAllImages()
-                },
-            )
+            // 用户中途划掉面板 = 取消分享：中断下载，避免关了面板分享面板又弹出来
+            val dismissAction = {
+                if (state.sharingImage) viewModel.cancelShare()
+                imageActionPage = -1
+            }
+            val saveAction = {
+                val page = imageActionPage
+                imageActionPage = -1
+                requestSaveImage(page)
+            }
+            val saveAllAction = {
+                imageActionPage = -1
+                requestSaveAllImages()
+            }
+            val shareWechat = {
+                if (imageActionPage >= 0) viewModel.shareImage(imageActionPage, ShareTargets.WECHAT)
+            }
+            val shareQq = {
+                if (imageActionPage >= 0) viewModel.shareImage(imageActionPage, ShareTargets.QQ)
+            }
+            val shareMore = {
+                if (imageActionPage >= 0) viewModel.shareImage(imageActionPage, null)
+            }
+            if (viewerPage >= 0) {
+                ReaderImageActionSheet(
+                    imageCount = state.pages.size,
+                    sharingImage = state.sharingImage,
+                    sharingTargetPackage = state.sharingTargetPackage,
+                    wechatInstalled = wechatInstalled,
+                    qqInstalled = qqInstalled,
+                    wechatIcon = wechatIcon,
+                    qqIcon = qqIcon,
+                    onDismiss = dismissAction,
+                    onSave = saveAction,
+                    onSaveAll = saveAllAction,
+                    onShareToWechat = shareWechat,
+                    onShareToQQ = shareQq,
+                    onShareMore = shareMore,
+                )
+            } else {
+                ImageActionSheet(
+                    dark = dark,
+                    imageCount = state.pages.size,
+                    sharingImage = state.sharingImage,
+                    sharingTargetPackage = state.sharingTargetPackage,
+                    wechatInstalled = wechatInstalled,
+                    qqInstalled = qqInstalled,
+                    wechatIcon = wechatIcon,
+                    qqIcon = qqIcon,
+                    onDismiss = dismissAction,
+                    onSave = saveAction,
+                    onShareToWechat = shareWechat,
+                    onShareToQQ = shareQq,
+                    onShareMore = shareMore,
+                    onSaveAll = saveAllAction,
+                )
+            }
         }
 
         // 相关作品点开 = 导航层压栈新的 SOURCE_DETAIL（每层独立 VM），本层不再自己叠浮层

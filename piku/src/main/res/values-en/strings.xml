@@ -398,6 +398,17 @@
     <string name="manga_hint_zone_menu">Show menu</string>
     <string name="manga_hint_long_press">Long-press an image: save · share</string>
     <string name="manga_hint_replay">Replay gesture hints</string>
+    <string name="manga_hd_standard">Standard</string>
+    <string name="manga_hd_original">Original</string>
+    <string name="manga_translate_idle">Translate</string>
+    <string name="manga_translate_busy">Translating</string>
+    <string name="manga_translate_done">Translated</string>
+    <string name="manga_tools_settings">Settings</string>
+    <string name="manga_resume">Resume at page %1$d</string>
+    <string name="manga_restart">From start</string>
+    <string name="manga_group_reading">Reading</string>
+    <string name="manga_group_display">Display</string>
+    <string name="manga_group_other">Other</string>
 
     <string name="detail_more">More</string>
     <string name="detail_reaction">React</string>

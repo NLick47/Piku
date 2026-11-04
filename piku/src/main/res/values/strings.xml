@@ -398,6 +398,17 @@
     <string name="manga_hint_zone_menu">显示菜单</string>
     <string name="manga_hint_long_press">长按图片：保存 · 分享</string>
     <string name="manga_hint_replay">重看操作提示</string>
+    <string name="manga_hd_standard">标准</string>
+    <string name="manga_hd_original">原图</string>
+    <string name="manga_translate_idle">未译</string>
+    <string name="manga_translate_busy">译中</string>
+    <string name="manga_translate_done">已译</string>
+    <string name="manga_tools_settings">设置</string>
+    <string name="manga_resume">从第 %1$d 页继续</string>
+    <string name="manga_restart">从头开始</string>
+    <string name="manga_group_reading">阅读方式</string>
+    <string name="manga_group_display">显示</string>
+    <string name="manga_group_other">其他</string>
 
     <string name="detail_more">更多</string>
     <string name="detail_reaction">回应</string>

@@ -35,7 +35,6 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastAny
 import androidx.compose.ui.util.fastForEach
-import coil3.compose.AsyncImage
 import coil3.compose.SubcomposeAsyncImage
 import com.piku.client.core.ui.common.rememberAnimatedImage
 import com.piku.client.core.ui.theme.PikuColors
@@ -264,12 +263,26 @@ internal fun ZoomableImage(
                     modifier = Modifier.fillMaxSize(),
                 )
             } else {
-                AsyncImage(
+                SubcomposeAsyncImage(
                     model = rememberAnimatedImage(image.thumbnailUrl),
                     contentDescription = contentDescription,
                     contentScale = contentScale,
                     colorFilter = PikuColors.tameWhiteFilter,
                     modifier = Modifier.fillMaxSize(),
+                    // 没有独立原图层时缩略图是唯一能测到真实比例的地方，
+                    // 不回调的话滚动模式会一直用 1:1.42 占位，长图上下留白看起来像页缝
+                    onSuccess = { state ->
+                        if (image.fullUrl == null || image.fullUrl == image.thumbnailUrl) {
+                            val size = state.painter.intrinsicSize
+                            if (size.width.isFinite() && size.height.isFinite() &&
+                                size.width > 0f && size.height > 0f
+                            ) {
+                                currentOnIntrinsicAspect?.invoke(size.width / size.height)
+                            }
+                        }
+                    },
+                    loading = {},
+                    error = {},
                 )
             }
         }

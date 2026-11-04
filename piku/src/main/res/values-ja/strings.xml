@@ -398,6 +398,17 @@
     <string name="manga_hint_zone_menu">メニュー表示</string>
     <string name="manga_hint_long_press">画像を長押し：保存・共有</string>
     <string name="manga_hint_replay">操作ヒントをもう一度見る</string>
+    <string name="manga_hd_standard">標準</string>
+    <string name="manga_hd_original">原画</string>
+    <string name="manga_translate_idle">未翻訳</string>
+    <string name="manga_translate_busy">翻訳中</string>
+    <string name="manga_translate_done">翻訳済み</string>
+    <string name="manga_tools_settings">設定</string>
+    <string name="manga_resume">%1$d ページから再開</string>
+    <string name="manga_restart">最初から</string>
+    <string name="manga_group_reading">閲覧方法</string>
+    <string name="manga_group_display">表示</string>
+    <string name="manga_group_other">その他</string>
 
     <string name="detail_more">その他</string>
     <string name="detail_reaction">リアクション</string>

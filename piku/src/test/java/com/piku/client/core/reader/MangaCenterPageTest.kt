@@ -33,6 +33,26 @@ class MangaCenterPageTest {
         assertEquals(2, centerItemIndex(0, 1000, visible))
     }
 
+    /** 开了留缝时中心落在页缝里：选最近的下一页，退回第一个可见项会错一页 */
+    @Test
+    fun gapBetweenPagesPicksNearestNextPage() {
+        val visible = listOf(
+            VisibleSpan(index = 4, offset = 0, size = 470),
+            VisibleSpan(index = 5, offset = 510, size = 490),
+        )
+        assertEquals(5, centerItemIndex(0, 1000, visible))
+    }
+
+    /** 反过来离上一页更近时也一样，避免把"下一页"写死 */
+    @Test
+    fun gapBetweenPagesPicksNearestPreviousPage() {
+        val visible = listOf(
+            VisibleSpan(index = 4, offset = 0, size = 490),
+            VisibleSpan(index = 5, offset = 530, size = 470),
+        )
+        assertEquals(4, centerItemIndex(0, 1000, visible))
+    }
+
     /** 首帧还没量到布局：不猜，调用方回落第一个可见项 */
     @Test
     fun emptyLayoutHasNoCenterPage() {
