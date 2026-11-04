@@ -78,7 +78,7 @@ object Routes {
     const val COLLECTION = "collection"
     const val DETAIL = "detail/{authorId}/{workId}?thumb={thumb}"
     const val SOURCE_DETAIL =
-        "source_detail/{source}/{kind}/{authorId}/{workId}?thumb={thumb}&title={title}&authorName={authorName}&avatar={avatar}&r18={r18}&len={len}"
+        "source_detail/{source}/{kind}/{authorId}/{workId}?thumb={thumb}&title={title}&authorName={authorName}&avatar={avatar}&r18={r18}&count={count}&len={len}"
     const val HISTORY = "history"
     const val FOLLOW_USERS = "follow_users/{source}"
     const val BLOCK_USERS = "block_users"
@@ -149,6 +149,8 @@ object Routes {
             "&authorName=${Uri.encode(work.authorName)}" +
             "&avatar=${Uri.encode(work.authorAvatarUrl.orEmpty())}" +
             "&r18=${work.r18}" +
+            // 张数要带：详情页据此写历史/收藏，缺了这两处角标就永远是 0
+            "&count=${work.imageCount}" +
             "&len=${work.textLength}"
 }
 
@@ -721,6 +723,7 @@ fun AppNavHost(
                 navArgument("authorName") { type = NavType.StringType; defaultValue = "" },
                 navArgument("avatar") { type = NavType.StringType; defaultValue = "" },
                 navArgument("r18") { type = NavType.BoolType; defaultValue = false },
+                navArgument("count") { type = NavType.IntType; defaultValue = 0 },
                 navArgument("len") { type = NavType.IntType; defaultValue = 0 },
             ),
         ) { entry ->
@@ -737,7 +740,7 @@ fun AppNavHost(
                     categoryName = "",
                     title = a.getString("title").orEmpty(),
                     thumbnailUrl = a.getString("thumb").orEmpty(),
-                    imageCount = 0,
+                    imageCount = a.getInt("count"),
                     textLength = a.getInt("len"),
                     r18 = a.getBoolean("r18"),
                     source = WorkSource.entries.firstOrNull { it.name == a.getString("source") }

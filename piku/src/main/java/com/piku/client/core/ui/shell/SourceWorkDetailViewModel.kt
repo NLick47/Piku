@@ -198,7 +198,7 @@ class SourceWorkDetailViewModel @Inject constructor(
     private var loadedWorkKey: String = ""
     /** 当前作品的站内 id；保存/分享的命名与日志用它（小说不走这几条路） */
     private val workId: Long get() = currentWork?.id ?: 0L
-    /** 收藏/关注操作的对象；VM 按作品驻留，进来就不变 */
+    /** 收藏/关注操作的对象；VM 按作品驻留，只在页表回来补张数时替换一次 */
     private var currentWork: Work? = null
 
     /** 个人标签记在作品自己所属的源名下：AO3 的标签不写进 pixiv 那份，[load] 时落定 */
@@ -419,8 +419,19 @@ class SourceWorkDetailViewModel @Inject constructor(
                     _ui.update {
                         it.copy(loading = false, detail = detail, pages = list, stats = text?.stats)
                     }
-                    // 与 poipiku 详情一致：打开即记历史（upsert 去重）
-                    recordHistoryUseCase(work)
+                    // 与 poipiku 详情一致：打开即记历史（upsert 去重）。
+                    // 路由里的张数可能缺失（旧记录、深链）：页表回来按实际页数补齐，
+                    // 收藏行也一起回填——收藏只在加收藏那一刻写，不补就永远停在 0
+                    val loadedWork = if (list.size > work.imageCount) {
+                        work.copy(imageCount = list.size)
+                    } else {
+                        work
+                    }
+                    if (loadedWork !== work) {
+                        currentWork = loadedWork
+                        favoriteRepository.refreshImageCount(loadedWork)
+                    }
+                    recordHistoryUseCase(loadedWork)
                     // 与 poipiku 详情一致：开了 AI 翻译就自动译一次（失败静默）
                     if (settingsRepository.aiTranslateEnabled.value) translate()
                 },

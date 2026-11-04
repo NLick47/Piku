@@ -247,6 +247,17 @@ class FavoriteRepository @Inject constructor(
         return added
     }
 
+    /**
+     * 详情页拿到真实页数后回填收藏行：历史会随每次打开重写，收藏只在加收藏那一刻写一次，
+     * 旧行（或从旧记录、深链进来收藏的）会永远留着 0，列表里的张数角标就再也出不来。
+     * 只改张数一列：整行重写会把标题/缩略图/cloudSynced 覆盖成详情页手上那份（深链那份是空的）。
+     */
+    suspend fun refreshImageCount(work: Work) {
+        val existing = favoriteDao.favoriteById(work.source, work.key.workId) ?: return
+        if (existing.imageCount == work.imageCount) return
+        favoriteDao.upsert(existing.copy(imageCount = work.imageCount))
+    }
+
     suspend fun toggleFolder(work: Work, folderId: Long) = favoriteMutationLock.withLock {
         val workId = work.key.workId
         val wasFavorite = favoriteFolderDao.folderIdsForWork(work.source, workId).isNotEmpty()
