@@ -70,8 +70,15 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 private const val AUTO_HIDE_DELAY_MS = 2600L
+
+/** 点按判定上限；必须小于 500ms 长按阈值，否则长按图片会顺带翻页 */
+private const val TAP_MAX_MS = 400L
+
+/** 淡出期间控制栏还在树上、还会吃掉点击，这段窗口越短越不"点不动" */
+private const val CONTROLS_FADE_OUT_MS = 220
 
 /** 未测到真实比例前的占位：竖漫常见宽高比 */
 private const val DEFAULT_PAGE_ASPECT = 1f / 1.42f
@@ -357,7 +364,7 @@ fun MangaReader(
             visible = controlsVisible && !overviewOpen,
             modifier = Modifier.align(Alignment.TopCenter),
             enter = fadeIn(tween(150)),
-            exit = fadeOut(tween(400)),
+            exit = fadeOut(tween(CONTROLS_FADE_OUT_MS)),
         ) {
             MangaReaderTopBar(
                 title = title,
@@ -374,7 +381,7 @@ fun MangaReader(
             AnimatedVisibility(
                 visible = controlsVisible && !overviewOpen && !panelOpen,
                 enter = fadeIn(tween(150)),
-                exit = fadeOut(tween(400)),
+                exit = fadeOut(tween(CONTROLS_FADE_OUT_MS)),
             ) {
                 MangaReaderBottomBar(
                     page = page,
@@ -404,7 +411,7 @@ fun MangaReader(
             AnimatedVisibility(
                 visible = panelOpen && controlsVisible && !overviewOpen,
                 enter = fadeIn(tween(150)),
-                exit = fadeOut(tween(400)),
+                exit = fadeOut(tween(CONTROLS_FADE_OUT_MS)),
             ) {
                 MangaReaderSettingsPanel(
                     settings = settings,
@@ -483,7 +490,13 @@ private fun PagedReader(
     // 两条路不会互相纠正
     LaunchedEffect(jumpTarget) {
         jumpTarget?.let { target ->
-            pagerState.scrollToPage(target.coerceIn(0, images.lastIndex.coerceAtLeast(0)))
+            val clamped = target.coerceIn(0, images.lastIndex.coerceAtLeast(0))
+            // 相邻页滑过去：硬切一帧换图没有运动反馈，点了像没反应；跨页跳仍瞬移
+            if (abs(clamped - pagerState.currentPage) == 1) {
+                pagerState.animateScrollToPage(clamped)
+            } else {
+                pagerState.scrollToPage(clamped)
+            }
             onJumpConsumed()
         }
     }
@@ -510,10 +523,13 @@ private fun PagedReader(
             modifier = Modifier
                 .fillMaxSize()
                 .then(pageDragModifier)
-                .mangaTapZones(
-                    onLeft = { onStep(if (settings.rightToLeft) 1 else -1) },
-                    onRight = { onStep(if (settings.rightToLeft) -1 else 1) },
-                ),
+                .readerTapZones { zone ->
+                    when (zone) {
+                        TAP_ZONE_LEFT -> onStep(if (settings.rightToLeft) 1 else -1)
+                        TAP_ZONE_RIGHT -> onStep(if (settings.rightToLeft) -1 else 1)
+                        else -> onTapCenter()
+                    }
+                },
         ) {
             PageCell(
                 image = images[index],
@@ -524,7 +540,6 @@ private fun PagedReader(
                 preview = previews[index],
                 contentScale = if (settings.fillWidth) ContentScale.FillWidth else ContentScale.Fit,
                 onLongPress = { onLongPressImage(index) },
-                onTapCenter = onTapCenter,
                 // 只有铺满宽要按比例定高；整页模式传 null，省掉一次必然的重组
                 onIntrinsicAspect = if (settings.fillWidth) {
                     { aspects[index] = it }
@@ -622,7 +637,10 @@ private fun ScrollReader(
 
     LazyColumn(
         state = listState,
-        modifier = Modifier.fillMaxSize(),
+        // 滚动模式没有左右翻页区，整屏点按都是唤出/收起菜单
+        modifier = Modifier
+            .fillMaxSize()
+            .readerTapZones { onTapCenter() },
         // 单页内容不满一屏时贴顶会留大片空白；长图超出视口时 Center 自然失效
         verticalArrangement = if (images.size <= 1) {
             Arrangement.Center
@@ -640,7 +658,6 @@ private fun ScrollReader(
                 preview = previews[index],
                 contentScale = ContentScale.Fit,
                 onLongPress = { onLongPressImage(index) },
-                onTapCenter = onTapCenter,
                 onIntrinsicAspect = { aspects[index] = it },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -661,18 +678,15 @@ private fun PageCell(
     preview: Painter?,
     contentScale: ContentScale,
     onLongPress: () -> Unit,
-    onTapCenter: () -> Unit,
     modifier: Modifier = Modifier,
     onIntrinsicAspect: ((Float) -> Unit)? = null,
 ) {
     val bitmap = if (imageTranslated) translatedImages[pageIndex] else null
-    val onTap = { zone: Int -> if (zone == TAP_ZONE_CENTER) onTapCenter() }
     if (bitmap != null) {
         TranslatedZoomableImage(
             bitmap = bitmap,
             contentDescription = null,
             contentScale = contentScale,
-            onTap = onTap,
             onLongPress = onLongPress,
             modifier = modifier,
         )
@@ -684,7 +698,6 @@ private fun PageCell(
             hdUrl = hdUrl,
             preview = preview,
             onIntrinsicAspect = onIntrinsicAspect,
-            onTap = onTap,
             onLongPress = onLongPress,
             modifier = modifier,
         )
@@ -692,21 +705,17 @@ private fun PageCell(
 }
 
 /**
- * 左右三分之一的点按：在 Initial 阶段观察事件、不消费，所以不必等双击超时就能翻页。
- * 中间那三分之一留给图片自己的手势（显隐 + 双击缩放）——它本来就要等双击窗口，
- * 三区都走那条路的话每次翻页都会慢半拍。
+ * 三区点按统一走这里：Initial 阶段旁听、不消费，抬手立刻响应。
+ * 中间区也是——交给图片的 detectTapGestures 得等满双击超时，还会被翻页手势消费位移后取消，
+ * 于是"左右翻页秒到、点中间叫不出菜单"。判定挂在整屏，铺满宽时下半截黑区也能点。
  *
  * 回调用 rememberUpdatedState 兜住、pointerInput 的 key 固定为 Unit：
  * 拿 lambda 当 key 的话，翻页/控制栏淡出这类重组会让手势循环整体重启，
  * 重启后 origin 重置，正在拖拽的那一次抬手会被误判成"快速点按"，一次滑动翻两页。
  */
 @Composable
-private fun Modifier.mangaTapZones(
-    onLeft: () -> Unit,
-    onRight: () -> Unit,
-): Modifier {
-    val left by rememberUpdatedState(onLeft)
-    val right by rememberUpdatedState(onRight)
+private fun Modifier.readerTapZones(onTap: (Int) -> Unit): Modifier {
+    val tap by rememberUpdatedState(onTap)
     return this.pointerInput(Unit) {
         awaitPointerEventScope {
             while (true) {
@@ -724,16 +733,9 @@ private fun Modifier.mangaTapZones(
                         moved = true
                     }
                     if (event.changes.none { it.pressed }) {
-                        val up = event.changes.first()
-                        val isQuickTap = !moved && !multiTouch &&
-                            System.currentTimeMillis() - startedAt < 250 &&
-                            (up.position - origin).getDistance() <= viewConfiguration.touchSlop
-                        if (isQuickTap) {
-                            when {
-                                up.position.x < size.width / TAP_ZONE_DIVISOR -> left()
-                                up.position.x > size.width * 2f / TAP_ZONE_DIVISOR -> right()
-                            }
-                        }
+                        val held = System.currentTimeMillis() - startedAt
+                        // 上限 400ms：慢点也算点，但要收在 500ms 长按之前，别和图片菜单撞
+                        if (!moved && !multiTouch && held < TAP_MAX_MS) tap(tapZone(origin, size))
                         break
                     }
                 }

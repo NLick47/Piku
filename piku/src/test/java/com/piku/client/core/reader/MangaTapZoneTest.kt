@@ -9,26 +9,26 @@ class MangaTapZoneTest {
 
     private val viewport = IntSize(width = 1080, height = 2000)
 
-    /** 左侧三分之一：上一页（右→左时下一页由调用方对调） */
+    /** 左侧 30%：上一页（右→左时下一页由调用方对调） */
     @Test
-    fun leftThirdIsPreviousZone() {
+    fun leftEdgeIsPreviousZone() {
         assertEquals(TAP_ZONE_LEFT, tapZone(Offset(0f, 900f), viewport))
-        assertEquals(TAP_ZONE_LEFT, tapZone(Offset(359f, 900f), viewport))
+        assertEquals(TAP_ZONE_LEFT, tapZone(Offset(323f, 900f), viewport))
     }
 
-    /** 右侧三分之一：下一页 */
+    /** 右侧 30%：下一页 */
     @Test
-    fun rightThirdIsNextZone() {
-        assertEquals(TAP_ZONE_RIGHT, tapZone(Offset(721f, 900f), viewport))
+    fun rightEdgeIsNextZone() {
+        assertEquals(TAP_ZONE_RIGHT, tapZone(Offset(757f, 900f), viewport))
         assertEquals(TAP_ZONE_RIGHT, tapZone(Offset(1080f, 900f), viewport))
     }
 
-    /** 中间三分之一留给显隐与双击：判错会让双击缩放失效或点哪儿都翻页 */
+    /** 中间 40% 留给显隐：边界错一格就变成"点中间却翻页"，菜单再也叫不出来 */
     @Test
-    fun middleThirdStaysForControls() {
-        assertEquals(TAP_ZONE_CENTER, tapZone(Offset(360f, 900f), viewport))
+    fun centerBandIsWiderThanEdges() {
+        assertEquals(TAP_ZONE_CENTER, tapZone(Offset(324f, 900f), viewport))
         assertEquals(TAP_ZONE_CENTER, tapZone(Offset(540f, 900f), viewport))
-        assertEquals(TAP_ZONE_CENTER, tapZone(Offset(720f, 900f), viewport))
+        assertEquals(TAP_ZONE_CENTER, tapZone(Offset(756f, 900f), viewport))
     }
 
     /** 视口还没量到宽度（首帧）不判热区，否则会把整屏当中间 */

@@ -668,13 +668,15 @@ internal fun MangaZoneHint(
             .fillMaxSize()
             .graphicsLayer { this.alpha = alpha },
     ) {
-        val third = Modifier.fillMaxHeight().fillMaxWidth(1f / TAP_ZONE_DIVISOR)
+        val edge = Modifier.fillMaxHeight().fillMaxWidth(TAP_ZONE_EDGE_FRACTION)
+        val center = Modifier.fillMaxHeight().fillMaxWidth(1f - TAP_ZONE_EDGE_FRACTION * 2f)
         if (settings.scrollMode) {
+            // 整屏都是热区，铺满 27% 黑会把整页压暗三秒；只留居中的牌子
             HintZone(
                 label = stringResource(R.string.manga_hint_zone_menu),
                 icon = Icons.Outlined.TouchApp,
-                filled = true,
-                modifier = third.align(Alignment.Center),
+                filled = false,
+                modifier = Modifier.fillMaxSize(),
             )
         } else {
             HintZone(
@@ -684,13 +686,13 @@ internal fun MangaZoneHint(
                 icon = Icons.AutoMirrored.Outlined.ArrowLeft,
                 filled = true,
                 edge = HintZoneEdge.RIGHT,
-                modifier = third.align(Alignment.CenterStart),
+                modifier = edge.align(Alignment.CenterStart),
             )
             HintZone(
                 label = stringResource(R.string.manga_hint_zone_menu),
                 icon = Icons.Outlined.TouchApp,
                 filled = false,
-                modifier = third.align(Alignment.Center),
+                modifier = center.align(Alignment.Center),
             )
             HintZone(
                 label = stringResource(
@@ -699,7 +701,7 @@ internal fun MangaZoneHint(
                 icon = Icons.AutoMirrored.Outlined.ArrowRight,
                 filled = true,
                 edge = HintZoneEdge.LEFT,
-                modifier = third.align(Alignment.CenterEnd),
+                modifier = edge.align(Alignment.CenterEnd),
             )
         }
         HintCaption(

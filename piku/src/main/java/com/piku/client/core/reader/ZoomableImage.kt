@@ -47,18 +47,18 @@ internal const val MAX_SCALE = 4f
 private const val DOUBLE_TAP_SCALE = 2.5f
 private const val SCALE_EPSILON = 0.01f
 
-/** 点按热区：左右各三分之一翻页，中间留给显隐与双击缩放 */
+/** 点按热区：左右两侧翻页，中间唤出/收起控制栏 */
 internal const val TAP_ZONE_LEFT = 0
 internal const val TAP_ZONE_CENTER = 1
 internal const val TAP_ZONE_RIGHT = 2
 
-/** 点按热区的三等分：区域提示的色带宽度共用它，改这里两处一起变 */
-internal const val TAP_ZONE_DIVISOR = 3f
+/** 左右翻页区各占屏宽的比例，中间剩 40%：菜单只有这一块能点到，比翻页更该给宽 */
+internal const val TAP_ZONE_EDGE_FRACTION = 0.3f
 
 internal fun tapZone(offset: Offset, viewport: IntSize): Int = when {
     viewport.width <= 0 -> TAP_ZONE_CENTER
-    offset.x < viewport.width / TAP_ZONE_DIVISOR -> TAP_ZONE_LEFT
-    offset.x > viewport.width * 2f / TAP_ZONE_DIVISOR -> TAP_ZONE_RIGHT
+    offset.x < viewport.width * TAP_ZONE_EDGE_FRACTION -> TAP_ZONE_LEFT
+    offset.x > viewport.width * (1f - TAP_ZONE_EDGE_FRACTION) -> TAP_ZONE_RIGHT
     else -> TAP_ZONE_CENTER
 }
 
@@ -149,7 +149,6 @@ internal fun ZoomableImage(
     preview: Painter? = null,
     /** 量到原图宽高比后回传：滚动模式靠它定每页高度 */
     onIntrinsicAspect: ((Float) -> Unit)? = null,
-    onTap: (Int) -> Unit,
     onLongPress: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -165,7 +164,6 @@ internal fun ZoomableImage(
         delay(FULL_IMAGE_FADE_MS)
         thumbnailVisible = false
     }
-    val currentOnTap by rememberUpdatedState(onTap)
     val currentOnLongPress by rememberUpdatedState(onLongPress)
     val currentOnIntrinsicAspect by rememberUpdatedState(onIntrinsicAspect)
 
@@ -173,6 +171,8 @@ internal fun ZoomableImage(
         modifier = modifier
             .onSizeChanged { viewport = it }
             .pointerInput(viewport) {
+                // 单点不在这里判：要和双击共用超时窗口，抬手后得等满 300ms，
+                // 中间区交给外层的 readerTapZones 才能即点即应
                 detectTapGestures(
                     onDoubleTap = { pivot ->
                         val zoomed = zoom.scale > MIN_SCALE + SCALE_EPSILON
@@ -180,7 +180,6 @@ internal fun ZoomableImage(
                         zoom = ZoomTransform.zoomTo(zoom, target, pivot, viewport)
                     },
                     onLongPress = { currentOnLongPress() },
-                    onTap = { offset -> currentOnTap(tapZone(offset, viewport)) },
                 )
             }
             .pointerInput(viewport) {
@@ -344,13 +343,11 @@ internal fun TranslatedZoomableImage(
     bitmap: android.graphics.Bitmap,
     contentDescription: String?,
     contentScale: ContentScale = ContentScale.Fit,
-    onTap: (Int) -> Unit,
     onLongPress: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var zoom by remember { mutableStateOf(ZoomState()) }
     var viewport by remember { mutableStateOf(IntSize.Zero) }
-    val currentOnTap by rememberUpdatedState(onTap)
     val currentOnLongPress by rememberUpdatedState(onLongPress)
 
     Box(
@@ -364,7 +361,6 @@ internal fun TranslatedZoomableImage(
                         zoom = ZoomTransform.zoomTo(zoom, target, pivot, viewport)
                     },
                     onLongPress = { currentOnLongPress() },
-                    onTap = { offset -> currentOnTap(tapZone(offset, viewport)) },
                 )
             }
             .pointerInput(viewport) {
