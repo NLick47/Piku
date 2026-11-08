@@ -830,7 +830,10 @@ class SourceWorkDetailViewModel @Inject constructor(
     /** [force] 手动入口（chip 点击/长按重翻）传 true，跳过目标语言预检强制送翻 */
     private fun translate(force: Boolean = false) {
         val detail = _ui.value.detail ?: return
-        if (_ui.value.translating) return
+        if (_ui.value.translating) {
+            Log.d("PikuDiag", "source detail translate queued work=$workId (busy)")
+            return
+        }
         if (!translationRepository.hasKey()) {
             Log.d("PikuDiag", "source detail translate skip work=$workId: no api key")
             return
@@ -843,7 +846,13 @@ class SourceWorkDetailViewModel @Inject constructor(
                     observeLanguageUseCase().value,
                     force = force,
                 )
+            }.onFailure { error ->
+                Log.d("PikuDiag", "source detail translate fail work=$workId: ${error.message}")
             }.getOrNull()
+            // 手动失败要出声：小文本一次定成败，端点异常都会落到 outcome == null
+            if (force && (outcome == null || outcome.failed)) {
+                feedback.show(R.string.detail_translate_failed)
+            }
             _ui.update { state ->
                 val current = state.detail ?: return@update state.copy(translating = false)
                 val fields = outcome?.takeUnless { it.failed }?.fields

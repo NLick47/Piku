@@ -176,7 +176,7 @@ class LlmTranslateEngineAddressTest {
     }
 
     @Test
-    fun `single attempt probe stops after the first failure`() = runTest {
+    fun `single attempt long text stops after the first failure`() = runTest {
         var calls = 0
         val api = object : LlmChatApi {
             override suspend fun chat(
@@ -193,11 +193,41 @@ class LlmTranslateEngineAddressTest {
         }
         val engine = LlmTranslateEngine(api, config())
 
-        // 首块探针：端点不通时只打一次，别让用户干等两轮退避。
-        // 用长文本走单条路径（小说分块就是这条，批量路径不受 maxAttempts 影响）
+        // 小说分块首块走单条路径：预算 1 时端点 5xx 只打一次
         val longText = "あ".repeat(700)
         val result = runCatching {
             engine.translate(listOf(longText), LlmTranslateEngine.TARGET_ZH, null, maxAttempts = 1)
+        }
+        assertTrue(result.exceptionOrNull() is TranslationApiException)
+        assertEquals(1, calls)
+    }
+
+    @Test
+    fun `short text batch propagates endpoint failure without per-item fallback`() = runTest {
+        var calls = 0
+        val api = object : LlmChatApi {
+            override suspend fun chat(
+                url: String,
+                headers: Map<String, String>,
+                body: JsonObject,
+            ): ChatResponse {
+                calls++
+                throw TranslationApiException(502, "bad gateway")
+            }
+
+            override suspend fun models(url: String, headers: Map<String, String>): LlmModelsResponse =
+                LlmModelsResponse()
+        }
+        val engine = LlmTranslateEngine(api, config())
+
+        // 详情页标题/简介/标签走批量路径：端点挂了就上抛，不该在预算外逐条兜底
+        val result = runCatching {
+            engine.translate(
+                listOf("はじめまして", "自己紹介", "タグ"),
+                LlmTranslateEngine.TARGET_ZH,
+                null,
+                maxAttempts = 1,
+            )
         }
         assertTrue(result.exceptionOrNull() is TranslationApiException)
         assertEquals(1, calls)

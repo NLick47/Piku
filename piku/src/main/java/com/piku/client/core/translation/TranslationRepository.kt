@@ -505,6 +505,9 @@ class TranslationRepository @Inject constructor(
      *
      * [skipPrecheck] = true 时不做「已是目标语言」透传，每条都查缓存/送翻（手动入口）。
      * 提示词已要求模型「原文已是目标语言就原样返回」，强制送翻不会把中文改写串味。
+     *
+     * 小文本通道一律单次尝试：端点级失败直接向上抛（手动路径弹提示、自动路径静默），
+     * 故障转移只救「模型全体空返回」，不救「端点不通」——后者重试只是重复等待。
      */
     suspend fun translateAll(
         texts: List<String>,
@@ -584,7 +587,9 @@ class TranslationRepository @Inject constructor(
             if (pending.isNotEmpty()) {
                 // 送翻的都是摘除链接后的纯文字，URL 不出现在 prompt 里
                 val strippedPending = pending.map { units[it].stripped }
-                var fresh = activeEngine.translate(strippedPending, targetLang)
+                // 小文本通道一次定成败：端点失败向上抛（手动路径弹提示、自动路径静默），
+                // 不重试不探测——重试交给用户再点一次，共用 API 的次数不值得烧在退避上
+                var fresh = activeEngine.translate(strippedPending, targetLang, null, 1)
                 var failedOver = false
                 // 手动 API 失败不回退到目录共享模型：用户明确选了本地/自己的服务，
                 // 悄悄改走别人的 key 既意外又可能泄露正文。目录条目仍保留原有故障转移。
@@ -601,7 +606,7 @@ class TranslationRepository @Inject constructor(
                         delay(Random.nextLong(FAILOVER_JITTER_MIN_MS, FAILOVER_JITTER_MAX_MS))
                         activeEngine = fallbackEngine
                         engineId = fallbackEngine.engineId
-                        fresh = fallbackEngine.translate(strippedPending, targetLang)
+                        fresh = fallbackEngine.translate(strippedPending, targetLang, null, 1)
                         failedOver = true
                     }
                 }

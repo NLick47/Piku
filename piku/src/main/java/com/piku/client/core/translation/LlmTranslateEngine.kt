@@ -125,7 +125,7 @@ class LlmTranslateEngine(
             result[index] = translateSingle(text, targetLang, context, maxAttempts)
         }
         if (short.isNotEmpty()) {
-            val batched = translateBatch(short.map { it.value }, targetLang)
+            val batched = translateBatch(short.map { it.value }, targetLang, maxAttempts)
             short.forEachIndexed { i, entry ->
                 result[entry.index] = batched.getOrElse(i) { "" }
             }
@@ -175,14 +175,19 @@ class LlmTranslateEngine(
     /**
      * 批量翻译：用 [[n]] 序号包裹每条，要求模型按同样序号回。
      * 条数对不上就退回逐条翻译（宁可慢，不能串错行）。
+     * 端点级失败与单条路径同契约：抛 [TranslationApiException]，重试预算由调用方定。
      */
-    private suspend fun translateBatch(texts: List<String>, targetLang: String): List<String> {
-        if (texts.size == 1) return listOf(translateSingle(texts.first(), targetLang))
+    private suspend fun translateBatch(
+        texts: List<String>,
+        targetLang: String,
+        maxAttempts: Int,
+    ): List<String> {
+        if (texts.size == 1) return listOf(translateSingle(texts.first(), targetLang, null, maxAttempts))
 
         val payload = texts.withIndex().joinToString("\n") { (i, text) ->
             "${marker(i + 1)}\n$text"
         }
-        repeat(MAX_ATTEMPTS) { attempt ->
+        repeat(maxAttempts) { attempt ->
             val output = try {
                 request(
                     system = systemPrompt(targetLang, true),
@@ -190,10 +195,12 @@ class LlmTranslateEngine(
                 )
             } catch (e: TranslationApiException) {
                 Log.d(TAG, "translateBatch attempt=${attempt + 1} api error: ${e.code}")
-                if (attempt < MAX_ATTEMPTS - 1 && e.code != 0) delay(retryDelay(attempt))
+                // 端点级失败交给调用方定夺，别在预算耗尽后再逐条兜底多发一轮请求
+                if (e.isEndpointUnavailable()) throw e
+                if (attempt < maxAttempts - 1) delay(retryDelay(attempt))
                 return@repeat
             }
-            if (output.isBlank()) return texts.map { translateSingle(it, targetLang) }
+            if (output.isBlank()) return texts.map { translateSingle(it, targetLang, null, maxAttempts) }
             val parsed = parseBatch(output, texts.size)
             if (parsed != null) {
                 val bad = parsed.indices.filter {
@@ -201,14 +208,14 @@ class LlmTranslateEngine(
                 }
                 if (bad.isEmpty()) return parsed
                 // 只有部分条目坏（跑偏/拒绝）时逐条重试坏条目，好的直接保留
-                bad.forEach { i -> parsed[i] = translateSingle(texts[i], targetLang) }
+                bad.forEach { i -> parsed[i] = translateSingle(texts[i], targetLang, null, maxAttempts) }
                 return parsed
             }
             Log.d(TAG, "translateBatch attempt=${attempt + 1} parse failed")
-            if (attempt < MAX_ATTEMPTS - 1) delay(retryDelay(attempt))
+            if (attempt < maxAttempts - 1) delay(retryDelay(attempt))
         }
         // 批量不可靠时逐条重试，保证尽量有译文
-        return texts.map { translateSingle(it, targetLang) }
+        return texts.map { translateSingle(it, targetLang, null, maxAttempts) }
     }
 
     private suspend fun request(system: String, user: String): String {

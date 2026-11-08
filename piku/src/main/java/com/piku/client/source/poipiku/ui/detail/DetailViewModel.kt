@@ -305,11 +305,6 @@ class DetailViewModel @Inject constructor(
     // 独立于底部引导的标记，保证新加的提示对升级上来的老用户也能展示一次
     private val showImageHint = !prefs.getBoolean(KEY_IMAGE_HINT_SHOWN, false)
 
-    /** 上次手动翻译的入口：失败提示的重试按原样重发（顶栏=false / 阅读器长文=true） */
-    private var lastManualTranslateIncludeNovel = false
-    /** 上次"换模型重翻"所选模型，供失败重试复用 */
-    private var lastForcedEntry: ModelEntry? = null
-
     /** 小说正文流式翻译：内容与进度都在共用编排里，本类只把它映射进 UI 状态 */
     private val novelTranslation = NovelTranslationController(
         hasModel = { translationRepository.hasNovelModel() },
@@ -687,14 +682,11 @@ class DetailViewModel @Inject constructor(
         _uiState.update { it.copy(showTranslationAll = true, fieldOverrides = emptySet()) }
     }
 
-    /**
-     * 启动小说分块流式翻译。正文模型缺失时不置位重试标记，避免失败重试空跑正文流。
-     */
+    /** 启动小说分块流式翻译 */
     private fun startNovelStream() {
         val detail = _uiState.value.detail ?: return
         if (detail.novelText.isBlank()) return
         if (!translationRepository.hasNovelModel()) return
-        lastManualTranslateIncludeNovel = true
         novelTranslation.start(detail, key = 0, source = detail.novelText)
     }
 
@@ -775,6 +767,7 @@ class DetailViewModel @Inject constructor(
     ) {
         val detail = _uiState.value.detail ?: return
         if (_uiState.value.translating) {
+            Log.d("PikuDiag", "translate queued work=$workId (busy)")
             pendingTranslate = TranslateRequest(includeLongNovel, requireAutoEnabled, showAfter, forcedEntry, forceShow)
             return
         }
@@ -785,10 +778,6 @@ class DetailViewModel @Inject constructor(
             return
         }
         val manual = !requireAutoEnabled
-        if (manual) {
-            lastManualTranslateIncludeNovel = includeLongNovel
-            lastForcedEntry = forcedEntry
-        }
         viewModelScope.launch {
             _uiState.update { it.copy(translating = true, fetchingNovelText = includeLongNovel) }
             val outcome = runCatching {
@@ -805,9 +794,9 @@ class DetailViewModel @Inject constructor(
             // 只有引擎/网络层面的真失败才提示；预检透传等“正常无译文”保持静默
             val failed = manual && (outcome == null || outcome.failed)
             val fields = outcome?.takeUnless { it.failed }?.fields
+            if (failed) notifyTranslateFailed()
             _uiState.update { state ->
                 // 期间可能已重新加载/解锁成 detail，按当前 detail 回填
-                if (failed) notifyTranslateFailed()
                 val current = state.detail ?: return@update state.copy(
                     translating = false,
                     fetchingNovelText = false,
@@ -862,23 +851,6 @@ class DetailViewModel @Inject constructor(
     /** 关闭模型选择弹窗 */
     fun dismissModelPicker() {
         _uiState.update { it.copy(showModelPicker = false) }
-    }
-
-    /** 手动翻译失败的 snackbar 重试：按上次入口原样重发
-     *  正文流式的失败重试直接重启流，缓存命中让已成功块秒过，只补失败块
-     *  不能走 onReaderTranslateToggle：部分失败后 novelText 已非空，会被误判为已有译文
-     *  正文重试一律走正文默认模型，一次性强制模型只服务短字段 */
-    fun retryLastTranslate() {
-        if (lastManualTranslateIncludeNovel) {
-            startNovelStream()
-            return
-        }
-        val forced = lastForcedEntry
-        if (forced != null) {
-            reTranslateWith(forced)
-            return
-        }
-        onTopBarTranslateClick()
     }
 
     // =====================================================================
@@ -975,12 +947,9 @@ class DetailViewModel @Inject constructor(
         is ImageTranslateError.Upstream, is ImageTranslateError.BadResponse -> R.string.image_translate_upstream
     }
 
-    /** 手动翻译失败提示（带「重试」动作）；自动路径保持静默 */
+    /** 手动翻译失败提示；小文本不重试，用户再点一次「译」即重新开始 */
     private fun notifyTranslateFailed() {
-        feedback.showAction(
-            R.string.detail_translate_failed,
-            R.string.detail_translate_retry,
-        ) { retryLastTranslate() }
+        feedback.show(R.string.detail_translate_failed)
     }
 
     private suspend fun doTranslateImage(imageUrl: String): ImageTranslateResult {
