@@ -3,7 +3,10 @@ package com.piku.client.core.translation
 import android.util.Log
 import com.piku.client.core.translation.ChunkContext
 import com.piku.client.core.translation.TranslationEngine
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
@@ -50,10 +53,58 @@ class LlmTranslateEngine(
     override val engineId: String
         get() = "llm:${config.role}:${config.model}:${config.baseUrl.trimEnd('/')}"
 
+    /**
+     * 轻量探针：GET /models，不生成内容。
+     * 端点返回 401/403/404/429 都算「活着」（有的服务不实现 /models，鉴权口径也不一），
+     * 只有连不上、超时、5xx（含代理 502）才判定不可用。
+     * 成功的结论缓存 60 秒，连续点译不会重复探。
+     */
+    override suspend fun probe(timeoutMs: Long): EngineProbe {
+        val cached = probeOkAt[engineId]
+        if (cached != null && System.currentTimeMillis() - cached < PROBE_TTL_MS) {
+            return EngineProbe.REACHABLE
+        }
+        val cfg = config
+        if (cfg.authMode != AuthMode.NONE && cfg.apiKey.isBlank()) return EngineProbe.UNREACHABLE
+        val headers = llmAuthHeaders(
+            authMode = cfg.authMode,
+            authHeader = cfg.authHeader,
+            apiKey = cfg.apiKey,
+            extraHeaders = cfg.extraHeaders,
+        )
+        var lastCode = 0
+        for (base in LlmAddressPreference.ordered(engineId, cfg.candidates())) {
+            try {
+                withTimeout(timeoutMs) {
+                    api.models(base.trimEnd('/') + "/models", headers)
+                }
+                Log.d(TAG, "probe ok base=$base")
+                probeOkAt[engineId] = System.currentTimeMillis()
+                return EngineProbe.REACHABLE
+            } catch (e: TimeoutCancellationException) {
+                lastCode = 0
+                Log.d(TAG, "probe timeout base=$base (${timeoutMs}ms)")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                val code = e.asApiException().code
+                lastCode = code
+                Log.d(TAG, "probe fail base=$base code=$code")
+                if (code == 401 || code == 403 || code == 404 || code == 429) {
+                    probeOkAt[engineId] = System.currentTimeMillis()
+                    return EngineProbe.REACHABLE
+                }
+            }
+        }
+        Log.d(TAG, "probe unreachable lastCode=$lastCode")
+        return EngineProbe.UNREACHABLE
+    }
+
     override suspend fun translate(
         texts: List<String>,
         targetLang: String,
         context: ChunkContext?,
+        maxAttempts: Int,
     ): List<String> {
         if (texts.isEmpty()) return emptyList()
         // 空白项不发请求，直接占位返回，保证下标与入参严格对齐
@@ -71,7 +122,7 @@ class LlmTranslateEngine(
         }
 
         for ((index, text) in long) {
-            result[index] = translateSingle(text, targetLang, context)
+            result[index] = translateSingle(text, targetLang, context, maxAttempts)
         }
         if (short.isNotEmpty()) {
             val batched = translateBatch(short.map { it.value }, targetLang)
@@ -87,6 +138,7 @@ class LlmTranslateEngine(
         text: String,
         targetLang: String,
         context: ChunkContext? = null,
+        maxAttempts: Int = MAX_ATTEMPTS,
     ): String {
         // 提示词组按场景路由：只有小说通道（role=NOVEL 或显式带上下文）才用 novel 组；
         // 文本通道的单条路径（批量仅剩 1 条、>600 长简介、批量失败逐条回退）
@@ -97,20 +149,26 @@ class LlmTranslateEngine(
             systemPrompt(targetLang, isBatch = false)
         }
         val user = context?.let { contextUserPrefix(it) + text } ?: text
-        repeat(MAX_ATTEMPTS) { attempt ->
+        var lastFailure: TranslationApiException? = null
+        repeat(maxAttempts) { attempt ->
             val output = try {
                 request(system = system, user = user)
             } catch (e: TranslationApiException) {
                 Log.d(TAG, "translateSingle attempt=${attempt + 1} api error: ${e.code}")
-                if (attempt < MAX_ATTEMPTS - 1 && e.code != 0) delay(retryDelay(attempt))
+                lastFailure = e
+                // code 0 = 连不上/超时：连试三次只是把同一个超时再等三遍，直接交回调用方
+                if (e.code == 0) throw e
+                if (attempt < maxAttempts - 1) delay(retryDelay(attempt))
                 return@repeat
             }
             if (output.isBlank()) return ""
             val cleaned = stripEcho(output.trim(), context)
             if (!looksUntranslated(text, cleaned) && !isRefusal(cleaned)) return cleaned
             Log.d(TAG, "translateSingle attempt=${attempt + 1} untranslated/refused")
-            if (attempt < MAX_ATTEMPTS - 1) delay(retryDelay(attempt))
+            if (attempt < maxAttempts - 1) delay(retryDelay(attempt))
         }
+        // 端点级错误（鉴权/路径/5xx）不能吞成「空译文」：分块流要据此判断接口不可用并中止
+        lastFailure?.takeIf { it.isEndpointUnavailable() }?.let { throw it }
         return ""
     }
 
@@ -264,7 +322,11 @@ class LlmTranslateEngine(
         private const val TAG = "PikuDiag"
 
         /** 校验失败后最多再试一次（免费模型偶发抽风） */
-        private const val MAX_ATTEMPTS = 3
+        const val MAX_ATTEMPTS = 3
+
+        /** 探针成功的记忆：60 秒内同一引擎不再重复探 */
+        private const val PROBE_TTL_MS = 60_000L
+        private val probeOkAt = ConcurrentHashMap<String, Long>()
 
         /** 回声判定中 ⟦待翻正文⟧ 标记允许出现的最大偏移（相对注入前缀长度的富余量） */
         private const val ECHO_SLACK = 32
@@ -532,6 +594,13 @@ class LlmTranslateEngine(
 
 /** API 层面错误（429 限速 / 5xx 服务端 / 空响应），用于区分校验失败 */
 class TranslationApiException(val code: Int, message: String) : Exception(message)
+
+/**
+ * 端点层面不可用：连不上、鉴权失败、路径不对、5xx（含代理 502）。
+ * 429 不算——端点还活着，等一等能好，不该中止整条流。
+ */
+internal fun TranslationApiException.isEndpointUnavailable(): Boolean =
+    code == 0 || code == 401 || code == 403 || code == 404 || code >= 500
 
 /**
  * 同模型多入口的进程内偏好：某个地址成功过就记住它，后续请求先从它开始试。

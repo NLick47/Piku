@@ -150,10 +150,8 @@ fun FullNovelViewer(
     /** 展示的正文译文是否为历史缓存，模型已下线；为真且显示译文时正文上方标注 */
     novelStale: Boolean = false,
     showTranslation: Boolean = false,
-    /** 拉取中：切换钮禁用并显示进行中，防连点重复扣额度 */
+    /** 拉取中：切换钮显示进行中，防连点重复扣额度 */
     translating: Boolean = false,
-    /** 任何翻译请求在途（含元数据）时禁用点击，避免触发被吞 */
-    busy: Boolean = false,
     /** 小说分块流式翻译进度（百分比）；非 null 时进度行的百分比位置改为显示翻译进度 */
     novelStreamProgress: Int? = null,
     onToggleTranslation: () -> Unit = {},
@@ -162,6 +160,10 @@ fun FullNovelViewer(
      * 空或单章走 [text] 的单篇路径，与从前一致；进度始终按整部百分比落盘。
      */
     chapters: List<com.piku.client.core.model.NovelChapter> = emptyList(),
+    /** 与 [chapters] 等长的译文；null 落回该章原文 */
+    chapterTranslations: List<String?> = emptyList(),
+    /** 章节模式下当前章变化，宿主据此按需翻译 */
+    onChapterChanged: (Int) -> Unit = {},
     /** 设置面板底部的只读缓存状态；null = 不显示（图片作品/未缓存） */
     cacheStatus: String? = null,
 ) {
@@ -197,7 +199,16 @@ fun FullNovelViewer(
     // 待恢复的章内百分比：首放/目录跳转时非零，定位完清零
     var chapterStartPercent by remember { mutableIntStateOf(if (chaptered) startPosition.localPercent else 0) }
     var chapterSheetOpen by remember { mutableStateOf(false) }
-    val bodyText = if (chaptered) chapters[chapterIndex].text else text
+    val bodyText = if (chaptered) {
+        chapterTranslations.getOrNull(chapterIndex) ?: chapters[chapterIndex].text
+    } else {
+        text
+    }
+    // 换章通知宿主：译文模式下要跟着翻当前章
+    val chapterChangedHandler by rememberUpdatedState(onChapterChanged)
+    LaunchedEffect(chaptered, chapterIndex) {
+        if (chaptered) chapterChangedHandler(chapterIndex)
+    }
 
     fun refreshAutoHide() {
         controlsVisible = true
@@ -526,7 +537,6 @@ fun FullNovelViewer(
                         onSeekEnd = { refreshAutoHide() },
                         translationAvailable = translationAvailable,
                         translating = translating,
-                        busy = busy,
                         showTranslation = showTranslation,
                         streamProgress = novelStreamProgress,
                         onToggleTranslation = onToggleTranslation,

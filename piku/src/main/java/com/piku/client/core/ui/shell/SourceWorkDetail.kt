@@ -587,8 +587,23 @@ internal fun SourceWorkDetailScreen(
         // 阅读器盖在顶栏与详情之上，与 poipiku 详情页同级
         // 分章源（AO3）的正文在 chapters 里、novelText 为空：两者有一个就够开阅读器
         if (state.novelReaderOpen && (state.novelText.isNotBlank() || state.novelChapters.isNotEmpty())) {
+            val chaptered = state.novelChapters.size > 1
+            val chapterIndex = state.novelChapterIndex
+            val activeSource = if (chaptered) {
+                state.novelChapters.getOrNull(chapterIndex)?.text.orEmpty()
+            } else {
+                state.novelText
+            }
+            val cachedNovel = detail?.translated?.novelText
+            val translationBody = state.novelChapterTranslations[chapterIndex]
+                ?: if (!chaptered) cachedNovel else null
+            val showingTranslation = state.novelTranslationShowing(chapterIndex)
             FullNovelViewer(
-                text = state.novelText,
+                text = if (chaptered || !showingTranslation) {
+                    state.novelText
+                } else {
+                    translationBody ?: state.novelText
+                },
                 title = detail?.translated?.title
                     ?.takeIf { state.showTranslationAll && it.isNotBlank() }
                     ?: detail?.title.orEmpty(),
@@ -599,6 +614,18 @@ internal fun SourceWorkDetailScreen(
                 onClose = viewModel::closeNovelReader,
                 onWorkClick = { authorId, workId, _ -> onPoipikuWorkClick(authorId, workId) },
                 chapters = state.novelChapters,
+                chapterTranslations = if (chaptered && state.novelTranslationShown) {
+                    state.novelChapters.indices.map { state.novelChapterTranslations[it] }
+                } else {
+                    emptyList()
+                },
+                translationAvailable = activeSource.isNotBlank() &&
+                    (state.hasNovelModel || cachedNovel != null),
+                novelStale = cachedNovel != null && !state.hasNovelModel,
+                showTranslation = showingTranslation,
+                novelStreamProgress = state.novelStreamProgress,
+                onToggleTranslation = viewModel::onReaderTranslateToggle,
+                onChapterChanged = viewModel::onNovelChapterChanged,
                 cacheStatus = novelCacheReaderStatus(state.cache),
             )
         }

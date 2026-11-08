@@ -525,15 +525,14 @@ fun DetailScreen(
                 val novelTranslated = state.showTranslation(TranslateField.NOVEL)
                 val titleTranslated = state.showTranslation(TranslateField.TITLE)
                 val translatedNovel = it.translated?.novelText
-                // 边翻边读：流式进行中把未译剩余原文拼接在已译前缀之后；
-                // 首块完成前（remainder 为空）显示纯原文，避免重复拼接
+                // 边翻边读：流式进行中把未译剩余原文拼接在已译前缀之后，分隔符已含在前缀里
                 val novelBody = if (
                     novelTranslated &&
                     state.novelStreamProgress != null &&
                     translatedNovel != null &&
                     !state.novelRemainder.isNullOrEmpty()
                 ) {
-                    "$translatedNovel\n\n${state.novelRemainder}"
+                    translatedNovel + state.novelRemainder
                 } else {
                     translatedNovel
                         ?.takeIf { text -> novelTranslated && text.isNotBlank() }
@@ -561,7 +560,6 @@ fun DetailScreen(
                     showTranslation = showingTranslation,
                     // 只有本轮真的在拉正文才显示加载态，元数据拉取不误标
                     translating = state.fetchingNovelText,
-                    busy = state.translating,
                     cacheStatus = novelCacheReaderStatus(state.cache),
                     novelStreamProgress = state.novelStreamProgress,
                     onToggleTranslation = viewModel::onReaderTranslateToggle,

@@ -37,7 +37,7 @@ import com.piku.client.core.translation.ImageTranslationPrompts
 import com.piku.client.core.translation.LlmTranslateEngine
 import com.piku.client.core.translation.ModelCatalogRepository
 import com.piku.client.core.translation.ModelEntry
-import com.piku.client.core.translation.NovelStreamEvent
+import com.piku.client.core.translation.NovelTranslationController
 import com.piku.client.core.translation.TagsTranslationController
 import com.piku.client.core.translation.TranslationRepository
 import com.piku.client.core.ui.common.FeedbackChannel
@@ -310,8 +310,19 @@ class DetailViewModel @Inject constructor(
     /** 上次"换模型重翻"所选模型，供失败重试复用 */
     private var lastForcedEntry: ModelEntry? = null
 
-    /** 小说分块流式翻译的唯一持有 job；新流启动前必杀旧流，VM 销毁自动取消 */
-    private var novelStreamJob: Job? = null
+    /** 小说正文流式翻译：内容与进度都在共用编排里，本类只把它映射进 UI 状态 */
+    private val novelTranslation = NovelTranslationController(
+        hasModel = { translationRepository.hasNovelModel() },
+        stream = { detail, source ->
+            translationRepository.translateNovelStreaming(
+                detail,
+                observeLanguageUseCase().value,
+                force = true,
+                source = source,
+            )
+        },
+        scope = viewModelScope,
+    )
 
     private val _uiState = MutableStateFlow(
         DetailUiState(
@@ -596,11 +607,13 @@ class DetailViewModel @Inject constructor(
                 }
             }
         }
+        observeNovelTranslation()
         load()
     }
 
     override fun onCleared() {
         super.onCleared()
+        novelTranslation.cancel()
         clearImageTranslations()
     }
 
@@ -675,66 +688,14 @@ class DetailViewModel @Inject constructor(
     }
 
     /**
-     * 启动小说分块流式翻译：逐事件把累计译文写入 [DetailUiState.detail] 的 novelText，
-     * 阅读器按 "已译前缀 + 剩余原文" 拼接实现边翻边读。失败块由仓库层回退原文继续流，
-     * 全部结束后若有失败段给 snackbar——重试重启流，缓存命中让成功块秒过。
+     * 启动小说分块流式翻译。正文模型缺失时不置位重试标记，避免失败重试空跑正文流。
      */
     private fun startNovelStream() {
         val detail = _uiState.value.detail ?: return
         if (detail.novelText.isBlank()) return
-        // 正文流必须以正文模型为闸门，文本通道的 key 不能放行
         if (!translationRepository.hasNovelModel()) return
-        cancelNovelStream()
         lastManualTranslateIncludeNovel = true
-        novelStreamJob = viewModelScope.launch {
-            _uiState.update { it.copy(novelStreamProgress = 0) }
-            try {
-                translationRepository.translateNovelStreaming(
-                    detail,
-                    observeLanguageUseCase().value,
-                    force = true,
-                ).collect { event ->
-                    when (event) {
-                        is NovelStreamEvent.Progress -> _uiState.update { state ->
-                            val current = state.detail ?: return@update state
-                            state.copy(
-                                detail = current.copy(
-                                    translated = withProgressiveNovel(current.translated, event.translatedSoFar),
-                                ),
-                                // 首块完成前 translated 仍为空，阅读器显示纯原文；末块剩余为空串，
-                                // 由 Screen 的 isNullOrEmpty 判空避免拼接出尾部分隔
-                                novelRemainder = current.novelText
-                                    .takeIf { it.isNotBlank() }
-                                    ?.let { it.substring(event.consumedOffset) },
-                                novelStreamProgress =
-                                if (event.totalChunks > 0) event.doneChunks * 100 / event.totalChunks else null,
-                            )
-                        }
-
-                        is NovelStreamEvent.Completed -> {
-                            if (event.failedCount > 0) feedback.show(R.string.detail_novel_partial_failed)
-                            _uiState.update { state ->
-                                val current = state.detail ?: return@update state
-                                state.copy(
-                                    detail = current.copy(
-                                        translated = withProgressiveNovel(current.translated, event.translatedSoFar),
-                                    ),
-                                    novelStreamProgress = null,
-                                    novelRemainder = null,
-                                )
-                            }
-                        }
-                    }
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.d("PikuDiag", "novel stream fail work=$workId: ${e.message}")
-                _uiState.update { it.copy(novelStreamProgress = null, novelRemainder = null) }
-            } finally {
-                if (novelStreamJob?.isCancelled != false) novelStreamJob = null
-            }
-        }
+        novelTranslation.start(detail, key = 0, source = detail.novelText)
     }
 
     /** 渐进写入：把流式累计译文合入 translated（无则构造最小字段集，保证 chip 出现） */
@@ -744,11 +705,35 @@ class DetailViewModel @Inject constructor(
         return if (base.novelText == novelText) base else base.copy(novelText = novelText)
     }
 
-    /** 杀掉进行中的小说流并清理进度状态 */
-    private fun cancelNovelStream() {
-        novelStreamJob?.cancel()
-        novelStreamJob = null
-        _uiState.update { it.copy(novelStreamProgress = null, novelRemainder = null) }
+    /** 流状态映射进 UI：正文流是单篇，固定 key 0 */
+    private fun observeNovelTranslation() {
+        viewModelScope.launch {
+            novelTranslation.state.collect { streaming ->
+                val part = streaming.parts[0]
+                _uiState.update { state ->
+                    val current = state.detail
+                    // 正文换了（解锁/重载）就别把旧译文贴上去
+                    val fresh = part != null && (part.source == null || part.source == current?.novelText)
+                    val translated = part?.translated?.takeIf { fresh }
+                    state.copy(
+                        detail = if (current != null && translated != null) {
+                            current.copy(translated = withProgressiveNovel(current.translated, translated))
+                        } else {
+                            current
+                        },
+                        novelRemainder = part?.remainder?.takeIf { fresh },
+                        novelStreamProgress = streaming.running?.let { part?.progress ?: 0 },
+                    )
+                }
+            }
+        }
+        viewModelScope.launch {
+            novelTranslation.failed.collect { allFailed ->
+                feedback.show(
+                    if (allFailed) R.string.detail_translate_failed else R.string.detail_novel_partial_failed,
+                )
+            }
+        }
     }
 
     /** 一次翻译请求的参数快照：in-flight 期间收到的新请求记为待补跑 */

@@ -1,5 +1,6 @@
 package com.piku.client.core.translation
 
+import android.util.Log
 import com.piku.client.BuildConfig
 import com.piku.client.core.storage.prefs.SettingsRepository
 import com.piku.client.core.storage.db.TranslationDao
@@ -57,6 +58,8 @@ sealed interface NovelStreamEvent {
         val translatedSoFar: String,
         val failedCount: Int,
         val totalChunks: Int,
+        /** 接口不可用导致提前中止：译文只是已处理的部分，不能当作整段结果 */
+        val aborted: Boolean = false,
     ) : NovelStreamEvent
 }
 
@@ -295,9 +298,13 @@ class TranslationRepository @Inject constructor(
         detail: WorkDetail,
         language: AppLanguage,
         force: Boolean,
+        /** 待翻正文；单篇传整篇，分章传当前章 */
+        source: String = detail.novelText,
     ): Flow<NovelStreamEvent> = flow {
-        val source = detail.novelText
-        if (source.isBlank()) return@flow
+        if (source.isBlank()) {
+            emit(NovelStreamEvent.Completed(translatedSoFar = "", failedCount = 0, totalChunks = 0))
+            return@flow
+        }
         val entry = effectiveNovelEntry()
         val engine = entry?.let {
             engineFactory.create(apiKeyFor(it), Role.NOVEL, it, modelCatalogRepository.catalogDefaults.value)
@@ -313,10 +320,31 @@ class TranslationRepository @Inject constructor(
         val engineId = engine.engineId + (glossary?.let { "#g:" + hash(it).take(8) }.orEmpty())
         val chunks = NovelChunker.split(source)
         val total = chunks.size
+        Log.d(
+            "PikuDiag",
+            "novel stream entry=${entry.id} chunks=$total force=$force lang=$targetLang model=${entry.model}",
+        )
+        // 起流前先探端点：GET /models 不生成内容，几秒内就能判断「根本连不通」
+        if (engine.probe(PROBE_TIMEOUT_MS) == EngineProbe.UNREACHABLE) {
+            Log.d("PikuDiag", "probe unreachable, abort before streaming")
+            emit(
+                NovelStreamEvent.Completed(
+                    translatedSoFar = "",
+                    failedCount = 1,
+                    totalChunks = 1,
+                    aborted = true,
+                ),
+            )
+            return@flow
+        }
 
         val translated = StringBuilder()
         var consumed = 0
         var failedCount = 0
+        // 连续「连不上」的块数：接口地址根本不存在时别把整本书都空试一遍
+        var deadChunks = 0
+        // 真正拿到译文的块数（含缓存命中）：用来判断是不是从头到尾一次都没成功
+        var translatedOk = 0
         var tailOriginal = ""
         var tailTranslated = ""
         // 累积待落盘实体，达到 STREAM_PERSIST_BATCH 或流结束时批量写入
@@ -342,6 +370,7 @@ class TranslationRepository @Inject constructor(
             // 掺杂任何其他语言（假名/英文句/其他字系，含半角片假名）→ 必须送翻。
             // 中日混排块在 ja 目标下由 hanDominantOverKana 保证中文为主时仍送翻，
             // zh 目标下"汉字≥英文词×2"仅容忍点缀性英文词。逐条语义见 isAlreadyInTarget 测试矩阵。
+            var chunkEndpointDown = false
             val value: String? = when {
                 !force && LlmTranslateEngine.isAlreadyInTarget(chunk.text, targetLang) -> chunk.text
                 else -> {
@@ -355,16 +384,22 @@ class TranslationRepository @Inject constructor(
                         val cached = withContext(Dispatchers.IO) {
                             dao.get(cacheKey(stripped, links), targetLang, engineId)
                         }?.takeUnless { LlmTranslateEngine.isRefusal(it) }
-                        cached ?: run {
+                        if (cached != null) {
+                            translatedOk++
+                            cached
+                        } else {
                             var translatedText: String? = null
-                            repeat(1 + CHUNK_RETRY_ATTEMPTS) { attempt ->
-                                if (translatedText != null) return@repeat
+                            for (attempt in 0..CHUNK_RETRY_ATTEMPTS) {
+                                if (translatedText != null) break
                                 try {
-                                    val out = engine.translate(listOf(stripped), targetLang, context)
+                                    // 还没译出过任何一块时只打一次：端点不通要尽快报错，
+                                    // 別把「再试两轮」的时间也搭进去；成功过一块后恢复正常重试
+                                    val attempts = if (translatedOk == 0) 1 else LlmTranslateEngine.MAX_ATTEMPTS
+                                    val out = engine.translate(listOf(stripped), targetLang, context, attempts)
                                         .firstOrNull().orEmpty()
                                     if (out.isBlank()) {
                                         if (attempt < CHUNK_RETRY_ATTEMPTS) delay(chunkRetryDelay(attempt))
-                                        return@repeat
+                                        continue
                                     }
                                     val full = if (links.isEmpty()) out
                                     else out.trimEnd() + links.joinToString("") { " $it" }
@@ -378,12 +413,20 @@ class TranslationRepository @Inject constructor(
                                     if (pendingPersist.size >= STREAM_PERSIST_BATCH) flushPersist()
                                     translatedText = full
                                 } catch (e: TranslationApiException) {
-                                    if (attempt < CHUNK_RETRY_ATTEMPTS && e.code != 0) {
-                                        delay(chunkRetryDelay(attempt))
+                                    // 端点不可用（连不上/鉴权/路径/5xx 含代理 502）：同一块再试也一样
+                                    Log.d(
+                                        "PikuDiag",
+                                        "chunk $index attempt=$attempt code=${e.code} " +
+                                            "endpointDown=${e.isEndpointUnavailable()}",
+                                    )
+                                    if (e.isEndpointUnavailable()) {
+                                        chunkEndpointDown = true
+                                        break
                                     }
+                                    if (attempt < CHUNK_RETRY_ATTEMPTS) delay(chunkRetryDelay(attempt))
                                 }
                             }
-                            if (translatedText == null) failedCount++
+                            if (translatedText == null) failedCount++ else translatedOk++
                             translatedText
                         }
                     }
@@ -391,7 +434,10 @@ class TranslationRepository @Inject constructor(
             }
             // 失败块回退原文继续流：局部失败不整体放弃（与主通道哲学一致）
             val piece = value ?: chunk.text
+            Log.d("PikuDiag", "chunk $index ${if (value != null) "ok" else "fallback原样"} len=${piece.length}")
             translated.append(piece)
+            // 块间分隔符原样补回：分隔线与图 token 都藏在这里，丢了会并段、丢图
+            translated.append(chunk.separatorAfter)
             consumed += chunk.text.length + chunk.separatorAfter.length
             emit(
                 NovelStreamEvent.Progress(
@@ -403,8 +449,28 @@ class TranslationRepository @Inject constructor(
             )
             tailOriginal = NovelChunker.tail(chunk.text, NovelChunker.TAIL_ORIGINAL_CHARS)
             tailTranslated = NovelChunker.tail(piece, NovelChunker.TAIL_TRANSLATED_CHARS)
+            if (chunkEndpointDown) deadChunks++ else deadChunks = 0
+            // 接口层面根本不可用（地址不存在/代理 502/鉴权失败）且一次都没译成功：
+            // 继续按块空试只会让用户对着 0% 干等，直接结束并交回「翻译失败」
+            if (deadChunks >= ENDPOINT_DOWN_ABORT && translatedOk == 0) {
+                Log.d(
+                    "PikuDiag",
+                    "stream aborted at chunk=$index failed=$failedCount ok=$translatedOk total=$total",
+                )
+                flushPersist()
+                emit(
+                    NovelStreamEvent.Completed(
+                        translatedSoFar = translated.toString(),
+                        failedCount = failedCount,
+                        totalChunks = index + 1,
+                        aborted = true,
+                    ),
+                )
+                return@flow
+            }
         }
         flushPersist()
+        Log.d("PikuDiag", "stream done failed=$failedCount ok=$translatedOk total=$total")
         emit(
             NovelStreamEvent.Completed(
                 translatedSoFar = translated.toString(),
@@ -778,6 +844,12 @@ class TranslationRepository @Inject constructor(
 
         /** 块级重试次数（不含首次尝试） */
         private const val CHUNK_RETRY_ATTEMPTS = 2
+
+        /** 连续多少块「接口层面不可用」就中止整条流（一次都没译成功时）；引擎已重试过 3 次 */
+        private const val ENDPOINT_DOWN_ABORT = 1
+
+        /** 起流前探针的超时：只问 /models，几秒内必须给答案 */
+        private const val PROBE_TIMEOUT_MS = 6_000L
 
         /** 块级重试延迟基数（ms）：指数退避 1s → 2s → 4s... */
         private const val CHUNK_RETRY_DELAY_BASE_MS = 1000L

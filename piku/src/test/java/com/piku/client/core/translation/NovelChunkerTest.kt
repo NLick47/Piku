@@ -86,6 +86,37 @@ class NovelChunkerTest {
         assertFalse(NovelChunker.isDividerLine("...三点不算"))
     }
 
+    @Test
+    fun `image token line never enters chunk text`() {
+        val token = "[nimg:https://i.pximg.net/img/a.jpg]"
+        val source = "第一段。\n$token\n第二段。"
+        val chunks = NovelChunker.split(source)
+        chunks.forEach { assertFalse("token 进了正文: ${it.text}", it.text.contains("nimg")) }
+        assertEquals(source, joined(chunks))
+        assertTrue(chunks.any { it.separatorAfter.contains(token) })
+    }
+
+    @Test
+    fun `image token at document start is preserved without being translated`() {
+        val token = "[nimg:https://i.pximg.net/img/a.jpg]"
+        val source = "$token\n开头就是图\n正文。"
+        val chunks = NovelChunker.split(source)
+        chunks.forEach { assertFalse("token 进了正文: ${it.text}", it.text.contains("nimg")) }
+        assertEquals(source, joined(chunks))
+    }
+
+    @Test
+    fun `divider and image token together keep roundtrip and stay out of text`() {
+        val token = "[nimg:https://i.pximg.net/img/a.jpg]"
+        val source = "一。\n\n***\n\n$token\n\n二。"
+        val chunks = NovelChunker.split(source)
+        chunks.forEach {
+            assertFalse(it.text.contains("nimg"))
+            assertFalse(it.text.contains("***"))
+        }
+        assertEquals(source, joined(chunks))
+    }
+
 
     @Test
     fun `oversized line is split at sentence boundaries without losing chars`() {

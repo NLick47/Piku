@@ -26,6 +26,12 @@ interface TranslationEngine {
     val engineId: String
 
     /**
+     * 起流前的轻量连通性探针：不生成内容，只问端点是否活着。
+     * 默认返回可用（非 LLM 引擎无需探）。
+     */
+    suspend fun probe(timeoutMs: Long): EngineProbe = EngineProbe.REACHABLE
+
+    /**
      * 批量翻译。返回列表长度必须与 [texts] 一致且顺序对应；
      * 某条翻译不出来时返回空字符串，由调用方回退原文。
      *
@@ -37,5 +43,9 @@ interface TranslationEngine {
         texts: List<String>,
         targetLang: String,
         context: ChunkContext? = null,
+        /** 单条重试次数；分块流可用 1 做「首块探针」，端点不通时立刻报错 */
+        maxAttempts: Int = 3,
     ): List<String>
 }
+
+enum class EngineProbe { REACHABLE, UNREACHABLE }

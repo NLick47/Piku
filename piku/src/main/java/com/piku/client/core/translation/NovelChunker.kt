@@ -31,7 +31,14 @@ internal object NovelChunker {
     /** 句末标点（含后续收尾引号），用于超长行兜底切分与尾部对齐 */
     private val SENTENCE_END = Regex("""[。！？…‼⁉]+[」』）〕”’]*""")
 
+    /** pixiv 内嵌图 token 独占一行，位置与 URL 都必须原样保留 */
+    private val IMAGE_TOKEN_LINE = Regex("""^[\s　]*\[nimg:[^\]]+][\s　]*$""")
+
     fun isDividerLine(line: String): Boolean = DIVIDER_LINE.matches(line)
+
+    /** 不可译行：分隔线与内嵌图 token，只作为分块边界 */
+    internal fun isKeptLine(line: String): Boolean =
+        isDividerLine(line) || IMAGE_TOKEN_LINE.matches(line)
 
     fun split(source: String): List<Chunk> {
         if (source.isBlank()) return listOf(Chunk(source, ""))
@@ -49,7 +56,7 @@ internal object NovelChunker {
             // 除文档末元素外，每行后面都紧跟一个换行，归入该行的尾随分隔符
             val nl = if (idx < lines.lastIndex) "\n" else ""
             when {
-                line.isBlank() || isDividerLine(line) -> pendingSep += line + nl
+                line.isBlank() || isKeptLine(line) -> pendingSep += line + nl
                 else -> {
                     val pieces =
                         if (line.length > HARD_MAX_LINE_CHARS) splitLongLine(line)
@@ -70,18 +77,26 @@ internal object NovelChunker {
         var buffer = StringBuilder()
         var bufferChars = 0
         for (atom in atoms) {
-            // 断块时机：已达目标大小，或本块开头紧跟在场景分隔线之后（语义边界优先）。
-            // 分隔线属于"上一块的结尾"：断块时把分隔符在最后一个分隔线处切开，
-            // 前半段归上一块的 separatorAfter，后半段留给新块的开头（roundtrip 不变量不变）。
-            val dividerEnd = lastDividerEndIn(atom.leadingSep)
-            if (buffer.isNotEmpty() && (bufferChars >= TARGET_CHUNK_CHARS || dividerEnd >= 0)) {
-                val cut = maxOf(dividerEnd, 0)
-                chunks += Chunk(buffer.toString(), atom.leadingSep.substring(0, cut))
-                buffer.setLength(0)
-                bufferChars = 0
-                buffer.append(atom.leadingSep.substring(cut))
-            } else {
-                buffer.append(atom.leadingSep)
+            // 断块时机：已达目标大小，或本块开头紧跟在不可译行之后（语义边界优先）。
+            // 这类行属于"上一块的结尾"：断块时在最后一个不可译行处切开，
+            // 前半段归上一块的 separatorAfter，后半段留给新块的开头。
+            val keptEnd = lastKeptEndIn(atom.leadingSep)
+            when {
+                // 文档开头（或连续不可译行）没有所属块，单独成块保住位置，绝不进正文
+                buffer.isEmpty() && keptEnd > 0 -> {
+                    chunks += Chunk("", atom.leadingSep.substring(0, keptEnd))
+                    buffer.append(atom.leadingSep.substring(keptEnd))
+                }
+
+                buffer.isNotEmpty() && (bufferChars >= TARGET_CHUNK_CHARS || keptEnd >= 0) -> {
+                    val cut = maxOf(keptEnd, 0)
+                    chunks += Chunk(buffer.toString(), atom.leadingSep.substring(0, cut))
+                    buffer.setLength(0)
+                    bufferChars = 0
+                    buffer.append(atom.leadingSep.substring(cut))
+                }
+
+                else -> buffer.append(atom.leadingSep)
             }
             buffer.append(atom.text)
             bufferChars += atom.text.length
@@ -90,14 +105,14 @@ internal object NovelChunker {
         return chunks
     }
 
-    /** [sep] 中最后一个分隔线行的结束位置（含其后换行）；无分隔线返回 -1 */
-    private fun lastDividerEndIn(sep: String): Int {
+    /** [sep] 中最后一个不可译行的结束位置（含其后换行）；没有则返回 -1 */
+    private fun lastKeptEndIn(sep: String): Int {
         var end = -1
         var from = 0
         while (from <= sep.length) {
             val nl = sep.indexOf('\n', from)
             val lineEnd = if (nl == -1) sep.length else nl
-            if (isDividerLine(sep.substring(from, lineEnd))) {
+            if (isKeptLine(sep.substring(from, lineEnd))) {
                 end = if (nl == -1) sep.length else nl + 1
             }
             if (nl == -1) break

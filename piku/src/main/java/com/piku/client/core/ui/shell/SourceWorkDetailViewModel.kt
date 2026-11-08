@@ -41,6 +41,7 @@ import com.piku.client.core.translation.ImageTranslateResult
 import com.piku.client.core.translation.ImageTranslationPrompts
 import com.piku.client.core.translation.LlmTranslateEngine
 import com.piku.client.core.translation.ModelCatalogRepository
+import com.piku.client.core.translation.NovelTranslationController
 import com.piku.client.core.translation.TagsTranslationController
 import com.piku.client.core.translation.TranslationRepository
 import com.piku.client.core.ui.detail.diagImageUrl
@@ -165,12 +166,31 @@ class SourceWorkDetailViewModel @Inject constructor(
             NovelCacheUiState.Hidden,
         val novelReaderSettings: NovelReaderSettings = NovelReaderSettings(),
         val novelProgressPercent: Int = 0,
+        /** 阅读器里的当前章；单篇恒 0 */
+        val novelChapterIndex: Int = 0,
+        /** 阅读器是否显示译文 */
+        val novelTranslationShown: Boolean = false,
+        /** 各章展示正文（已译前缀 + 未译剩余），只含有译文的章 */
+        val novelChapterTranslations: Map<Int, String> = emptyMap(),
+        /** 正文流式翻译进度百分比；null = 空闲 */
+        val novelStreamProgress: Int? = null,
+        /** 是否有可用的正文模型，宁缺毋滥：无则阅读器不给翻译入口 */
+        val hasNovelModel: Boolean = false,
         val imageProgressPage: Int = 0,
     ) {
         val hasTranslation: Boolean get() = detail?.translated?.hasAny == true
 
         /** 标签当前显示态：用户点过 chip 用覆盖值，否则跟随设置 */
         val showTranslatedTags: Boolean get() = tagsOverride ?: autoTranslateTags
+
+        /** 阅读器当前是否真在显示译文：与 chip 显示判据同源，别在两处各写一遍 */
+        fun novelTranslationShowing(index: Int): Boolean =
+            novelTranslationShown &&
+                (
+                    novelChapterTranslations.containsKey(index) ||
+                        (novelChapters.size <= 1 && detail?.translated?.novelText != null) ||
+                        novelStreamProgress != null
+                    )
     }
 
     /** 查看器图片对：页 0 垫图区那张缓存必中的打底图，清晰图作为第二层后台盖上；HD 档给原图 */
@@ -253,16 +273,47 @@ class SourceWorkDetailViewModel @Inject constructor(
         onFailed = { feedback.show(R.string.detail_translate_failed) },
     )
 
+    /** 正文分块流式翻译（与 poipiku 详情页共用）：单篇 key 0，分章用章号 */
+    private val novelTranslation = NovelTranslationController(
+        hasModel = { translationRepository.hasNovelModel() },
+        stream = { detail, source ->
+            translationRepository.translateNovelStreaming(
+                detail,
+                observeLanguageUseCase().value,
+                force = true,
+                source = source,
+            )
+        },
+        scope = viewModelScope,
+    )
+
     init {
         viewModelScope.launch {
             translationRepository.roleModelAvailability.collect { avail ->
-                _ui.update { it.copy(hasTextModel = avail.text, hasImageModel = avail.image) }
+                _ui.update {
+                    it.copy(
+                        hasTextModel = avail.text,
+                        hasImageModel = avail.image,
+                        hasNovelModel = avail.novel,
+                    )
+                }
             }
         }
         viewModelScope.launch {
             // 标签默认显示态跟随「自动翻译标签」；用户点过 chip 后的覆盖值不受设置变化影响
             settingsRepository.autoTranslateTags.collect { enabled ->
                 _ui.update { it.copy(autoTranslateTags = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            novelTranslation.state.collect { publishNovelTranslation() }
+        }
+        viewModelScope.launch {
+            novelTranslation.failed.collect { allFailed ->
+                Log.d("PikuDiag", "reader failed collected allFailed=$allFailed")
+                feedback.show(
+                    if (allFailed) R.string.detail_translate_failed else R.string.detail_novel_partial_failed,
+                )
             }
         }
         // pixiv 登录态：登录/登出实时改关注按钮显隐；刚登录时补拉一次关注状态回显
@@ -318,32 +369,67 @@ class SourceWorkDetailViewModel @Inject constructor(
         imageTranslateJob?.cancel()
         wireFavoriteCollectors(work)
         refreshPixivSocialState()
-        // 秒进：列表里自带的标题/作者/缩略图先上屏打底，接口回来再补全简介/统计/清晰图
-        // 运行时开关由 init 期 collect 写入，整表重置必须带回，否则图片翻译入口永远不亮
-        _ui.value = UiState(
-            language = observeLanguageUseCase().value,
-            hasTextModel = _ui.value.hasTextModel,
-            hasImageModel = _ui.value.hasImageModel,
-            imageProgressPage = settingsRepository.getImageProgress(work.key),
-            autoTranslateTags = _ui.value.autoTranslateTags,
-            // 整表重建不能冲掉登录态：登录/登出才推一次，这里丢了下一次要等状态变化
-            loggedIn = _ui.value.loggedIn,
-            cloudBookmarked = cloudBookmarkedCarried,
-            detail = WorkDetail(
-                title = work.title,
-                authorName = work.authorName,
-                authorAvatarUrl = work.authorAvatarUrl.orEmpty(),
-                categoryCd = -1,
-                categoryName = "",
-                imageUrls = listOf(work.thumbnailUrl),
-                tags = emptyList(),
-                r18 = work.r18,
-            ),
-        )
+        // 秒进：列表里自带的标题/作者/缩略图先上屏打底，接口回来再补全简介/统计/清晰图。
+        // 只重置本次要重新拉的字段；init 期 collect 写入的运行时开关、阅读器设置、
+        // 收藏夹与自定义标签一律保留——整表 new 一个 UiState 就会把它们悄悄清零
+        _ui.update {
+            it.copy(
+                language = observeLanguageUseCase().value,
+                loading = true,
+                failed = false,
+                loginRequired = false,
+                translating = false,
+                showTranslationAll = false,
+                tagsOverride = null,
+                tagsTranslating = false,
+                translatedImages = emptyMap(),
+                imageTranslatingPage = null,
+                showTranslatedImage = false,
+                hdPages = emptySet(),
+                savingImage = false,
+                sharingImage = false,
+                sharingTargetPackage = null,
+                pages = emptyList(),
+                stats = null,
+                related = emptyList(),
+                relatedLoading = false,
+                isFavorite = false,
+                cloudSynced = false,
+                cloudBookmarked = cloudBookmarkedCarried,
+                mirrorPending = false,
+                workFavoriteFolderIds = emptySet(),
+                followed = false,
+                followQuiet = false,
+                followSending = false,
+                novelText = "",
+                novelChapters = emptyList(),
+                novelStatusRes = 0,
+                novelBodyLoading = false,
+                novelReaderOpen = false,
+                cache = NovelCacheUiState.Hidden,
+                novelProgressPercent = 0,
+                imageProgressPage = settingsRepository.getImageProgress(work.key),
+                detail = WorkDetail(
+                    title = work.title,
+                    authorName = work.authorName,
+                    authorAvatarUrl = work.authorAvatarUrl.orEmpty(),
+                    categoryCd = -1,
+                    categoryName = "",
+                    imageUrls = listOf(work.thumbnailUrl),
+                    tags = emptyList(),
+                    r18 = work.r18,
+                ),
+            )
+        }
         viewModelScope.launch {
-            // 按作品自己的源取页：跨源列表（收藏/历史）点进来的作品不必等于当前首页源
-            val source = sourceRegistry.byId(work.source)
-            if (work.kind == WorkKind.NOVEL) loadNovel(work, source) else loadIllust(work, source)
+            try {
+                // 按作品自己的源取页：跨源列表（收藏/历史）点进来的作品不必等于当前首页源
+                val source = sourceRegistry.byId(work.source)
+                if (work.kind == WorkKind.NOVEL) loadNovel(work, source) else loadIllust(work, source)
+            } finally {
+                // 正文换了（解锁/重登）要按新原文重新校验已有译文
+                publishNovelTranslation()
+            }
         }
     }
 
@@ -473,6 +559,9 @@ class SourceWorkDetailViewModel @Inject constructor(
     fun openNovelReader() {
         val work = currentWork ?: return
         if (_ui.value.novelText.isNotBlank() || _ui.value.novelChapters.isNotEmpty()) {
+            seedNovelTranslation()
+            // 正文可能刚换过：按当前原文把编排层已有的译文重新铺到 UI
+            publishNovelTranslation()
             _ui.update { it.copy(novelReaderOpen = true) }
             return
         }
@@ -511,7 +600,100 @@ class SourceWorkDetailViewModel @Inject constructor(
                 }
             }
             if (load.fallback) feedback.show(R.string.novel_cache_offline_toast)
+            seedNovelTranslation()
+            // 正文到手后再铺一次：重载期间清空的译文映射由编排层按新原文重新校验
+            publishNovelTranslation()
             refreshCacheState(work)
+        }
+    }
+
+    /** 阅读器「译/原」切换：逐章按需起流，已翻完的章直接切显示，半译的章续翻 */
+    fun onReaderTranslateToggle() {
+        val state = _ui.value
+        val index = state.novelChapterIndex
+        val source = state.sourceAt(index)
+        Log.d(
+            "PikuDiag",
+            "reader toggle index=$index shown=${state.novelTranslationShown} " +
+                "showing=${state.novelTranslationShowing(index)} hasModel=${state.hasNovelModel} " +
+                "src=${source?.length ?: -1} text=${novelTranslation.hasText(index, source.orEmpty())} " +
+                "complete=${novelTranslation.isComplete(index, source.orEmpty())} " +
+                "detail=${state.detail != null}",
+        )
+        if (state.novelTranslationShowing(index)) {
+            _ui.update { it.copy(novelTranslationShown = false) }
+            return
+        }
+        if (source == null) {
+            Log.d("PikuDiag", "reader toggle: no source, ignored")
+            return
+        }
+        val hasText = novelTranslation.hasText(index, source)
+        if (!hasText && !state.hasNovelModel) {
+            Log.d("PikuDiag", "reader toggle: no model, feedback")
+            feedback.show(R.string.detail_novel_model_unavailable)
+            return
+        }
+        _ui.update { it.copy(novelTranslationShown = true) }
+        if (!novelTranslation.isComplete(index, source) && state.hasNovelModel) {
+            Log.d("PikuDiag", "reader toggle: start stream key=$index")
+            state.detail?.let { novelTranslation.start(it, index, source) }
+        } else {
+            Log.d("PikuDiag", "reader toggle: nothing to start (complete or no model)")
+        }
+    }
+
+    /** 阅读器换章：译文模式跟着翻当前章，半译的章从断点续 */
+    fun onNovelChapterChanged(index: Int) {
+        if (_ui.value.novelChapterIndex == index) return
+        _ui.update { it.copy(novelChapterIndex = index) }
+        val state = _ui.value
+        if (!state.novelTranslationShown) return
+        val source = state.sourceAt(index) ?: return
+        if (novelTranslation.isComplete(index, source)) return
+        state.detail?.let { novelTranslation.start(it, index, source) }
+    }
+
+    private fun UiState.sourceAt(index: Int): String? =
+        if (novelChapters.size > 1) {
+            novelChapters.getOrNull(index)?.text?.takeIf { it.isNotBlank() }
+        } else {
+            novelText.takeIf { it.isNotBlank() }
+        }
+
+    /** 详情页已翻好的短正文当作现成译文，进阅读器不再重跑；页面在译文视图时阅读器跟着显示译文 */
+    private fun seedNovelTranslation() {
+        val state = _ui.value
+        if (state.novelChapters.size <= 1) {
+            novelTranslation.seed(0, state.detail?.translated?.novelText, state.novelText)
+        }
+        if (state.showTranslationAll && state.detail?.translated?.novelText != null) {
+            _ui.update { it.copy(novelTranslationShown = true) }
+        }
+    }
+
+    /** 把编排层的译文按当前正文校验后写进 UI；正文换了旧译文自动失效 */
+    private fun publishNovelTranslation() {
+        val streaming = novelTranslation.state.value
+        _ui.update { state ->
+            val sources = if (state.novelChapters.size > 1) {
+                state.novelChapters.map { it.text }
+            } else {
+                listOf(state.novelText)
+            }
+            val displayed = streaming.parts.keys.mapNotNull { key ->
+                val source = sources.getOrNull(key) ?: return@mapNotNull null
+                novelTranslation.displayText(key, source)?.let { key to it }
+            }.toMap()
+            Log.d(
+                "PikuDiag",
+                "publish keys=${displayed.keys.sorted()} shown=${state.novelTranslationShown} " +
+                    "running=${streaming.running} body=${displayed.values.firstOrNull()?.length ?: 0}",
+            )
+            state.copy(
+                novelChapterTranslations = displayed,
+                novelStreamProgress = streaming.running?.let { streaming.parts[it]?.progress ?: 0 },
+            )
         }
     }
 

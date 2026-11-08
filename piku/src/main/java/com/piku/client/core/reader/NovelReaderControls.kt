@@ -159,7 +159,6 @@ internal fun NovelReaderControls(
     onSeekEnd: () -> Unit,
     translationAvailable: Boolean,
     translating: Boolean,
-    busy: Boolean,
     showTranslation: Boolean,
     streamProgress: Int?,
     onToggleTranslation: () -> Unit,
@@ -204,9 +203,7 @@ internal fun NovelReaderControls(
                 ReaderTranslateChip(
                     translationAvailable = translationAvailable,
                     translating = translating,
-                    busy = busy,
                     showTranslation = showTranslation,
-                    streamProgress = streamProgress,
                     theme = theme,
                     onClick = onToggleTranslation,
                 )
@@ -770,14 +767,13 @@ private fun ReaderGlyphButton(
 }
 
 /** 底部栏译/原切换chip：无正文不渲染；非流式的在途翻译禁点防重复扣额度；
- *  流式期间保持"原/译"短标签（翻译进度在进度行展示），点按仅切换原/译展示 */
+ *  流式期间保持"原/译"短标签（翻译进度在进度行展示），点按仅切换原/译展示。
+ *  一律可点：正文流与元数据翻译互不相干，元数据在途不应禁掉这个入口。 */
 @Composable
 private fun ReaderTranslateChip(
     translationAvailable: Boolean,
     translating: Boolean,
-    busy: Boolean,
     showTranslation: Boolean,
-    streamProgress: Int?,
     theme: NovelReaderTheme,
     onClick: () -> Unit,
 ) {
@@ -797,8 +793,8 @@ private fun ReaderTranslateChip(
                 if (showTranslation) theme.link.copy(alpha = 0.15f)
                 else Color.Transparent,
             )
-            // 流式期间切换显示永远可用（无副作用）；仅非流式的在途翻译才禁点防重复扣额度
-            .clickable(enabled = !busy || streamProgress != null, onClick = onClick)
+            // 一律可点：正文流与元数据翻译互不相干，元数据在途不应禁掉这个入口
+            .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 6.dp),
     )
 }

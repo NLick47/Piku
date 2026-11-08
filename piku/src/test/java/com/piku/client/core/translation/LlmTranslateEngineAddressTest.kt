@@ -105,14 +105,102 @@ class LlmTranslateEngineAddressTest {
     }
 
     @Test
-    fun `all addresses failing yields empty translation and tries every address`() = runTest {
+    fun `all addresses failing throws after trying every address`() = runTest {
         val api = AddressAwareApi(healthy = emptySet())
         val engine = LlmTranslateEngine(api, config(baseUrls = listOf(backup)))
 
-        assertEquals(listOf(""), engine.translate(listOf(source), LlmTranslateEngine.TARGET_ZH, null))
-        // 每一次尝试都走满整条候选链（主 → 备），一条都不漏
-        assertTrue(api.urls.size >= 2)
-        assertEquals(urlsOf(primary, backup), api.urls.take(2))
+        // 连不上（code 0）不是「模型返回空」：立即交回上层判断，别用三次空转掩盖
+        val result = runCatching { engine.translate(listOf(source), LlmTranslateEngine.TARGET_ZH, null) }
+        assertTrue(result.exceptionOrNull() is TranslationApiException)
+        // 候选链一条都不漏
+        assertEquals(urlsOf(primary, backup), api.urls)
+    }
+
+    @Test
+    fun `server error propagates as endpoint unavailable after retries`() = runTest {
+        var calls = 0
+        val api = object : LlmChatApi {
+            override suspend fun chat(
+                url: String,
+                headers: Map<String, String>,
+                body: JsonObject,
+            ): ChatResponse {
+                calls++
+                throw TranslationApiException(502, "bad gateway")
+            }
+
+            override suspend fun models(url: String, headers: Map<String, String>): LlmModelsResponse =
+                LlmModelsResponse()
+        }
+        val engine = LlmTranslateEngine(api, config())
+
+        // 5xx 先按 MAX_ATTEMPTS 重试，仍失败就抛给上层（分块流据此判断「接口不可用」）
+        val result = runCatching { engine.translate(listOf(source), LlmTranslateEngine.TARGET_ZH, null) }
+        assertTrue(result.exceptionOrNull() is TranslationApiException)
+        assertEquals(3, calls)
+    }
+
+    @Test
+    fun `probe reports unreachable on network failure`() = runTest {
+        val api = object : LlmChatApi {
+            override suspend fun chat(
+                url: String,
+                headers: Map<String, String>,
+                body: JsonObject,
+            ): ChatResponse = error("probe should not chat")
+
+            override suspend fun models(url: String, headers: Map<String, String>): LlmModelsResponse =
+                throw IOException("connect timed out")
+        }
+        val engine = LlmTranslateEngine(api, config(baseUrl = "https://probe-dead.example/v1"))
+
+        assertEquals(EngineProbe.UNREACHABLE, engine.probe(1_000))
+    }
+
+    @Test
+    fun `probe treats missing models endpoint as reachable`() = runTest {
+        val api = object : LlmChatApi {
+            override suspend fun chat(
+                url: String,
+                headers: Map<String, String>,
+                body: JsonObject,
+            ): ChatResponse = error("probe should not chat")
+
+            override suspend fun models(url: String, headers: Map<String, String>): LlmModelsResponse =
+                throw TranslationApiException(404, "no /models")
+        }
+        val engine = LlmTranslateEngine(api, config(baseUrl = "https://probe-404.example/v1"))
+
+        // 有的服务不实现 /models：404 说明端点活着，不能因此判死
+        assertEquals(EngineProbe.REACHABLE, engine.probe(1_000))
+    }
+
+    @Test
+    fun `single attempt probe stops after the first failure`() = runTest {
+        var calls = 0
+        val api = object : LlmChatApi {
+            override suspend fun chat(
+                url: String,
+                headers: Map<String, String>,
+                body: JsonObject,
+            ): ChatResponse {
+                calls++
+                throw TranslationApiException(502, "bad gateway")
+            }
+
+            override suspend fun models(url: String, headers: Map<String, String>): LlmModelsResponse =
+                LlmModelsResponse()
+        }
+        val engine = LlmTranslateEngine(api, config())
+
+        // 首块探针：端点不通时只打一次，别让用户干等两轮退避。
+        // 用长文本走单条路径（小说分块就是这条，批量路径不受 maxAttempts 影响）
+        val longText = "あ".repeat(700)
+        val result = runCatching {
+            engine.translate(listOf(longText), LlmTranslateEngine.TARGET_ZH, null, maxAttempts = 1)
+        }
+        assertTrue(result.exceptionOrNull() is TranslationApiException)
+        assertEquals(1, calls)
     }
 
     @Test
