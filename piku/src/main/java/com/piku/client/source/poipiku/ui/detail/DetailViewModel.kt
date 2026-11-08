@@ -18,7 +18,6 @@ import com.piku.client.core.model.Work
 import com.piku.client.core.model.WorkDetail
 import com.piku.client.core.model.WorkSource
 import com.piku.client.core.model.key
-import com.piku.client.core.model.mergeTranslatedFields
 import com.piku.client.core.novelcache.NovelCacheRepository
 import com.piku.client.core.ui.novelcache.NovelCacheAction
 import com.piku.client.core.ui.novelcache.NovelCacheUiState
@@ -30,6 +29,10 @@ import com.piku.client.core.storage.media.ImageShareHelper
 import com.piku.client.core.storage.prefs.MangaReaderSettings
 import com.piku.client.core.storage.prefs.NovelReaderSettings
 import com.piku.client.core.storage.prefs.SettingsRepository
+import com.piku.client.core.translation.DetailTranslationController
+import com.piku.client.core.translation.DetailTranslationController.Origin.AUTO
+import com.piku.client.core.translation.DetailTranslationController.Origin.MANUAL
+import com.piku.client.core.translation.DetailTranslationController.Request as DetailRequest
 import com.piku.client.core.translation.ImageTranslateEngine
 import com.piku.client.core.translation.ImageTranslateError
 import com.piku.client.core.translation.ImageTranslateResult
@@ -176,8 +179,8 @@ data class DetailUiState(
     val novelRemainder: String? = null,
     /**
      * 顶栏全局开关（方案 B）：true = 整页显示译文。
-     * 默认 false（显示原文）；自动翻译首次拿到译文时自动置为 true
-     * （见 [DetailViewModel.translate] 的 showAfter），之后完全由用户切换控制。
+     * 默认 false（显示原文）；自动翻译首次拿到译文时由共用编排置为 true，
+     * 之后完全由用户切换控制。
      */
     val showTranslationAll: Boolean = false,
     /** 标签默认显示态：「自动翻译标签」设置，VM 内 collect 保持同步 */
@@ -501,6 +504,65 @@ class DetailViewModel @Inject constructor(
         onFailed = { feedback.show(R.string.detail_translate_failed) },
     )
 
+    /** 短字段翻译编排（与内容源详情页共用）：本类只提供状态读写与请求执行 */
+    private val detailTranslation = DetailTranslationController(
+        translate = { detail, request ->
+            translationRepository.translate(
+                detail,
+                observeLanguageUseCase().value,
+                request.includeLongNovel,
+                request.forcedEntry,
+                force = request.origin == MANUAL,
+            )
+        },
+        config = {
+            DetailTranslationController.Config(
+                autoEnabled = settingsRepository.aiTranslateEnabled.value,
+                hasKey = translationRepository.hasKey(),
+            )
+        },
+        scope = viewModelScope,
+        read = {
+            val s = _uiState.value
+            DetailTranslationController.State(
+                detail = s.detail,
+                translating = s.translating,
+                showTranslationAll = s.showTranslationAll,
+                fetchingNovelText = s.fetchingNovelText,
+            )
+        },
+        write = { transform ->
+            _uiState.update { s ->
+                val next = transform(
+                    DetailTranslationController.State(
+                        detail = s.detail,
+                        translating = s.translating,
+                        showTranslationAll = s.showTranslationAll,
+                        fetchingNovelText = s.fetchingNovelText,
+                    )
+                )
+                s.copy(
+                    detail = next.detail,
+                    translating = next.translating,
+                    showTranslationAll = next.showTranslationAll,
+                    fetchingNovelText = next.fetchingNovelText,
+                )
+            }
+        },
+        onFailed = { failure ->
+            feedback.show(
+                when (failure) {
+                    DetailTranslationController.Failure.NO_MODEL -> R.string.detail_translate_no_model
+                    DetailTranslationController.Failure.REQUEST -> R.string.detail_translate_failed
+                }
+            )
+        },
+        autoEnabled = settingsRepository.aiTranslateEnabled,
+        modelAvailability = translationRepository.roleModelAvailability,
+        // 锁定占位页没有可翻内容，别占住忙状态挡住解锁后的补翻
+        canTranslate = { !it.passwordProtected || it.imageUrls.isNotEmpty() || it.novelText.isNotBlank() },
+    )
+
     // 必须声明在 init 之前：init 里的收集器会被 Main.immediate 内联进构造函数，那时这些字段还没初始化
     private val _translatedImages = mutableMapOf<Int, android.graphics.Bitmap>()
     private var imageTranslateJob: Job? = null
@@ -572,8 +634,7 @@ class DetailViewModel @Inject constructor(
         viewModelScope.launch {
             settingsRepository.aiTranslateEnabled.collect { enabled ->
                 _uiState.update { it.copy(aiTranslateEnabled = enabled) }
-                // 开关是在详情页停留期间打开的：立刻补翻当前作品并自动呈现译文
-                if (enabled && _uiState.value.detail?.translated == null) translate(showAfter = true)
+                // 停留期间打开开关的补翻由共用编排的观察者负责，两个详情页一致
             }
         }
         viewModelScope.launch {
@@ -589,12 +650,6 @@ class DetailViewModel @Inject constructor(
                         hasImageModel = avail.image,
                         hasNovelModel = avail.novel,
                     )
-                }
-                // 补翻：文本或正文通道有模型时补上此前被无 key 静默跳过的作品，按角色判定不算兜底
-                if ((avail.text || avail.novel) && _uiState.value.aiTranslateEnabled &&
-                    _uiState.value.detail?.translated == null
-                ) {
-                    translate(showAfter = true)
                 }
                 // 图片模型失效时清掉内存译图：无法再生的译图不该继续展示
                 if (!avail.image && _uiState.value.imageTranslatingPage == null) {
@@ -640,7 +695,7 @@ class DetailViewModel @Inject constructor(
     /**
      * 顶栏手动入口（最短路径）：
      * - 已有译文 → 整页原/译切换；
-     * - 没有 → 立即翻译，并预先把展示态切到译文，翻完自动呈现。
+     * - 没有 → 立即翻译，拿到译文后由共用编排呈现，失败不动显示态。
      * 与自动翻译同范围（不含长正文）：长篇只在阅读器内按需拉取。
      */
     fun onTopBarTranslateClick() {
@@ -648,8 +703,8 @@ class DetailViewModel @Inject constructor(
             toggleTranslationAll()
             return
         }
-        translate(requireAutoEnabled = false)
-        _uiState.update { it.copy(showTranslationAll = true, fieldOverrides = emptySet()) }
+        detailTranslation.request(DetailRequest(MANUAL))
+        _uiState.update { it.copy(fieldOverrides = emptySet()) }
     }
 
     /**
@@ -728,117 +783,9 @@ class DetailViewModel @Inject constructor(
         }
     }
 
-    /** 一次翻译请求的参数快照：in-flight 期间收到的新请求记为待补跑 */
-    private data class TranslateRequest(
-        val includeLongNovel: Boolean,
-        val requireAutoEnabled: Boolean,
-        val showAfter: Boolean,
-        /** 一次性重翻覆盖的模型（仅记快照，不写入默认设置） */
-        val forcedEntry: ModelEntry? = null,
-        /** 重翻强制切到译文视图（已存在译文时仍翻面，保证看到新结果） */
-        val forceShow: Boolean = false,
-    )
-
-    /** 翻译在途时收到的新请求只保留最近一次，当前这轮完成后补跑，不再静默丢弃 */
-    private var pendingTranslate: TranslateRequest? = null
-
-    /**
-     * 拉取译文（缓存优先，命中时不发网络请求）。
-     * 自动路径失败静默：UI 继续显示原文，不弹错误打扰阅读；
-     * 手动路径（顶栏/阅读器显式点击）失败给 snackbar 轻提示，可一键重试。
-     *
-     * 锁定占位页直接跳过：没有可翻的有效内容（判定与 [maybeAutoUnlock] 的
-     * "已解锁"同款），白烧免费额度不说，还会占住 translating 让解锁完成后
-     * 触发的那次翻译撞上 in-flight 守卫被吞——历史重进密码作品"解锁了却不翻"。
-     *
-     * @param includeLongNovel 长正文是否随本次一起翻；仅阅读器入口传 true
-     * @param requireAutoEnabled 自动路径要求总开关打开；顶栏/阅读器的显式点击不受限
-     * @param forcedEntry 一次性重翻：指定则短字段强制用此模型，正文只走正文默认
-     *
-     * 手动路径（[manual]）一律强制送翻：跳过目标语言预检，用户点了「译」就得翻，
-     * 不能让省额度的启发式把夹在中文里的日文吞掉。自动路径保持预检行为。
-     */
-    private fun translate(
-        includeLongNovel: Boolean = false,
-        requireAutoEnabled: Boolean = true,
-        showAfter: Boolean = false,
-        forcedEntry: ModelEntry? = null,
-        forceShow: Boolean = false,
-    ) {
-        val detail = _uiState.value.detail ?: return
-        if (_uiState.value.translating) {
-            Log.d("PikuDiag", "translate queued work=$workId (busy)")
-            pendingTranslate = TranslateRequest(includeLongNovel, requireAutoEnabled, showAfter, forcedEntry, forceShow)
-            return
-        }
-        if (detail.passwordProtected && detail.imageUrls.isEmpty() && detail.novelText.isBlank()) return
-        if (requireAutoEnabled && !settingsRepository.aiTranslateEnabled.value) return
-        if (!translationRepository.hasKey()) {
-            Log.d("PikuDiag", "translate skip work=$workId: no api key (catalog pending?)")
-            return
-        }
-        val manual = !requireAutoEnabled
-        viewModelScope.launch {
-            _uiState.update { it.copy(translating = true, fetchingNovelText = includeLongNovel) }
-            val outcome = runCatching {
-                translationRepository.translate(
-                    detail,
-                    observeLanguageUseCase().value,
-                    includeLongNovel,
-                    forcedEntry,
-                    force = manual,
-                )
-            }.onFailure { error ->
-                Log.d("PikuDiag", "translate fail work=$workId: ${error.message}")
-            }.getOrNull()
-            // 只有引擎/网络层面的真失败才提示；预检透传等“正常无译文”保持静默
-            val failed = manual && (outcome == null || outcome.failed)
-            val fields = outcome?.takeUnless { it.failed }?.fields
-            if (failed) notifyTranslateFailed()
-            _uiState.update { state ->
-                // 期间可能已重新加载/解锁成 detail，按当前 detail 回填
-                val current = state.detail ?: return@update state.copy(
-                    translating = false,
-                    fetchingNovelText = false,
-                )
-                val merged = mergeTranslatedFields(current.translated, fields)
-                // 自动路径在“本次首次拿到译文”时翻面到译文视图；已有译文后的
-                // 重跑（解锁补翻、重登刷新）不翻转——此时 showTranslationAll=false
-                // 可能正是用户刚切回原文的显式选择，不能覆盖。translated == null 时
-                // 用户不可能做过原/译选择（chip 与顶栏按钮都尚未出现），翻面安全。
-                val shouldShow = merged != null &&
-                    ((showAfter && current.translated == null) || forceShow)
-                state.copy(
-                    translating = false,
-                    fetchingNovelText = false,
-                    detail = if (merged != null) current.copy(translated = merged) else current,
-                    showTranslationAll = if (shouldShow) true else state.showTranslationAll,
-                )
-            }
-            // 补跑在途期间记下的最近一次请求（先清空再跑，防循环）
-            pendingTranslate?.let { pending ->
-                pendingTranslate = null
-                translate(
-                    pending.includeLongNovel,
-                    pending.requireAutoEnabled,
-                    pending.showAfter,
-                    pending.forcedEntry,
-                    pending.forceShow,
-                )
-            }
-        }
-    }
-
-    /** 换模型重翻：一次性重翻短字段，不写入默认设置，失败可重试并复用所选模型
-     *  正文不在此列，正文模型由 AI 翻译设置统一决定，正文失败的重试在阅读器内重启流 */
+    /** 换模型重翻：一次性重翻短字段，不写入默认设置；正文模型由 AI 翻译设置统一决定 */
     fun reTranslateWith(entry: ModelEntry) {
-        translate(
-            includeLongNovel = false,
-            requireAutoEnabled = false,
-            showAfter = true,
-            forcedEntry = entry,
-            forceShow = true,
-        )
+        detailTranslation.request(DetailRequest(MANUAL, forcedEntry = entry, forceShow = true))
         _uiState.update { it.copy(showModelPicker = false) }
     }
 
@@ -945,11 +892,6 @@ class DetailViewModel @Inject constructor(
         is ImageTranslateError.NoModel -> R.string.image_translate_no_model
         is ImageTranslateError.Network -> R.string.image_translate_network
         is ImageTranslateError.Upstream, is ImageTranslateError.BadResponse -> R.string.image_translate_upstream
-    }
-
-    /** 手动翻译失败提示；小文本不重试，用户再点一次「译」即重新开始 */
-    private fun notifyTranslateFailed() {
-        feedback.show(R.string.detail_translate_failed)
     }
 
     private suspend fun doTranslateImage(imageUrl: String): ImageTranslateResult {
@@ -1078,7 +1020,7 @@ class DetailViewModel @Inject constructor(
                     // 密码错误也是 onSuccess 返回（passwordError=true）：不得触发翻译，
                     // 否则用户每输错一次就重跑一轮请求
                     if (!detail.passwordError) {
-                        translate(showAfter = settingsRepository.aiTranslateEnabled.value)
+                        detailTranslation.request(DetailRequest(AUTO))
                     }
                 }
                 .onFailure { error ->
@@ -1139,7 +1081,7 @@ class DetailViewModel @Inject constructor(
                     } else if (!unlocked.unlockBlocked && _uiState.value.loggedIn) {
                         loadFullImages(saved)
                     }
-                    if (!failed) translate(showAfter = settingsRepository.aiTranslateEnabled.value)
+                    if (!failed) detailTranslation.request(DetailRequest(AUTO))
                 }
                 .onFailure { error ->
                     Log.d("PikuDiag", "maybeAutoUnlock work=$workId network/parse failure, keep password")
@@ -1647,7 +1589,7 @@ class DetailViewModel @Inject constructor(
                     // 普通作品等首图渲染完再解析（见 ensureFullImages）
                     if (detail.passwordProtected) loadFullImages(retainedPassword)
                     maybeAutoUnlock(detail)
-                    translate(showAfter = settingsRepository.aiTranslateEnabled.value)
+                    detailTranslation.request(DetailRequest(AUTO))
                 }
                 .onFailure { error ->
                     Log.d(

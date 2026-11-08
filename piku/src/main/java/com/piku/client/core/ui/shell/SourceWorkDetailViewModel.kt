@@ -19,7 +19,6 @@ import com.piku.client.core.model.WorkKind
 import com.piku.client.core.model.WorkSource
 import com.piku.client.core.model.WorkStats
 import com.piku.client.core.model.key
-import com.piku.client.core.model.mergeTranslatedFields
 import com.piku.client.core.novelcache.NovelCacheRepository
 import com.piku.client.core.novelcache.fetchNovelChapters
 import com.piku.client.core.ui.novelcache.NovelCacheAction
@@ -36,6 +35,10 @@ import com.piku.client.core.source.SourceWorkPage
 import com.piku.client.core.storage.prefs.MangaReaderSettings
 import com.piku.client.core.storage.prefs.NovelReaderSettings
 import com.piku.client.core.storage.prefs.SettingsRepository
+import com.piku.client.core.translation.DetailTranslationController
+import com.piku.client.core.translation.DetailTranslationController.Origin.AUTO
+import com.piku.client.core.translation.DetailTranslationController.Origin.MANUAL
+import com.piku.client.core.translation.DetailTranslationController.Request as DetailRequest
 import com.piku.client.core.translation.ImageTranslateEngine
 import com.piku.client.core.translation.ImageTranslateResult
 import com.piku.client.core.translation.ImageTranslationPrompts
@@ -273,6 +276,60 @@ class SourceWorkDetailViewModel @Inject constructor(
         onFailed = { feedback.show(R.string.detail_translate_failed) },
     )
 
+    /** 短字段翻译编排（与 poipiku 详情页共用）：本类只提供状态读写与请求执行 */
+    private val detailTranslation = DetailTranslationController(
+        translate = { detail, request ->
+            translationRepository.translate(
+                detail,
+                observeLanguageUseCase().value,
+                request.includeLongNovel,
+                request.forcedEntry,
+                force = request.origin == MANUAL,
+            )
+        },
+        config = {
+            DetailTranslationController.Config(
+                autoEnabled = settingsRepository.aiTranslateEnabled.value,
+                hasKey = translationRepository.hasKey(),
+            )
+        },
+        scope = viewModelScope,
+        read = {
+            val s = _ui.value
+            DetailTranslationController.State(
+                detail = s.detail,
+                translating = s.translating,
+                showTranslationAll = s.showTranslationAll,
+            )
+        },
+        write = { transform ->
+            _ui.update { s ->
+                val next = transform(
+                    DetailTranslationController.State(
+                        detail = s.detail,
+                        translating = s.translating,
+                        showTranslationAll = s.showTranslationAll,
+                    )
+                )
+                s.copy(
+                    detail = next.detail,
+                    translating = next.translating,
+                    showTranslationAll = next.showTranslationAll,
+                )
+            }
+        },
+        onFailed = { failure ->
+            feedback.show(
+                when (failure) {
+                    DetailTranslationController.Failure.NO_MODEL -> R.string.detail_translate_no_model
+                    DetailTranslationController.Failure.REQUEST -> R.string.detail_translate_failed
+                }
+            )
+        },
+        autoEnabled = settingsRepository.aiTranslateEnabled,
+        modelAvailability = translationRepository.roleModelAvailability,
+    )
+
     /** 正文分块流式翻译（与 poipiku 详情页共用）：单篇 key 0，分章用章号 */
     private val novelTranslation = NovelTranslationController(
         hasModel = { translationRepository.hasNovelModel() },
@@ -457,7 +514,7 @@ class SourceWorkDetailViewModel @Inject constructor(
         }
         refreshCacheState(work)
         recordHistoryUseCase(work)
-        if (settingsRepository.aiTranslateEnabled.value) translate()
+        detailTranslation.request(DetailRequest(AUTO))
     }
 
     private suspend fun loadIllust(work: Work, source: ContentSource) {
@@ -518,8 +575,8 @@ class SourceWorkDetailViewModel @Inject constructor(
                         favoriteRepository.refreshImageCount(loadedWork)
                     }
                     recordHistoryUseCase(loadedWork)
-                    // 与 poipiku 详情一致：开了 AI 翻译就自动译一次（失败静默）
-                    if (settingsRepository.aiTranslateEnabled.value) translate()
+                    // 与 poipiku 详情一致：开页面就试一次自动翻译（失败静默）
+                    detailTranslation.request(DetailRequest(AUTO))
                 },
                 onFailure = { error ->
                     // 详情没出来这一页就是失败态：相关作品跟着撤，别在错误页上补网格
@@ -799,12 +856,12 @@ class SourceWorkDetailViewModel @Inject constructor(
             _ui.update { it.copy(showTranslationAll = !it.showTranslationAll) }
             return
         }
-        translate(force = true)
+        detailTranslation.request(DetailRequest(MANUAL))
     }
 
     /** chip 长按：换模型重翻（pixiv 详情页没有模型选择器，直接按当前模型重翻一次） */
     fun onRetranslate() {
-        translate(force = true)
+        detailTranslation.request(DetailRequest(MANUAL, forceShow = true))
     }
 
     /**
@@ -823,47 +880,6 @@ class SourceWorkDetailViewModel @Inject constructor(
             } else {
                 addCustomTagUseCase(tagSource, tag)
                 feedback.show(R.string.detail_tag_added)
-            }
-        }
-    }
-
-    /** [force] 手动入口（chip 点击/长按重翻）传 true，跳过目标语言预检强制送翻 */
-    private fun translate(force: Boolean = false) {
-        val detail = _ui.value.detail ?: return
-        if (_ui.value.translating) {
-            Log.d("PikuDiag", "source detail translate queued work=$workId (busy)")
-            return
-        }
-        if (!translationRepository.hasKey()) {
-            Log.d("PikuDiag", "source detail translate skip work=$workId: no api key")
-            return
-        }
-        viewModelScope.launch {
-            _ui.update { it.copy(translating = true) }
-            val outcome = runCatching {
-                translationRepository.translate(
-                    detail,
-                    observeLanguageUseCase().value,
-                    force = force,
-                )
-            }.onFailure { error ->
-                Log.d("PikuDiag", "source detail translate fail work=$workId: ${error.message}")
-            }.getOrNull()
-            // 手动失败要出声：小文本一次定成败，端点异常都会落到 outcome == null
-            if (force && (outcome == null || outcome.failed)) {
-                feedback.show(R.string.detail_translate_failed)
-            }
-            _ui.update { state ->
-                val current = state.detail ?: return@update state.copy(translating = false)
-                val fields = outcome?.takeUnless { it.failed }?.fields
-                val merged = mergeTranslatedFields(current.translated, fields)
-                // 首次拿到译文翻到译文视图；已有译文后的重跑不动用户的显式选择（同 poipiku）
-                val show = merged != null && (current.translated == null || state.showTranslationAll)
-                state.copy(
-                    translating = false,
-                    detail = current.copy(translated = merged),
-                    showTranslationAll = show,
-                )
             }
         }
     }

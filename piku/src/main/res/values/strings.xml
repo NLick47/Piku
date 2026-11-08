@@ -565,6 +565,7 @@
     <string name="detail_novel_model_unavailable">正文翻译模型已下线，暂无法翻译正文</string>
     <string name="detail_novel_translation_stale">历史译文（正文翻译模型已下线）</string>
     <string name="detail_translate_failed">翻译失败，请稍后重试</string>
+    <string name="detail_translate_no_model">没有可用的翻译模型，请先在 AI 翻译设置里配置</string>
     <string name="detail_translate_retry">重试</string>
     <string name="detail_retry_with_model_title">选择翻译模型（仅本次重翻）</string>
     <string name="detail_action_save">保存到相册</string>

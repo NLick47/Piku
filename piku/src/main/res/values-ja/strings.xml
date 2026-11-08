@@ -565,6 +565,7 @@
     <string name="detail_novel_model_unavailable">本文翻訳モデルが利用できないため、現在本文は翻訳できません</string>
     <string name="detail_novel_translation_stale">過去の翻訳（本文翻訳モデルはオフライン）</string>
     <string name="detail_translate_failed">翻訳に失敗しました。しばらくしてからもう一度お試しください。</string>
+    <string name="detail_translate_no_model">利用できる翻訳モデルがありません。AI翻訳設定で設定してください。</string>
     <string name="detail_translate_retry">再試行</string>
     <string name="detail_retry_with_model_title">翻訳モデルを選択（今回の再翻訳のみ）</string>
     <string name="detail_action_save">アルバムに保存</string>
