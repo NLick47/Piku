@@ -1094,4 +1094,12 @@
     <string name="llm_provider_prompt_note">默认使用模型目录下发的提示词（目录不可用时使用应用内置版本）；修改只对当前 API 生效。批量翻译的 [[n]] 格式由程序自动附加。</string>
     <string name="llm_prompt_done">完成</string>
     <string name="llm_prompt_apply_hint">返回后点保存生效</string>
+    <string name="llm_status_on">已开启 · %1$d 个模型可用</string>
+    <string name="llm_status_off">已关闭</string>
+    <string name="llm_config_master_label">总开关</string>
+    <string name="llm_disabled_hint">已暂停自动翻译，下方配置会保留</string>
+    <string name="llm_following_default">跟随默认</string>
+    <string name="llm_discard_title">放弃未保存的修改？</string>
+    <string name="llm_discard_message">填写的内容不会保存</string>
+    <string name="llm_discard_confirm">放弃修改</string>
 </resources>

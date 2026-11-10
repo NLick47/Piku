@@ -1094,4 +1094,12 @@
     <string name="llm_provider_prompt_note">The catalog prompt is used by default (with the built-in version when unavailable); edits apply only to this API. The [[n]] batch format is appended automatically.</string>
     <string name="llm_prompt_done">Done</string>
     <string name="llm_prompt_apply_hint">Save the API to apply</string>
+    <string name="llm_status_on">On · %1$d models available</string>
+    <string name="llm_status_off">Off</string>
+    <string name="llm_config_master_label">Master switch</string>
+    <string name="llm_disabled_hint">Auto translation is paused; your settings are kept</string>
+    <string name="llm_following_default">Following default</string>
+    <string name="llm_discard_title">Discard unsaved changes?</string>
+    <string name="llm_discard_message">What you entered will not be saved</string>
+    <string name="llm_discard_confirm">Discard</string>
 </resources>

@@ -7,7 +7,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,16 +17,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -39,7 +36,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -47,7 +43,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.piku.client.R
-import com.piku.client.core.translation.AuthMode
 import com.piku.client.core.translation.ManualProvider
 import com.piku.client.core.translation.ManualProviderPreset
 import com.piku.client.core.translation.ModelEntry
@@ -55,6 +50,8 @@ import com.piku.client.core.translation.Role
 import com.piku.client.core.translation.isUsable
 import com.piku.client.core.ui.common.PikuBottomSheet
 import com.piku.client.core.ui.common.PikuPageHeader
+import com.piku.client.core.ui.common.PikuSheetSubtitle
+import com.piku.client.core.ui.common.PikuSheetTitle
 import com.piku.client.core.ui.theme.HomeBgBottomDark
 import com.piku.client.core.ui.theme.HomeBgBottomLight
 import com.piku.client.core.ui.theme.HomeBgTopDark
@@ -85,6 +82,7 @@ fun LlmConfigScreen(
     onSaveProvider: (ManualProvider, String?, Boolean) -> Unit,
     onDeleteProvider: (String) -> Unit,
     onTestProvider: (String) -> Unit,
+    onCancelTest: (String) -> Unit,
     onTestDraft: (ManualProvider, String?) -> Unit,
     onClearDraftTest: () -> Unit,
     onFetchModels: (ManualProvider, String?) -> Unit,
@@ -109,7 +107,7 @@ fun LlmConfigScreen(
         page = LlmPage.Editor(
             request = ProviderEditorRequest(
                 provider = preset?.toDraft() ?: ManualProvider(
-                    authMode = AuthMode.NONE,
+                    authMode = com.piku.client.core.translation.AuthMode.NONE,
                     roles = listOf(role?.takeIf { it != Role.IMAGE } ?: Role.TEXT),
                 ),
                 isNew = true,
@@ -161,6 +159,7 @@ fun LlmConfigScreen(
             onCustomAdd = { openAdd(returnToManual = true) },
             onEdit = { provider -> openEdit(provider, returnToManual = true) },
             onTest = onTestProvider,
+            onCancelTest = onCancelTest,
         )
 
         LlmPage.BuiltinPrompts -> BuiltinPromptScreen(
@@ -190,6 +189,7 @@ fun LlmConfigScreen(
             onRequestDelete = { deleteTarget = it },
             onDismiss = { leaveEditor(current.returnToManual) },
             onClearTest = onClearDraftTest,
+            onCancelDraftTest = { onCancelTest(ProviderTestState.DRAFT_TEST_KEY) },
             dark = dark,
         )
     }
@@ -223,12 +223,13 @@ fun LlmConfigScreen(
         val returnToManual = (page as? LlmPage.Editor)?.returnToManual == true
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
+            containerColor = PikuColors.surface,
             title = {
                 Text(
                     text = stringResource(R.string.llm_provider_delete_confirm_title),
                     color = PikuColors.textPrimary,
                     fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = FontWeight.Medium,
                 )
             },
             text = {
@@ -236,7 +237,6 @@ fun LlmConfigScreen(
                     text = stringResource(R.string.llm_provider_delete_confirm_text),
                     color = PikuColors.textSecondary,
                     fontSize = 13.sp,
-                    lineHeight = 19.sp,
                 )
             },
             confirmButton = {
@@ -271,6 +271,12 @@ private fun MainSettingsPage(
     onOpenCatalogSource: () -> Unit,
     onBack: () -> Unit,
 ) {
+    val modelCount = state.translateModels.count { it.isUsable() }
+    val headerSubtitle = if (state.aiTranslateEnabled) {
+        stringResource(R.string.llm_status_on, modelCount)
+    } else {
+        stringResource(R.string.llm_status_off)
+    }
     Column(
         Modifier
             .fillMaxSize()
@@ -278,7 +284,7 @@ private fun MainSettingsPage(
     ) {
         PikuPageHeader(
             title = stringResource(R.string.menu_ai_translate),
-            subtitle = stringResource(R.string.llm_config_subtitle),
+            subtitle = headerSubtitle,
             dark = dark,
             onBack = onBack,
         )
@@ -287,46 +293,63 @@ private fun MainSettingsPage(
                 .fillMaxSize()
                 .navigationBarsPadding()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp)
-                .padding(top = 4.dp, bottom = 28.dp),
+                .padding(horizontal = 18.dp)
+                .padding(top = 18.dp, bottom = 28.dp),
         ) {
-            TranslateSettingsCard(
+            OverviewCard(
                 state = state,
                 dark = dark,
                 onToggleEnabled = onToggleEnabled,
                 onToggleTagsAuto = onToggleTagsAuto,
+                onPickRole = onPickRole,
             )
 
-            Spacer(Modifier.height(20.dp))
-            SettingsSectionLabel(stringResource(R.string.llm_section_models))
-            ModelBindingsCard(state = state, onPick = onPickRole, dark = dark)
-
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(22.dp))
             SettingsSectionLabel(stringResource(R.string.llm_section_interface))
-            InterfaceCard(
-                state = state,
-                dark = dark,
-                onOpenManual = onOpenManual,
-                onOpenCatalogSource = onOpenCatalogSource,
-            )
+            SettingsCard(dark = dark) {
+                Column(Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
+                    LlmEntryRow(
+                        title = stringResource(R.string.llm_config_tab_manual),
+                        subtitle = if (state.manualProviders.isEmpty()) {
+                            stringResource(R.string.llm_manual_entry_empty)
+                        } else {
+                            stringResource(R.string.llm_manual_entry_count, state.manualProviders.size)
+                        },
+                        onClick = onOpenManual,
+                    )
+                    LlmEntryRow(
+                        title = stringResource(R.string.llm_catalog_source),
+                        subtitle = stringResource(
+                            if (state.catalogIsCustom) {
+                                R.string.llm_catalog_custom
+                            } else {
+                                R.string.llm_catalog_default
+                            },
+                        ),
+                        onClick = onOpenCatalogSource,
+                    )
+                }
+            }
 
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(22.dp))
             SettingsSectionLabel(stringResource(R.string.llm_section_advanced))
             SettingsCard(dark = dark) {
-                InterfaceRow(
-                    title = stringResource(R.string.llm_builtin_prompt_title),
-                    subtitle = stringResource(R.string.llm_builtin_prompt_desc),
-                    onClick = onOpenBuiltinPrompts,
-                )
+                Column(Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
+                    LlmEntryRow(
+                        title = stringResource(R.string.llm_builtin_prompt_title),
+                        subtitle = stringResource(R.string.llm_builtin_prompt_desc),
+                        onClick = onOpenBuiltinPrompts,
+                    )
+                }
             }
 
             Spacer(Modifier.height(18.dp))
             Text(
                 text = stringResource(R.string.llm_builtin_footnote),
-                color = PikuColors.textFaint,
-                fontSize = 10.5.sp,
-                lineHeight = 16.sp,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                color = PikuColors.textSecondary,
+                fontSize = 11.sp,
+                lineHeight = 17.sp,
+                modifier = Modifier.padding(horizontal = 2.dp),
             )
         }
     }
@@ -339,102 +362,67 @@ private fun pageBackground(dark: Boolean): Brush = Brush.verticalGradient(
 )
 
 @Composable
-private fun TranslateSettingsCard(
+private fun OverviewCard(
     state: HomeUiState,
     dark: Boolean,
     onToggleEnabled: (Boolean) -> Unit,
     onToggleTagsAuto: (Boolean) -> Unit,
+    onPickRole: (String) -> Unit,
 ) {
     SettingsCard(dark = dark) {
-        TranslateToggleRow(
-            title = stringResource(R.string.ai_translate_enable),
-            subtitle = stringResource(R.string.ai_translate_auto_subtitle),
-            checked = state.aiTranslateEnabled,
-            onToggle = onToggleEnabled,
-            dark = dark,
-        )
-        if (state.aiTranslateEnabled) {
-            HorizontalDivider(
-                color = PikuColors.border,
-                thickness = 0.5.dp,
-                modifier = Modifier.padding(horizontal = 14.dp),
-            )
-            TranslateToggleRow(
-                title = stringResource(R.string.ai_translate_tags_auto),
-                subtitle = null,
-                checked = state.autoTranslateTags,
-                onToggle = onToggleTagsAuto,
-                dark = dark,
-                compact = true,
-            )
-        }
-    }
-}
-
-@Composable
-private fun TranslateToggleRow(
-    title: String,
-    subtitle: String?,
-    checked: Boolean,
-    onToggle: (Boolean) -> Unit,
-    dark: Boolean,
-    compact: Boolean = false,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onToggle(!checked) }
-            .padding(
-                horizontal = 16.dp,
-                vertical = if (compact) 11.dp else 14.dp,
-            ),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = title,
-                color = PikuColors.textPrimary,
-                fontSize = if (compact) 13.5.sp else 14.5.sp,
-                fontWeight = FontWeight.Medium,
-            )
-            if (subtitle != null) {
-                Spacer(Modifier.height(2.dp))
+        Column(Modifier.padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.llm_config_master_label),
+                        color = PikuColors.textFaint,
+                        fontSize = 11.sp,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = stringResource(R.string.ai_translate_auto_subtitle),
+                        color = PikuColors.textPrimary,
+                        fontSize = 13.sp,
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                Switch(
+                    checked = state.aiTranslateEnabled,
+                    onCheckedChange = onToggleEnabled,
+                    colors = themedSwitchColors(dark),
+                )
+            }
+            if (!state.aiTranslateEnabled) {
+                Spacer(Modifier.height(8.dp))
                 Text(
-                    text = subtitle,
+                    text = stringResource(R.string.llm_disabled_hint),
                     color = PikuColors.textSecondary,
-                    fontSize = 11.5.sp,
+                    fontSize = 11.sp,
+                    lineHeight = 17.sp,
                 )
             }
-        }
-        Spacer(Modifier.width(12.dp))
-        androidx.compose.material3.Switch(
-            checked = checked,
-            onCheckedChange = onToggle,
-            colors = themedSwitchColors(dark),
-        )
-    }
-}
 
-@Composable
-private fun ModelBindingsCard(
-    state: HomeUiState,
-    onPick: (String) -> Unit,
-    dark: Boolean,
-) {
-    SettingsCard(dark = dark) {
-        listOf(Role.TEXT, Role.NOVEL, Role.IMAGE).forEachIndexed { index, role ->
-            if (index > 0) {
-                HorizontalDivider(
-                    color = PikuColors.border,
-                    thickness = 0.5.dp,
-                    modifier = Modifier.padding(horizontal = 14.dp),
-                )
+            LlmDivider()
+            listOf(Role.TEXT, Role.NOVEL, Role.IMAGE).forEach { role ->
+                ModelBindingRow(role = role, state = state, onClick = { onPickRole(role) })
             }
-            ModelBindingRow(
-                role = role,
-                state = state,
-                onClick = { onPick(role) },
-            )
+
+            if (state.aiTranslateEnabled) {
+                LlmDivider()
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = stringResource(R.string.ai_translate_tags_auto),
+                        color = PikuColors.textPrimary,
+                        fontSize = 12.sp,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(
+                        checked = state.autoTranslateTags,
+                        onCheckedChange = onToggleTagsAuto,
+                        colors = themedSwitchColors(dark),
+                    )
+                }
+            }
         }
     }
 }
@@ -447,118 +435,52 @@ private fun ModelBindingRow(
 ) {
     val entry = selectedLlmEntry(state, role)
     val missing = entry != null && !entry.isUsable()
+    val label = entry?.label?.ifBlank { entry.baseUrl }
+        ?: stringResource(R.string.llm_source_none)
+    val text = if (missing) {
+        "$label · ${stringResource(R.string.llm_manual_key_missing)}"
+    } else {
+        label
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .padding(vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(
-                text = roleLabel(role),
-                color = PikuColors.textSecondary,
-                fontSize = 10.5.sp,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = roleLabel(role),
+                    color = PikuColors.textFaint,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (storedSelection(state, role).isBlank()) {
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = stringResource(R.string.llm_following_default),
+                        color = PikuColors.textFaint,
+                        fontSize = 11.sp,
+                    )
+                }
+            }
             Spacer(Modifier.height(2.dp))
             Text(
-                text = entry?.label?.ifBlank { entry.baseUrl }
-                    ?: stringResource(R.string.llm_source_none),
-                color = if (missing) PikuColors.error else PikuColors.textPrimary,
-                fontSize = 13.5.sp,
-                fontWeight = FontWeight.Medium,
+                text = text,
+                color = when {
+                    missing -> PikuColors.error
+                    entry == null -> PikuColors.textSecondary
+                    else -> PikuColors.textPrimary
+                },
+                fontSize = 13.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        when {
-            missing -> MiniPill(
-                stringResource(R.string.llm_manual_key_missing),
-                color = PikuColors.error,
-            )
-            entry?.isManual == true -> MiniPill(stringResource(R.string.llm_source_manual))
-        }
-        Spacer(Modifier.width(4.dp))
-        Icon(
-            imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-            contentDescription = null,
-            tint = PikuColors.textFaint,
-            modifier = Modifier.size(17.dp),
-        )
-    }
-}
-
-@Composable
-private fun InterfaceCard(
-    state: HomeUiState,
-    dark: Boolean,
-    onOpenManual: () -> Unit,
-    onOpenCatalogSource: () -> Unit,
-) {
-    SettingsCard(dark = dark) {
-        InterfaceRow(
-            title = stringResource(R.string.llm_config_tab_manual),
-            subtitle = if (state.manualProviders.isEmpty()) {
-                stringResource(R.string.llm_manual_entry_empty)
-            } else {
-                stringResource(
-                    R.string.llm_manual_entry_count,
-                    state.manualProviders.size,
-                )
-            },
-            onClick = onOpenManual,
-        )
-        HorizontalDivider(
-            color = PikuColors.border,
-            thickness = 0.5.dp,
-            modifier = Modifier.padding(horizontal = 14.dp),
-        )
-        InterfaceRow(
-            title = stringResource(R.string.llm_catalog_source),
-            subtitle = stringResource(
-                if (state.catalogIsCustom) {
-                    R.string.llm_catalog_custom
-                } else {
-                    R.string.llm_catalog_default
-                },
-            ),
-            onClick = onOpenCatalogSource,
-        )
-    }
-}
-
-@Composable
-private fun InterfaceRow(
-    title: String,
-    subtitle: String,
-    onClick: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = title,
-                color = PikuColors.textPrimary,
-                fontSize = 13.5.sp,
-                fontWeight = FontWeight.Medium,
-            )
-            Text(
-                text = subtitle,
-                color = PikuColors.textSecondary,
-                fontSize = 10.5.sp,
-            )
-        }
-        Icon(
-            imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-            contentDescription = null,
-            tint = PikuColors.textFaint,
-            modifier = Modifier.size(17.dp),
-        )
+        LlmChevron()
     }
 }
 
@@ -571,6 +493,7 @@ private fun ManualProvidersPage(
     onCustomAdd: () -> Unit,
     onEdit: (ManualProvider) -> Unit,
     onTest: (String) -> Unit,
+    onCancelTest: (String) -> Unit,
 ) {
     Column(
         Modifier
@@ -588,30 +511,24 @@ private fun ManualProvidersPage(
                 .fillMaxSize()
                 .navigationBarsPadding()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp)
-                .padding(top = 4.dp, bottom = 28.dp),
+                .padding(horizontal = 18.dp)
+                .padding(top = 18.dp, bottom = 28.dp),
         ) {
             SettingsSectionLabel(stringResource(R.string.llm_manual_quick_add))
-            QuickAddGrid(
-                onQuickAdd = onQuickAdd,
-                onCustomAdd = onCustomAdd,
-            )
+            QuickAddGrid(onQuickAdd = onQuickAdd, onCustomAdd = onCustomAdd)
 
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(22.dp))
             if (state.manualProviders.isEmpty()) {
                 Text(
                     text = stringResource(R.string.llm_manual_empty_desc),
                     color = PikuColors.textSecondary,
-                    fontSize = 11.5.sp,
+                    fontSize = 11.sp,
                     lineHeight = 17.sp,
-                    modifier = Modifier.padding(horizontal = 4.dp),
+                    modifier = Modifier.padding(horizontal = 2.dp),
                 )
             } else {
                 SettingsSectionLabel(
-                    stringResource(
-                        R.string.llm_manual_added_count,
-                        state.manualProviders.size,
-                    ),
+                    stringResource(R.string.llm_manual_added_count, state.manualProviders.size),
                 )
                 state.manualProviders.forEach { provider ->
                     ManualProviderCard(
@@ -619,14 +536,21 @@ private fun ManualProvidersPage(
                         state = state,
                         dark = dark,
                         onTestProvider = onTest,
+                        onCancelTest = onCancelTest,
                         onEditProvider = onEdit,
                     )
                     Spacer(Modifier.height(10.dp))
                 }
             }
 
-            Spacer(Modifier.height(8.dp))
-            ManualInfoNote()
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = stringResource(R.string.llm_manual_info),
+                color = PikuColors.textSecondary,
+                fontSize = 11.sp,
+                lineHeight = 17.sp,
+                modifier = Modifier.padding(horizontal = 2.dp),
+            )
         }
     }
 }
@@ -654,14 +578,15 @@ private fun QuickAddGrid(
             }
             Spacer(Modifier.height(8.dp))
         }
+        val shape = RoundedCornerShape(10.dp)
         Row(
             Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(15.dp))
+                .clip(shape)
                 .background(PikuColors.surface)
-                .border(BorderStroke(0.5.dp, PikuColors.border), RoundedCornerShape(15.dp))
+                .border(BorderStroke(0.5.dp, PikuColors.border), shape)
                 .clickable(onClick = onCustomAdd)
-                .padding(horizontal = 14.dp, vertical = 13.dp),
+                .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
@@ -669,20 +594,21 @@ private fun QuickAddGrid(
                     text = stringResource(R.string.llm_manual_custom),
                     color = PikuColors.textPrimary,
                     fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = FontWeight.Medium,
                 )
                 Text(
                     text = stringResource(R.string.llm_manual_custom_desc),
                     color = PikuColors.textSecondary,
-                    fontSize = 10.5.sp,
+                    fontSize = 11.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            Text(
-                text = "+",
-                color = PikuColors.textFaint,
-                fontSize = 18.sp,
+            Icon(
+                imageVector = Icons.Outlined.Add,
+                contentDescription = null,
+                tint = PikuColors.textFaint,
+                modifier = Modifier.size(15.dp),
             )
         }
     }
@@ -694,11 +620,12 @@ private fun QuickAddTile(
     modifier: Modifier,
     onClick: () -> Unit,
 ) {
+    val shape = RoundedCornerShape(10.dp)
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(15.dp))
+            .clip(shape)
             .background(PikuColors.surface)
-            .border(BorderStroke(0.5.dp, PikuColors.border), RoundedCornerShape(15.dp))
+            .border(BorderStroke(0.5.dp, PikuColors.border), shape)
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 11.dp),
     ) {
@@ -707,17 +634,22 @@ private fun QuickAddTile(
                 text = preset.name,
                 color = PikuColors.textPrimary,
                 fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
+                fontWeight = FontWeight.Medium,
                 modifier = Modifier.weight(1f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(text = "+", color = PikuColors.textFaint, fontSize = 15.sp)
+            Icon(
+                imageVector = Icons.Outlined.Add,
+                contentDescription = null,
+                tint = PikuColors.textFaint,
+                modifier = Modifier.size(14.dp),
+            )
         }
         Text(
             text = preset.hint,
             color = PikuColors.textSecondary,
-            fontSize = 10.5.sp,
+            fontSize = 11.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 3.dp),
@@ -731,124 +663,77 @@ private fun ManualProviderCard(
     state: HomeUiState,
     dark: Boolean,
     onTestProvider: (String) -> Unit,
+    onCancelTest: (String) -> Unit,
     onEditProvider: (ManualProvider) -> Unit,
 ) {
-    val primary = PikuColors.textPrimary
-    val secondary = PikuColors.textSecondary
     val test = state.providerTestStates[provider.id]
     val roleText = provider.roles.map { roleLabel(it) }.joinToString(" / ")
     SettingsCard(dark = dark) {
         Column(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 11.dp),
+                .padding(14.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                StatusDot(test = test, provider = provider)
-                Spacer(Modifier.width(7.dp))
                 Text(
                     text = provider.name,
-                    color = primary,
+                    color = PikuColors.textPrimary,
                     fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
                 MiniPill(authLabel(provider))
-                Spacer(Modifier.width(2.dp))
-                TextButton(
+                Spacer(Modifier.width(8.dp))
+                LlmTextAction(
+                    text = stringResource(R.string.llm_manual_edit),
                     onClick = { onEditProvider(provider) },
-                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
-                ) {
-                    Text(
-                        text = stringResource(R.string.llm_manual_edit),
-                        color = secondary,
-                        fontSize = 11.sp,
-                    )
-                }
+                )
             }
             Text(
                 text = provider.baseUrl,
-                color = secondary,
-                fontSize = 10.5.sp,
+                color = PikuColors.textSecondary,
+                fontSize = 11.sp,
                 fontFamily = FontFamily.Monospace,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 6.dp),
+                modifier = Modifier.padding(top = 7.dp),
             )
             Text(
                 text = stringResource(R.string.llm_provider_model_label, provider.model) +
                     if (roleText.isEmpty()) "" else " · $roleText",
-                color = secondary,
-                fontSize = 10.5.sp,
+                color = PikuColors.textSecondary,
+                fontSize = 11.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 2.dp),
+                modifier = Modifier.padding(top = 3.dp),
             )
             if (provider.promptOverrides.hasAny()) {
-                Spacer(Modifier.height(4.dp))
-                MiniPill(
-                    stringResource(R.string.llm_provider_prompt_customized),
-                    color = PikuColors.controlAccent,
+                Spacer(Modifier.height(8.dp))
+                MiniPill(stringResource(R.string.llm_provider_prompt_customized))
+            }
+            LlmDivider()
+            val longStatus = test == ProviderTestState.Testing || test is ProviderTestState.Failed
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                LlmTextAction(
+                    text = stringResource(R.string.llm_manual_test),
+                    onClick = { onTestProvider(provider.id) },
+                )
+                Spacer(Modifier.weight(1f))
+                if (!longStatus) TestStatusText(test = test, provider = provider)
+            }
+            if (longStatus) {
+                Spacer(Modifier.height(6.dp))
+                TestStatusText(
+                    test = test,
+                    provider = provider,
+                    onCancel = { onCancelTest(provider.id) },
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
-            HorizontalDivider(
-                color = PikuColors.border,
-                thickness = 0.5.dp,
-                modifier = Modifier.padding(top = 10.dp),
-            )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(
-                    onClick = { onTestProvider(provider.id) },
-                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
-                ) {
-                    Text(
-                        text = stringResource(R.string.llm_manual_test),
-                        color = PikuColors.controlAccent,
-                        fontSize = 11.5.sp,
-                    )
-                }
-                Spacer(Modifier.weight(1f))
-                TestStatusText(test = test, provider = provider)
-            }
         }
     }
-}
-
-@Composable
-private fun ManualInfoNote() {
-    Text(
-        text = stringResource(R.string.llm_manual_info),
-        color = PikuColors.textSecondary,
-        fontSize = 10.5.sp,
-        lineHeight = 16.sp,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(13.dp))
-            .background(PikuColors.surfaceMuted)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-    )
-}
-
-@Composable
-private fun StatusDot(test: ProviderTestState?, provider: ManualProvider) {
-    val color = when (test) {
-        ProviderTestState.Testing -> Color(0xFFFFA726)
-        is ProviderTestState.Success -> Color(0xFF5BAE61)
-        is ProviderTestState.Failed -> PikuColors.error
-        else -> if (provider.authMode != AuthMode.NONE && !provider.hasKey) {
-            Color(0xFFFFA726)
-        } else {
-            PikuColors.textFaint
-        }
-    }
-    Box(
-        Modifier
-            .size(7.dp)
-            .clip(CircleShape)
-            .background(color),
-    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -868,48 +753,58 @@ private fun RolePickerSheet(
     }
     val manual = state.manualProviders.filter { role in it.roles }
     val stored = storedSelection(state, role)
+    val defaultSubtitle = buildString {
+        append(stringResource(R.string.llm_role_default_desc))
+        if (stored.isBlank()) {
+            selectedLlmEntry(state, role)?.label?.takeIf { it.isNotBlank() }?.let {
+                append(" · ")
+                append(it)
+            }
+        }
+    }
     PikuBottomSheet(
         onDismissRequest = onDismiss,
         dark = dark,
         scrollable = true,
     ) {
-        Text(
-            text = stringResource(R.string.llm_role_picker_title, roleLabel(role)),
-            color = PikuColors.textPrimary,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.SemiBold,
-        )
-        Text(
-            text = roleDesc(role),
-            color = PikuColors.textSecondary,
-            fontSize = 11.sp,
-            modifier = Modifier.padding(top = 2.dp),
-        )
-        Spacer(Modifier.height(12.dp))
-        PickerRow(
+        PikuSheetTitle(text = stringResource(R.string.llm_role_picker_title, roleLabel(role)))
+        Spacer(Modifier.height(3.dp))
+        PikuSheetSubtitle(text = roleDesc(role))
+        Spacer(Modifier.height(14.dp))
+        LlmOptionRow(
             title = stringResource(R.string.llm_role_default_option),
-            subtitle = stringResource(R.string.llm_role_default_desc),
+            subtitle = defaultSubtitle,
             selected = stored.isBlank(),
             onClick = onClear,
         )
-        HorizontalDivider(color = PikuColors.border, thickness = 0.5.dp)
+
+        Spacer(Modifier.height(14.dp))
         OptionGroupLabel(stringResource(R.string.llm_role_group_builtin))
         if (builtin.isEmpty()) {
             Text(
                 text = stringResource(R.string.llm_role_builtin_empty),
                 color = PikuColors.textSecondary,
-                fontSize = 11.5.sp,
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
+                fontSize = 11.sp,
+                modifier = Modifier.padding(start = 2.dp, top = 6.dp, bottom = 6.dp),
             )
         } else {
             builtin.forEach { entry ->
-                ModelRow(
-                    entry = entry,
+                LlmOptionRow(
+                    title = entry.label,
+                    subtitle = entry.hint.ifBlank { entry.baseUrl },
                     selected = stored.isNotBlank() && selectedLlmEntry(state, role)?.id == entry.id,
                     onClick = { onSelectEntry(entry) },
+                    badge = if (entry.free) {
+                        { MiniPill(stringResource(R.string.llm_badge_free)) }
+                    } else {
+                        null
+                    },
                 )
+                Spacer(Modifier.height(6.dp))
             }
         }
+
+        Spacer(Modifier.height(8.dp))
         OptionGroupLabel(stringResource(R.string.llm_role_group_manual))
         if (manual.isEmpty()) {
             Text(
@@ -921,137 +816,46 @@ private fun RolePickerSheet(
                     },
                 ),
                 color = PikuColors.textSecondary,
-                fontSize = 11.5.sp,
+                fontSize = 11.sp,
                 lineHeight = 17.sp,
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
+                modifier = Modifier.padding(start = 2.dp, top = 6.dp, bottom = 6.dp),
             )
             if (role != Role.IMAGE) {
-                TextButton(
+                LlmTextAction(
+                    text = stringResource(R.string.llm_manual_add),
                     onClick = onAddProvider,
-                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
-                ) {
-                    Text(stringResource(R.string.llm_manual_add), fontSize = 11.5.sp)
-                }
+                )
             }
         } else {
             manual.forEach { provider ->
                 val entry = state.translateModels.firstOrNull { it.id == provider.id }
                 if (entry != null) {
-                    ModelRow(
-                        entry = entry,
+                    LlmOptionRow(
+                        title = entry.label,
+                        subtitle = entry.hint.ifBlank { entry.baseUrl },
                         selected = selectedLlmEntry(state, role)?.id == provider.id,
                         onClick = {
                             if (entry.isUsable()) onSelectEntry(entry) else onEditProvider(provider)
                         },
+                        badge = if (!entry.isUsable()) {
+                            { MiniPill(stringResource(R.string.llm_manual_key_missing), color = PikuColors.error) }
+                        } else {
+                            null
+                        },
                     )
+                    Spacer(Modifier.height(6.dp))
                 }
             }
         }
         Spacer(Modifier.height(10.dp))
-    }
-}
-
-@Composable
-private fun PickerRow(
-    title: String,
-    subtitle: String,
-    selected: Boolean,
-    enabled: Boolean = true,
-    onClick: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 11.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        RadioDot(selected = selected)
-        Spacer(Modifier.width(10.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = title,
-                color = if (enabled) PikuColors.textPrimary else PikuColors.textFaint,
-                fontSize = 13.5.sp,
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-            )
-            if (subtitle.isNotBlank()) {
-                Text(
-                    text = subtitle,
-                    color = PikuColors.textSecondary,
-                    fontSize = 10.5.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-        if (selected) {
-            Icon(
-                imageVector = Icons.Filled.Check,
-                contentDescription = null,
-                tint = PikuColors.controlAccent,
-                modifier = Modifier.size(17.dp),
-            )
-        }
-    }
-}
-
-@Composable
-private fun ModelRow(
-    entry: ModelEntry,
-    selected: Boolean,
-    enabled: Boolean = true,
-    onClick: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 11.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        RadioDot(selected = selected)
-        Spacer(Modifier.width(10.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = entry.label,
-                color = if (enabled) PikuColors.textPrimary else PikuColors.textFaint,
-                fontSize = 13.5.sp,
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = entry.hint.ifBlank { entry.baseUrl },
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            LlmTextAction(
+                text = stringResource(R.string.llm_provider_cancel),
+                onClick = onDismiss,
                 color = PikuColors.textSecondary,
-                fontSize = 10.5.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
             )
         }
-        if (entry.isManual) {
-            MiniPill(stringResource(R.string.llm_source_manual))
-        } else if (entry.free) {
-            Text(
-                text = stringResource(R.string.llm_badge_free),
-                color = Color(0xFF5BAE61),
-                fontSize = 9.5.sp,
-                fontWeight = FontWeight.Medium,
-            )
-        }
-        if (!entry.isUsable()) {
-            Spacer(Modifier.width(4.dp))
-            MiniPill(stringResource(R.string.llm_manual_key_missing), color = PikuColors.error)
-        }
-        if (selected) {
-            Spacer(Modifier.width(4.dp))
-            Icon(
-                imageVector = Icons.Filled.Check,
-                contentDescription = null,
-                tint = PikuColors.controlAccent,
-                modifier = Modifier.size(17.dp),
-            )
-        }
+        Spacer(Modifier.height(6.dp))
     }
 }
 
@@ -1060,31 +864,11 @@ private fun OptionGroupLabel(text: String) {
     Text(
         text = text,
         color = PikuColors.textFaint,
-        fontSize = 10.sp,
+        fontSize = 11.sp,
         fontWeight = FontWeight.Medium,
-        modifier = Modifier.padding(start = 4.dp, top = 12.dp, bottom = 5.dp),
+        letterSpacing = 1.sp,
+        modifier = Modifier.padding(start = 2.dp, bottom = 8.dp),
     )
-}
-
-@Composable
-private fun RadioDot(selected: Boolean) {
-    val border = if (selected) PikuColors.textPrimary else PikuColors.border
-    Box(
-        Modifier
-            .size(18.dp)
-            .clip(CircleShape)
-            .border(BorderStroke(1.5.dp, border), CircleShape),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (selected) {
-            Box(
-                Modifier
-                    .size(8.dp)
-                    .clip(CircleShape)
-                    .background(PikuColors.textPrimary),
-            )
-        }
-    }
 }
 
 private fun storedSelection(state: HomeUiState, role: String): String = when (role) {

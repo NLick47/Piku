@@ -1094,4 +1094,12 @@
     <string name="llm_provider_prompt_note">既定ではカタログのプロンプトを使用します（利用できない場合はアプリ内蔵版を使用）。変更はこのAPIにのみ適用されます。バッチ用の [[n]] 形式は自動で付加されます。</string>
     <string name="llm_prompt_done">完了</string>
     <string name="llm_prompt_apply_hint">戻って保存すると反映されます</string>
+    <string name="llm_status_on">オン · %1$d 個のモデルが利用可能</string>
+    <string name="llm_status_off">オフ</string>
+    <string name="llm_config_master_label">マスタースイッチ</string>
+    <string name="llm_disabled_hint">自動翻訳を一時停止中。設定は保持されます</string>
+    <string name="llm_following_default">デフォルトに従う</string>
+    <string name="llm_discard_title">未保存の変更を破棄しますか？</string>
+    <string name="llm_discard_message">入力内容は保存されません</string>
+    <string name="llm_discard_confirm">破棄</string>
 </resources>

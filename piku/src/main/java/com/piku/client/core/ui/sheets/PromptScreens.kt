@@ -13,14 +13,8 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -30,9 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -46,7 +38,6 @@ import com.piku.client.core.ui.theme.HomeBgBottomLight
 import com.piku.client.core.ui.theme.HomeBgTopDark
 import com.piku.client.core.ui.theme.HomeBgTopLight
 import com.piku.client.core.ui.theme.PikuColors
-import com.piku.client.core.ui.theme.onAccent
 import com.piku.client.source.poipiku.ui.home.HomeUiState
 
 @Composable
@@ -80,12 +71,14 @@ internal fun BuiltinPromptScreen(
             Modifier
                 .weight(1f)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp)
-                .padding(top = 8.dp, bottom = 18.dp),
+                .padding(horizontal = 18.dp)
+                .padding(top = 18.dp, bottom = 18.dp),
         ) {
             PromptTabs(tab = tab, onSelect = { tab = it })
+            Spacer(Modifier.height(14.dp))
             PromptLanguageLine(langKey = state.promptLangKey)
             PromptNote(stringResource(R.string.llm_builtin_prompt_note))
+            Spacer(Modifier.height(18.dp))
             PromptCard(
                 role = role,
                 text = text,
@@ -99,10 +92,10 @@ internal fun BuiltinPromptScreen(
             )
             Text(
                 text = stringResource(R.string.llm_prompt_novel_note),
-                color = PikuColors.textFaint,
-                fontSize = 10.5.sp,
-                lineHeight = 16.sp,
-                modifier = Modifier.padding(start = 4.dp, top = 14.dp),
+                color = PikuColors.textSecondary,
+                fontSize = 11.sp,
+                lineHeight = 17.sp,
+                modifier = Modifier.padding(start = 2.dp, top = 14.dp),
             )
         }
     }
@@ -161,12 +154,14 @@ internal fun ProviderPromptEditor(
             Modifier
                 .weight(1f)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp)
-                .padding(top = 8.dp, bottom = 18.dp),
+                .padding(horizontal = 18.dp)
+                .padding(top = 18.dp, bottom = 18.dp),
         ) {
             PromptTabs(tab = tab, onSelect = { tab = it })
+            Spacer(Modifier.height(14.dp))
             PromptLanguageLine(langKey = langKey)
             PromptNote(stringResource(R.string.llm_provider_prompt_note))
+            Spacer(Modifier.height(18.dp))
             PromptCard(
                 role = role,
                 text = draft,
@@ -184,30 +179,25 @@ internal fun ProviderPromptEditor(
             )
             Text(
                 text = stringResource(R.string.llm_prompt_novel_note),
-                color = PikuColors.textFaint,
-                fontSize = 10.5.sp,
-                lineHeight = 16.sp,
-                modifier = Modifier.padding(start = 4.dp, top = 14.dp),
+                color = PikuColors.textSecondary,
+                fontSize = 11.sp,
+                lineHeight = 17.sp,
+                modifier = Modifier.padding(start = 2.dp, top = 14.dp),
             )
         }
         SettingsFooter(dark = dark) {
             Text(
                 text = stringResource(R.string.llm_prompt_apply_hint),
                 color = PikuColors.textSecondary,
-                fontSize = 10.5.sp,
+                fontSize = 11.sp,
                 modifier = Modifier.padding(start = 2.dp, bottom = 7.dp),
             )
-            Button(
+            LlmActionButton(
+                text = stringResource(R.string.llm_prompt_done),
+                primary = true,
                 onClick = { applyAndBack() },
-                shape = RoundedCornerShape(13.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = PikuColors.controlAccent,
-                    contentColor = onAccent(),
-                ),
-                modifier = Modifier.fillMaxWidth().height(48.dp),
-            ) {
-                Text(stringResource(R.string.llm_prompt_done), fontSize = 13.sp)
-            }
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }
@@ -228,24 +218,24 @@ private fun PromptTabs(tab: Int, onSelect: (Int) -> Unit) {
 private fun PromptLanguageLine(langKey: String) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(start = 4.dp, top = 8.dp),
+        modifier = Modifier.padding(start = 2.dp),
     ) {
         Text(
             text = stringResource(R.string.llm_prompt_target_language),
             color = PikuColors.textSecondary,
-            fontSize = 10.5.sp,
+            fontSize = 11.sp,
         )
         Text(
             text = stringResource(languageLabelRes(langKey)),
             color = PikuColors.textPrimary,
-            fontSize = 10.5.sp,
+            fontSize = 11.sp,
             fontWeight = FontWeight.Medium,
         )
         Spacer(Modifier.width(6.dp))
         Text(
             text = stringResource(R.string.llm_prompt_follow_language),
             color = PikuColors.textFaint,
-            fontSize = 10.sp,
+            fontSize = 11.sp,
         )
     }
 }
@@ -255,13 +245,11 @@ private fun PromptNote(text: String) {
     Text(
         text = text,
         color = PikuColors.textSecondary,
-        fontSize = 10.5.sp,
-        lineHeight = 16.sp,
+        fontSize = 11.sp,
+        lineHeight = 17.sp,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 12.dp)
-            .background(PikuColors.surfaceMuted, RoundedCornerShape(13.dp))
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .padding(start = 2.dp, top = 10.dp),
     )
 }
 
@@ -280,25 +268,14 @@ private fun PromptCard(
     val title = stringResource(
         if (role == Role.NOVEL) R.string.llm_prompt_novel_title else R.string.llm_prompt_text_title,
     )
-    val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = PikuColors.controlAccent,
-        unfocusedBorderColor = PikuColors.border,
-        cursorColor = PikuColors.controlAccent,
-        focusedTextColor = PikuColors.textPrimary,
-        unfocusedTextColor = PikuColors.textPrimary,
-        focusedContainerColor = if (dark) Color(0x14FFFFFF) else Color(0x0A000000),
-        unfocusedContainerColor = if (dark) Color(0x14FFFFFF) else Color(0x0A000000),
-        disabledContainerColor = if (dark) Color(0x14FFFFFF) else Color(0x0A000000),
-    )
-
     SettingsCard(dark = dark) {
         Column(Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = title,
                     color = PikuColors.textPrimary,
-                    fontSize = 12.5.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
                 )
                 Spacer(Modifier.width(6.dp))
                 MiniPill(
@@ -316,36 +293,18 @@ private fun PromptCard(
                 }
                 Spacer(Modifier.weight(1f))
                 if (!readOnly && text.trim() != defaultText.trim()) {
-                    TextButton(
+                    LlmTextAction(
+                        text = stringResource(R.string.llm_prompt_reset_default),
                         onClick = onReset,
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                            horizontal = 4.dp,
-                            vertical = 0.dp,
-                        ),
-                    ) {
-                        Text(
-                            text = stringResource(R.string.llm_prompt_reset_default),
-                            color = PikuColors.textSecondary,
-                            fontSize = 11.sp,
-                        )
-                    }
+                        color = PikuColors.textSecondary,
+                    )
                 }
             }
-            OutlinedTextField(
+            Spacer(Modifier.height(10.dp))
+            LlmTextArea(
                 value = text,
                 onValueChange = onTextChange,
                 readOnly = readOnly,
-                textStyle = TextStyle(
-                    fontSize = 12.sp,
-                    lineHeight = 20.sp,
-                    color = PikuColors.textPrimary,
-                ),
-                shape = RoundedCornerShape(12.dp),
-                colors = fieldColors,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(if (readOnly) 300.dp else 260.dp)
-                    .padding(top = 8.dp),
             )
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -360,13 +319,13 @@ private fun PromptCard(
                         },
                     ),
                     color = PikuColors.textFaint,
-                    fontSize = 10.sp,
+                    fontSize = 11.sp,
                 )
                 Spacer(Modifier.weight(1f))
                 Text(
                     text = stringResource(R.string.llm_prompt_char_count, text.length),
                     color = PikuColors.textFaint,
-                    fontSize = 10.sp,
+                    fontSize = 11.sp,
                 )
             }
         }

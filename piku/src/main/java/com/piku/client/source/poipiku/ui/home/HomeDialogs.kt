@@ -245,6 +245,7 @@ internal fun HomeDialogs(
                 onSaveProvider = viewModel::saveManualProvider,
                 onDeleteProvider = viewModel::deleteManualProvider,
                 onTestProvider = viewModel::testManualProvider,
+                onCancelTest = viewModel::cancelProviderTest,
                 onTestDraft = viewModel::testDraftProvider,
                 onClearDraftTest = viewModel::clearDraftProviderTest,
                 onFetchModels = viewModel::fetchDraftModels,

@@ -1,13 +1,12 @@
 package com.piku.client.core.ui.sheets
 
-import androidx.compose.foundation.BorderStroke
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,34 +20,32 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -61,17 +58,19 @@ import com.piku.client.core.translation.ManualProvider
 import com.piku.client.core.translation.ManualProviderPreset
 import com.piku.client.core.translation.PromptOverrides
 import com.piku.client.core.translation.Role
+import com.piku.client.core.ui.common.EffectOnChange
 import com.piku.client.core.ui.common.PikuBottomSheet
 import com.piku.client.core.ui.common.PikuPageHeader
 import com.piku.client.core.ui.common.PikuSegmented
+import com.piku.client.core.ui.common.PikuSheetTitle
 import com.piku.client.core.ui.theme.HomeBgBottomDark
 import com.piku.client.core.ui.theme.HomeBgBottomLight
 import com.piku.client.core.ui.theme.HomeBgTopDark
 import com.piku.client.core.ui.theme.HomeBgTopLight
 import com.piku.client.core.ui.theme.PikuColors
-import com.piku.client.core.ui.theme.onAccent
 import com.piku.client.source.poipiku.ui.home.ModelFetchState
 import com.piku.client.source.poipiku.ui.home.ProviderTestState
+import kotlinx.coroutines.launch
 
 private enum class EditorError {
     URL_REQUIRED,
@@ -81,6 +80,7 @@ private enum class EditorError {
     ROLES_REQUIRED,
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun ManualProviderEditorScreen(
     provider: ManualProvider,
@@ -100,6 +100,7 @@ internal fun ManualProviderEditorScreen(
     onRequestDelete: (ManualProvider) -> Unit,
     onDismiss: () -> Unit,
     onClearTest: () -> Unit,
+    onCancelDraftTest: () -> Unit,
     dark: Boolean,
 ) {
     var selectedPresetId by remember(provider.id) {
@@ -132,39 +133,57 @@ internal fun ManualProviderEditorScreen(
     var showModelPicker by remember { mutableStateOf(false) }
     var promptOverrides by remember(provider.id) { mutableStateOf(provider.promptOverrides) }
     var showPromptEditor by remember { mutableStateOf(false) }
+    var showDiscardConfirm by remember { mutableStateOf(false) }
 
     val mode = runCatching { AuthMode.valueOf(authMode) }.getOrDefault(AuthMode.NONE)
     val preset = ManualProviderPreset.find(selectedPresetId)
-    val primary = PikuColors.textPrimary
     val secondary = PikuColors.textSecondary
-    val accent = PikuColors.controlAccent
     val errorColor = PikuColors.error
-    val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = accent,
-        unfocusedBorderColor = PikuColors.border,
-        errorBorderColor = errorColor,
-        focusedContainerColor = if (dark) Color(0x14FFFFFF) else Color(0x0A000000),
-        unfocusedContainerColor = if (dark) Color(0x14FFFFFF) else Color(0x0A000000),
-        errorContainerColor = if (dark) Color(0x14FFFFFF) else Color(0x0A000000),
-        disabledBorderColor = Color.Transparent,
-        disabledContainerColor = if (dark) Color(0x14FFFFFF) else Color(0x0A000000),
-        disabledTextColor = secondary,
-        disabledLabelColor = secondary,
-        disabledPlaceholderColor = secondary,
-        disabledTrailingIconColor = secondary,
-        cursorColor = accent,
-        errorCursorColor = errorColor,
-        focusedTextColor = primary,
-        unfocusedTextColor = primary,
-        focusedLabelColor = accent,
-        unfocusedLabelColor = secondary,
-        errorLabelColor = errorColor,
-        focusedPlaceholderColor = secondary,
-        unfocusedPlaceholderColor = secondary,
-        focusedSupportingTextColor = errorColor,
-        unfocusedSupportingTextColor = secondary,
-        errorSupportingTextColor = errorColor,
-    )
+    val scope = rememberCoroutineScope()
+    val urlRequester = remember { BringIntoViewRequester() }
+    val keyRequester = remember { BringIntoViewRequester() }
+    val modelRequester = remember { BringIntoViewRequester() }
+    val rolesRequester = remember { BringIntoViewRequester() }
+    val scrollState = rememberScrollState()
+
+    val dirty = name != provider.name ||
+        baseUrl != provider.baseUrl ||
+        model != provider.model ||
+        apiKey.isNotBlank() ||
+        clearKey ||
+        authMode != provider.authMode.name ||
+        authHeader != provider.authHeader ||
+        roleNames != provider.roles.filter { it == Role.TEXT || it == Role.NOVEL }
+            .ifEmpty { listOf(Role.TEXT) } ||
+        baseUrlsText != provider.baseUrls.joinToString("\n") ||
+        extraHeadersText != provider.extraHeaders.entries
+            .joinToString("\n") { "${it.key}: ${it.value}" } ||
+        promptOverrides != provider.promptOverrides
+
+    fun requestDismiss() {
+        if (dirty) showDiscardConfirm = true else onDismiss()
+    }
+
+    BackHandler(enabled = true) { requestDismiss() }
+
+    EffectOnChange({ advanced }) {
+        if (advanced) {
+            withFrameNanos { }
+            scrollState.animateScrollTo(scrollState.maxValue)
+        }
+    }
+
+    fun showError(err: EditorError?) {
+        error = err
+        if (err != null) scope.launch {
+            when (err) {
+                EditorError.URL_REQUIRED, EditorError.URL_INVALID -> urlRequester.bringIntoView()
+                EditorError.KEY_REQUIRED -> keyRequester.bringIntoView()
+                EditorError.MODEL_REQUIRED -> modelRequester.bringIntoView()
+                EditorError.ROLES_REQUIRED -> rolesRequester.bringIntoView()
+            }
+        }
+    }
 
     fun applyPreset(target: ManualProviderPreset?) {
         selectedPresetId = target?.id ?: ManualProviderPreset.CUSTOM_ID
@@ -253,21 +272,16 @@ internal fun ManualProviderEditorScreen(
             ),
             subtitle = stringResource(R.string.llm_provider_page_subtitle),
             dark = dark,
-            onBack = onDismiss,
+            onBack = { requestDismiss() },
             trailing = if (isNew) {
                 null
             } else {
                 {
-                    TextButton(
+                    LlmTextAction(
+                        text = stringResource(R.string.llm_manual_delete),
                         onClick = { onRequestDelete(provider) },
-                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
-                    ) {
-                        Text(
-                            text = stringResource(R.string.llm_manual_delete),
-                            color = errorColor,
-                            fontSize = 12.sp,
-                        )
-                    }
+                        color = errorColor,
+                    )
                 }
             },
         )
@@ -275,20 +289,19 @@ internal fun ManualProviderEditorScreen(
         Column(
             Modifier
                 .weight(1f)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp)
-                .padding(top = 4.dp, bottom = 16.dp),
+                .verticalScroll(scrollState)
+                .padding(horizontal = 18.dp)
+                .padding(top = 18.dp, bottom = 16.dp),
         ) {
             if (isNew) {
                 SettingsSectionLabel(stringResource(R.string.llm_provider_section_preset))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     ManualProviderPreset.QUICK_ADD.forEach { item ->
-                        PresetChip(
+                        LlmChip(
                             text = item.name,
                             selected = selectedPresetId == item.id,
                             onClick = {
@@ -296,13 +309,11 @@ internal fun ManualProviderEditorScreen(
                             },
                         )
                     }
-                    PresetChip(
+                    LlmChip(
                         text = stringResource(R.string.llm_provider_preset_custom),
                         selected = selectedPresetId == ManualProviderPreset.CUSTOM_ID,
                         onClick = {
-                            if (selectedPresetId != ManualProviderPreset.CUSTOM_ID) {
-                                applyPreset(null)
-                            }
+                            if (selectedPresetId != ManualProviderPreset.CUSTOM_ID) applyPreset(null)
                         },
                     )
                 }
@@ -312,33 +323,22 @@ internal fun ManualProviderEditorScreen(
             SettingsSectionLabel(stringResource(R.string.llm_provider_section_connection))
             SettingsCard(dark = dark) {
                 Column(Modifier.padding(14.dp)) {
-                    FieldLabel(stringResource(R.string.llm_provider_name))
-                    Spacer(Modifier.height(6.dp))
-                    OutlinedTextField(
+                    LlmTextField(
                         value = name,
                         onValueChange = { name = it },
-                        placeholder = { Text(stringResource(R.string.llm_provider_name_hint)) },
-                        singleLine = true,
-                        textStyle = TextStyle(fontSize = 13.sp, color = primary),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = fieldColors,
-                        modifier = Modifier.fillMaxWidth(),
+                        label = stringResource(R.string.llm_provider_name),
+                        placeholder = stringResource(R.string.llm_provider_name_hint),
                     )
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(14.dp))
 
-                    FieldLabel(stringResource(R.string.llm_provider_base_url))
-                    Spacer(Modifier.height(6.dp))
-                    OutlinedTextField(
+                    LlmTextField(
                         value = baseUrl,
                         onValueChange = { baseUrl = it; error = null },
-                        placeholder = {
-                            Text(preset?.baseUrlPlaceholder ?: "http://192.168.1.10:8000/v1")
-                        },
-                        singleLine = true,
-                        textStyle = TextStyle(fontSize = 13.sp, color = primary),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = fieldColors,
-                        modifier = Modifier.fillMaxWidth(),
+                        label = stringResource(R.string.llm_provider_base_url),
+                        placeholder = preset?.baseUrlPlaceholder ?: "http://192.168.1.10:8000/v1",
+                        mono = true,
+                        error = error == EditorError.URL_REQUIRED || error == EditorError.URL_INVALID,
+                        requester = urlRequester,
                     )
                     FieldError(
                         when (error) {
@@ -350,60 +350,48 @@ internal fun ManualProviderEditorScreen(
                     Text(
                         text = stringResource(R.string.llm_provider_base_url_hint),
                         color = secondary,
-                        fontSize = 10.5.sp,
-                        lineHeight = 15.sp,
-                        modifier = Modifier.padding(start = 2.dp, top = 5.dp),
+                        fontSize = 11.sp,
+                        lineHeight = 17.sp,
+                        modifier = Modifier.padding(start = 2.dp, top = 4.dp),
                     )
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(14.dp))
 
-                    FieldLabel(stringResource(R.string.llm_provider_api_key))
-                    Spacer(Modifier.height(6.dp))
-                    OutlinedTextField(
+                    LlmTextField(
                         value = apiKey,
                         onValueChange = {
                             apiKey = it
                             clearKey = false
                             error = null
                         },
-                        placeholder = {
-                            Text(
-                                when {
-                                    mode == AuthMode.NONE ->
-                                        stringResource(R.string.llm_manual_key_placeholder)
-                                    !isNew && provider.hasKey && !clearKey ->
-                                        stringResource(R.string.llm_manual_key_keep_hint)
-                                    else -> "sk-..."
-                                },
-                            )
+                        label = stringResource(R.string.llm_provider_api_key),
+                        placeholder = when {
+                            mode == AuthMode.NONE -> null
+                            !isNew && provider.hasKey && !clearKey ->
+                                stringResource(R.string.llm_manual_key_keep_hint)
+                            else -> "sk-..."
                         },
-                        singleLine = true,
                         enabled = mode != AuthMode.NONE,
+                        error = error == EditorError.KEY_REQUIRED,
                         visualTransformation = if (showKey) {
                             VisualTransformation.None
                         } else {
                             PasswordVisualTransformation()
                         },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        trailingIcon = {
-                            if (mode != AuthMode.NONE) {
-                                TextButton(
+                        trailing = if (mode != AuthMode.NONE) {
+                            {
+                                LlmTextAction(
+                                    text = stringResource(
+                                        if (showKey) R.string.password_hide else R.string.password_show,
+                                    ),
                                     onClick = { showKey = !showKey },
-                                    contentPadding = PaddingValues(horizontal = 8.dp),
-                                ) {
-                                    Text(
-                                        text = stringResource(
-                                            if (showKey) R.string.password_hide else R.string.password_show,
-                                        ),
-                                        color = secondary,
-                                        fontSize = 10.5.sp,
-                                    )
-                                }
+                                    color = secondary,
+                                )
                             }
+                        } else {
+                            null
                         },
-                        textStyle = TextStyle(fontSize = 13.sp, color = primary),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = fieldColors,
-                        modifier = Modifier.fillMaxWidth(),
+                        requester = keyRequester,
                     )
                     FieldError(
                         if (error == EditorError.KEY_REQUIRED) {
@@ -416,112 +404,88 @@ internal fun ManualProviderEditorScreen(
                         text = when {
                             clearKey -> stringResource(R.string.llm_manual_key_will_clear)
                             mode == AuthMode.NONE -> stringResource(R.string.llm_manual_key_placeholder)
-                            !isNew && provider.hasKey ->
-                                stringResource(R.string.llm_manual_key_keep_hint)
+                            !isNew && provider.hasKey -> stringResource(R.string.llm_manual_key_keep_hint)
                             else -> stringResource(R.string.llm_manual_key_saved_hint)
                         },
                         color = if (clearKey) errorColor else secondary,
-                        fontSize = 10.5.sp,
-                        lineHeight = 15.sp,
-                        modifier = Modifier.padding(start = 2.dp, top = 5.dp),
+                        fontSize = 11.sp,
+                        lineHeight = 17.sp,
+                        modifier = Modifier.padding(start = 2.dp, top = 4.dp),
                     )
                     if (!isNew && provider.hasKey && !clearKey) {
-                        TextButton(
+                        Spacer(Modifier.height(4.dp))
+                        LlmTextAction(
+                            text = stringResource(R.string.llm_manual_key_clear),
                             onClick = {
                                 clearKey = true
                                 apiKey = ""
                                 error = null
                             },
-                            contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp),
-                        ) {
-                            Text(
-                                text = stringResource(R.string.llm_manual_key_clear),
-                                color = secondary,
-                                fontSize = 10.5.sp,
-                            )
-                        }
+                            color = secondary,
+                        )
                     }
                 }
             }
 
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(22.dp))
             SettingsSectionLabel(stringResource(R.string.llm_provider_section_model))
             SettingsCard(dark = dark) {
                 Column(Modifier.padding(14.dp)) {
-                    FieldLabel(stringResource(R.string.llm_provider_model))
-                    Spacer(Modifier.height(6.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedTextField(
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        LlmTextField(
                             value = model,
                             onValueChange = { model = it; error = null },
-                            placeholder = { Text(stringResource(R.string.llm_provider_model_hint)) },
-                            singleLine = true,
-                            textStyle = TextStyle(fontSize = 13.sp, color = primary),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = fieldColors,
+                            label = stringResource(R.string.llm_provider_model),
+                            placeholder = stringResource(R.string.llm_provider_model_hint),
+                            error = error == EditorError.MODEL_REQUIRED,
                             modifier = Modifier.weight(1f),
+                            requester = modelRequester,
                         )
-                        Spacer(Modifier.width(8.dp))
-                        TextButton(
+                        Spacer(Modifier.width(10.dp))
+                        LlmActionButton(
+                            text = stringResource(R.string.llm_provider_fetch_models),
+                            primary = false,
+                            height = 40.dp,
+                            loading = modelFetchState == ModelFetchState.Loading,
                             onClick = {
                                 val err = validate(requireModel = false, requireRoles = false)
-                                error = err
-                                if (err == null) {
-                                    onFetchModels(currentProvider(), keyArg())
-                                }
+                                showError(err)
+                                if (err == null) onFetchModels(currentProvider(), keyArg())
                             },
-                            enabled = modelFetchState != ModelFetchState.Loading,
-                            contentPadding = PaddingValues(horizontal = 8.dp),
-                            modifier = Modifier.height(48.dp),
-                        ) {
-                            if (modelFetchState == ModelFetchState.Loading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(14.dp),
-                                    color = accent,
-                                    strokeWidth = 1.5.dp,
-                                )
-                            } else {
-                                Text(
-                                    text = stringResource(R.string.llm_provider_fetch_models),
-                                    color = accent,
-                                    fontSize = 11.5.sp,
-                                )
-                            }
-                        }
+                            modifier = Modifier.width(88.dp),
+                        )
                     }
                     FieldError(
-                        when (error) {
-                            EditorError.MODEL_REQUIRED -> stringResource(R.string.llm_provider_model_required)
-                            else -> null
+                        if (error == EditorError.MODEL_REQUIRED) {
+                            stringResource(R.string.llm_provider_model_required)
+                        } else {
+                            null
                         },
                     )
-                    when (val fetch = modelFetchState) {
-                        is ModelFetchState.Failed -> Text(
-                            text = stringResource(
+                    Text(
+                        text = when (val fetch = modelFetchState) {
+                            is ModelFetchState.Failed -> stringResource(
                                 R.string.llm_provider_fetch_failed,
                                 fetch.message.orEmpty(),
-                            ),
-                            color = errorColor,
-                            fontSize = 10.5.sp,
-                            lineHeight = 15.sp,
-                            modifier = Modifier.padding(start = 2.dp, top = 5.dp),
-                        )
-                        else -> Text(
-                            text = stringResource(R.string.llm_provider_fetch_models_hint),
-                            color = secondary,
-                            fontSize = 10.5.sp,
-                            lineHeight = 15.sp,
-                            modifier = Modifier.padding(start = 2.dp, top = 5.dp),
-                        )
-                    }
-                    Spacer(Modifier.height(12.dp))
+                            )
+                            else -> stringResource(R.string.llm_provider_fetch_models_hint)
+                        },
+                        color = if (modelFetchState is ModelFetchState.Failed) errorColor else secondary,
+                        fontSize = 11.sp,
+                        lineHeight = 17.sp,
+                        modifier = Modifier.padding(start = 2.dp, top = 4.dp),
+                    )
+                    Spacer(Modifier.height(16.dp))
 
                     FieldLabel(stringResource(R.string.llm_provider_roles))
-                    Spacer(Modifier.height(6.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.bringIntoViewRequester(rolesRequester),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
                         listOf(Role.TEXT, Role.NOVEL).forEach { role ->
                             val selected = role in roleNames
-                            RoleToggleChip(
+                            LlmChip(
                                 text = roleLabel(role),
                                 selected = selected,
                                 onClick = {
@@ -540,14 +504,14 @@ internal fun ManualProviderEditorScreen(
                     )
                     Text(
                         text = stringResource(R.string.llm_provider_roles_hint),
-                        color = PikuColors.textFaint,
-                        fontSize = 10.5.sp,
-                        modifier = Modifier.padding(start = 2.dp, top = 5.dp),
+                        color = PikuColors.textSecondary,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(start = 2.dp, top = 4.dp),
                     )
                 }
             }
 
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(22.dp))
             SettingsSectionLabel(stringResource(R.string.llm_provider_auth))
             SettingsCard(dark = dark) {
                 Column(Modifier.padding(12.dp)) {
@@ -572,66 +536,41 @@ internal fun ManualProviderEditorScreen(
                         },
                     )
                     if (mode == AuthMode.HEADER) {
-                        Spacer(Modifier.height(12.dp))
-                        FieldLabel(stringResource(R.string.llm_provider_header_name))
-                        Spacer(Modifier.height(6.dp))
-                        OutlinedTextField(
+                        Spacer(Modifier.height(14.dp))
+                        LlmTextField(
                             value = authHeader,
                             onValueChange = { authHeader = it },
-                            singleLine = true,
-                            textStyle = TextStyle(fontSize = 13.sp, color = primary),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = fieldColors,
-                            modifier = Modifier.fillMaxWidth(),
+                            label = stringResource(R.string.llm_provider_header_name),
                         )
                     }
                 }
             }
 
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(22.dp))
             SettingsSectionLabel(stringResource(R.string.llm_provider_prompt_section))
             SettingsCard(dark = dark) {
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .clickable { showPromptEditor = true }
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            text = stringResource(R.string.llm_prompt_settings),
-                            color = primary,
-                            fontSize = 13.5.sp,
-                            fontWeight = FontWeight.Medium,
-                        )
-                        Text(
-                            text = stringResource(
-                                if (promptOverrides.hasAny(promptLangKey)) {
-                                    R.string.llm_provider_prompt_customized_desc
-                                } else {
-                                    R.string.llm_provider_prompt_desc
-                                },
-                            ),
-                            color = secondary,
-                            fontSize = 10.5.sp,
-                        )
-                    }
-                    Text(
-                        text = "›",
-                        color = PikuColors.textFaint,
-                        fontSize = 18.sp,
+                Column(Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
+                    LlmEntryRow(
+                        title = stringResource(R.string.llm_prompt_settings),
+                        subtitle = stringResource(
+                            if (promptOverrides.hasAny(promptLangKey)) {
+                                R.string.llm_provider_prompt_customized_desc
+                            } else {
+                                R.string.llm_provider_prompt_desc
+                            },
+                        ),
+                        onClick = { showPromptEditor = true },
                     )
                 }
             }
 
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(22.dp))
             SettingsCard(dark = dark) {
                 Row(
                     Modifier
                         .fillMaxWidth()
                         .clickable { advanced = !advanced }
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
@@ -640,45 +579,31 @@ internal fun ManualProviderEditorScreen(
                         fontSize = 12.sp,
                         modifier = Modifier.weight(1f),
                     )
-                    Text(
-                        text = if (advanced) "▾" else "▸",
-                        color = PikuColors.textFaint,
-                        fontSize = 12.sp,
+                    LlmChevron(
+                        Modifier.graphicsLayer(rotationZ = if (advanced) 270f else 90f),
                     )
                 }
                 if (advanced) {
-                    HorizontalDivider(
-                        color = PikuColors.border,
-                        thickness = 0.5.dp,
-                        modifier = Modifier.padding(horizontal = 14.dp),
-                    )
-                    Column(Modifier.padding(14.dp)) {
-                        FieldLabel(stringResource(R.string.llm_provider_base_urls))
-                        Spacer(Modifier.height(6.dp))
-                        OutlinedTextField(
+                    LlmDivider()
+                    Column(
+                        Modifier.padding(start = 14.dp, end = 14.dp, bottom = 14.dp),
+                    ) {
+                        LlmTextField(
                             value = baseUrlsText,
                             onValueChange = { baseUrlsText = it },
-                            placeholder = { Text(stringResource(R.string.llm_provider_base_urls_hint)) },
+                            label = stringResource(R.string.llm_provider_base_urls),
+                            placeholder = stringResource(R.string.llm_provider_base_urls_hint),
+                            singleLine = false,
                             minLines = 2,
-                            maxLines = 4,
-                            textStyle = TextStyle(fontSize = 12.5.sp, color = primary),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = fieldColors,
-                            modifier = Modifier.fillMaxWidth(),
                         )
-                        Spacer(Modifier.height(12.dp))
-                        FieldLabel(stringResource(R.string.llm_provider_headers))
-                        Spacer(Modifier.height(6.dp))
-                        OutlinedTextField(
+                        Spacer(Modifier.height(14.dp))
+                        LlmTextField(
                             value = extraHeadersText,
                             onValueChange = { extraHeadersText = it },
-                            placeholder = { Text(stringResource(R.string.llm_provider_headers_hint)) },
+                            label = stringResource(R.string.llm_provider_headers),
+                            placeholder = stringResource(R.string.llm_provider_headers_hint),
+                            singleLine = false,
                             minLines = 2,
-                            maxLines = 4,
-                            textStyle = TextStyle(fontSize = 12.5.sp, color = primary),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = fieldColors,
-                            modifier = Modifier.fillMaxWidth(),
                         )
                     }
                 }
@@ -686,25 +611,35 @@ internal fun ManualProviderEditorScreen(
         }
 
         SettingsFooter(dark = dark) {
-            DraftTestLine(testState = testState)
-            Spacer(Modifier.height(7.dp))
+            val errorSummary = editorErrorText(error)
+            if (errorSummary != null) {
+                Text(
+                    text = errorSummary,
+                    color = errorColor,
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(bottom = 6.dp),
+                )
+            }
+            DraftTestLine(testState = testState, onCancel = onCancelDraftTest)
+            Spacer(Modifier.height(9.dp))
             Row {
-                OutlinedButton(
+                LlmActionButton(
+                    text = stringResource(R.string.llm_provider_test),
+                    primary = false,
                     onClick = {
                         val err = validate(requireModel = true, requireRoles = false)
-                        error = err
+                        showError(err)
                         if (err == null) onTest(currentProvider(), keyArg())
                     },
-                    shape = RoundedCornerShape(13.dp),
-                    modifier = Modifier.weight(1f).height(48.dp),
-                ) {
-                    Text(stringResource(R.string.llm_provider_test), fontSize = 12.5.sp)
-                }
+                    modifier = Modifier.weight(1f),
+                )
                 Spacer(Modifier.width(8.dp))
-                Button(
+                LlmActionButton(
+                    text = stringResource(R.string.llm_provider_save),
+                    primary = true,
                     onClick = {
                         val err = validate(requireModel = true, requireRoles = true)
-                        error = err
+                        showError(err)
                         if (err == null) {
                             onSave(
                                 currentProvider(),
@@ -713,15 +648,8 @@ internal fun ManualProviderEditorScreen(
                             )
                         }
                     },
-                    shape = RoundedCornerShape(13.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = accent,
-                        contentColor = onAccent(),
-                    ),
-                    modifier = Modifier.weight(1.15f).height(48.dp),
-                ) {
-                    Text(stringResource(R.string.llm_provider_save), fontSize = 13.sp)
-                }
+                    modifier = Modifier.weight(1.15f),
+                )
             }
         }
     }
@@ -743,90 +671,97 @@ internal fun ManualProviderEditorScreen(
             },
         )
     }
-}
 
-@Composable
-private fun DraftTestLine(testState: ProviderTestState?) {
-    when (testState) {
-        ProviderTestState.Testing -> Row(verticalAlignment = Alignment.CenterVertically) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(11.dp),
-                color = PikuColors.controlAccent,
-                strokeWidth = 1.4.dp,
-            )
-            Spacer(Modifier.width(5.dp))
-            Text(
-                text = stringResource(R.string.llm_manual_testing),
-                color = PikuColors.textSecondary,
-                fontSize = 10.5.sp,
-            )
-        }
-        is ProviderTestState.Success -> Text(
-            text = stringResource(R.string.llm_manual_connected_latency, testState.latencyMs),
-            color = Color(0xFF5BAE61),
-            fontSize = 10.5.sp,
-        )
-        is ProviderTestState.Failed -> Text(
-            text = if (testState.message.isNullOrBlank()) {
-                stringResource(R.string.llm_provider_key_required)
-            } else {
-                stringResource(R.string.llm_manual_failed_detail, testState.message)
+    if (showDiscardConfirm) {
+        ConfirmDestructiveDialog(
+            title = stringResource(R.string.llm_discard_title),
+            message = stringResource(R.string.llm_discard_message),
+            confirmLabel = stringResource(R.string.llm_discard_confirm),
+            onConfirm = {
+                showDiscardConfirm = false
+                onDismiss()
             },
-            color = PikuColors.error,
-            fontSize = 10.5.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        else -> Text(
-            text = stringResource(R.string.llm_provider_test_hint),
-            color = PikuColors.textFaint,
-            fontSize = 10.5.sp,
+            onDismiss = { showDiscardConfirm = false },
+            dark = dark,
         )
     }
 }
 
 @Composable
-private fun PresetChip(text: String, selected: Boolean, onClick: () -> Unit) {
-    Text(
-        text = text,
-        color = if (selected) PikuColors.textPrimary else PikuColors.textSecondary,
-        fontSize = 11.5.sp,
-        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-        maxLines = 1,
-        modifier = Modifier
-            .clip(RoundedCornerShape(999.dp))
-            .background(
-                if (selected) PikuColors.controlAccent.copy(alpha = 0.12f)
-                else PikuColors.surface,
-            )
-            .border(
-                BorderStroke(
-                    1.dp,
-                    if (selected) PikuColors.controlAccent.copy(alpha = 0.25f)
-                    else PikuColors.border,
-                ),
-                RoundedCornerShape(999.dp),
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 11.dp, vertical = 7.dp),
-    )
+private fun editorErrorText(error: EditorError?): String? {
+    val res = when (error) {
+        EditorError.URL_REQUIRED -> R.string.llm_provider_url_required
+        EditorError.URL_INVALID -> R.string.llm_provider_url_invalid
+        EditorError.MODEL_REQUIRED -> R.string.llm_provider_model_required
+        EditorError.KEY_REQUIRED -> R.string.llm_provider_key_required
+        EditorError.ROLES_REQUIRED -> R.string.llm_provider_roles_required
+        else -> return null
+    }
+    return stringResource(res)
 }
 
 @Composable
-private fun RoleToggleChip(text: String, selected: Boolean, onClick: () -> Unit) {
-    Text(
-        text = text,
-        color = if (selected) PikuColors.textPrimary else PikuColors.textSecondary,
-        fontSize = 11.5.sp,
-        fontWeight = FontWeight.Medium,
-        modifier = Modifier
-            .clip(RoundedCornerShape(999.dp))
-            .background(
-                if (selected) PikuColors.controlAccent.copy(alpha = 0.14f) else PikuColors.surfaceMuted,
+private fun DraftTestLine(testState: ProviderTestState?, onCancel: () -> Unit) {
+    val secondary = PikuColors.textSecondary
+    when (testState) {
+        ProviderTestState.Testing -> Row(verticalAlignment = Alignment.CenterVertically) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(11.dp),
+                color = secondary,
+                strokeWidth = 1.4.dp,
             )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 6.dp),
-    )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = stringResource(R.string.llm_manual_testing),
+                color = secondary,
+                fontSize = 11.sp,
+                modifier = Modifier.weight(1f),
+            )
+            LlmTextAction(
+                text = stringResource(R.string.llm_provider_cancel),
+                onClick = onCancel,
+                color = secondary,
+            )
+        }
+        is ProviderTestState.Success -> Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = Icons.Filled.Check,
+                contentDescription = null,
+                tint = secondary,
+                modifier = Modifier.size(13.dp),
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = stringResource(R.string.llm_manual_connected_latency, testState.latencyMs),
+                color = secondary,
+                fontSize = 11.sp,
+            )
+        }
+        is ProviderTestState.Failed -> Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = Icons.Outlined.Close,
+                contentDescription = null,
+                tint = PikuColors.error,
+                modifier = Modifier.size(13.dp),
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = if (testState.message.isNullOrBlank()) {
+                    stringResource(R.string.llm_provider_key_required)
+                } else {
+                    stringResource(R.string.llm_manual_failed_detail, testState.message)
+                },
+                color = PikuColors.error,
+                fontSize = 11.sp,
+                maxLines = 2,
+            )
+        }
+        else -> Text(
+            text = stringResource(R.string.llm_provider_test_hint),
+            color = PikuColors.textSecondary,
+            fontSize = 11.sp,
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -840,51 +775,26 @@ private fun ModelPickerSheet(
 ) {
     var query by remember { mutableStateOf("") }
     val filtered = remember(models, query) {
-        if (query.isBlank()) {
-            models
-        } else {
-            models.filter { it.contains(query, ignoreCase = true) }
-        }
+        if (query.isBlank()) models else models.filter { it.contains(query, ignoreCase = true) }
     }
     PikuBottomSheet(
         onDismissRequest = onDismiss,
         dark = dark,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = stringResource(R.string.llm_provider_model_picker),
-                color = PikuColors.textPrimary,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                text = stringResource(R.string.llm_provider_model_picker_count, models.size),
-                color = PikuColors.textFaint,
-                fontSize = 10.5.sp,
-            )
-        }
+        PikuSheetTitle(text = stringResource(R.string.llm_provider_model_picker))
         Spacer(Modifier.height(10.dp))
-        OutlinedTextField(
+        LlmTextField(
             value = query,
             onValueChange = { query = it },
-            placeholder = {
-                Text(
-                    text = stringResource(R.string.llm_provider_model_picker_search),
-                    fontSize = 12.sp,
-                )
-            },
-            singleLine = true,
-            textStyle = TextStyle(fontSize = 13.sp, color = PikuColors.textPrimary),
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.fillMaxWidth(),
+            label = null,
+            placeholder = stringResource(R.string.llm_provider_model_picker_search),
         )
         Spacer(Modifier.height(8.dp))
         if (filtered.isEmpty()) {
             Text(
                 text = stringResource(R.string.llm_provider_model_picker_empty),
                 color = PikuColors.textSecondary,
-                fontSize = 11.5.sp,
+                fontSize = 11.sp,
                 modifier = Modifier.padding(vertical = 12.dp),
             )
         } else {
@@ -904,22 +814,36 @@ private fun ModelPickerSheet(
                         Text(
                             text = id,
                             color = PikuColors.textPrimary,
-                            fontSize = 12.5.sp,
-                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            fontSize = 12.sp,
+                            fontFamily = FontFamily.Monospace,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f),
                         )
                         if (id == selected) {
-                            Text(
-                                text = stringResource(R.string.llm_provider_model_picker_current),
-                                color = PikuColors.controlAccent,
-                                fontSize = 10.sp,
+                            Icon(
+                                imageVector = Icons.Filled.Check,
+                                contentDescription = null,
+                                tint = PikuColors.textPrimary,
+                                modifier = Modifier.size(14.dp),
                             )
                         }
                     }
                 }
             }
         }
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            LlmTextAction(
+                text = stringResource(R.string.llm_provider_cancel),
+                onClick = onDismiss,
+                color = PikuColors.textSecondary,
+            )
+        }
+        Spacer(Modifier.height(12.dp))
     }
 }
 

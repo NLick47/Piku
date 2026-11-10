@@ -1,43 +1,34 @@
 package com.piku.client.core.ui.sheets
 
-import com.piku.client.source.poipiku.ui.home.CatalogRefreshState
-import com.piku.client.source.poipiku.ui.home.HomeUiState
-
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -52,20 +43,21 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.piku.client.R
 import com.piku.client.core.storage.prefs.CatalogSource
 import com.piku.client.core.storage.prefs.SettingsRepository
-import com.piku.client.R
 import com.piku.client.core.ui.common.PikuPageHeader
-import androidx.compose.animation.animateColorAsState
 import com.piku.client.core.ui.theme.HomeBgBottomDark
 import com.piku.client.core.ui.theme.HomeBgBottomLight
 import com.piku.client.core.ui.theme.HomeBgTopDark
 import com.piku.client.core.ui.theme.HomeBgTopLight
 import com.piku.client.core.ui.theme.PikuColors
+import com.piku.client.source.poipiku.ui.home.CatalogRefreshState
+import com.piku.client.source.poipiku.ui.home.HomeUiState
 
 private val CATALOG_KEY_HEX = Regex("^[0-9a-fA-F]{64}$")
 
@@ -86,7 +78,6 @@ fun CatalogSourceScreen(
     val primary = PikuColors.textPrimary
     val secondary = PikuColors.textSecondary
     val accent = PikuColors.controlAccent
-    val onAccent = if (dark) Color(0xFF1A1A1A) else Color.White
     val errorColor = PikuColors.error
 
     var urlInput by rememberSaveable(state.catalogUrl) { mutableStateOf(state.catalogUrl) }
@@ -96,30 +87,8 @@ fun CatalogSourceScreen(
     val sourceSuffix = if (state.catalogSourceId.isBlank()) "" else " · ${state.catalogSourceId}"
     val trimmedKey = keyInput.trim()
     val keyValid = trimmedKey.isEmpty() || CATALOG_KEY_HEX.matches(trimmedKey)
-    // 与当前持久化值都相同（地址空白=默认语义）时无需保存；刷新中或密钥格式非法时禁用
     val saveEnabled = !refreshing && keyValid &&
         (urlInput.trim() != state.catalogUrl || trimmedKey != state.catalogEncKey)
-    // 两个输入框共用一套配色，避免逐字段重复
-    val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = accent,
-        unfocusedBorderColor = PikuColors.border,
-        errorBorderColor = errorColor,
-        focusedContainerColor = if (dark) Color(0x14FFFFFF) else Color(0x0A000000),
-        unfocusedContainerColor = if (dark) Color(0x14FFFFFF) else Color(0x0A000000),
-        errorContainerColor = if (dark) Color(0x14FFFFFF) else Color(0x0A000000),
-        cursorColor = accent,
-        errorCursorColor = errorColor,
-        focusedTextColor = primary,
-        unfocusedTextColor = primary,
-        focusedLabelColor = accent,
-        unfocusedLabelColor = secondary,
-        errorLabelColor = errorColor,
-        focusedPlaceholderColor = secondary,
-        unfocusedPlaceholderColor = secondary,
-        focusedSupportingTextColor = errorColor,
-        unfocusedSupportingTextColor = secondary,
-        errorSupportingTextColor = errorColor,
-    )
 
     Column(
         Modifier
@@ -142,197 +111,153 @@ fun CatalogSourceScreen(
                 .navigationBarsPadding()
                 .imePadding()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp)
-                .padding(top = 14.dp, bottom = 12.dp),
+                .padding(horizontal = 18.dp)
+                .padding(top = 18.dp, bottom = 20.dp),
         ) {
-        Text(
-            text = stringResource(R.string.ai_translate_catalog_desc),
-            color = secondary,
-            fontSize = 12.sp,
-            lineHeight = 17.sp,
-        )
-        Spacer(Modifier.height(16.dp))
-
-        // 已保存的源：官方默认固定首行 + 自定义源，点击即切换并刷新
-        SheetSectionLabel(stringResource(R.string.ai_translate_catalog_saved), secondary)
-        Spacer(Modifier.height(8.dp))
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .heightIn(max = 300.dp)
-                .verticalScroll(rememberScrollState()),
-        ) {
-            CatalogSourceListCard(
-                sources = state.catalogSources,
-                activeUrl = state.catalogUrl,
-                activeKey = state.catalogEncKey,
-                onActivateOfficial = onResetCatalog,
-                onActivateSource = onActivateSource,
-                onManageSource = { managedSource = it },
-                dark = dark,
+            Text(
+                text = stringResource(R.string.ai_translate_catalog_desc),
+                color = secondary,
+                fontSize = 12.sp,
+                lineHeight = 18.sp,
             )
-        }
+            Spacer(Modifier.height(22.dp))
 
-        Spacer(Modifier.height(16.dp))
-
-        OutlinedTextField(
-            value = urlInput,
-            onValueChange = { urlInput = it },
-            label = { Text(stringResource(R.string.ai_translate_catalog_url_label)) },
-            placeholder = {
-                Text(
-                    text = SettingsRepository.CATALOG_URL_DEFAULT,
-                    color = secondary,
-                    fontSize = 11.sp,
-                    maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                )
-            },
-            singleLine = true,
-            textStyle = TextStyle(fontSize = 12.sp, color = primary),
-            shape = RoundedCornerShape(12.dp),
-            colors = fieldColors,
-            modifier = Modifier.fillMaxWidth(),
-        )
-
-        Spacer(Modifier.height(14.dp))
-
-        // 解密密钥：第三方加密目录的配套密钥（作者随地址一起分发）；明文 JSON 无需填写
-        OutlinedTextField(
-            value = keyInput,
-            onValueChange = { keyInput = it },
-            label = { Text(stringResource(R.string.ai_translate_catalog_key_label)) },
-            placeholder = {
-                Text(
-                    text = stringResource(R.string.ai_translate_catalog_key_hint),
-                    color = secondary,
-                    fontSize = 11.sp,
-                    maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                )
-            },
-            isError = !keyValid,
-            supportingText = if (!keyValid) {
-                { Text(stringResource(R.string.ai_translate_catalog_key_invalid), fontSize = 11.sp) }
-            } else {
-                null
-            },
-            singleLine = true,
-            textStyle = TextStyle(fontSize = 12.sp, color = primary),
-            shape = RoundedCornerShape(12.dp),
-            colors = fieldColors,
-            modifier = Modifier.fillMaxWidth(),
-        )
-
-        Spacer(Modifier.height(4.dp))
-
-        // 存为新源：把当前编辑的地址+密钥入库（名称自动从 URL 推导，之后可重命名）
-        TextButton(
-            onClick = { onSaveAsSource(urlInput.trim(), trimmedKey) },
-            enabled = !refreshing && keyValid && urlInput.isNotBlank(),
-            contentPadding = PaddingValues(horizontal = 6.dp),
-            colors = ButtonDefaults.textButtonColors(contentColor = accent),
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.Add,
-                contentDescription = null,
-                modifier = Modifier.size(13.dp),
-            )
-            Spacer(Modifier.width(4.dp))
-            Text(text = stringResource(R.string.ai_translate_catalog_save_as_new), fontSize = 12.sp)
-        }
-
-        Spacer(Modifier.height(10.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(
-                onClick = onResetCatalog,
-                // 自定义地址或自定义密钥任一存在即可恢复默认（密钥随地址一并清除）
-                enabled = !refreshing && (state.catalogIsCustom || state.catalogEncKey.isNotEmpty()),
-                colors = ButtonDefaults.textButtonColors(contentColor = secondary),
+            SettingsSectionLabel(stringResource(R.string.ai_translate_catalog_saved))
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 300.dp)
+                    .verticalScroll(rememberScrollState()),
             ) {
-                Text(text = stringResource(R.string.ai_translate_catalog_reset), fontSize = 13.sp)
+                CatalogSourceListCard(
+                    sources = state.catalogSources,
+                    activeUrl = state.catalogUrl,
+                    activeKey = state.catalogEncKey,
+                    onActivateOfficial = onResetCatalog,
+                    onActivateSource = onActivateSource,
+                    onManageSource = { managedSource = it },
+                )
             }
-            Spacer(Modifier.weight(1f))
-            Button(
-                onClick = { onSaveCatalog(urlInput, keyInput) },
-                enabled = saveEnabled,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = accent,
-                    contentColor = onAccent,
-                ),
-            ) {
-                Text(
+
+            Spacer(Modifier.height(22.dp))
+            SettingsCard(dark = dark) {
+                Column(Modifier.padding(14.dp)) {
+                    LlmTextField(
+                        value = urlInput,
+                        onValueChange = { urlInput = it },
+                        label = stringResource(R.string.ai_translate_catalog_url_label),
+                        placeholder = SettingsRepository.CATALOG_URL_DEFAULT,
+                        mono = true,
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    LlmTextField(
+                        value = keyInput,
+                        onValueChange = { keyInput = it },
+                        label = stringResource(R.string.ai_translate_catalog_key_label),
+                        placeholder = stringResource(R.string.ai_translate_catalog_key_hint),
+                        error = !keyValid,
+                    )
+                    FieldError(
+                        if (!keyValid) stringResource(R.string.ai_translate_catalog_key_invalid) else null,
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(10.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Outlined.Add,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(14.dp),
+                )
+                Spacer(Modifier.width(4.dp))
+                LlmTextAction(
+                    text = stringResource(R.string.ai_translate_catalog_save_as_new),
+                    onClick = { onSaveAsSource(urlInput.trim(), trimmedKey) },
+                    color = accent,
+                    enabled = !refreshing && keyValid && urlInput.isNotBlank(),
+                )
+            }
+
+            Spacer(Modifier.height(16.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                LlmTextAction(
+                    text = stringResource(R.string.ai_translate_catalog_reset),
+                    onClick = onResetCatalog,
+                    color = secondary,
+                    enabled = !refreshing && (state.catalogIsCustom || state.catalogEncKey.isNotEmpty()),
+                )
+                Spacer(Modifier.weight(1f))
+                LlmActionButton(
                     text = stringResource(
                         if (refreshing) R.string.ai_translate_catalog_loading else R.string.ai_translate_catalog_save,
                     ),
-                    fontSize = 13.sp,
+                    primary = true,
+                    enabled = saveEnabled,
+                    onClick = { onSaveCatalog(urlInput, keyInput) },
+                    modifier = Modifier.width(120.dp),
                 )
             }
-        }
 
-        when (val refresh = state.catalogRefreshState) {
-            CatalogRefreshState.Idle -> Unit
-            CatalogRefreshState.Loading -> Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(start = 4.dp, top = 6.dp),
-            ) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(13.dp),
-                    color = accent,
-                    strokeWidth = 1.5.dp,
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = stringResource(R.string.ai_translate_catalog_loading),
+            when (val refresh = state.catalogRefreshState) {
+                CatalogRefreshState.Idle -> Unit
+                CatalogRefreshState.Loading -> Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(start = 2.dp, top = 10.dp),
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(12.dp),
+                        color = secondary,
+                        strokeWidth = 1.5.dp,
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = stringResource(R.string.ai_translate_catalog_loading),
+                        color = secondary,
+                        fontSize = 11.sp,
+                    )
+                }
+                is CatalogRefreshState.Success -> Text(
+                    text = stringResource(R.string.ai_translate_catalog_success, refresh.modelCount) + sourceSuffix,
                     color = secondary,
-                    fontSize = 12.sp,
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(start = 2.dp, top = 10.dp),
+                )
+                CatalogRefreshState.UpToDate -> Text(
+                    text = stringResource(R.string.ai_translate_catalog_uptodate) + sourceSuffix,
+                    color = secondary,
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(start = 2.dp, top = 10.dp),
+                )
+                CatalogRefreshState.Failed -> Text(
+                    text = stringResource(R.string.ai_translate_catalog_failed),
+                    color = errorColor,
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(start = 2.dp, top = 10.dp),
                 )
             }
-            is CatalogRefreshState.Success -> Text(
-                text = stringResource(R.string.ai_translate_catalog_success, refresh.modelCount) + sourceSuffix,
-                color = accent,
-                fontSize = 12.sp,
-                modifier = Modifier.padding(start = 4.dp, top = 6.dp),
-            )
-            CatalogRefreshState.UpToDate -> Text(
-                text = stringResource(R.string.ai_translate_catalog_uptodate) + sourceSuffix,
-                color = secondary,
-                fontSize = 12.sp,
-                modifier = Modifier.padding(start = 4.dp, top = 6.dp),
-            )
-            CatalogRefreshState.Failed -> Text(
-                text = stringResource(R.string.ai_translate_catalog_failed),
-                color = errorColor,
-                fontSize = 12.sp,
-                modifier = Modifier.padding(start = 4.dp, top = 6.dp),
-            )
-        }
 
-        managedSource?.let { source ->
-            CatalogManageDialog(
-                source = source,
-                onRename = { name ->
-                    val trimmed = name.trim()
-                    if (trimmed.isNotEmpty() && trimmed != source.name) onRenameSource(source, trimmed)
-                    managedSource = null
-                },
-                onDelete = {
-                    onDeleteSource(source)
-                    managedSource = null
-                },
-                onDismiss = { managedSource = null },
-                dark = dark,
-            )
+            managedSource?.let { source ->
+                CatalogManageDialog(
+                    source = source,
+                    onRename = { name ->
+                        val trimmed = name.trim()
+                        if (trimmed.isNotEmpty() && trimmed != source.name) onRenameSource(source, trimmed)
+                        managedSource = null
+                    },
+                    onDelete = {
+                        onDeleteSource(source)
+                        managedSource = null
+                    },
+                    onDismiss = { managedSource = null },
+                    dark = dark,
+                )
+            }
         }
-    }
     }
 }
 
-/**
- * 已保存源列表卡片：与模型选择卡片同一套视觉（选中行 accent 淡底 + 右侧勾）。
- * 官方默认固定首行不可删；自定义源点行即切换，右侧 ⋮ 打开重命名/删除管理框。
- * 激活判定与实际生效的两键（地址+密钥）严格一致。
- */
 @Composable
 private fun CatalogSourceListCard(
     sources: List<CatalogSource>,
@@ -341,27 +266,22 @@ private fun CatalogSourceListCard(
     onActivateOfficial: () -> Unit,
     onActivateSource: (CatalogSource) -> Unit,
     onManageSource: (CatalogSource) -> Unit,
-    dark: Boolean,
 ) {
     val primary = PikuColors.textPrimary
     val secondary = PikuColors.textSecondary
-    val accent = PikuColors.controlAccent
     val borderColor = PikuColors.border
+    val shape = RoundedCornerShape(12.dp)
     val officialActive =
         activeUrl in SettingsRepository.CATALOG_URL_MIRRORS && activeKey.isEmpty()
 
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .border(BorderStroke(0.5.dp, borderColor), RoundedCornerShape(14.dp)),
+            .clip(shape)
+            .border(BorderStroke(0.5.dp, borderColor), shape),
     ) {
         val officialBg by animateColorAsState(
-            targetValue = if (officialActive) {
-                accent.copy(alpha = if (dark) 0.18f else 0.12f)
-            } else {
-                Color.Transparent
-            },
+            targetValue = if (officialActive) PikuColors.surfaceSoft else Color.Transparent,
             label = "officialBg",
         )
         Row(
@@ -370,14 +290,14 @@ private fun CatalogSourceListCard(
                 .fillMaxWidth()
                 .background(officialBg)
                 .clickable(enabled = !officialActive, onClick = onActivateOfficial)
-                .padding(start = 14.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
+                .padding(start = 14.dp, end = 12.dp, top = 11.dp, bottom = 11.dp),
         ) {
             Column(Modifier.weight(1f)) {
                 Text(
                     text = stringResource(R.string.ai_translate_catalog_default),
                     color = primary,
                     fontSize = 14.sp,
-                    fontWeight = if (officialActive) FontWeight.SemiBold else FontWeight.Medium,
+                    fontWeight = FontWeight.Medium,
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
@@ -391,20 +311,16 @@ private fun CatalogSourceListCard(
                 Icon(
                     imageVector = Icons.Filled.Check,
                     contentDescription = null,
-                    tint = accent,
-                    modifier = Modifier.size(18.dp),
+                    tint = primary,
+                    modifier = Modifier.size(16.dp),
                 )
             }
         }
-        sources.forEachIndexed { index, source ->
+        sources.forEach { source ->
             HorizontalDivider(color = borderColor, thickness = 0.5.dp)
             val active = source.url == activeUrl && source.encKey == activeKey
             val rowBg by animateColorAsState(
-                targetValue = if (active) {
-                    accent.copy(alpha = if (dark) 0.18f else 0.12f)
-                } else {
-                    Color.Transparent
-                },
+                targetValue = if (active) PikuColors.surfaceSoft else Color.Transparent,
                 label = "sourceRowBg",
             )
             Row(
@@ -413,16 +329,16 @@ private fun CatalogSourceListCard(
                     .fillMaxWidth()
                     .background(rowBg)
                     .clickable(enabled = !active, onClick = { onActivateSource(source) })
-                    .padding(start = 14.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+                    .padding(start = 14.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
             ) {
                 Column(Modifier.weight(1f)) {
                     Text(
                         text = source.name,
                         color = primary,
                         fontSize = 14.sp,
-                        fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
+                        fontWeight = FontWeight.Medium,
                         maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
@@ -430,7 +346,7 @@ private fun CatalogSourceListCard(
                         color = secondary,
                         fontSize = 11.sp,
                         maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
                 if (active) {
@@ -438,23 +354,25 @@ private fun CatalogSourceListCard(
                     Icon(
                         imageVector = Icons.Filled.Check,
                         contentDescription = null,
-                        tint = accent,
-                        modifier = Modifier.size(18.dp),
+                        tint = primary,
+                        modifier = Modifier.size(16.dp),
                     )
                 }
-                TextButton(
-                    onClick = { onManageSource(source) },
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                    colors = ButtonDefaults.textButtonColors(contentColor = secondary),
-                ) {
-                    Text(text = "⋮", fontSize = 16.sp)
-                }
+                Spacer(Modifier.width(6.dp))
+                Icon(
+                    imageVector = Icons.Outlined.MoreVert,
+                    contentDescription = null,
+                    tint = secondary,
+                    modifier = Modifier
+                        .size(22.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable { onManageSource(source) }
+                        .padding(3.dp),
+                )
             }
         }
     }
 }
-
-
 
 @Composable
 private fun CatalogManageDialog(
@@ -464,37 +382,41 @@ private fun CatalogManageDialog(
     onDismiss: () -> Unit,
     dark: Boolean,
 ) {
-    val primary = PikuColors.textPrimary
     var nameInput by rememberSaveable(source.id) { mutableStateOf(source.name) }
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = PikuColors.surface,
         title = {
             Text(
                 text = stringResource(R.string.ai_translate_catalog_manage_title),
-                color = primary,
+                color = PikuColors.textPrimary,
                 fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
+                fontWeight = FontWeight.Medium,
             )
         },
         text = {
-            OutlinedTextField(
+            LlmTextField(
                 value = nameInput,
                 onValueChange = { nameInput = it },
-                label = { Text(stringResource(R.string.ai_translate_catalog_name_hint)) },
-                singleLine = true,
-                textStyle = TextStyle(fontSize = 13.sp, color = primary),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth(),
+                label = stringResource(R.string.ai_translate_catalog_name_hint),
             )
         },
         confirmButton = {
             TextButton(onClick = { onRename(nameInput) }) {
-                Text(text = stringResource(R.string.ai_translate_catalog_rename), fontSize = 13.sp)
+                Text(
+                    text = stringResource(R.string.ai_translate_catalog_rename),
+                    color = PikuColors.controlAccent,
+                    fontSize = 13.sp,
+                )
             }
         },
         dismissButton = {
             TextButton(onClick = onDelete) {
-                Text(text = stringResource(R.string.ai_translate_catalog_delete), fontSize = 13.sp)
+                Text(
+                    text = stringResource(R.string.ai_translate_catalog_delete),
+                    color = PikuColors.error,
+                    fontSize = 13.sp,
+                )
             }
         },
     )

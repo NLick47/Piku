@@ -986,8 +986,8 @@ class HomeViewModel @Inject constructor(
     }
 
     /**
-     * 保存手动 API。新建时自动绑定其声明的用途；编辑时保持用户已有绑定，
-     * 因为选中值存的是 provider id，模型名/地址变化会自动跟随。
+     * 保存手动 API。新建时仅在角色仍跟随目录默认时绑定，不覆盖用户显式选过的模型；
+     * 编辑时保持已有绑定，因为选中值存的是 provider id，模型名/地址变化会自动跟随。
      */
     fun saveManualProvider(provider: ManualProvider, newKey: String?, clearKey: Boolean) {
         val isNew = provider.id.isBlank()
@@ -1000,7 +1000,18 @@ class HomeViewModel @Inject constructor(
             },
         )
         modelCatalogRepository.reloadManualModels()
-        if (isNew) saved.roles.forEach { role -> bindManualProvider(role, saved.id) }
+        if (isNew) {
+            val current = _uiState.value
+            saved.roles.forEach { role ->
+                val followingDefault = when (role) {
+                    Role.TEXT -> current.llmModel.isBlank()
+                    Role.NOVEL -> current.llmNovelModel.isBlank()
+                    Role.IMAGE -> current.llmImageModel.isBlank()
+                    else -> false
+                }
+                if (followingDefault) bindManualProvider(role, saved.id)
+            }
+        }
         _uiState.update {
             it.copy(
                 providerTestStates = it.providerTestStates -
@@ -1089,8 +1100,18 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    private val providerTestJobs = mutableMapOf<String, Job>()
+
+    fun cancelProviderTest(testKey: String) {
+        providerTestJobs.remove(testKey)?.cancel()
+        _uiState.update {
+            it.copy(providerTestStates = it.providerTestStates - testKey)
+        }
+    }
+
     private fun startProviderTest(testKey: String, provider: ManualProvider, apiKey: String?) {
-        viewModelScope.launch {
+        providerTestJobs.remove(testKey)?.cancel()
+        providerTestJobs[testKey] = viewModelScope.launch {
             _uiState.update {
                 it.copy(providerTestStates = it.providerTestStates + (testKey to ProviderTestState.Testing))
             }
@@ -1106,6 +1127,7 @@ class HomeViewModel @Inject constructor(
             _uiState.update {
                 it.copy(providerTestStates = it.providerTestStates + (testKey to state))
             }
+            providerTestJobs.remove(testKey)
         }
     }
 
