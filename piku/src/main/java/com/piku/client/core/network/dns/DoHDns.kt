@@ -577,7 +577,6 @@ class DoHDns internal constructor(
             "poipiku.com",
             "pixiv.net",
             "pximg.net",
-            "pages.dev",
             "pic-relay.cyou",
             "archiveofourown.org",
         )
@@ -588,7 +587,6 @@ class DoHDns internal constructor(
             "cdn.poipiku.com",
             "www.pixiv.net",
             "i.pximg.net",
-            "piku-img.pages.dev",
             "pic-relay.cyou",
             "archiveofourown.org",
         )

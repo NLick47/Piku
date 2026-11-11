@@ -149,7 +149,7 @@ class ImageRouteProbeTest {
 
     @Test
     fun pixivRelayProbeGoesThroughThePximgPrefix() {
-        probe { response(200) }.probe(ImageUpstream.PIXIV, relayHost = "piku-img.pages.dev")
+        probe { response(200) }.probe(ImageUpstream.PIXIV, relayHost = "pic-relay.cyou")
 
         assertEquals(
             "/pximg${ImageUpstream.PIXIV.probePath}",
