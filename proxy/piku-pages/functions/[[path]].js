@@ -1,4 +1,4 @@
-// Piku 中转 · Cloudflare Pages Functions
+// Piku 中转 · Cloudflare Pages Functions（回退版）
 //
 // 部署后按路径分四类回源：
 //   1. /dns-query      -> https://cloudflare-dns.com/dns-query（RFC8484 原样透传）
@@ -20,10 +20,10 @@
 //   DoH   https://<项目名>.pages.dev/dns-query
 //   目录  https://<项目名>.pages.dev/catalog/models.enc.json
 //
-// 全功能版以本文件为准（/pxapi 路由、客户端头透传）；piku-image-worker.js 是最小同构版，
-// 两份实现改任一处记得对齐另一份。
+// 生产入口已切到 Worker：proxy/piku-image-worker.js + proxy/wrangler.toml
+//（workers_dev = false，只绑 pic-relay.cyou）。本文件保留作回退，改任一处记得对齐另一份。
 //
-// 部署：cd proxy/piku-pages && npx wrangler pages deploy . --project-name piku-img --branch main
+// 回退部署：cd proxy/piku-pages && npx wrangler pages deploy . --project-name piku-img --branch main
 //   目录参数必须是 "."——wrangler 从 cwd 找 functions/，写 proxy/piku-pages 会只传静态资源、
 //   跳过函数包（部署成功但全站 404）。
 

@@ -1,30 +1,13 @@
-// Piku 中转 · Cloudflare Worker（最小同构版：图片/DoH/px/目录 四类回源）
-// 全功能版（/pxapi 路由、客户端头透传）在 piku-pages/functions/[[path]].js，改任一处记得对齐。
+// Piku 中转 · Cloudflare Worker（生产入口）
+// Pages 版 piku-pages/functions/[[path]].js 保留作回退，改任一处记得对齐另一份。
 //
-// 按路径分四类回源：
-//   1. /dns-query      -> https://cloudflare-dns.com/dns-query（RFC8484 原样透传）
-//   2. /px/<原路径>     -> https://www.pixiv.net/<原路径>
-//   3. /catalog/models.enc.json -> 模型目录密文（GitHub raw 被墙的是国内直连，CF 出口可达）
-//   4. 其余 <原路径>    -> https://cdn.poipiku.com/<原路径>（原有图片中转）
+// 部署：cd proxy && npx wrangler deploy
+//   wrangler.toml 里 workers_dev = false，只绑 pic-relay.cyou 自定义域；
+//   *.workers.dev 在国内常被墙，本来也只走自定义域。
 //
-// 为什么需要这两条新路由（2026-09 实测）：
-//   · www.pixiv.net 在 Cloudflare 上。GFW 按 SNI 字符串拦 pixiv/pximg：同一个
-//     Cloudflare IP，SNI 换成 poipiku.com 能拿到 301，换成 www.pixiv.net 则 64ms
-//     被 RST；而清空 SNI 会被 Cloudflare 拒（ssl alert 40，CF 没有 SNI 无法选 zone）。
-//     两头一夹，接口没有直连解法，只能经这里回源。
-//   · 系统 DNS 与 alidns 对 pixiv 都返回投毒结果（Facebook 段 IP），DoH 需要一条
-//     出境出口。
-//
-// 部署要点：
-//   1. wrangler deploy
-//   2. 必须绑一个自定义域名（*.workers.dev 在国内经常被墙）
-//
-// 客户端改写：
-//   图片  https://cdn.poipiku.com/<path> -> https://<你的域名>/<path>
-//   pixiv 图 https://i.pximg.net/<path>   -> https://<你的域名>/pximg/<path>
-//   接口  https://www.pixiv.net/         -> https://<你的域名>/px/
-//   DoH   https://<你的域名>/dns-query
-//   目录  https://<你的域名>/catalog/models.enc.json
+// 回源：/dns-query -> cloudflare-dns.com，/px/ -> www.pixiv.net，
+//       /pxapi/ -> app-api.pixiv.net，/pximg/ -> i.pximg.net，
+//       /catalog/models.enc.json -> 模型目录，其余 -> cdn.poipiku.com
 
 const IMAGE_UPSTREAM = "https://cdn.poipiku.com";
 const IMAGE_REFERER = "https://poipiku.com/";
@@ -35,6 +18,9 @@ const PIXIV_IMG_UPSTREAM = "https://i.pximg.net";
 const PIXIV_IMG_PREFIX = "/pximg";
 const PIXIV_IMG_REFERER = "https://www.pixiv.net/";
 const DOH_UPSTREAM = "https://cloudflare-dns.com/dns-query";
+/** 应用接口是另一个 zone，bot 策略未必与主站一致，单独开一条便于对比 */
+const PIXIV_APP_UPSTREAM = "https://app-api.pixiv.net";
+const PIXIV_APP_PREFIX = "/pxapi";
 
 /** 模型目录密文（piku-models 的 catalog 分支）：国内直连 GitHub raw 被墙，这里由 CF 出口回源 */
 const CATALOG_PATH = "/catalog/models.enc.json";
@@ -52,12 +38,31 @@ const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET,HEAD,POST,OPTIONS",
 };
-// pixiv 网页接口对 UA 敏感；Referer 必须是站点页，否则部分接口直接 403
+/** 客户端可覆盖/需要透传到 pixiv 的头 */
+const FORWARD_HEADERS = [
+  "User-Agent",
+  "Accept",
+  "Authorization",
+  "App-OS",
+  "App-OS-Version",
+  "App-Version",
+  "X-Client-Hash",
+];
+// 出口 IP 被 pixiv 整站封锁时，换 UA、补齐浏览器指纹都没用，别把下面这组头当解药。
 const PIXIV_HEADERS = {
   "User-Agent":
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
   "Referer": "https://www.pixiv.net/",
-  "Accept-Language": "ja,en;q=0.8",
+  "Accept-Language": "ja,en-US;q=0.9,en;q=0.8",
+  "Accept-Encoding": "gzip, deflate, br",
+  "sec-ch-ua": '"Chromium";v="126", "Not)A;Brand";v="24"',
+  "sec-ch-ua-mobile": "?0",
+  "sec-ch-ua-platform": '"Windows"',
+  "Sec-Fetch-Dest": "document",
+  "Sec-Fetch-Mode": "navigate",
+  "Sec-Fetch-Site": "same-origin",
+  "Sec-Fetch-User": "?1",
+  "Upgrade-Insecure-Requests": "1",
 };
 
 export default {
@@ -65,12 +70,15 @@ export default {
     const url = new URL(request.url);
 
     if (request.method === "OPTIONS") return new Response(null, { headers: CORS });
-    if (url.pathname === "/" || url.pathname === "/health") {
+    if (url.pathname === "/health" || url.pathname === "/__health") {
       return new Response("piku-relay ok", { status: 200, headers: CORS });
     }
     if (url.pathname === "/dns-query") return doh(request);
+    if (url.pathname === PIXIV_APP_PREFIX || url.pathname.startsWith(PIXIV_APP_PREFIX + "/")) {
+      return pixiv(request, url, ctx, PIXIV_APP_UPSTREAM, PIXIV_APP_PREFIX);
+    }
     if (url.pathname === PIXIV_PREFIX || url.pathname.startsWith(PIXIV_PREFIX + "/")) {
-      return pixiv(request, url, ctx);
+      return pixiv(request, url, ctx, PIXIV_UPSTREAM, PIXIV_PREFIX);
     }
     if (url.pathname === PIXIV_IMG_PREFIX || url.pathname.startsWith(PIXIV_IMG_PREFIX + "/")) {
       return pixivImage(request, url, ctx);
@@ -108,12 +116,13 @@ async function doh(request) {
   return new Response(origin.body, { status: origin.status, headers: h });
 }
 
-async function pixiv(request, url, ctx) {
-  const path = url.pathname.slice(PIXIV_PREFIX.length) || "/";
-  const upstreamUrl = PIXIV_UPSTREAM + path + url.search;
+async function pixiv(request, url, ctx, upstream, prefix) {
+  const path = url.pathname.slice(prefix.length) || "/";
+  const upstreamUrl = upstream + path + url.search;
   const cookie = request.headers.get("Cookie");
-  // 带 Cookie 的请求按用户不同，不进共享缓存
-  const cacheable = request.method === "GET" && !cookie;
+  const auth = request.headers.get("Authorization");
+  // 带 Cookie / Authorization 的请求按用户不同，不进共享缓存
+  const cacheable = request.method === "GET" && !cookie && !auth;
   const cacheKey = new Request(upstreamUrl, { method: "GET" });
 
   if (cacheable) {
@@ -122,8 +131,11 @@ async function pixiv(request, url, ctx) {
   }
 
   const headers = { ...PIXIV_HEADERS };
-  const accept = request.headers.get("Accept");
-  if (accept) headers["Accept"] = accept;
+  // 客户端自带的应用侧头要能覆盖默认值——App 接口靠 UA / App-OS 判客户端
+  for (const name of FORWARD_HEADERS) {
+    const value = request.headers.get(name);
+    if (value) headers[name] = value;
+  }
   if (cookie) headers["Cookie"] = cookie;
 
   let origin;

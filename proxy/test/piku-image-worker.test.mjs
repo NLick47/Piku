@@ -169,6 +169,16 @@ test("pixiv api route still rewrites to www.pixiv.net and caches briefly", async
   assert.equal(h.calls.length, 1, "第二次应命中边缘缓存");
 });
 
+test("pxapi route goes to app-api.pixiv.net, not the image upstream", async () => {
+  const h = setup({
+    "https://app-api.pixiv.net/v1/illust/recommended": () => new Response("{}", { status: 200 }),
+  });
+
+  const { res } = await h.get("/pxapi/v1/illust/recommended");
+  assert.equal(res.status, 200);
+  assert.equal(h.calls[0].url, "https://app-api.pixiv.net/v1/illust/recommended");
+});
+
 test("pximg route keeps its own referer and long image cache", async () => {
   const h = setup({
     "https://i.pximg.net/img/2026/x.jpg": () => new Response("jpg-bytes", { status: 200 }),
