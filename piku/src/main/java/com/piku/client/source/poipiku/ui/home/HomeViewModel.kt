@@ -154,6 +154,7 @@ data class HomeUiState(
     val works: List<Work> = emptyList(),
     val favoriteIds: Set<WorkKey> = emptySet(),
     val adultEnabled: Boolean = false,
+    val incognitoEnabled: Boolean = false,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val imageRouteMode: ImageRouteMode = ImageRouteMode.AUTO,
     val pixivBookmarkMirror: PixivBookmarkMirror = PixivBookmarkMirror.PUBLIC,
@@ -348,6 +349,11 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             settingsRepository.pixivBookmarkMirror.collect { mode ->
                 _uiState.update { it.copy(pixivBookmarkMirror = mode) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.incognitoEnabled.collect { enabled ->
+                _uiState.update { it.copy(incognitoEnabled = enabled) }
             }
         }
         viewModelScope.launch {
@@ -830,6 +836,10 @@ class HomeViewModel @Inject constructor(
             val changed = setAdultContentUseCase(target)
             if (changed && old != target) reloadAllFeeds()
         }
+    }
+
+    fun toggleIncognito() {
+        settingsRepository.setIncognitoEnabled(!_uiState.value.incognitoEnabled)
     }
 
     fun setThemeMode(mode: ThemeMode) {

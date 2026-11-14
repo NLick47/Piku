@@ -52,6 +52,7 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.Tag
 import androidx.compose.material.icons.outlined.Translate
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.Wallpaper
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.HorizontalDivider
@@ -114,6 +115,8 @@ fun UserDrawer(
     currentVersion: String,
     updateAvailable: Boolean,
     onToggleAdult: () -> Unit,
+    incognitoEnabled: Boolean = false,
+    onToggleIncognito: () -> Unit = {},
     onSettingsClick: () -> Unit,
     onAboutClick: () -> Unit,
     onThemeClick: () -> Unit,
@@ -166,6 +169,8 @@ fun UserDrawer(
                 currentVersion = currentVersion,
                 updateAvailable = updateAvailable,
                 onToggleAdult = onToggleAdult,
+                incognitoEnabled = incognitoEnabled,
+                onToggleIncognito = onToggleIncognito,
                 onSettingsClick = {
                     settingsExpanded = !settingsExpanded
                     onSettingsClick()
@@ -220,6 +225,8 @@ private fun DrawerPanel(
     currentVersion: String,
     updateAvailable: Boolean,
     onToggleAdult: () -> Unit,
+    incognitoEnabled: Boolean,
+    onToggleIncognito: () -> Unit,
     onSettingsClick: () -> Unit,
     onAboutClick: () -> Unit,
     onThemeClick: () -> Unit,
@@ -399,13 +406,23 @@ private fun DrawerPanel(
             )
             // 本源接管了成人行的（如 pixiv：R-18 由账号侧服务端管控，开关无效）不再渲染
             if (sourceDrawer?.ownsAdultRow != true) {
-                AdultContentRow(
-                    adultEnabled = adultEnabled,
-                    onToggleAdult = onToggleAdult,
+                ToggleRow(
+                    icon = Icons.Outlined.Lock,
+                    label = stringResource(R.string.menu_adult_content),
+                    checked = adultEnabled,
+                    onToggle = onToggleAdult,
                     dark = dark,
                     accent = iconAccent,
                 )
             }
+            ToggleRow(
+                icon = Icons.Outlined.VisibilityOff,
+                label = stringResource(R.string.menu_incognito),
+                checked = incognitoEnabled,
+                onToggle = onToggleIncognito,
+                dark = dark,
+                accent = iconAccent,
+            )
             DrawerMenuRow(
                 icon = Icons.Outlined.DarkMode,
                 label = stringResource(R.string.menu_theme),
@@ -948,9 +965,11 @@ fun AppLanguage.labelRes(): Int = when (this) {
 }
 
 @Composable
-private fun AdultContentRow(
-    adultEnabled: Boolean,
-    onToggleAdult: () -> Unit,
+private fun ToggleRow(
+    icon: ImageVector,
+    label: String,
+    checked: Boolean,
+    onToggle: () -> Unit,
     dark: Boolean,
     accent: Color,
 ) {
@@ -960,7 +979,7 @@ private fun AdultContentRow(
             .fillMaxWidth()
             .padding(horizontal = 14.dp)
             .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = onToggleAdult)
+            .clickable(onClick = onToggle)
             .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -972,7 +991,7 @@ private fun AdultContentRow(
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                imageVector = Icons.Outlined.Lock,
+                imageVector = icon,
                 contentDescription = null,
                 tint = accent,
                 modifier = Modifier.size(19.dp),
@@ -980,15 +999,15 @@ private fun AdultContentRow(
         }
         Spacer(Modifier.width(13.dp))
         Text(
-            text = stringResource(R.string.menu_adult_content),
+            text = label,
             color = primary,
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
             modifier = Modifier.weight(1f),
         )
         Switch(
-            checked = adultEnabled,
-            onCheckedChange = { onToggleAdult() },
+            checked = checked,
+            onCheckedChange = { onToggle() },
             colors = themedSwitchColors(dark),
         )
     }
