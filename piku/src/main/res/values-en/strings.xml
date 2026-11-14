@@ -329,6 +329,8 @@
     <string name="search_filter_sort">Sort</string>
     <string name="search_filter_kind">Work type</string>
     <string name="search_filter_kind_all">All</string>
+    <string name="search_filter_kind_illust">Illustration</string>
+    <string name="search_filter_kind_manga">Manga</string>
     <string name="search_filter_kind_novel">Novel</string>
     <string name="search_filter_sort_new">Newest</string>
     <string name="search_filter_sort_old">Oldest</string>
@@ -342,7 +344,7 @@
     <string name="search_filter_duration_day">Last 24 hours</string>
     <string name="search_filter_duration_week">Last week</string>
     <string name="search_filter_duration_month">Last month</string>
-    <string name="search_filter_hide_ai">Hide AI-generated works</string>
+    <string name="search_filter_hide_ai">Hide AI</string>
     <string name="category_raku_gaki">Doodle</string>
     <string name="category_jishuren">Practice</string>
     <string name="category_dekita">Finished</string>

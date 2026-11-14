@@ -95,6 +95,8 @@ interface SourceSearch {
         /** 作品类型维度组：声明了它的源，外壳在小说档走 [searchNovels] */
         const val FILTER_KIND = "kind"
         const val KIND_ALL = "all"
+        const val KIND_ILLUST = "illust"
+        const val KIND_MANGA = "manga"
         const val KIND_NOVEL = "novel"
     }
 }

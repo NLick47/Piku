@@ -250,6 +250,8 @@ class SearchViewModel @Inject constructor(
     val feedback = FeedbackChannel()
 
     private var worksPage = 0
+    /** 连续被客户端筛选筛空的页数，用来止住自动续页 */
+    private var emptyPageStreak = 0
     private var usersPage = 0
     private var tagSuggestionsPage = 0
     private var tagWorksPage = 0
@@ -603,6 +605,7 @@ class SearchViewModel @Inject constructor(
         }
         if (base.isEmpty()) return
         worksPage = 0
+        emptyPageStreak = 0
         loadWorks(append = false)
         if (_uiState.value.selectedTagName != null) {
             tagWorksPage = 0
@@ -817,14 +820,23 @@ class SearchViewModel @Inject constructor(
                     worksPage = targetPage
                     _uiState.update { state ->
                         val merged = if (append) mergePage(state.works, page.items) { w -> w.key } else page.items
+                        // 客户端按插画/漫画筛过的一页可能变短甚至为空，到底只认站点给的 hasNext
+                        val endReached = page.hasNext?.let { !it } ?: page.items.isEmpty()
                         state.copy(
                             worksLoading = false,
                             worksLoadingMore = false,
                             worksLoadMoreErrorRes = null,
                             works = merged,
-                            // 站点把相邻页返回成同一批（分页飘）时合并后没有新增：视作到底，别再续页
-                            worksEndReached = page.items.isEmpty() || (append && merged.size == state.works.size),
+                            worksEndReached = endReached ||
+                                (append && merged.size == state.works.size && page.hasNext != true),
                         )
+                    }
+                    // 整页被筛空时列表没有可滚的内容，不自动续页就成了假空态
+                    if (page.items.isEmpty() && page.hasNext == true && emptyPageStreak < EMPTY_PAGE_RETRY_LIMIT) {
+                        emptyPageStreak++
+                        loadWorks(append = true)
+                    } else if (page.items.isNotEmpty()) {
+                        emptyPageStreak = 0
                     }
                 }
                 .onFailure { error ->
@@ -1272,3 +1284,6 @@ internal fun tagFallbackTarget(word: String, suggestions: List<TagCard>, append:
 /** 热门标签 → 待机态图墙条目；缺封面的标签也进墙（格子画中性占位），不替用户筛掉任何一个 */
 internal fun PopularTag.toTrendingTag(): SourceTrendingTag =
     SourceTrendingTag(name = name, thumbnailUrl = thumbnailUrl.orEmpty())
+
+/** 自动续页上限：连续这么多页都被筛空就停，避免深页码下无限空转 */
+private const val EMPTY_PAGE_RETRY_LIMIT = 6

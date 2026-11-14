@@ -329,6 +329,8 @@
     <string name="search_filter_sort">排序</string>
     <string name="search_filter_kind">作品类型</string>
     <string name="search_filter_kind_all">全部</string>
+    <string name="search_filter_kind_illust">插画</string>
+    <string name="search_filter_kind_manga">漫画</string>
     <string name="search_filter_kind_novel">小说</string>
     <string name="search_filter_sort_new">最新优先</string>
     <string name="search_filter_sort_old">最早优先</string>
@@ -342,7 +344,7 @@
     <string name="search_filter_duration_day">24 小时内</string>
     <string name="search_filter_duration_week">一周内</string>
     <string name="search_filter_duration_month">一月内</string>
-    <string name="search_filter_hide_ai">隐藏 AI 生成作品</string>
+    <string name="search_filter_hide_ai">隐藏 AI</string>
     <string name="category_raku_gaki">涂鸦</string>
     <string name="category_jishuren">自主练习</string>
     <string name="category_dekita">完成品</string>

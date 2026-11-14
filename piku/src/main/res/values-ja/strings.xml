@@ -329,6 +329,8 @@
     <string name="search_filter_sort">並び替え</string>
     <string name="search_filter_kind">作品種別</string>
     <string name="search_filter_kind_all">すべて</string>
+    <string name="search_filter_kind_illust">イラスト</string>
+    <string name="search_filter_kind_manga">マンガ</string>
     <string name="search_filter_kind_novel">小説</string>
     <string name="search_filter_sort_new">新着順</string>
     <string name="search_filter_sort_old">古い順</string>
@@ -342,7 +344,7 @@
     <string name="search_filter_duration_day">24時間以内</string>
     <string name="search_filter_duration_week">1週間以内</string>
     <string name="search_filter_duration_month">1ヶ月以内</string>
-    <string name="search_filter_hide_ai">AI生成作品を非表示</string>
+    <string name="search_filter_hide_ai">AI を隠す</string>
     <string name="category_raku_gaki">らくがき</string>
     <string name="category_jishuren">自主練</string>
     <string name="category_dekita">できた</string>

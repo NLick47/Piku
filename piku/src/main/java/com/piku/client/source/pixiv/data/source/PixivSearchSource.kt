@@ -69,6 +69,7 @@ class PixivSearchSource @Inject constructor(
             sort = filters[GROUP_SORT]?.ifBlank { null } ?: SORT_NEW,
             duration = filters[GROUP_DURATION]?.ifBlank { null },
             hideAi = filters[TOGGLE_HIDE_AI] == FILTER_TOGGLE_ON,
+            illustType = filters[SourceSearch.FILTER_KIND],
             page = page,
         )
     }
@@ -132,6 +133,14 @@ class PixivSearchSource @Inject constructor(
                         id = SourceSearch.KIND_ALL,
                         labelRes = R.string.search_filter_kind_all,
                         default = true,
+                    ),
+                    SearchFilterOptionSpec(
+                        id = SourceSearch.KIND_ILLUST,
+                        labelRes = R.string.search_filter_kind_illust,
+                    ),
+                    SearchFilterOptionSpec(
+                        id = SourceSearch.KIND_MANGA,
+                        labelRes = R.string.search_filter_kind_manga,
                     ),
                     SearchFilterOptionSpec(
                         id = SourceSearch.KIND_NOVEL,

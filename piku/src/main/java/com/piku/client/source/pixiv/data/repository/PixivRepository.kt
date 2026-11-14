@@ -38,6 +38,7 @@ import com.piku.client.core.model.WorkKind
 import com.piku.client.core.model.WorkSource
 import com.piku.client.core.model.WorkStats
 import com.piku.client.core.source.SourcePage
+import com.piku.client.core.source.SourceSearch
 import com.piku.client.core.source.SourceSuggestion
 import com.piku.client.core.source.SourceTrendingTag
 import com.piku.client.core.source.SourceWorkPage
@@ -190,6 +191,7 @@ class PixivRepository @Inject constructor(
         sort: String?,
         duration: String?,
         hideAi: Boolean,
+        illustType: String?,
         page: Int,
     ): Result<SourcePage> {
         val hdThumb = imageRoute.worthFullImageInline(ImageUpstream.PIXIV)
@@ -204,7 +206,7 @@ class PixivRepository @Inject constructor(
                         searchTarget = searchTarget,
                         sort = sort,
                         duration = duration,
-                        searchAiType = if (hideAi) SEARCH_AI_TYPE_HIDE else null,
+                        searchAiType = null,
                         offset = page * PixivAppConfig.PAGE_SIZE,
                     )
                 } catch (e: HttpException) {
@@ -213,7 +215,16 @@ class PixivRepository @Inject constructor(
                         else -> e
                     }
                 }
-                SourcePage(items = response.illusts.mapNotNull { it.toWork(hdThumb) })
+                // 接口不分插画/漫画（也没有 type 参数），AI 过滤的服务端参数语义也不稳，
+                // 两者都在这里按返回项筛
+                val filtered = response.illusts.filter {
+                    it.matchesKind(illustType) && (!hideAi || it.illustAiType != 2)
+                }
+                SourcePage(
+                    items = filtered.mapNotNull { it.toWork(hdThumb) },
+                    // 客户端筛掉一半时本页可能变短，到底与否只认站点的 next_url
+                    hasNext = response.nextUrl != null,
+                )
             }
             val error = appResult.exceptionOrNull()
             if (error == null || error !is AppError.LoginRequired) return appResult
@@ -806,8 +817,11 @@ private const val WEB_S_MODE_TC = "s_tc"
 private const val WEB_ORDER_NEW = "date_d"
 private const val WEB_ORDER_OLD = "date_asc"
 
-/** search_ai_type：1 = 排除 AI 作品，0/不传 = 显示。传 0 是"不筛选"而不是"隐藏" */
-private const val SEARCH_AI_TYPE_HIDE = 1
+/**
+ * search_ai_type 按 pixivpy 注释 0 = 过滤 AI，但实测该值不生效；作品搜索已改为按返回项
+ * 的 illust_ai_type 本地筛，这里只留给小说接口兜底
+ */
+private const val SEARCH_AI_TYPE_HIDE = 0
 
 /**
  * app-api 全量详情 → 详情文本与统计。标签对象字段是 name（与网页端的 tag 不同名，
@@ -894,6 +908,13 @@ internal fun PixivWorkCard.toWork(): Work? {
         r18 = xRestrict > 0,
         source = WorkSource.PIXIV,
     )
+}
+
+/** 动图在 pixiv 的搜索口径里算插画，只有 manga 单独一类 */
+private fun PixivAppIllust.matchesKind(kind: String?): Boolean = when (kind) {
+    SourceSearch.KIND_MANGA -> type == "manga"
+    SourceSearch.KIND_ILLUST -> type != "manga"
+    else -> true
 }
 
 internal fun PixivAppIllust.toWork(hdThumb: Boolean = true): Work? {
