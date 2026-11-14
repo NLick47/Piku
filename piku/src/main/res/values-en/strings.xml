@@ -54,7 +54,11 @@
     <string name="profile_edit_avatar_read_failed">Could not read the selected image, please try again</string>
     <string name="profile_edit_error_size">Image is too large (limit 1 MB)</string>
     <string name="menu_adult_content">R-18</string>
+    <string name="menu_app_lock">App lock</string>
     <string name="menu_incognito">Incognito</string>
+    <string name="app_lock_need_credential">Set a screen lock first</string>
+    <string name="app_lock_unlock">Unlock</string>
+    <string name="app_lock_prompt_title">Unlock Piku</string>
     <string name="menu_auto_check_update">Auto-check updates</string>
     <string name="menu_check_update">Check for updates</string>
     <string name="update_available">New version %1$s available</string>

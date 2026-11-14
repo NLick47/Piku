@@ -54,7 +54,11 @@
     <string name="profile_edit_avatar_read_failed">无法读取所选图片，请重试</string>
     <string name="profile_edit_error_size">图片过大，压缩后仍超出 1MB 限制</string>
     <string name="menu_adult_content">R-18</string>
+    <string name="menu_app_lock">应用锁</string>
     <string name="menu_incognito">无痕模式</string>
+    <string name="app_lock_need_credential">需先设置系统锁屏</string>
+    <string name="app_lock_unlock">解锁</string>
+    <string name="app_lock_prompt_title">解锁 Piku</string>
     <string name="menu_auto_check_update">自动检查更新</string>
     <string name="menu_check_update">检查更新</string>
     <string name="update_available">发现新版本 %1$s</string>

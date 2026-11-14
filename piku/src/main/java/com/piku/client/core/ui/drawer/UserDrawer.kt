@@ -1,8 +1,10 @@
 package com.piku.client.core.ui.drawer
 
+import com.piku.client.core.privacy.AppLockController
 import com.piku.client.core.ui.sheets.ConfirmDestructiveDialog
 import com.piku.client.core.ui.novelcache.novelCacheSize
 
+import android.widget.Toast
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -49,6 +51,7 @@ import androidx.compose.material.icons.automirrored.outlined.Login
 import androidx.compose.material.icons.outlined.ManageAccounts
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.ScreenLockPortrait
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.Tag
 import androidx.compose.material.icons.outlined.Translate
@@ -76,6 +79,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -115,7 +119,9 @@ fun UserDrawer(
     currentVersion: String,
     updateAvailable: Boolean,
     onToggleAdult: () -> Unit,
+    appLockEnabled: Boolean = false,
     incognitoEnabled: Boolean = false,
+    onToggleAppLock: () -> Unit = {},
     onToggleIncognito: () -> Unit = {},
     onSettingsClick: () -> Unit,
     onAboutClick: () -> Unit,
@@ -169,7 +175,9 @@ fun UserDrawer(
                 currentVersion = currentVersion,
                 updateAvailable = updateAvailable,
                 onToggleAdult = onToggleAdult,
+                appLockEnabled = appLockEnabled,
                 incognitoEnabled = incognitoEnabled,
+                onToggleAppLock = onToggleAppLock,
                 onToggleIncognito = onToggleIncognito,
                 onSettingsClick = {
                     settingsExpanded = !settingsExpanded
@@ -225,7 +233,9 @@ private fun DrawerPanel(
     currentVersion: String,
     updateAvailable: Boolean,
     onToggleAdult: () -> Unit,
+    appLockEnabled: Boolean,
     incognitoEnabled: Boolean,
+    onToggleAppLock: () -> Unit,
     onToggleIncognito: () -> Unit,
     onSettingsClick: () -> Unit,
     onAboutClick: () -> Unit,
@@ -415,6 +425,23 @@ private fun DrawerPanel(
                     accent = iconAccent,
                 )
             }
+            // 隐私两行不跟源走：锁的是整个 app。无设备凭据时应用锁不可开
+            val context = LocalContext.current
+            val needCredential = stringResource(R.string.app_lock_need_credential)
+            ToggleRow(
+                icon = Icons.Outlined.ScreenLockPortrait,
+                label = stringResource(R.string.menu_app_lock),
+                checked = appLockEnabled,
+                onToggle = {
+                    if (!appLockEnabled && !AppLockController.isAvailable(context)) {
+                        Toast.makeText(context, needCredential, Toast.LENGTH_SHORT).show()
+                    } else {
+                        onToggleAppLock()
+                    }
+                },
+                dark = dark,
+                accent = iconAccent,
+            )
             ToggleRow(
                 icon = Icons.Outlined.VisibilityOff,
                 label = stringResource(R.string.menu_incognito),

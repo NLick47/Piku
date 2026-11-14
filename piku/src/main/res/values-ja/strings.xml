@@ -54,7 +54,11 @@
     <string name="profile_edit_avatar_read_failed">画像を読み込めませんでした。もう一度お試しください</string>
     <string name="profile_edit_error_size">画像サイズが大きすぎます（1MBまで）</string>
     <string name="menu_adult_content">R-18</string>
+    <string name="menu_app_lock">アプリロック</string>
     <string name="menu_incognito">シークレット</string>
+    <string name="app_lock_need_credential">先に画面ロックを設定してください</string>
+    <string name="app_lock_unlock">ロック解除</string>
+    <string name="app_lock_prompt_title">Piku をロック解除</string>
     <string name="menu_auto_check_update">更新を自動確認</string>
     <string name="menu_check_update">アップデートを確認</string>
     <string name="update_available">新しいバージョン %1$s が利用可能です</string>

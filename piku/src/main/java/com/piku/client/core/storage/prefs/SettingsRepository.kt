@@ -102,6 +102,12 @@ class SettingsRepository @Inject constructor(
     )
     val autoCheckEnabled: StateFlow<Boolean> = _autoCheckEnabled.asStateFlow()
 
+    /** 应用锁：切后台即锁 + 最近任务遮罩 */
+    private val _appLockEnabled = MutableStateFlow(
+        prefs.getBoolean(KEY_APP_LOCK_ENABLED, false),
+    )
+    val appLockEnabled: StateFlow<Boolean> = _appLockEnabled.asStateFlow()
+
     /** 无痕模式：暂停浏览历史与搜索词记录 */
     private val _incognitoEnabled = MutableStateFlow(
         prefs.getBoolean(KEY_INCOGNITO_ENABLED, false),
@@ -264,6 +270,11 @@ class SettingsRepository @Inject constructor(
     fun setAutoCheckEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_AUTO_CHECK_ENABLED, enabled).apply()
         _autoCheckEnabled.value = enabled
+    }
+
+    fun setAppLockEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_APP_LOCK_ENABLED, enabled).apply()
+        _appLockEnabled.value = enabled
     }
 
     fun setIncognitoEnabled(enabled: Boolean) {
@@ -938,6 +949,7 @@ class SettingsRepository @Inject constructor(
 
         const val KEY_AUTO_CHECK_ENABLED = "auto_check_update_enabled"
         const val KEY_LAST_UPDATE_CHECK_AT = "last_update_check_at"
+        const val KEY_APP_LOCK_ENABLED = "app_lock_enabled"
         const val KEY_INCOGNITO_ENABLED = "incognito_enabled"
         const val KEY_NOVEL_FONT_SIZE = "novel_font_size"
         const val KEY_NOVEL_LINE_HEIGHT = "novel_line_height"
