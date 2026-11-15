@@ -145,7 +145,7 @@ class ImageRelayInterceptor(
         } catch (e: IOException) {
             // 取消（用户划走 / callTimeout）不是线路故障：记下来只会把线路永久带偏
             if (chain.call().isCanceled()) throw e
-            controller.markDirectFailed(upstream)
+            controller.markDirectFailed(upstream, isSniBlockedLike(e))
             logDecision(upstream)
             if (!hasRoomFor(ctx, ImageCallBudget.relayWorstMs)) throw ManagedBudgetExhausted(e)
             val outcome = tryRelays(chain, request, upstream, relayHealth)

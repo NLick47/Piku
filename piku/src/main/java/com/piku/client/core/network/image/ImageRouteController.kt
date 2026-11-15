@@ -204,11 +204,21 @@ class ImageRouteController(
         }
     }
 
-    fun markDirectFailed(upstream: ImageUpstream) = ifAuto {
+    fun markDirectFailed(upstream: ImageUpstream, blockedByReset: Boolean = false) = ifAuto {
         val state = stateOf(upstream)
         state.directDown = true
         state.directDownAt = runtime.monotonicNow()
-        setRelay(upstream, true, "直连请求失败")
+        setRelay(upstream, true, if (blockedByReset) "直连被重置" else "直连请求失败")
+        // RST 证明 IP 可达、只是明文 SNI 被看破：带点 SNI 的原生通道正对症，先按试探处理一段
+        if (blockedByReset && upstream.nativeCapable && canTryNative(upstream)) {
+            state.nativeUntil = maxOf(state.nativeUntil, runtime.monotonicNow() + NATIVE_TRIAL_MS)
+            state.lastDecision = Decision(
+                ImageRoute.NATIVE,
+                "直连被重置，改试原生通道",
+                runtime.now(),
+                applied = true,
+            )
+        }
     }
 
     /**

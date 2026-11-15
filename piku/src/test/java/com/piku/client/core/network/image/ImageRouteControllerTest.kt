@@ -341,4 +341,28 @@ class ImageRouteControllerTest {
         // pixiv 没有原生通道：arm 了试探只会让 route 误报 NATIVE，详情图被强制全尺寸
         assertEquals(ImageRoute.RELAY, controller.route(ImageUpstream.PIXIV))
     }
+
+    @Test
+    fun directResetArmsTheNativeTrial() {
+        controller.markDirectFailed(ImageUpstream.POIPIKU, blockedByReset = true)
+
+        // RST 证明 IP 可达、只是明文 SNI 被看破：带点 SNI 的原生通道正对症
+        assertEquals(ImageRoute.NATIVE, controller.route(ImageUpstream.POIPIKU))
+        assertTrue(controller.canTryNative(ImageUpstream.POIPIKU))
+    }
+
+    @Test
+    fun plainDirectFailureDoesNotArmTheNativeTrial() {
+        controller.markDirectFailed(ImageUpstream.POIPIKU, blockedByReset = false)
+
+        // 超时/拒绝是 IP 层不通，换 SNI 没用，不该浪费原生试探
+        assertEquals(ImageRoute.RELAY, controller.route(ImageUpstream.POIPIKU))
+    }
+
+    @Test
+    fun directResetDoesNotArmNativeForPixiv() {
+        controller.markDirectFailed(ImageUpstream.PIXIV, blockedByReset = true)
+
+        assertEquals(ImageRoute.RELAY, controller.route(ImageUpstream.PIXIV))
+    }
 }

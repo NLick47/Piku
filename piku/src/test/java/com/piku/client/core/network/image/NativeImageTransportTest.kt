@@ -13,6 +13,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.IOException
+import java.net.SocketException
+import java.net.SocketTimeoutException
 
 class NativeImageTransportTest {
 
@@ -332,6 +334,53 @@ class NativeImageTransportTest {
             listOf("pic-relay.cyou", ImageUpstream.PIXIV.host),
             chain.hosts,
         )
+    }
+
+    @Test
+    fun connectionResetArmsTheNativeTrialForNextRequests() {
+        now = 100_000L
+        val controller = controller()
+        val interceptor = ImageRelayInterceptor(
+            controller,
+            runtime = runtime,
+            nativeTransport = transport { image(it) },
+        )
+        val chain = FakeChain(
+            request,
+            FakeCall(request),
+            listOf(SocketException("Connection reset"), okResponse(request)),
+            onProceed = { now += 100L },
+        )
+
+        val response = interceptor.intercept(chain)
+
+        // 本张图仍由应答最快的中转给出；RST 证据已武装原生试探，后续图直接原生优先
+        assertEquals(200, response.code)
+        assertEquals(listOf(ImageUpstream.POIPIKU.host, "pic-relay.cyou"), chain.hosts)
+        assertEquals(ImageRoute.NATIVE, controller.route(ImageUpstream.POIPIKU))
+    }
+
+    @Test
+    fun directTimeoutDoesNotArmTheNativeTrial() {
+        now = 100_000L
+        val controller = controller()
+        val interceptor = ImageRelayInterceptor(
+            controller,
+            runtime = runtime,
+            nativeTransport = transport { image(it) },
+        )
+        val chain = FakeChain(
+            request,
+            FakeCall(request),
+            listOf(SocketTimeoutException("connect timed out"), okResponse(request)),
+            onProceed = { now += 100L },
+        )
+
+        val response = interceptor.intercept(chain)
+
+        // 超时是 IP 层不通：切中转即可，不带点 SNI 也不该试
+        assertEquals(200, response.code)
+        assertEquals(ImageRoute.RELAY, controller.route(ImageUpstream.POIPIKU))
     }
 
     @Test
