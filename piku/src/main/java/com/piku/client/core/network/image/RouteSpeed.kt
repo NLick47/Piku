@@ -28,10 +28,10 @@ internal class RouteSpeed(
         while (samples.size > capacity) samples.removeFirst()
     }
 
-    /** 该线路最近样本的加权速率（字节/秒）；没样本返回 null */
+    /** 该线路 [since] 之后样本的加权速率（字节/秒）；没样本返回 null */
     @Synchronized
-    fun rate(relay: Boolean): Long? {
-        val fresh = samples.filter { it.relay == relay && now() - it.at <= windowMs }
+    fun rate(relay: Boolean, since: Long = Long.MIN_VALUE): Long? {
+        val fresh = samples.filter { it.relay == relay && it.at > since && now() - it.at <= windowMs }
         if (fresh.isEmpty()) return null
         val bytes = fresh.sumOf { it.bytes }
         val ms = fresh.sumOf { it.elapsedMs }

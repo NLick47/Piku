@@ -14,7 +14,10 @@ import com.piku.client.core.network.dns.DoHEventListener
 import com.piku.client.source.pixiv.data.remote.EchConfigStore
 import com.piku.client.core.network.image.ImageDiagnostics
 import com.piku.client.core.network.image.ImageNetworkInterceptor
+import com.piku.client.core.network.image.NativeImageTransport
+import com.piku.client.core.network.image.NativeImageResponse
 import com.piku.client.core.network.image.ImageRelayInterceptor
+import com.piku.client.source.pixiv.data.ech.NativeEch
 import com.piku.client.core.network.image.ImageUpstream
 import com.piku.client.core.network.image.ImageRetryInterceptor
 import com.piku.client.core.network.image.ImageRouteProbe
@@ -189,7 +192,24 @@ object NetworkModule {
                 }
             }
             .cookieJar(cookieJar)
-            .addInterceptor(ImageRelayInterceptor(routeController, diagnostics))
+            .addInterceptor(
+                ImageRelayInterceptor(
+                    routeController,
+                    diagnostics,
+                    nativeTransport = NativeImageTransport(USER_AGENT, runtime) { spec ->
+                        val r = NativeEch.fetch(
+                            url = spec.url,
+                            method = "GET",
+                            headers = spec.headers,
+                            body = null,
+                            echConfig = ByteArray(0),
+                            ip = spec.ip,
+                            timeoutMs = spec.timeoutMs,
+                        )
+                        NativeImageResponse(r.status, r.headers, r.body)
+                    },
+                )
+            )
             .addInterceptor(RefererInterceptor())
             .addInterceptor(RetryInterceptor(doHDns, diagnostics = diagnostics))
             .addInterceptor { chain ->

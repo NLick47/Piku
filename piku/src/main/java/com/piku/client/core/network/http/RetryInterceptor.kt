@@ -5,6 +5,16 @@ import com.piku.client.core.network.dns.DoHDns
 import okhttp3.Interceptor
 import okhttp3.Response
 import java.io.IOException
+import java.io.InterruptedIOException
+import java.net.SocketTimeoutException
+
+/**
+ * 打上这个 tag 的请求，**超时类** I/O 重试由外层负责（图片线路切换 + Coil 重试）。
+ *
+ * 超时重试要再吃满一个连接超时（一次直连最坏 10s），会把调用方留给线路切换和
+ * 原生通道的预算吃光；而「连接被拒」这类快速失败的重试几乎不花时间，仍然值得保留。
+ */
+object OuterLayerOwnsRetry
 
 class RetryInterceptor internal constructor(
     private val dns: DoHDns,
@@ -31,6 +41,7 @@ class RetryInterceptor internal constructor(
                 runtime.sleeper(decision.delayMs)
             } catch (e: IOException) {
                 if (chain.call().isCanceled()) throw e
+                if (request.tag(OuterLayerOwnsRetry::class.java) != null && isSlowFailure(e)) throw e
                 val decision = policy.ioFailure(e, retryableMethod, attempts)
                 if (decision !is RetryPolicy.Decision.Retry) {
                     diagnostics.warn(
@@ -49,4 +60,8 @@ class RetryInterceptor internal constructor(
             }
         }
     }
+
+    /** 超时类失败：重试要再吃满一个连接超时，对有时间预算的调用方不划算 */
+    private fun isSlowFailure(e: IOException): Boolean =
+        e is SocketTimeoutException || e is InterruptedIOException
 }

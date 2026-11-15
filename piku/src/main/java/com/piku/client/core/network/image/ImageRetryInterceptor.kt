@@ -34,7 +34,7 @@ class ImageRetryInterceptor internal constructor(
                 // 异常出在 Coil 侧，OkHttp 拦截器链看不到 —— 所以换边必须挂在这里：
                 // 直连失败切中继，中继断流切直连，切完这次重试就走新线路
                 if (switchRouteOnTransferFailure(upstream, cause, routeController)) {
-                    val to = if (upstream != null && routeController?.useRelay(upstream) == true) "中继" else "直连"
+                    val to = upstream?.let { routeController?.route(it)?.label } ?: "直连"
                     diagnostics.warn(
                         "image route ${upstream?.host} -> $to｜取图传输失败：" +
                             cause?.describeChain(levels = 1, maxChars = 60),
@@ -72,9 +72,15 @@ internal fun switchRouteOnTransferFailure(
 ): Boolean {
     if (upstream == null || controller == null) return false
     if (!isTransferFailure(cause)) return false
-    val wasRelay = controller.useRelay(upstream)
-    if (wasRelay) controller.markRelayFailed(upstream) else controller.markDirectFailed(upstream)
-    return controller.useRelay(upstream) != wasRelay
+    val before = controller.route(upstream)
+    when (before) {
+        // 原生通道是整包读完后才交给 Coil 的，传输中断不可能来自它；
+        // 归因给原生只会把一条好线路误封 60s（并发下尤其容易）
+        ImageRoute.NATIVE -> return false
+        ImageRoute.RELAY -> controller.markRelayFailed(upstream)
+        ImageRoute.DIRECT -> controller.markDirectFailed(upstream)
+    }
+    return controller.route(upstream) != before
 }
 
 /**

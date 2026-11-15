@@ -112,9 +112,6 @@ fn handle(
         env.convert_byte_array(&ech_config)
             .map_err(|e| format!("读 ECH 配置失败: {e}"))?
     };
-    if ech_config.is_empty() {
-        return Err("ECH 配置为空".into());
-    }
     let body = if body.is_null() {
         None
     } else {

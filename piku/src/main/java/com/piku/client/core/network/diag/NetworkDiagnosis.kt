@@ -138,10 +138,10 @@ class NetworkDiagnosis internal constructor(
             lines += "  启动探测（poipiku 直连）$verdict｜${probe.elapsedMs}ms$detail｜${stamp(probe.atMillis)}"
         }
         ImageUpstream.entries.forEach { upstream ->
-            val route = if (routeController.useRelay(upstream)) "走中转" else "走直连"
+            val route = "走" + routeController.route(upstream).label
             lines += "  ${upstream.host}  $route"
             routeController.lastDecision(upstream)?.let { decision ->
-                val target = if (decision.relay) "中转" else "直连"
+                val target = decision.route.label
                 val state = if (decision.applied) "已生效" else "被冷却拦下（20s 内不重复翻转）"
                 lines += "    最近判定 切到$target｜${decision.reason}｜${stamp(decision.atMillis)}｜$state"
             }

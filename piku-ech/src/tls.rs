@@ -81,3 +81,32 @@ pub fn server_name(host: &str) -> Result<ServerName<'static>, String> {
 pub fn ech_status(conn: &rustls::ClientConnection) -> String {
     format!("{:?}", conn.ech_status())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 带点 SNI 是整条原生图片通道的前提。这里钉的是"ClientHello 里真的带尾点"，
+    /// 而不是"握手能成功"——后者在不带点的域名上同样成立，抓不出 patch 失效。
+    #[test]
+    fn client_hello_keeps_sni_root_label() {
+        let provider = Arc::new(rustls::crypto::ring::default_provider());
+        let config = Arc::new(
+            rustls::ClientConfig::builder_with_provider(provider)
+                .with_safe_default_protocol_versions()
+                .unwrap()
+                .with_root_certificates(RootCertStore::empty())
+                .with_no_client_auth(),
+        );
+        let name = server_name("cdn.poipiku.com.").unwrap();
+        let mut conn = rustls::ClientConnection::new(config, name).unwrap();
+
+        let mut hello = Vec::new();
+        conn.write_tls(&mut hello).unwrap();
+
+        assert!(
+            hello.windows(16).any(|w| w == b"cdn.poipiku.com."),
+            "ClientHello 里必须保留尾部根标签"
+        );
+    }
+}

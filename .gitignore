@@ -17,4 +17,9 @@ piku/src/test/resources/*.html
 
 # piku-ech 交叉编译产物（由 :piku:buildNativeEch 生成）
 piku/src/main/jniLibs/
+piku-ech/src/main/jniLibs/
 piku-ech/target/
+
+# 本地工具状态
+.workbuddy/
+.zcode/

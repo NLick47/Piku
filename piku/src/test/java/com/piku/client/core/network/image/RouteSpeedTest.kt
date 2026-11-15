@@ -107,4 +107,17 @@ class RouteSpeedTest {
         pool.shutdown()
         assertEquals("并发读写不该抛异常：$failures", emptyList<Throwable>(), failures.toList())
     }
+
+    @Test
+    fun rateSinceIgnoresOlderSamples() {
+        speed.record(relay = false, bytes = 1_048_576, elapsedMs = 1_000)
+        now += 1_000
+        val judgedAt = now
+
+        now += 1_000
+        speed.record(relay = false, bytes = 1_048_576, elapsedMs = 4_000)
+
+        assertEquals(262_144L, speed.rate(relay = false, since = judgedAt))
+        assertNull(speed.rate(relay = false, since = now))
+    }
 }

@@ -414,6 +414,15 @@ class DoHDnsRoutingTest {
     }
 
     @Test
+    fun builtInCdnFrontThreeCoverDistinctNetworks() {
+        val front = DoHDns.STATIC_ADDRESSES.getValue("cdn.poipiku.com").take(3)
+        val networks = front.map { it.substringBeforeLast('.') }
+
+        assertEquals(3, front.size)
+        assertEquals("原生通道只取前 3 条，单个网段失效时不能全军覆没", front.size, networks.distinct().size)
+    }
+
+    @Test
     fun aDeadEndFallsBackToTheBuiltInCdnAddress() {
         val dns = dns(
             sources = listOf(AddressSource { emptyList() }),

@@ -44,6 +44,8 @@ internal class FakeChain(
     private val request: Request,
     private val call: FakeCall,
     private val results: List<Any>,
+    /** 模拟这次尝试实际花掉的时间：用于验证按耗时分配预算的逻辑 */
+    private val onProceed: () -> Unit = {},
 ) : Interceptor.Chain {
 
     val proceeded = mutableListOf<Request>()
@@ -53,6 +55,7 @@ internal class FakeChain(
     override fun request(): Request = request
 
     override fun proceed(request: Request): Response {
+        onProceed()
         val result = results.getOrNull(proceeded.size)
         proceeded += request
         return when (result) {

@@ -72,10 +72,11 @@ class ImageRouteControllerTest {
         now += 20_000
         controller.markRelayFailed(ImageUpstream.POIPIKU)
 
-        assertTrue("直连已判定不可用时不该切回直连", controller.useRelay(ImageUpstream.POIPIKU))
+        // 不切回直连；两条常规线路都不通，于是先试原生通道
+        assertEquals(ImageRoute.NATIVE, controller.route(ImageUpstream.POIPIKU))
         val decision = controller.lastDecision(ImageUpstream.POIPIKU)!!
         assertTrue(decision.applied)
-        assertTrue(decision.reason.contains("直连已判定不可用"))
+        assertTrue(decision.reason.contains("均不通"))
     }
 
     @Test
@@ -86,7 +87,8 @@ class ImageRouteControllerTest {
         now += 20_000
         controller.markRelayFailed(ImageUpstream.POIPIKU)
 
-        assertTrue("真实请求证明直连不通后，中转失败也不切回", controller.useRelay(ImageUpstream.POIPIKU))
+        // 真实请求证明直连不通后，中转失败也不切回直连
+        assertEquals(ImageRoute.NATIVE, controller.route(ImageUpstream.POIPIKU))
     }
 
     @Test
@@ -94,12 +96,13 @@ class ImageRouteControllerTest {
         controller.applyProbe(directOk = false)
         now += 20_000
         controller.markRelayFailed(ImageUpstream.POIPIKU)
-        assertTrue(controller.useRelay(ImageUpstream.POIPIKU))
+        assertEquals(ImageRoute.NATIVE, controller.route(ImageUpstream.POIPIKU))
 
-        // 探测是解除"直连不可用"的出口：换了网络要能回到直连
+        // 探测是解除"直连不可用"的出口：换了网络要能回到直连，原生粘性也一并作废
         now += 20_000
         controller.applyProbe(directOk = true)
 
+        assertEquals(ImageRoute.DIRECT, controller.route(ImageUpstream.POIPIKU))
         assertFalse(controller.useRelay(ImageUpstream.POIPIKU))
     }
 
@@ -273,5 +276,69 @@ class ImageRouteControllerTest {
 
         assertTrue(controller.useRelay(ImageUpstream.PIXIV))
         assertTrue(controller.worthFullImageInline(ImageUpstream.PIXIV))
+    }
+
+    @Test
+    fun directDownOutweighsAFastSample() {
+        controller.recordSpeed(ImageUpstream.POIPIKU, relay = false, bytes = 1_048_576, elapsedMs = 1_000)
+        controller.applyProbe(ImageUpstream.POIPIKU, directOk = false)
+
+        assertEquals(ImageRoute.RELAY, controller.route(ImageUpstream.POIPIKU))
+
+        now += 20_000
+        controller.applyProbe(ImageUpstream.POIPIKU, directOk = true)
+
+        assertEquals(ImageRoute.DIRECT, controller.route(ImageUpstream.POIPIKU))
+    }
+
+    @Test
+    fun judgingDirectDeadIgnoresStaleEvidence() {
+        controller.recordSpeed(ImageUpstream.POIPIKU, relay = false, bytes = 1_048_576, elapsedMs = 1_000)
+        controller.markDirectFailed(ImageUpstream.POIPIKU)
+
+        assertEquals(ImageRoute.RELAY, controller.route(ImageUpstream.POIPIKU))
+
+        now += 20_000
+        controller.recordSpeed(ImageUpstream.POIPIKU, relay = false, bytes = 1_048_576, elapsedMs = 1_000)
+
+        assertEquals(ImageRoute.DIRECT, controller.route(ImageUpstream.POIPIKU))
+    }
+
+    @Test
+    fun coldStartProbeFailureIsNotSwallowedByTheFlipCooldown() {
+        now = 5_000L
+        controller.applyProbe(ImageUpstream.POIPIKU, directOk = false)
+
+        assertEquals(ImageRoute.RELAY, controller.route(ImageUpstream.POIPIKU))
+        assertTrue(controller.lastDecision(ImageUpstream.POIPIKU)!!.applied)
+    }
+
+    @Test
+    fun judgingDirectDeadKeepsTheMeasuredHistory() {
+        controller.recordSpeed(ImageUpstream.PIXIV, relay = false, bytes = 1_048_576, elapsedMs = 1_000)
+        controller.markDirectFailed(ImageUpstream.PIXIV)
+
+        assertTrue(
+            "判死不该物理删除测速历史",
+            controller.speed(ImageUpstream.PIXIV)
+                .estimatedMs(RouteSpeed.FULL_IMAGE_BYTES_ESTIMATE, relay = false) != null,
+        )
+
+        now += 20_000
+        controller.applyProbe(ImageUpstream.PIXIV, directOk = true)
+
+        assertEquals(ImageRoute.DIRECT, controller.route(ImageUpstream.PIXIV))
+        assertTrue(controller.worthFullImageInline(ImageUpstream.PIXIV))
+    }
+
+    @Test
+    fun relayFailureDoesNotArmANativeTrialForPixiv() {
+        controller.applyProbe(ImageUpstream.PIXIV, directOk = false)
+        assertTrue(controller.useRelay(ImageUpstream.PIXIV))
+
+        controller.markRelayFailed(ImageUpstream.PIXIV)
+
+        // pixiv 没有原生通道：arm 了试探只会让 route 误报 NATIVE，详情图被强制全尺寸
+        assertEquals(ImageRoute.RELAY, controller.route(ImageUpstream.PIXIV))
     }
 }

@@ -11,8 +11,15 @@ enum class ImageUpstream(
     val probePath: String,
     /** 探测要不要真读 body：pixiv 的结论取决于大图传不传得完，只看响应头会永远判"可用" */
     val probeWithBody: Boolean = false,
+    /** 这条上游有没有带点 SNI 的原生通道（依赖固定 IP 表，见 DoHDns.STATIC_ADDRESSES） */
+    val nativeCapable: Boolean = false,
 ) {
-    POIPIKU("cdn.poipiku.com", "", "/assets/img/poipiku_icon_512x512_2.png"),
+    POIPIKU(
+        "cdn.poipiku.com",
+        "",
+        "/assets/img/poipiku_icon_512x512_2.png",
+        nativeCapable = true,
+    ),
     PIXIV(
         "i.pximg.net",
         "/pximg",

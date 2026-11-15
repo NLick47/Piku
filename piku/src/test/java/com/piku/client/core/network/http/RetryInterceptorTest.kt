@@ -17,6 +17,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.IOException
+import java.net.ConnectException
 import java.net.ProxySelector
 import java.net.SocketTimeoutException
 import java.util.concurrent.TimeUnit
@@ -121,6 +122,40 @@ class RetryInterceptorTest {
             .code(code)
             .message("")
             .build()
+
+    @Test
+    fun routeManagedRequestsSkipTheInnerIoRetry() {
+        // 图片线路自己负责重试：内层再试一轮会再吃满一个连接超时，15s 的 call 预算不够
+        val tagged = request.newBuilder()
+            .tag(OuterLayerOwnsRetry::class.java, OuterLayerOwnsRetry)
+            .build()
+        val chain = FakeChain(
+            tagged, FakeCall(tagged),
+            arrayOf(SocketTimeoutException("timeout"), response(200)),
+        )
+
+        val thrown = runCatching { interceptor.intercept(chain) }.exceptionOrNull()
+
+        assertTrue(thrown is SocketTimeoutException)
+        assertEquals(1, chain.proceedCount)
+    }
+
+    @Test
+    fun routeManagedRequestsStillRetryFastFailures() {
+        // 连接被拒几乎不花时间，重试一次很值；只有超时才需要把预算让给外层
+        val tagged = request.newBuilder()
+            .tag(OuterLayerOwnsRetry::class.java, OuterLayerOwnsRetry)
+            .build()
+        val chain = FakeChain(
+            tagged, FakeCall(tagged),
+            arrayOf(ConnectException("connection refused"), response(200)),
+        )
+
+        val result = interceptor.intercept(chain)
+
+        assertEquals(200, result.code)
+        assertEquals(2, chain.proceedCount)
+    }
 
     @Test
     fun retriesOnIOExceptionUntilSuccess() {

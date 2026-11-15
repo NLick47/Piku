@@ -107,6 +107,23 @@ class ImageRetryInterceptorTest {
     }
 
     @Test
+    fun transferFailureDoesNotBlameTheNativeRoute() {
+        val controller = controller()
+        controller.markNativeSucceeded(ImageUpstream.POIPIKU)
+
+        val switched = switchRouteOnTransferFailure(
+            ImageUpstream.POIPIKU,
+            InterruptedIOException("timeout"),
+            controller,
+        )
+
+        // 原生通道整包读完后才交给 Coil，传输中断不可能来自它
+        assertFalse(switched)
+        assertEquals(ImageRoute.NATIVE, controller.route(ImageUpstream.POIPIKU))
+        assertTrue(controller.canTryNative(ImageUpstream.POIPIKU))
+    }
+
+    @Test
     fun httpFailureAndCancellationDoNotFlipTheRoute() {
         val controller = controller()
 

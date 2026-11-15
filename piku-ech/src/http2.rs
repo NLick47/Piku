@@ -97,15 +97,21 @@ pub fn fetch(spec: &FetchSpec) -> Result<FetchResult, String> {
 }
 
 async fn fetch_async(spec: &FetchSpec) -> Result<FetchResult, String> {
-    let timeout = Duration::from_millis(spec.timeout_ms.max(1000));
+    // Kotlin 侧给的是整次取图的预算，重定向与换地址都必须在同一个 deadline 内完成
+    let budget = Duration::from_millis(spec.timeout_ms.max(1000));
+    let deadline = tokio::time::Instant::now() + budget;
     let mut url = parse_url(&spec.url)?;
     let mut method = spec.method.to_uppercase();
     let mut body = spec.body.clone();
     let mut cookies: Vec<(String, String)> = Vec::new();
 
     for _ in 0..=MAX_REDIRECTS {
+        let remain = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remain.is_zero() {
+            return Err(format!("请求超时（{} ms）", spec.timeout_ms));
+        }
         let result = tokio::time::timeout(
-            timeout,
+            remain,
             round(
                 &spec.ech_config,
                 &spec.ip,
