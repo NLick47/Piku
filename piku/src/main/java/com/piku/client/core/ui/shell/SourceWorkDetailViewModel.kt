@@ -42,6 +42,7 @@ import com.piku.client.core.translation.DetailTranslationController.Request as D
 import com.piku.client.core.translation.ImageTranslateEngine
 import com.piku.client.core.translation.ImageTranslateResult
 import com.piku.client.core.translation.ImageTranslationPrompts
+import com.piku.client.core.translation.toMessageRes
 import com.piku.client.core.translation.LlmTranslateEngine
 import com.piku.client.core.translation.ModelCatalogRepository
 import com.piku.client.core.translation.NovelTranslationController
@@ -1326,12 +1327,13 @@ class SourceWorkDetailViewModel @Inject constructor(
                     }
                 }
                 is ImageTranslateResult.Failure -> {
-                    // 与 poipiku 的失败重试语义一致：复位按钮，用户再点一次即重试
+                    // 与 poipiku 的失败重试语义一致：复位按钮，用户再点一次即重试。
                     Log.e(
                         "SourceDetailTranslate",
                         "page=$page failed: ${result.error::class.simpleName}: ${result.error.message}",
                     )
                     _ui.update { it.copy(imageTranslatingPage = null) }
+                    feedback.show(result.error.toMessageRes())
                 }
             }
         }
@@ -1344,7 +1346,7 @@ class SourceWorkDetailViewModel @Inject constructor(
             )
         val language = observeLanguageUseCase().value
         val targetLang = TranslationRepository.targetLangName(language)
-        val entry = translationRepository.effectiveImageEntry()
+        val config = translationRepository.imageTranslateConfig()
             ?: return ImageTranslateResult.Failure(
                 com.piku.client.core.translation.ImageTranslateError.NoModel(),
             )
@@ -1352,7 +1354,14 @@ class SourceWorkDetailViewModel @Inject constructor(
             imageBytes = bytes,
             prompt = imagePrompt(targetLang),
             targetLang = targetLang,
-            proxyBaseUrl = entry.baseUrl,
+            baseUrl = config.baseUrl,
+            model = config.model,
+            apiKey = config.apiKey,
+            authMode = config.authMode,
+            authHeader = config.authHeader,
+            extraHeaders = config.extraHeaders,
+            params = config.params,
+            apiMode = config.apiMode,
         )
     }
 

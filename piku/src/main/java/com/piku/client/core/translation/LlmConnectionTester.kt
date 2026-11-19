@@ -20,24 +20,13 @@ class LlmConnectionTester @Inject constructor(
         if (provider.authMode != AuthMode.NONE && key.isBlank()) {
             return Result.failure(IllegalStateException(MISSING_KEY))
         }
-        val body = buildJsonObject {
-            put("model", JsonPrimitive(provider.model))
-            put(
-                "messages",
-                buildJsonArray {
-                    add(
-                        buildJsonObject {
-                            put("role", JsonPrimitive("user"))
-                            put("content", JsonPrimitive("ping"))
-                        },
-                    )
-                },
-            )
-            put("stream", JsonPrimitive(false))
-        }
+        val imageOnly = Role.IMAGE in provider.roles &&
+            Role.TEXT !in provider.roles &&
+            Role.NOVEL !in provider.roles
+        val body = if (imageOnly) imageProbeBody(provider.model) else textProbeBody(provider.model)
         val started = System.currentTimeMillis()
         return try {
-            withTimeout(TEST_TIMEOUT_MS) {
+            withTimeout(if (imageOnly) IMAGE_TEST_TIMEOUT_MS else TEST_TIMEOUT_MS) {
                 api.chat(
                     url = LlmTranslateEngine.chatUrl(normalizeManualBaseUrl(provider.baseUrl)),
                     headers = authHeaders(provider, key),
@@ -52,6 +41,57 @@ class LlmConnectionTester @Inject constructor(
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    private fun textProbeBody(model: String) = buildJsonObject {
+        put("model", JsonPrimitive(model))
+        put(
+            "messages",
+            buildJsonArray {
+                add(
+                    buildJsonObject {
+                        put("role", JsonPrimitive("user"))
+                        put("content", JsonPrimitive("ping"))
+                    },
+                )
+            },
+        )
+        put("stream", JsonPrimitive(false))
+    }
+
+    private fun imageProbeBody(model: String) = buildJsonObject {
+        put("model", JsonPrimitive(model))
+        put(
+            "messages",
+            buildJsonArray {
+                add(
+                    buildJsonObject {
+                        put("role", JsonPrimitive("user"))
+                        put(
+                            "content",
+                            buildJsonArray {
+                                add(
+                                    buildJsonObject {
+                                        put("type", JsonPrimitive("text"))
+                                        put("text", JsonPrimitive("reply with the word ok"))
+                                    },
+                                )
+                                add(
+                                    buildJsonObject {
+                                        put("type", JsonPrimitive("image_url"))
+                                        put(
+                                            "image_url",
+                                            buildJsonObject { put("url", JsonPrimitive(PROBE_IMAGE)) },
+                                        )
+                                    },
+                                )
+                            },
+                        )
+                    },
+                )
+            },
+        )
+        put("stream", JsonPrimitive(false))
     }
 
     suspend fun listModels(provider: ManualProvider, apiKey: String?): Result<List<String>> {
@@ -103,5 +143,11 @@ class LlmConnectionTester @Inject constructor(
     companion object {
         const val MISSING_KEY = "missing api key"
         private const val TEST_TIMEOUT_MS = 20_000L
+
+        private const val IMAGE_TEST_TIMEOUT_MS = 60_000L
+
+        private const val PROBE_IMAGE =
+            "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk" +
+                "YPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
     }
 }

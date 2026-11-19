@@ -989,6 +989,10 @@
     <string name="llm_role_text">Short text</string>
     <string name="llm_role_novel">Novel text</string>
     <string name="llm_role_image">Image translation</string>
+    <string name="llm_image_api_mode">API type</string>
+    <string name="llm_image_api_chat">Chat (image editing)</string>
+    <string name="llm_image_api_edits">/images/edits</string>
+    <string name="llm_image_api_hint">Image-editing models use Chat; OpenAI image models use /images/edits</string>
     <string name="llm_role_text_desc">Titles, descriptions, tags</string>
     <string name="llm_role_novel_desc">Long-form text</string>
     <string name="llm_role_image_desc">Text in images</string>
@@ -1072,7 +1076,6 @@
     <string name="llm_provider_delete_confirm_title">Delete this API?</string>
     <string name="llm_provider_delete_confirm_text">Roles bound to it will fall back to the catalog default.</string>
     <string name="llm_provider_delete_confirm">Delete</string>
-    <string name="llm_image_manual_unsupported">Image translation uses a dedicated image proxy and does not support manual APIs yet.</string>
     <string name="llm_section_advanced">Advanced</string>
     <string name="llm_prompt_settings">Translation prompts</string>
     <string name="llm_manual_quick_add">Quick add</string>

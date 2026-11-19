@@ -989,6 +989,10 @@
     <string name="llm_role_text">短文</string>
     <string name="llm_role_novel">本文</string>
     <string name="llm_role_image">画像翻訳</string>
+    <string name="llm_image_api_mode">API タイプ</string>
+    <string name="llm_image_api_chat">チャット（画像編集）</string>
+    <string name="llm_image_api_edits">/images/edits</string>
+    <string name="llm_image_api_hint">画像編集モデルは「チャット」、OpenAI 画像モデルは /images/edits を使用</string>
     <string name="llm_role_text_desc">タイトル・概要・タグ</string>
     <string name="llm_role_novel_desc">長文</string>
     <string name="llm_role_image_desc">画像内の文字</string>
@@ -1072,7 +1076,6 @@
     <string name="llm_provider_delete_confirm_title">このAPIを削除しますか？</string>
     <string name="llm_provider_delete_confirm_text">このAPIに割り当てた用途は内蔵の既定に戻ります。</string>
     <string name="llm_provider_delete_confirm">削除</string>
-    <string name="llm_image_manual_unsupported">画像翻訳は専用の画像プロキシを使用するため、手動APIには未対応です。</string>
     <string name="llm_section_advanced">詳細</string>
     <string name="llm_prompt_settings">翻訳プロンプト</string>
     <string name="llm_manual_quick_add">クイック追加</string>

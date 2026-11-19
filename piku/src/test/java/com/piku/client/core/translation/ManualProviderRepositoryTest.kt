@@ -108,7 +108,7 @@ class ManualProviderRepositoryTest {
 
         assertEquals("https://primary.example/v1", saved.baseUrl)
         assertEquals(listOf("https://backup.example/v1"), saved.baseUrls)
-        assertEquals(listOf(Role.TEXT), saved.roles)
+        assertEquals(listOf(Role.TEXT, Role.IMAGE), saved.roles)
     }
 
     @Test
@@ -146,5 +146,19 @@ class ManualProviderRepositoryTest {
         assertEquals(saved.id, reloaded.id)
         assertEquals("sk-persist", second.apiKey(saved.id))
         assertTrue(reloaded.hasKey)
+    }
+
+    @Test
+    fun imageRoleSurvivesSaveAndReload() {
+        val prefs = InMemorySharedPreferences()
+        val repository = repo(prefs)
+        val saved = repository.upsert(
+            provider(roles = listOf(Role.IMAGE), authMode = AuthMode.NONE),
+            newKey = null,
+        )
+
+        assertEquals(listOf(Role.IMAGE), saved.roles)
+        assertEquals(listOf(Role.IMAGE), repository.modelEntries().single().roles)
+        assertEquals(listOf(Role.IMAGE), repo(prefs).find(saved.id)?.roles)
     }
 }

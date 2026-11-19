@@ -1,17 +1,29 @@
 package com.piku.client.core.translation
 
+import com.piku.client.R
+
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
+import java.net.URLDecoder
+import java.util.Base64
 import javax.inject.Inject
 import javax.inject.Named
 import javax.inject.Singleton
@@ -61,68 +73,65 @@ sealed interface ImageTranslateResult {
     data class Failure(val error: ImageTranslateError) : ImageTranslateResult
 }
 
-/**
- * 图片翻译引擎：调用代理的 /v1/translate-image 端点。
- *
- * 与文本翻译引擎 [LlmTranslateEngine] 完全独立：
- * - 走 multipart/form-data 而非 JSON chat completions
- * - 返回 binary image 而非文本
- * - 代理内部处理 base64 ↔ Gemini API 转换
- */
 @Singleton
 class ImageTranslateEngine @Inject constructor(
     @Named("translate") val client: OkHttpClient,
 ) {
 
-    /**
-     * 翻译单页图片
-     *
-     * @param imageBytes 原图 binary（PNG/JPEG）
-     * @param prompt 翻译提示词（来自 catalog image 模式）
-     * @param targetLang 目标语言代码（zh/en/ja）
-     * @param proxyBaseUrl 代理地址（如 http://47.86.19.39:43981）
-     */
     suspend fun translate(
         imageBytes: ByteArray,
         prompt: String,
         targetLang: String,
-        proxyBaseUrl: String,
+        baseUrl: String,
+        model: String,
+        apiKey: String,
+        authMode: AuthMode = AuthMode.BEARER,
+        authHeader: String = ManualProvider.DEFAULT_AUTH_HEADER,
+        extraHeaders: Map<String, String> = emptyMap(),
+        params: Map<String, JsonElement> = emptyMap(),
+        apiMode: ImageApiMode = ImageApiMode.CHAT,
     ): ImageTranslateResult = withContext(Dispatchers.IO) {
-        // Compress if too large (> 2MB)
-        val sendBytes = if (imageBytes.size > 2 * 1024 * 1024) {
+        if (authMode != AuthMode.NONE && apiKey.isBlank()) {
+            return@withContext ImageTranslateResult.Failure(ImageTranslateError.Upstream(401))
+        }
+        val sendBytes = if (imageBytes.size > MAX_INPUT_BYTES) {
             compressImage(imageBytes) ?: imageBytes
         } else {
             imageBytes
         }
 
-        val body = MultipartBody.Builder()
-            .setType(MultipartBody.FORM)
-            .addFormDataPart(
-                "image", "page.png",
-                sendBytes.toRequestBody("image/png".toMediaType()),
-            )
-            .addFormDataPart("prompt", prompt)
-            .addFormDataPart("target_lang", targetLang)
-            .build()
-
+        val headers = llmAuthHeaders(authMode, authHeader, apiKey, extraHeaders)
+            .toMutableMap()
+            .apply { putIfAbsent("Content-Type", "application/json") }
+        val (url, body) = when (apiMode) {
+            ImageApiMode.CHAT -> chatUrl(baseUrl) to buildChatBody(sendBytes, prompt, model, params)
+            ImageApiMode.EDITS -> editsUrl(baseUrl) to buildEditsBody(sendBytes, prompt, model, params)
+        }
         val request = Request.Builder()
-            .url(proxyBaseUrl.trimEnd('/'))
-            .post(body)
+            .url(url)
+            .post(body.toString().toRequestBody(JSON_MEDIA))
+            .apply { headers.forEach { (k, v) -> header(k, v) } }
             .build()
 
         try {
             client.newCall(request).execute().use { response ->
+                val raw = runCatching { response.body?.string() }.getOrNull()
                 if (!response.isSuccessful) {
                     val retryAfter = response.header("Retry-After")?.toLongOrNull()
-                    val errorBody = runCatching { response.body?.string() }.getOrNull()
-                    Log.w(TAG, "translate failed: ${response.code} ${errorBody?.take(200)}")
+                    Log.w(TAG, "translate failed: ${response.code} ${raw?.take(300)}")
                     return@withContext ImageTranslateResult.Failure(
-                        classifyHttpError(response.code, retryAfter, errorBody),
+                        classifyHttpError(response.code, retryAfter, raw),
                     )
                 }
-                val bytes = response.body?.bytes()
-                    ?: return@withContext ImageTranslateResult.Failure(ImageTranslateError.BadResponse())
-                val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                val remote = raw?.let { extractImageUrl(it) }
+                val decoded = when {
+                    remote != null -> fetchRemote(remote)
+                    raw != null -> extractImageBytes(raw)
+                    else -> null
+                } ?: return@withContext ImageTranslateResult.Failure(
+                    ImageTranslateError.BadResponse(),
+                )
+                val bitmap = BitmapFactory.decodeByteArray(decoded, 0, decoded.size)
                     ?: return@withContext ImageTranslateResult.Failure(ImageTranslateError.BadResponse())
                 ImageTranslateResult.Success(bitmap)
             }
@@ -130,6 +139,176 @@ class ImageTranslateEngine @Inject constructor(
             Log.e(TAG, "translate error: ${e::class.simpleName}: ${e.message}")
             ImageTranslateResult.Failure(ImageTranslateError.Network(e))
         }
+    }
+
+    private fun buildEditsBody(
+        imageBytes: ByteArray,
+        prompt: String,
+        model: String,
+        params: Map<String, JsonElement>,
+    ): JsonObject {
+        val dataUrl = "data:image/png;base64," + Base64.getEncoder().encodeToString(imageBytes)
+        return buildJsonObject {
+            put("model", JsonPrimitive(model))
+            put("prompt", JsonPrimitive(prompt))
+            put(
+                "images",
+                buildJsonArray {
+                    add(
+                        buildJsonObject {
+                            put("image_url", JsonPrimitive(dataUrl))
+                        },
+                    )
+                },
+            )
+            params.forEach { (k, v) -> if (k !in EDITS_RESERVED_KEYS) put(k, v) }
+        }
+    }
+
+    private fun buildChatBody(
+        imageBytes: ByteArray,
+        prompt: String,
+        model: String,
+        params: Map<String, JsonElement>,
+    ): JsonObject {
+        val dataUrl = "data:image/png;base64," + Base64.getEncoder().encodeToString(imageBytes)
+        return buildJsonObject {
+            put("model", JsonPrimitive(model))
+            put("stream", JsonPrimitive(false))
+            put(
+                "messages",
+                buildJsonArray {
+                    add(
+                        buildJsonObject {
+                            put("role", JsonPrimitive("user"))
+                            put(
+                                "content",
+                                buildJsonArray {
+                                    add(
+                                        buildJsonObject {
+                                            put("type", JsonPrimitive("text"))
+                                            put("text", JsonPrimitive(prompt))
+                                        },
+                                    )
+                                    add(
+                                        buildJsonObject {
+                                            put("type", JsonPrimitive("image_url"))
+                                            put(
+                                                "image_url",
+                                                buildJsonObject { put("url", JsonPrimitive(dataUrl)) },
+                                            )
+                                        },
+                                    )
+                                },
+                            )
+                        },
+                    )
+                },
+            )
+            params.forEach { (k, v) -> if (k !in RESERVED_KEYS) put(k, v) }
+        }
+    }
+
+            internal fun extractImageUrl(raw: String): String? {
+        val root = runCatching { Json.parseToJsonElement(raw) as? JsonObject }.getOrNull() ?: return null
+        val candidates = mutableListOf<JsonElement>()
+        (root["data"] as? JsonArray)?.forEach { el ->
+            (el as? JsonObject)?.get("url")?.let { candidates += it }
+        }
+        (root["choices"] as? JsonArray)?.firstOrNull()?.jsonObject?.get("message")?.jsonObject?.let { msg ->
+            (msg["content"] as? JsonArray)?.forEach { el ->
+                (el as? JsonObject)?.get("image_url")?.let { candidates += it }
+            }
+            (msg["images"] as? JsonArray)?.forEach { el ->
+                (el as? JsonObject)?.get("url")?.let { candidates += it }
+            }
+        }
+        return candidates.firstNotNullOfOrNull { el ->
+            val text = when (el) {
+                is JsonPrimitive -> el.contentOrNull
+                is JsonObject -> (el["url"] as? JsonPrimitive)?.contentOrNull
+                else -> null
+            }
+            text?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
+        }
+    }
+
+    private fun fetchRemote(url: String): ByteArray? = runCatching {
+        val request = Request.Builder().url(url).build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) return@use null
+            response.body?.bytes()
+        }
+    }.getOrNull()?.takeIf { it.size >= MIN_IMAGE_BYTES }
+
+    internal fun extractImageBytes(raw: String): ByteArray? {
+        val root = runCatching { Json.parseToJsonElement(raw) as? JsonObject }.getOrNull() ?: return null
+        val message = (root["choices"] as? JsonArray)
+            ?.firstOrNull()
+            ?.jsonObject
+            ?.get("message")
+            ?.jsonObject
+        if (message != null) {
+            when (val content = message["content"]) {
+                is JsonArray -> content.forEach { element ->
+                    val obj = element as? JsonObject ?: return@forEach
+                    obj["image_url"]?.let { return decodeImageUrl(it) }
+                    obj["b64_json"]?.let { return decodeBase64(it) }
+                    obj["image"]?.let { return decodeImageUrl(it) }
+                }
+                is JsonPrimitive -> content.contentOrNull?.let { text ->
+                    decodeDataUrl(text)?.let { return it }
+                    decodeBase64OrNull(text)?.let { return it }
+                }
+                else -> Unit
+            }
+            (message["images"] as? JsonArray)?.forEach { element ->
+                val obj = element as? JsonObject ?: return@forEach
+                obj["b64_json"]?.let { return decodeBase64(it) }
+                obj["image_url"]?.let { return decodeImageUrl(it) }
+                obj["url"]?.let { return decodeImageUrl(it) }
+            }
+        }
+        (root["data"] as? JsonArray)?.forEach { element ->
+            val obj = element as? JsonObject ?: return@forEach
+            obj["b64_json"]?.let { return decodeBase64(it) }
+            obj["url"]?.let { return decodeImageUrl(it) }
+        }
+        return null
+    }
+
+    private fun decodeImageUrl(element: JsonElement): ByteArray? {
+        val url = when (element) {
+            is JsonPrimitive -> element.contentOrNull
+            is JsonObject -> (element["url"] as? JsonPrimitive)?.contentOrNull
+            else -> null
+        } ?: return null
+        return decodeDataUrl(url)
+    }
+
+    private fun decodeDataUrl(text: String): ByteArray? {
+        val trimmed = text.trim()
+        if (!trimmed.startsWith("data:")) return null
+        val comma = trimmed.indexOf(',')
+        if (comma < 0) return null
+        val meta = trimmed.substring(0, comma)
+        val payload = trimmed.substring(comma + 1)
+        return if (meta.contains("base64", ignoreCase = true)) {
+            decodeBase64OrNull(payload)
+        } else {
+            runCatching { URLDecoder.decode(payload, "UTF-8").toByteArray() }.getOrNull()
+        }
+    }
+
+    private fun decodeBase64(element: JsonElement): ByteArray? =
+        (element as? JsonPrimitive)?.contentOrNull?.let(::decodeBase64OrNull)
+
+    private fun decodeBase64OrNull(text: String): ByteArray? {
+        val cleaned = text.filterNot { it.isWhitespace() }
+        if (cleaned.isEmpty()) return null
+        return runCatching { Base64.getDecoder().decode(cleaned) }
+            .getOrNull()
+            ?.takeIf { it.size >= MIN_IMAGE_BYTES }
     }
 
     /** 代理错误契约：429=限流，422=拒绝/未产图（body 带 type+detail），其余归上游错误 */
@@ -170,5 +349,45 @@ class ImageTranslateEngine @Inject constructor(
 
     companion object {
         private const val TAG = "ImageTranslate"
+        private const val MAX_INPUT_BYTES = 2 * 1024 * 1024
+        private const val MIN_IMAGE_BYTES = 128
+
+        private val JSON_MEDIA = "application/json".toMediaType()
+
+        private val RESERVED_KEYS = setOf("model", "messages", "stream", "n")
+
+        private val EDITS_RESERVED_KEYS = setOf("model", "prompt", "images", "n", "stream")
+
+        internal fun chatUrl(baseUrl: String): String {
+            val trimmed = baseUrl.trimEnd('/')
+            return if (trimmed.endsWith("/chat/completions")) trimmed else "$trimmed/chat/completions"
+        }
+
+        internal fun editsUrl(baseUrl: String): String {
+            val trimmed = baseUrl.trimEnd('/')
+            return when {
+                trimmed.endsWith("/images/edits") -> trimmed
+                trimmed.endsWith("/images") -> "$trimmed/edits"
+                else -> "$trimmed/images/edits"
+            }
+        }
     }
+}
+
+data class ImageTranslateConfig(
+    val baseUrl: String,
+    val model: String,
+    val apiKey: String,
+    val authMode: AuthMode = AuthMode.BEARER,
+    val authHeader: String = ManualProvider.DEFAULT_AUTH_HEADER,
+    val extraHeaders: Map<String, String> = emptyMap(),
+    val params: Map<String, JsonElement> = emptyMap(),
+    val apiMode: ImageApiMode = ImageApiMode.CHAT,
+)
+
+fun ImageTranslateError.toMessageRes(): Int = when (this) {
+    is ImageTranslateError.NoModel -> R.string.image_translate_no_model
+    is ImageTranslateError.DownloadFailed -> R.string.image_translate_download_failed
+    is ImageTranslateError.RateLimited -> R.string.image_translate_rate_limited
+    else -> R.string.detail_image_translate_failed
 }

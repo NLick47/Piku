@@ -811,24 +811,16 @@ private fun RolePickerSheet(
         OptionGroupLabel(stringResource(R.string.llm_role_group_manual))
         if (manual.isEmpty()) {
             Text(
-                text = stringResource(
-                    if (role == Role.IMAGE) {
-                        R.string.llm_image_manual_unsupported
-                    } else {
-                        R.string.llm_role_manual_empty
-                    },
-                ),
+                text = stringResource(R.string.llm_role_manual_empty),
                 color = PikuColors.textSecondary,
                 fontSize = 11.sp,
                 lineHeight = 17.sp,
                 modifier = Modifier.padding(start = 2.dp, top = 6.dp, bottom = 6.dp),
             )
-            if (role != Role.IMAGE) {
-                LlmTextAction(
-                    text = stringResource(R.string.llm_manual_add),
-                    onClick = onAddProvider,
-                )
-            }
+            LlmTextAction(
+                text = stringResource(R.string.llm_manual_add),
+                onClick = onAddProvider,
+            )
         } else {
             manual.forEach { provider ->
                 val entry = state.translateModels.firstOrNull { it.id == provider.id }

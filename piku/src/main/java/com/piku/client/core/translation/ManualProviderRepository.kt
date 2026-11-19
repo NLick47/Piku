@@ -88,7 +88,7 @@ class ManualProviderRepository @Inject constructor(
     private companion object {
         const val TAG = "PikuDiag"
         const val KEY_PROVIDERS = "llm_manual_providers_v1"
-        val KNOWN_ROLES = setOf(Role.TEXT, Role.NOVEL)
+        val KNOWN_ROLES = setOf(Role.TEXT, Role.NOVEL, Role.IMAGE)
 
         fun manualId(): String = "manual:" + UUID.randomUUID()
     }

@@ -759,6 +759,26 @@ class TranslationRepository @Inject constructor(
         return defaultRoleEntry(Role.IMAGE)
     }
 
+    /**
+     * 图片翻译的完整调用参数：地址、模型、鉴权一并算好，调用方不用自己拼。
+     * null = 没有可用模型（目录没配，或手动条目缺 key）。
+     */
+    fun imageTranslateConfig(): ImageTranslateConfig? {
+        val entry = effectiveImageEntry() ?: return null
+        val key = apiKeyFor(entry)
+        if (entry.authMode != AuthMode.NONE && key.isBlank()) return null
+        return ImageTranslateConfig(
+            baseUrl = entry.baseUrl,
+            model = entry.model,
+            apiKey = key,
+            authMode = entry.authMode,
+            authHeader = entry.authHeader,
+            extraHeaders = entry.extraHeaders,
+            params = entry.params.orEmpty(),
+            apiMode = entry.imageApi,
+        )
+    }
+
     /** 场景默认模型：目录 defaults.roles[role] 优先，退到首个该 role 的可开工内置条目 */
     private fun defaultRoleEntry(role: String): ModelEntry? =
         ModelCatalog.resolveRoleDefault(

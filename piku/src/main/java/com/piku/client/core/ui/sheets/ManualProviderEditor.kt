@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.piku.client.R
 import com.piku.client.core.translation.AuthMode
+import com.piku.client.core.translation.ImageApiMode
 import com.piku.client.core.translation.ManualProvider
 import com.piku.client.core.translation.ManualProviderPreset
 import com.piku.client.core.translation.PromptOverrides
@@ -128,7 +129,7 @@ internal fun ManualProviderEditorScreen(
     var authHeader by remember(provider.id) { mutableStateOf(provider.authHeader) }
     var roleNames by remember(provider.id) {
         mutableStateOf(
-            provider.roles.filter { it == Role.TEXT || it == Role.NOVEL }
+            provider.roles.filter { it in EDITABLE_ROLES }
                 .ifEmpty { listOf(Role.TEXT) },
         )
     }
@@ -142,6 +143,7 @@ internal fun ManualProviderEditorScreen(
         mutableStateOf(isThinkingEnabled(provider.extraParams))
     }
     var thinkingTouched by remember(provider.id) { mutableStateOf(false) }
+    var imageApi by remember(provider.id) { mutableStateOf(provider.imageApi) }
     var thinkingParamOverride by remember(provider.id) {
         mutableStateOf(thinkingParamOf(provider.extraParams))
     }
@@ -178,13 +180,14 @@ internal fun ManualProviderEditorScreen(
         clearKey ||
         authMode != provider.authMode.name ||
         authHeader != provider.authHeader ||
-        roleNames != provider.roles.filter { it == Role.TEXT || it == Role.NOVEL }
+        roleNames != provider.roles.filter { it in EDITABLE_ROLES }
             .ifEmpty { listOf(Role.TEXT) } ||
         baseUrlsText != provider.baseUrls.joinToString("\n") ||
         extraHeadersText != provider.extraHeaders.entries
             .joinToString("\n") { "${it.key}: ${it.value}" } ||
         thinkingEnabled != isThinkingEnabled(provider.extraParams) ||
         thinkingParamOverride != thinkingParamOf(provider.extraParams) ||
+        imageApi != provider.imageApi ||
         promptOverrides != provider.promptOverrides
 
     fun requestDismiss() {
@@ -219,7 +222,7 @@ internal fun ManualProviderEditorScreen(
         model = target?.defaultModel.orEmpty()
         authMode = (target?.authMode ?: AuthMode.NONE).name
         roleNames = target?.roles
-            ?.filter { it == Role.TEXT || it == Role.NOVEL }
+            ?.filter { it in EDITABLE_ROLES }
             ?.ifEmpty { listOf(Role.TEXT) }
             ?: listOf(Role.TEXT)
         apiKey = ""
@@ -231,6 +234,7 @@ internal fun ManualProviderEditorScreen(
         thinkingEnabled = false
         thinkingTouched = false
         thinkingParamOverride = null
+        imageApi = ImageApiMode.CHAT
         promptOverrides = PromptOverrides()
         onClearTest()
         onClearModelFetch()
@@ -253,6 +257,7 @@ internal fun ManualProviderEditorScreen(
             touched = thinkingTouched,
         ),
         promptOverrides = promptOverrides.normalized(),
+        imageApi = imageApi,
         hasKey = provider.hasKey,
     )
 
@@ -519,7 +524,7 @@ internal fun ManualProviderEditorScreen(
                         modifier = Modifier.bringIntoViewRequester(rolesRequester),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        listOf(Role.TEXT, Role.NOVEL).forEach { role ->
+                        EDITABLE_ROLES.forEach { role ->
                             val selected = role in roleNames
                             LlmChip(
                                 text = roleLabel(role),
@@ -530,6 +535,29 @@ internal fun ManualProviderEditorScreen(
                                 },
                             )
                         }
+                    }
+                    if (Role.IMAGE in roleNames) {
+                        Spacer(Modifier.height(14.dp))
+                        FieldLabel(stringResource(R.string.llm_image_api_mode))
+                        Spacer(Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf(
+                                ImageApiMode.CHAT to R.string.llm_image_api_chat,
+                                ImageApiMode.EDITS to R.string.llm_image_api_edits,
+                            ).forEach { (apiModeOption, labelRes) ->
+                                LlmChip(
+                                    text = stringResource(labelRes),
+                                    selected = imageApi == apiModeOption,
+                                    onClick = { imageApi = apiModeOption },
+                                )
+                            }
+                        }
+                        Text(
+                            text = stringResource(R.string.llm_image_api_hint),
+                            color = PikuColors.textSecondary,
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(start = 2.dp, top = 6.dp),
+                        )
                     }
                     FieldError(
                         if (error == EditorError.ROLES_REQUIRED) {
@@ -1026,3 +1054,5 @@ private fun ThinkingChip(
             .padding(horizontal = 7.dp, vertical = 5.dp),
     )
 }
+
+private val EDITABLE_ROLES = listOf(Role.TEXT, Role.NOVEL, Role.IMAGE)

@@ -67,7 +67,9 @@ import com.piku.client.source.poipiku.domain.usecase.LoadWorkDetailUseCase
 import com.piku.client.source.poipiku.domain.usecase.LoadWorkFullImagesUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.concurrent.ConcurrentHashMap
+import okhttp3.OkHttpClient
 import javax.inject.Inject
+import javax.inject.Named
 import kotlin.random.Random
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -271,6 +273,7 @@ class DetailViewModel @Inject constructor(
     private val modelCatalogRepository: ModelCatalogRepository,
     private val observeLanguageUseCase: ObserveLanguageUseCase,
     private val imageTranslateEngine: ImageTranslateEngine,
+    @Named("image") private val imageClient: OkHttpClient,
     private val prefs: SharedPreferences,
     private val novelCache: NovelCacheRepository,
     savedStateHandle: SavedStateHandle,
@@ -904,8 +907,8 @@ class DetailViewModel @Inject constructor(
         val targetLang = TranslationRepository.targetLangName(language)
         val prompt = getImagePrompt(targetLang)
 
-        // 3. 获取 image 模型的 baseUrl（优先用户选择，降级到目录默认）
-        val imageEntry = translationRepository.effectiveImageEntry()
+        // 3. 取图片模型的完整调用参数（优先用户选择，降级到目录默认）
+        val config = translationRepository.imageTranslateConfig()
             ?: return ImageTranslateResult.Failure(ImageTranslateError.NoModel())
 
         // 4. 调用翻译引擎
@@ -913,7 +916,14 @@ class DetailViewModel @Inject constructor(
             imageBytes = imageBytes,
             prompt = prompt,
             targetLang = targetLang,
-            proxyBaseUrl = imageEntry.baseUrl,
+            baseUrl = config.baseUrl,
+            model = config.model,
+            apiKey = config.apiKey,
+            authMode = config.authMode,
+            authHeader = config.authHeader,
+            extraHeaders = config.extraHeaders,
+            params = config.params,
+            apiMode = config.apiMode,
         )
     }
 
@@ -922,8 +932,7 @@ class DetailViewModel @Inject constructor(
             val request = okhttp3.Request.Builder()
                 .url(url)
                 .build()
-            // 复用注入的 OkHttpClient（带连接池和超时配置）
-            imageTranslateEngine.client.newCall(request).execute().use { response ->
+            imageClient.newCall(request).execute().use { response ->
                 if (response.isSuccessful) response.body?.bytes() else null
             }
         } catch (e: CancellationException) {

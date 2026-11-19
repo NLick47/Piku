@@ -989,6 +989,10 @@
     <string name="llm_role_text">短文本</string>
     <string name="llm_role_novel">小说正文</string>
     <string name="llm_role_image">图像翻译</string>
+    <string name="llm_image_api_mode">接口类型</string>
+    <string name="llm_image_api_chat">对话（图像编辑模型）</string>
+    <string name="llm_image_api_edits">/images/edits</string>
+    <string name="llm_image_api_hint">图像编辑模型走「对话」；OpenAI 图像模型走 /images/edits</string>
     <string name="llm_role_text_desc">标题、简介、标签</string>
     <string name="llm_role_novel_desc">长篇正文</string>
     <string name="llm_role_image_desc">图片里的文字</string>
@@ -1072,7 +1076,6 @@
     <string name="llm_provider_delete_confirm_title">删除这个 API？</string>
     <string name="llm_provider_delete_confirm_text">绑定它的角色会回到目录默认。</string>
     <string name="llm_provider_delete_confirm">删除</string>
-    <string name="llm_image_manual_unsupported">图像翻译使用专用的图片翻译代理，暂不支持手动 API。</string>
     <string name="llm_section_advanced">高级</string>
     <string name="llm_prompt_settings">翻译提示词</string>
     <string name="llm_manual_quick_add">快速添加</string>

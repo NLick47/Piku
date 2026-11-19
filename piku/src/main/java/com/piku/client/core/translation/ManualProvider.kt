@@ -11,6 +11,12 @@ enum class AuthMode {
 }
 
 @Serializable
+enum class ImageApiMode {
+    CHAT,
+    EDITS,
+}
+
+@Serializable
 data class ManualProvider(
     val id: String = "",
     val name: String = "",
@@ -24,6 +30,7 @@ data class ManualProvider(
     val extraParams: Map<String, JsonElement> = emptyMap(),
     val hasKey: Boolean = false,
     val promptOverrides: PromptOverrides = PromptOverrides(),
+    val imageApi: ImageApiMode = ImageApiMode.CHAT,
     val createdAt: Long = 0L,
 ) {
     fun toModelEntry(apiKey: String?): ModelEntry = ModelEntry(
@@ -43,6 +50,7 @@ data class ManualProvider(
         authHeader = authHeader,
         extraHeaders = extraHeaders,
         prompts = promptOverrides.toPromptSet(),
+        imageApi = imageApi,
         isManual = true,
     )
 

@@ -71,6 +71,8 @@ data class ModelEntry(
     val extraHeaders: Map<String, String> = emptyMap(),
     /** 是否来自“我的 API”。手动条目只参与显式选中，不参与目录默认与故障转移。 */
     val isManual: Boolean = false,
+    /** 图像用途走哪种接口（见 [ImageApiMode]）；缺省 CHAT */
+    val imageApi: ImageApiMode = ImageApiMode.CHAT,
 ) {
     /** 日志/异常里不得带出共享 key；手动条目本来就不把 key 写进这个对象以外的持久化层。 */
     override fun toString(): String =
