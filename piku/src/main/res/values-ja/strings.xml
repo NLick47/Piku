@@ -371,6 +371,7 @@
     <string name="detail_novel_layout">組版</string>
     <string name="detail_novel_indent">字下げ</string>
     <string name="detail_novel_paragraph_gap">段落間隔</string>
+    <string name="detail_novel_padding">余白</string>
     <string name="detail_novel_brightness">明るさ</string>
     <string name="detail_novel_brightness_auto">システム</string>
     <string name="detail_novel_font">書体</string>

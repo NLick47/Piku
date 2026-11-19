@@ -14,6 +14,7 @@ data class NovelReaderSettings(
     val indentFirstLine: Boolean = true,
     val paragraphGap: Boolean = false,
     val justify: Boolean = false,
+    val contentPadding: Float = SettingsRepository.NOVEL_PADDING_DEFAULT,
     /** 阅读时的屏幕亮度（0~1）；[BRIGHTNESS_SYSTEM] 表示跟随系统 */
     val brightness: Float = BRIGHTNESS_SYSTEM,
     val keepScreenOn: Boolean = false,

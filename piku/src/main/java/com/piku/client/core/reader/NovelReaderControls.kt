@@ -396,6 +396,29 @@ private fun ReaderSettingsPanel(
                 onInteract()
             },
         )
+        ReaderSettingSlider(
+            label = stringResource(R.string.detail_novel_padding),
+            valueText = settings.contentPadding.roundToInt().toString(),
+            fraction = readerFraction(settings.contentPadding, NOVEL_PADDING_MIN, NOVEL_PADDING_MAX),
+            theme = theme,
+            onValueChange = { fraction ->
+                onSettingsChange(
+                    settings.copy(
+                        contentPadding = readerStep(fraction, NOVEL_PADDING_MIN, NOVEL_PADDING_MAX, 1f),
+                    ),
+                    false,
+                )
+            },
+            onValueChangeFinished = { fraction ->
+                onSettingsChange(
+                    settings.copy(
+                        contentPadding = readerStep(fraction, NOVEL_PADDING_MIN, NOVEL_PADDING_MAX, 1f),
+                    ),
+                    true,
+                )
+                onInteract()
+            },
+        )
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
             verticalAlignment = Alignment.CenterVertically,

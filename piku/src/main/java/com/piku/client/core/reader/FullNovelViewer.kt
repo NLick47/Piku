@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.LocalTextStyle
@@ -61,6 +62,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
@@ -106,6 +108,8 @@ internal const val NOVEL_FONT_MAX = SettingsRepository.NOVEL_FONT_MAX
 internal const val NOVEL_FONT_DEFAULT = SettingsRepository.NOVEL_FONT_DEFAULT
 internal const val NOVEL_LINE_HEIGHT_MIN = SettingsRepository.NOVEL_LINE_HEIGHT_MIN
 internal const val NOVEL_LINE_HEIGHT_MAX = SettingsRepository.NOVEL_LINE_HEIGHT_MAX
+internal const val NOVEL_PADDING_MIN = SettingsRepository.NOVEL_PADDING_MIN
+internal const val NOVEL_PADDING_MAX = SettingsRepository.NOVEL_PADDING_MAX
 internal const val NOVEL_BRIGHTNESS_MIN = SettingsRepository.NOVEL_BRIGHTNESS_MIN
 
 private const val AUTO_HIDE_DELAY_MS = 2500L
@@ -122,8 +126,7 @@ private val IMAGE_FAILED_HEIGHT = 120.dp
  */
 private const val IMAGE_MAX_IN_FLIGHT = 2
 
-/** 正文左右边距 */
-private val CONTENT_PADDING_HORIZONTAL = 20.dp
+private const val CONTENT_MAX_CHARS = 34
 /** 正文顶部/底部留白（浮动栏之外），也让正文在栏下淡出 */
 private val CONTENT_PADDING_TOP = 84.dp
 private val CONTENT_PADDING_BOTTOM = 112.dp
@@ -176,6 +179,9 @@ fun FullNovelViewer(
     val view = LocalView.current
     val activity = remember(context) { context.findActivity() }
     val theme = remember(settings.themeId) { NovelReaderTheme.fromId(settings.themeId) }
+    val contentMaxWidth = with(LocalDensity.current) {
+        (settings.fontSize * CONTENT_MAX_CHARS).sp.toDp() + settings.contentPadding.dp * 2f
+    }
     val currentOnProgressSave by rememberUpdatedState(onProgressSave)
     // 正文链接化的稳定入口：宿主每重组一次都会给出新的 lambda 实例，直接把它当 remember key
     // 会让整章链接重解析；这里只在点击时读最新回调
@@ -408,9 +414,11 @@ fun FullNovelViewer(
 
         SelectionContainer(
             modifier = Modifier
+                .align(Alignment.TopCenter)
+                .widthIn(max = contentMaxWidth)
                 .fillMaxWidth()
                 .verticalScroll(scrollState)
-                .padding(horizontal = CONTENT_PADDING_HORIZONTAL)
+                .padding(horizontal = settings.contentPadding.dp)
                 .padding(top = CONTENT_PADDING_TOP, bottom = CONTENT_PADDING_BOTTOM)
                 .statusBarsPadding()
                 .navigationBarsPadding(),
@@ -435,14 +443,15 @@ fun FullNovelViewer(
                 }
                 // 章节模式：章名放在正文开头（页面顶部被浮动栏盖住，标题跟着正文走）
                 if (chaptered && chapters[chapterIndex].title.isNotBlank()) {
+                    val titleSize = settings.fontSize + 5
                     Text(
                         text = chapters[chapterIndex].title,
                         color = fg,
-                        fontSize = (settings.fontSize + 2).sp,
-                        fontWeight = FontWeight.SemiBold,
-                        lineHeight = ((settings.fontSize + 2) * settings.lineHeight).sp,
+                        fontSize = titleSize.sp,
+                        fontWeight = FontWeight.Bold,
+                        lineHeight = (titleSize * settings.lineHeight).sp,
                         fontFamily = if (settings.serif) FontFamily.Serif else FontFamily.Default,
-                        modifier = Modifier.padding(bottom = 14.dp),
+                        modifier = Modifier.padding(top = 8.dp, bottom = 20.dp),
                     )
                 }
                 val baseTextStyle = LocalTextStyle.current

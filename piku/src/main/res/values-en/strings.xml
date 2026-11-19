@@ -371,6 +371,7 @@
     <string name="detail_novel_layout">Layout</string>
     <string name="detail_novel_indent">Indent</string>
     <string name="detail_novel_paragraph_gap">Para gap</string>
+    <string name="detail_novel_padding">Margins</string>
     <string name="detail_novel_brightness">Brightness</string>
     <string name="detail_novel_brightness_auto">System</string>
     <string name="detail_novel_font">Font</string>

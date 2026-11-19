@@ -450,6 +450,7 @@ class SettingsRepository @Inject constructor(
         val clamped = settings.copy(
             fontSize = settings.fontSize.coerceIn(NOVEL_FONT_MIN, NOVEL_FONT_MAX),
             lineHeight = settings.lineHeight.coerceIn(NOVEL_LINE_HEIGHT_MIN, NOVEL_LINE_HEIGHT_MAX),
+            contentPadding = settings.contentPadding.coerceIn(NOVEL_PADDING_MIN, NOVEL_PADDING_MAX),
             brightness = settings.brightness.let {
                 if (it < 0f) NovelReaderSettings.BRIGHTNESS_SYSTEM
                 else it.coerceIn(NOVEL_BRIGHTNESS_MIN, 1f)
@@ -464,6 +465,7 @@ class SettingsRepository @Inject constructor(
                 .putBoolean(KEY_NOVEL_INDENT, clamped.indentFirstLine)
                 .putBoolean(KEY_NOVEL_PARAGRAPH_GAP, clamped.paragraphGap)
                 .putBoolean(KEY_NOVEL_JUSTIFY, clamped.justify)
+                .putFloat(KEY_NOVEL_PADDING, clamped.contentPadding)
                 .putFloat(KEY_NOVEL_BRIGHTNESS, clamped.brightness)
                 .putBoolean(KEY_NOVEL_KEEP_SCREEN_ON, clamped.keepScreenOn)
                 .apply()
@@ -479,6 +481,7 @@ class SettingsRepository @Inject constructor(
         indentFirstLine = prefs.getBoolean(KEY_NOVEL_INDENT, true),
         paragraphGap = prefs.getBoolean(KEY_NOVEL_PARAGRAPH_GAP, false),
         justify = prefs.getBoolean(KEY_NOVEL_JUSTIFY, false),
+        contentPadding = prefs.getFloat(KEY_NOVEL_PADDING, NOVEL_PADDING_DEFAULT),
         brightness = prefs.getFloat(KEY_NOVEL_BRIGHTNESS, NovelReaderSettings.BRIGHTNESS_SYSTEM),
         keepScreenOn = prefs.getBoolean(KEY_NOVEL_KEEP_SCREEN_ON, false),
     )
@@ -964,6 +967,7 @@ class SettingsRepository @Inject constructor(
         const val KEY_NOVEL_INDENT = "novel_indent"
         const val KEY_NOVEL_PARAGRAPH_GAP = "novel_paragraph_gap"
         const val KEY_NOVEL_JUSTIFY = "novel_justify"
+        const val KEY_NOVEL_PADDING = "novel_padding"
         const val KEY_NOVEL_BRIGHTNESS = "novel_brightness"
         const val KEY_NOVEL_KEEP_SCREEN_ON = "novel_keep_screen_on"
 
@@ -1006,6 +1010,11 @@ class SettingsRepository @Inject constructor(
 
         /** 双图层迁移标记：老版本只有一套取景参数，首次启动复制为头部层初值 */
         const val KEY_DUAL_LAYER_MIGRATED = "dual_layer_migrated"
+
+        /** 小说阅读器正文左右边距（dp） */
+        const val NOVEL_PADDING_MIN = 0f
+        const val NOVEL_PADDING_MAX = 48f
+        const val NOVEL_PADDING_DEFAULT = 20f
 
         /** 小说阅读器字号范围与默认值（sp） */
         const val NOVEL_FONT_MIN = 13f
