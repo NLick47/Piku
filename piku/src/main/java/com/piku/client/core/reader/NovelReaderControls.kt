@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
@@ -323,7 +324,6 @@ private fun ReaderProgressRow(
     }
 }
 
-/** 阅读设置面板：字号 / 行距 / 亮度 / 字体与常亮 / 背景 */
 @Composable
 private fun ReaderSettingsPanel(
     settings: NovelReaderSettings,
@@ -396,6 +396,50 @@ private fun ReaderSettingsPanel(
                 onInteract()
             },
         )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(R.string.detail_novel_layout),
+                color = theme.fg.copy(alpha = 0.65f),
+                fontSize = 12.sp,
+                maxLines = 1,
+                modifier = Modifier.width(SettingLabelWidth),
+            )
+            ReaderChoiceChip(
+                text = stringResource(R.string.detail_novel_indent),
+                selected = settings.indentFirstLine,
+                theme = theme,
+                toggle = true,
+                onClick = {
+                    onSettingsChange(settings.copy(indentFirstLine = !settings.indentFirstLine), true)
+                    onInteract()
+                },
+            )
+            Spacer(Modifier.width(4.dp))
+            ReaderChoiceChip(
+                text = stringResource(R.string.detail_novel_paragraph_gap),
+                selected = settings.paragraphGap,
+                theme = theme,
+                toggle = true,
+                onClick = {
+                    onSettingsChange(settings.copy(paragraphGap = !settings.paragraphGap), true)
+                    onInteract()
+                },
+            )
+            Spacer(Modifier.width(4.dp))
+            ReaderChoiceChip(
+                text = stringResource(R.string.detail_novel_justify),
+                selected = settings.justify,
+                theme = theme,
+                toggle = true,
+                onClick = {
+                    onSettingsChange(settings.copy(justify = !settings.justify), true)
+                    onInteract()
+                },
+            )
+        }
         val followSystem = settings.brightness < 0f
         ReaderSettingSlider(
             label = stringResource(R.string.detail_novel_brightness),
@@ -670,6 +714,7 @@ private fun ReaderChoiceChip(
     selected: Boolean,
     theme: NovelReaderTheme,
     onClick: () -> Unit,
+    toggle: Boolean = false,
 ) {
     Text(
         text = text,
@@ -679,7 +724,13 @@ private fun ReaderChoiceChip(
         modifier = Modifier
             .clip(ReaderChipShape)
             .background(if (selected) theme.accent.copy(alpha = 0.15f) else Color.Transparent)
-            .clickable(role = Role.RadioButton, onClick = onClick)
+            .then(
+                if (toggle) {
+                    Modifier.toggleable(value = selected, role = Role.Switch, onValueChange = { onClick() })
+                } else {
+                    Modifier.clickable(role = Role.RadioButton, onClick = onClick)
+                },
+            )
             .padding(horizontal = 10.dp, vertical = 6.dp),
     )
 }

@@ -368,11 +368,15 @@
     <string name="detail_novel_settings">阅读设置</string>
     <string name="detail_novel_font_size">字号</string>
     <string name="detail_novel_line_spacing">行距</string>
+    <string name="detail_novel_layout">排版</string>
+    <string name="detail_novel_indent">首行缩进</string>
+    <string name="detail_novel_paragraph_gap">段间留白</string>
     <string name="detail_novel_brightness">亮度</string>
     <string name="detail_novel_brightness_auto">跟随系统</string>
     <string name="detail_novel_font">字体</string>
     <string name="detail_novel_font_sans">默认</string>
     <string name="detail_novel_font_serif">宋体</string>
+    <string name="detail_novel_justify">两端对齐</string>
     <string name="detail_novel_keep_screen_on">常亮</string>
     <string name="detail_novel_background">背景</string>
     <string name="detail_novel_theme_paper">米黄</string>

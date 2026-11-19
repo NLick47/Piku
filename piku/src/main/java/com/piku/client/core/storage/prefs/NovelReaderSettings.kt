@@ -11,6 +11,9 @@ data class NovelReaderSettings(
     val themeId: Int = SettingsRepository.NOVEL_THEME_DEFAULT,
     /** 正文用衬线体（宋体/明朝体），默认跟随系统无衬线 */
     val serif: Boolean = false,
+    val indentFirstLine: Boolean = true,
+    val paragraphGap: Boolean = false,
+    val justify: Boolean = false,
     /** 阅读时的屏幕亮度（0~1）；[BRIGHTNESS_SYSTEM] 表示跟随系统 */
     val brightness: Float = BRIGHTNESS_SYSTEM,
     val keepScreenOn: Boolean = false,

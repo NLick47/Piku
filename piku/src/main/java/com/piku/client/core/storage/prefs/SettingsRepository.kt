@@ -461,6 +461,9 @@ class SettingsRepository @Inject constructor(
                 .putFloat(KEY_NOVEL_LINE_HEIGHT, clamped.lineHeight)
                 .putInt(KEY_NOVEL_READER_THEME, clamped.themeId)
                 .putBoolean(KEY_NOVEL_SERIF, clamped.serif)
+                .putBoolean(KEY_NOVEL_INDENT, clamped.indentFirstLine)
+                .putBoolean(KEY_NOVEL_PARAGRAPH_GAP, clamped.paragraphGap)
+                .putBoolean(KEY_NOVEL_JUSTIFY, clamped.justify)
                 .putFloat(KEY_NOVEL_BRIGHTNESS, clamped.brightness)
                 .putBoolean(KEY_NOVEL_KEEP_SCREEN_ON, clamped.keepScreenOn)
                 .apply()
@@ -473,6 +476,9 @@ class SettingsRepository @Inject constructor(
         lineHeight = prefs.getFloat(KEY_NOVEL_LINE_HEIGHT, NOVEL_LINE_HEIGHT_DEFAULT),
         themeId = prefs.getInt(KEY_NOVEL_READER_THEME, NOVEL_THEME_DEFAULT),
         serif = prefs.getBoolean(KEY_NOVEL_SERIF, false),
+        indentFirstLine = prefs.getBoolean(KEY_NOVEL_INDENT, true),
+        paragraphGap = prefs.getBoolean(KEY_NOVEL_PARAGRAPH_GAP, false),
+        justify = prefs.getBoolean(KEY_NOVEL_JUSTIFY, false),
         brightness = prefs.getFloat(KEY_NOVEL_BRIGHTNESS, NovelReaderSettings.BRIGHTNESS_SYSTEM),
         keepScreenOn = prefs.getBoolean(KEY_NOVEL_KEEP_SCREEN_ON, false),
     )
@@ -955,6 +961,9 @@ class SettingsRepository @Inject constructor(
         const val KEY_NOVEL_LINE_HEIGHT = "novel_line_height"
         const val KEY_NOVEL_READER_THEME = "novel_reader_theme"
         const val KEY_NOVEL_SERIF = "novel_serif"
+        const val KEY_NOVEL_INDENT = "novel_indent"
+        const val KEY_NOVEL_PARAGRAPH_GAP = "novel_paragraph_gap"
+        const val KEY_NOVEL_JUSTIFY = "novel_justify"
         const val KEY_NOVEL_BRIGHTNESS = "novel_brightness"
         const val KEY_NOVEL_KEEP_SCREEN_ON = "novel_keep_screen_on"
 

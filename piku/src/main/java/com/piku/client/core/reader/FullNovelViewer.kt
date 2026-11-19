@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -69,9 +70,13 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineBreak
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextIndent
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -204,6 +209,14 @@ fun FullNovelViewer(
     } else {
         text
     }
+    val indentSource = remember(chapters, text) {
+        if (chapters.size > 1) chapters.joinToString("\n") { it.text } else text
+    }
+    val needsParagraphMarks = remember(indentSource) {
+        NovelParagraphLayout.shouldIndent(indentSource)
+    }
+    val indentFirstLine = settings.indentFirstLine && needsParagraphMarks
+    val applyParagraphGap = settings.paragraphGap && needsParagraphMarks
     // 换章通知宿主：译文模式下要跟着翻当前章
     val chapterChangedHandler by rememberUpdatedState(onChapterChanged)
     LaunchedEffect(chaptered, chapterIndex) {
@@ -281,7 +294,10 @@ fun FullNovelViewer(
     }
 
     // 排版一变（字号、行距）就按百分比回到原处：像素偏移会在重排后落到别的段落上
-    LaunchedEffect(settings.fontSize, settings.lineHeight) {
+    LaunchedEffect(
+        settings.fontSize, settings.lineHeight,
+        indentFirstLine, applyParagraphGap, settings.justify,
+    ) {
         val target = position.percent
         if (target <= 0) return@LaunchedEffect
         withFrameNanos { }
@@ -429,17 +445,35 @@ fun FullNovelViewer(
                         modifier = Modifier.padding(bottom = 14.dp),
                     )
                 }
+                val baseTextStyle = LocalTextStyle.current
+                val bodyStyle = remember(baseTextStyle, indentFirstLine, settings.justify) {
+                    baseTextStyle.copy(
+                        textAlign = if (settings.justify) TextAlign.Justify else TextAlign.Start,
+                        textIndent = if (indentFirstLine) {
+                            TextIndent(firstLine = NovelParagraphLayout.INDENT_CHARS.em)
+                        } else {
+                            TextIndent.None
+                        },
+                        lineBreak = LineBreak.Paragraph.copy(strategy = LineBreak.Strategy.Simple),
+                    )
+                }
                 var imageIndex = 0
                 blocks.forEach { block ->
                     when (block) {
                         is NovelBlock.Text -> Text(
-                            text = remember(block.text, theme.link, context) {
-                                linkifyNovel(block.text, theme.link, context, workClickHandler)
+                            text = remember(block.text, theme.link, context, applyParagraphGap) {
+                                val raw = if (applyParagraphGap) {
+                                    NovelParagraphLayout.withParagraphGap(block.text)
+                                } else {
+                                    block.text
+                                }
+                                linkifyNovel(raw, theme.link, context, workClickHandler)
                             },
                             color = fg,
                             fontSize = settings.fontSize.sp,
                             lineHeight = (settings.fontSize * settings.lineHeight).sp,
                             fontFamily = if (settings.serif) FontFamily.Serif else FontFamily.Default,
+                            style = bodyStyle,
                         )
 
                         is NovelBlock.Image -> {

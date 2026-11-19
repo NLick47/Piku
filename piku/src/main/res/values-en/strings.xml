@@ -368,11 +368,15 @@
     <string name="detail_novel_settings">Reading settings</string>
     <string name="detail_novel_font_size">Size</string>
     <string name="detail_novel_line_spacing">Spacing</string>
+    <string name="detail_novel_layout">Layout</string>
+    <string name="detail_novel_indent">Indent</string>
+    <string name="detail_novel_paragraph_gap">Para gap</string>
     <string name="detail_novel_brightness">Brightness</string>
     <string name="detail_novel_brightness_auto">System</string>
     <string name="detail_novel_font">Font</string>
     <string name="detail_novel_font_sans">Default</string>
     <string name="detail_novel_font_serif">Serif</string>
+    <string name="detail_novel_justify">Justify</string>
     <string name="detail_novel_keep_screen_on">Awake</string>
     <string name="detail_novel_background">Theme</string>
     <string name="detail_novel_theme_paper">Cream</string>
