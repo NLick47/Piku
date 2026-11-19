@@ -994,7 +994,7 @@
     <string name="llm_role_image_desc">画像内の文字</string>
     <string name="llm_role_default_option">内蔵の既定を使用</string>
     <string name="llm_role_default_desc">内蔵リストの既定モデルを使用</string>
-    <string name="llm_role_builtin_empty">内蔵モデルはありません</string>
+    <string name="llm_role_builtin_empty">この用途で使えるモデルがまだありません。内蔵モデルはオンラインで読み込まれます。「マイ API」からも追加できます</string>
     <string name="llm_role_picker_title">%1$sモデルを選択</string>
     <string name="llm_role_group_builtin">内蔵リスト</string>
     <string name="llm_role_group_manual">マイAPI</string>
@@ -1022,6 +1022,8 @@
     <string name="llm_manual_key_missing">Keyが必要</string>
     <string name="llm_manual_key_placeholder">ローカルサービスでは不要</string>
     <string name="llm_manual_key_keep_hint">空欄の場合は保存済みKeyを変更しません</string>
+    <string name="llm_manual_key_show">表示</string>
+    <string name="llm_manual_key_hide">隠す</string>
     <string name="llm_manual_key_saved_hint">Bearer またはカスタムHeaderで送信され、ログには残りません。</string>
     <string name="llm_manual_key_clear">保存済みKeyを削除</string>
     <string name="llm_manual_key_will_clear">保存時にKeyを削除します</string>
@@ -1047,6 +1049,19 @@
     <string name="llm_provider_base_urls_hint">1行に1つ。メイン失敗時に順に試します</string>
     <string name="llm_provider_headers">追加Header</string>
     <string name="llm_provider_headers_hint">1行に Key: Value</string>
+    <string name="llm_provider_thinking">思考モード</string>
+    <string name="llm_provider_thinking_desc">翻訳では通常不要。オンにすると遅く、消費も増えます</string>
+    <string name="llm_provider_thinking_on">オン</string>
+    <string name="llm_provider_thinking_off">オフ</string>
+    <string name="llm_provider_thinking_param">無効化の方式</string>
+    <string name="llm_provider_thinking_param_auto">自動</string>
+    <string name="llm_provider_thinking_param_enable">enable_thinking</string>
+    <string name="llm_provider_thinking_param_template">chat_template_kwargs</string>
+    <string name="llm_provider_thinking_param_thinking">thinking</string>
+    <string name="llm_provider_thinking_param_hint">無効化のパラメータはサービスごとに異なります。ローカル vLLM は chat_template_kwargs</string>
+    <string name="llm_provider_thinking_note">未設定の場合はサービスごとに自動選択。既に翻訳できているサービスには影響しません。</string>
+    <string name="llm_provider_thinking_auto_resolved">現在は自動で %1$s を使用</string>
+    <string name="llm_provider_thinking_untouched">未操作のままではリクエストを変更しません。そのまま保存しても既存の翻訳に影響しません。</string>
     <string name="llm_provider_url_required">Base URLを入力してください</string>
     <string name="llm_provider_url_invalid">Base URLは http:// または https:// で始めてください</string>
     <string name="llm_provider_model_required">モデル名を入力してください</string>
@@ -1106,6 +1121,7 @@
     <string name="llm_config_master_label">マスタースイッチ</string>
     <string name="llm_disabled_hint">自動翻訳を一時停止中。設定は保持されます</string>
     <string name="llm_following_default">デフォルトに従う</string>
+    <string name="llm_default_unavailable">利用できる既定モデルがありません</string>
     <string name="llm_discard_title">未保存の変更を破棄しますか？</string>
     <string name="llm_discard_message">入力内容は保存されません</string>
     <string name="llm_discard_confirm">破棄</string>

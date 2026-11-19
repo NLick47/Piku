@@ -435,8 +435,11 @@ private fun ModelBindingRow(
 ) {
     val entry = selectedLlmEntry(state, role)
     val missing = entry != null && !entry.isUsable()
+    val followingDefault = storedSelection(state, role).isBlank()
     val label = entry?.label?.ifBlank { entry.baseUrl }
-        ?: stringResource(R.string.llm_source_none)
+        ?: stringResource(
+            if (followingDefault) R.string.llm_default_unavailable else R.string.llm_source_none,
+        )
     val text = if (missing) {
         "$label · ${stringResource(R.string.llm_manual_key_missing)}"
     } else {

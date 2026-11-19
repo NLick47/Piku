@@ -994,7 +994,7 @@
     <string name="llm_role_image_desc">图片里的文字</string>
     <string name="llm_role_default_option">使用目录默认</string>
     <string name="llm_role_default_desc">跟随内置目录当前默认模型</string>
-    <string name="llm_role_builtin_empty">暂无内置模型</string>
+    <string name="llm_role_builtin_empty">该用途暂无可用模型；内置模型需联网加载，也可在「我的 API」添加</string>
     <string name="llm_role_picker_title">选择%1$s模型</string>
     <string name="llm_role_group_builtin">内置目录</string>
     <string name="llm_role_group_manual">我的 API</string>
@@ -1022,6 +1022,8 @@
     <string name="llm_manual_key_missing">需要 Key</string>
     <string name="llm_manual_key_placeholder">本地服务无需 Key</string>
     <string name="llm_manual_key_keep_hint">留空表示不修改已保存的 Key</string>
+    <string name="llm_manual_key_show">显示</string>
+    <string name="llm_manual_key_hide">隐藏</string>
     <string name="llm_manual_key_saved_hint">以 Bearer 或自定义 Header 发送，不会写入日志。</string>
     <string name="llm_manual_key_clear">清除已保存的 Key</string>
     <string name="llm_manual_key_will_clear">保存后将清除 Key</string>
@@ -1047,6 +1049,19 @@
     <string name="llm_provider_base_urls_hint">每行一个，主地址失败时按序回退</string>
     <string name="llm_provider_headers">额外 Header</string>
     <string name="llm_provider_headers_hint">每行 Key: Value</string>
+    <string name="llm_provider_thinking">思考模式</string>
+    <string name="llm_provider_thinking_desc">翻译一般用不到；开启后更慢、更费额度</string>
+    <string name="llm_provider_thinking_on">开启</string>
+    <string name="llm_provider_thinking_off">关闭</string>
+    <string name="llm_provider_thinking_param">关闭方式</string>
+    <string name="llm_provider_thinking_param_auto">自动</string>
+    <string name="llm_provider_thinking_param_enable">enable_thinking</string>
+    <string name="llm_provider_thinking_param_template">chat_template_kwargs</string>
+    <string name="llm_provider_thinking_param_thinking">thinking</string>
+    <string name="llm_provider_thinking_param_hint">不同服务商的关闭参数不同；本地 vLLM 选 chat_template_kwargs</string>
+    <string name="llm_provider_thinking_note">未手动设置时按服务商自动选择，不影响已能正常翻译的服务。</string>
+    <string name="llm_provider_thinking_auto_resolved">自动选择：%1$s</string>
+    <string name="llm_provider_thinking_untouched">未手动切换时不会改动请求；直接保存不影响现有翻译。</string>
     <string name="llm_provider_url_required">请填写 Base URL</string>
     <string name="llm_provider_url_invalid">Base URL 需要以 http:// 或 https:// 开头</string>
     <string name="llm_provider_model_required">请填写模型名</string>
@@ -1106,6 +1121,7 @@
     <string name="llm_config_master_label">总开关</string>
     <string name="llm_disabled_hint">已暂停自动翻译，下方配置会保留</string>
     <string name="llm_following_default">跟随默认</string>
+    <string name="llm_default_unavailable">暂无可用的默认模型</string>
     <string name="llm_discard_title">放弃未保存的修改？</string>
     <string name="llm_discard_message">填写的内容不会保存</string>
     <string name="llm_discard_confirm">放弃修改</string>

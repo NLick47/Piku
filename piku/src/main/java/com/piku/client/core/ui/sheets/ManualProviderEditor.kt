@@ -2,6 +2,8 @@ package com.piku.client.core.ui.sheets
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -19,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
@@ -31,6 +34,7 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -41,11 +45,15 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -58,6 +66,11 @@ import com.piku.client.core.translation.ManualProvider
 import com.piku.client.core.translation.ManualProviderPreset
 import com.piku.client.core.translation.PromptOverrides
 import com.piku.client.core.translation.Role
+import com.piku.client.core.translation.ThinkingParam
+import com.piku.client.core.translation.applyThinking
+import com.piku.client.core.translation.inferThinkingParam
+import com.piku.client.core.translation.isThinkingEnabled
+import com.piku.client.core.translation.thinkingParamOf
 import com.piku.client.core.ui.common.EffectOnChange
 import com.piku.client.core.ui.common.PikuBottomSheet
 import com.piku.client.core.ui.common.PikuPageHeader
@@ -68,6 +81,7 @@ import com.piku.client.core.ui.theme.HomeBgBottomLight
 import com.piku.client.core.ui.theme.HomeBgTopDark
 import com.piku.client.core.ui.theme.HomeBgTopLight
 import com.piku.client.core.ui.theme.PikuColors
+import com.piku.client.core.ui.theme.themedSwitchColors
 import com.piku.client.source.poipiku.ui.home.ModelFetchState
 import com.piku.client.source.poipiku.ui.home.ProviderTestState
 import kotlinx.coroutines.launch
@@ -124,8 +138,19 @@ internal fun ManualProviderEditorScreen(
     var extraHeadersText by remember(provider.id) {
         mutableStateOf(provider.extraHeaders.entries.joinToString("\n") { "${it.key}: ${it.value}" })
     }
+    var thinkingEnabled by remember(provider.id) {
+        mutableStateOf(isThinkingEnabled(provider.extraParams))
+    }
+    var thinkingTouched by remember(provider.id) { mutableStateOf(false) }
+    var thinkingParamOverride by remember(provider.id) {
+        mutableStateOf(thinkingParamOf(provider.extraParams))
+    }
     var advanced by remember(provider.id) {
-        mutableStateOf(provider.baseUrls.isNotEmpty() || provider.extraHeaders.isNotEmpty())
+        mutableStateOf(
+            provider.baseUrls.isNotEmpty() ||
+                provider.extraHeaders.isNotEmpty() ||
+                provider.extraParams.isNotEmpty(),
+        )
     }
     var showKey by remember { mutableStateOf(false) }
     var clearKey by remember(provider.id) { mutableStateOf(false) }
@@ -158,6 +183,8 @@ internal fun ManualProviderEditorScreen(
         baseUrlsText != provider.baseUrls.joinToString("\n") ||
         extraHeadersText != provider.extraHeaders.entries
             .joinToString("\n") { "${it.key}: ${it.value}" } ||
+        thinkingEnabled != isThinkingEnabled(provider.extraParams) ||
+        thinkingParamOverride != thinkingParamOf(provider.extraParams) ||
         promptOverrides != provider.promptOverrides
 
     fun requestDismiss() {
@@ -201,6 +228,9 @@ internal fun ManualProviderEditorScreen(
         advanced = false
         baseUrlsText = ""
         extraHeadersText = ""
+        thinkingEnabled = false
+        thinkingTouched = false
+        thinkingParamOverride = null
         promptOverrides = PromptOverrides()
         onClearTest()
         onClearModelFetch()
@@ -216,6 +246,12 @@ internal fun ManualProviderEditorScreen(
         roles = roleNames,
         baseUrls = baseUrlsText.lines().map { it.trim() }.filter { it.isNotBlank() },
         extraHeaders = parseHeaderLines(extraHeadersText),
+        extraParams = applyThinking(
+            params = provider.extraParams,
+            thinkingEnabled = thinkingEnabled,
+            mode = thinkingParamOverride ?: inferThinkingParam(baseUrl.trim(), model.trim()),
+            touched = thinkingTouched,
+        ),
         promptOverrides = promptOverrides.normalized(),
         hasKey = provider.hasKey,
     )
@@ -382,7 +418,7 @@ internal fun ManualProviderEditorScreen(
                             {
                                 LlmTextAction(
                                     text = stringResource(
-                                        if (showKey) R.string.password_hide else R.string.password_show,
+                                        if (showKey) R.string.llm_manual_key_hide else R.string.llm_manual_key_show,
                                     ),
                                     onClick = { showKey = !showKey },
                                     color = secondary,
@@ -608,6 +644,23 @@ internal fun ManualProviderEditorScreen(
                     }
                 }
             }
+
+            Spacer(Modifier.height(22.dp))
+            ThinkingSection(
+                enabled = thinkingEnabled,
+                override = thinkingParamOverride,
+                inferred = inferThinkingParam(baseUrl.trim(), model.trim()),
+                touched = thinkingTouched,
+                onToggle = {
+                    thinkingEnabled = it
+                    thinkingTouched = true
+                },
+                onPickParam = { mode ->
+                    thinkingParamOverride = mode
+                    if (mode != null) thinkingTouched = true
+                },
+                dark = dark,
+            )
         }
 
         SettingsFooter(dark = dark) {
@@ -856,3 +909,120 @@ private fun parseHeaderLines(raw: String): Map<String, String> =
         }
         .filter { it.first.isNotBlank() }
         .toMap()
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ThinkingSection(
+    enabled: Boolean,
+    override: ThinkingParam?,
+    inferred: ThinkingParam,
+    touched: Boolean,
+    onToggle: (Boolean) -> Unit,
+    onPickParam: (ThinkingParam?) -> Unit,
+    dark: Boolean,
+) {
+    val effective = override ?: inferred
+    SettingsSectionLabel(stringResource(R.string.llm_provider_thinking))
+    SettingsCard(dark = dark) {
+        Column(Modifier.padding(14.dp)) {
+            PikuSegmented(
+                labels = listOf(
+                    stringResource(R.string.llm_provider_thinking_on),
+                    stringResource(R.string.llm_provider_thinking_off),
+                ),
+                selectedIndex = if (enabled) 0 else 1,
+                onSelect = { onToggle(it == 0) },
+            )
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = stringResource(R.string.llm_provider_thinking_desc),
+                color = PikuColors.textSecondary,
+                fontSize = 11.sp,
+                lineHeight = 16.sp,
+            )
+            if (!touched) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = stringResource(R.string.llm_provider_thinking_untouched),
+                    color = PikuColors.textFaint,
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp,
+                )
+            }
+
+            if (!enabled) {
+                Spacer(Modifier.height(14.dp))
+                FieldLabel(stringResource(R.string.llm_provider_thinking_param))
+                Spacer(Modifier.height(8.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    ThinkingChip(
+                        text = stringResource(R.string.llm_provider_thinking_param_auto),
+                        selected = override == null,
+                        onClick = { onPickParam(null) },
+                    )
+                    listOf(
+                        ThinkingParam.ENABLE_THINKING to R.string.llm_provider_thinking_param_enable,
+                        ThinkingParam.CHAT_TEMPLATE_KWARGS to R.string.llm_provider_thinking_param_template,
+                        ThinkingParam.THINKING_OBJECT to R.string.llm_provider_thinking_param_thinking,
+                    ).forEach { (mode, labelRes) ->
+                        ThinkingChip(
+                            text = stringResource(labelRes),
+                            selected = override == mode,
+                            onClick = { onPickParam(mode) },
+                        )
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = if (override == null) {
+                        stringResource(R.string.llm_provider_thinking_auto_resolved, thinkingParamLabel(effective))
+                    } else {
+                        stringResource(R.string.llm_provider_thinking_param_hint)
+                    },
+                    color = PikuColors.textFaint,
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun thinkingParamLabel(mode: ThinkingParam): String = stringResource(
+    when (mode) {
+        ThinkingParam.ENABLE_THINKING -> R.string.llm_provider_thinking_param_enable
+        ThinkingParam.CHAT_TEMPLATE_KWARGS -> R.string.llm_provider_thinking_param_template
+        ThinkingParam.THINKING_OBJECT -> R.string.llm_provider_thinking_param_thinking
+    },
+)
+
+@Composable
+private fun ThinkingChip(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Text(
+        text = text,
+        color = if (selected) PikuColors.textPrimary else PikuColors.textSecondary,
+        fontSize = 11.sp,
+        fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+        maxLines = 1,
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(if (selected) PikuColors.surfaceSoft else Color.Transparent)
+            .border(
+                BorderStroke(
+                    0.5.dp,
+                    if (selected) PikuColors.controlAccent.copy(alpha = 0.45f) else PikuColors.border,
+                ),
+                RoundedCornerShape(6.dp),
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 7.dp, vertical = 5.dp),
+    )
+}

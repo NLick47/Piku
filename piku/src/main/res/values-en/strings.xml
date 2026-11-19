@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Piku</string>
     <string name="back">Back</string>
@@ -994,7 +994,7 @@
     <string name="llm_role_image_desc">Text in images</string>
     <string name="llm_role_default_option">Use catalog default</string>
     <string name="llm_role_default_desc">Follow the built-in catalog default</string>
-    <string name="llm_role_builtin_empty">No built-in models</string>
+    <string name="llm_role_builtin_empty">No model available for this role yet; built-ins load online, or add one under My API</string>
     <string name="llm_role_picker_title">Select %1$s model</string>
     <string name="llm_role_group_builtin">Built-in catalog</string>
     <string name="llm_role_group_manual">My API</string>
@@ -1022,6 +1022,8 @@
     <string name="llm_manual_key_missing">Key required</string>
     <string name="llm_manual_key_placeholder">Not required for local services</string>
     <string name="llm_manual_key_keep_hint">Leave blank to keep the saved key</string>
+    <string name="llm_manual_key_show">Show</string>
+    <string name="llm_manual_key_hide">Hide</string>
     <string name="llm_manual_key_saved_hint">Sent as Bearer or a custom header; never logged.</string>
     <string name="llm_manual_key_clear">Clear saved key</string>
     <string name="llm_manual_key_will_clear">Key will be cleared on save</string>
@@ -1047,6 +1049,19 @@
     <string name="llm_provider_base_urls_hint">One per line; tried in order if the primary fails</string>
     <string name="llm_provider_headers">Extra headers</string>
     <string name="llm_provider_headers_hint">One Key: Value per line</string>
+    <string name="llm_provider_thinking">Thinking</string>
+    <string name="llm_provider_thinking_desc">Rarely needed for translation; slower and costlier</string>
+    <string name="llm_provider_thinking_on">On</string>
+    <string name="llm_provider_thinking_off">Off</string>
+    <string name="llm_provider_thinking_param">Disable via</string>
+    <string name="llm_provider_thinking_param_auto">Auto</string>
+    <string name="llm_provider_thinking_param_enable">enable_thinking</string>
+    <string name="llm_provider_thinking_param_template">chat_template_kwargs</string>
+    <string name="llm_provider_thinking_param_thinking">thinking</string>
+    <string name="llm_provider_thinking_param_hint">Each provider uses a different field; pick chat_template_kwargs for local vLLM</string>
+    <string name="llm_provider_thinking_note">Picked automatically per provider when untouched; won\'t affect services that already translate fine.</string>
+    <string name="llm_provider_thinking_auto_resolved">Auto picks %1$s for this provider</string>
+    <string name="llm_provider_thinking_untouched">Leaving it untouched sends nothing extra; saving won\'t change working translations.</string>
     <string name="llm_provider_url_required">Enter a base URL</string>
     <string name="llm_provider_url_invalid">Base URL must start with http:// or https://</string>
     <string name="llm_provider_model_required">Enter a model name</string>
@@ -1106,6 +1121,7 @@
     <string name="llm_config_master_label">Master switch</string>
     <string name="llm_disabled_hint">Auto translation is paused; your settings are kept</string>
     <string name="llm_following_default">Following default</string>
+    <string name="llm_default_unavailable">No default model available</string>
     <string name="llm_discard_title">Discard unsaved changes?</string>
     <string name="llm_discard_message">What you entered will not be saved</string>
     <string name="llm_discard_confirm">Discard</string>
