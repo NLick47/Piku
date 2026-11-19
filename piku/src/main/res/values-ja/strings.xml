@@ -56,6 +56,7 @@
     <string name="menu_adult_content">R-18</string>
     <string name="menu_app_lock">アプリロック</string>
     <string name="menu_incognito">シークレット</string>
+    <string name="menu_image_cache">画像キャッシュ</string>
     <string name="app_lock_need_credential">先に画面ロックを設定してください</string>
     <string name="app_lock_unlock">ロック解除</string>
     <string name="app_lock_prompt_title">Piku をロック解除</string>

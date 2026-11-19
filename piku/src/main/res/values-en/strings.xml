@@ -56,6 +56,7 @@
     <string name="menu_adult_content">R-18</string>
     <string name="menu_app_lock">App lock</string>
     <string name="menu_incognito">Incognito</string>
+    <string name="menu_image_cache">Image cache</string>
     <string name="app_lock_need_credential">Set a screen lock first</string>
     <string name="app_lock_unlock">Unlock</string>
     <string name="app_lock_prompt_title">Unlock Piku</string>

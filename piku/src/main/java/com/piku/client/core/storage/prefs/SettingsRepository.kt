@@ -114,6 +114,11 @@ class SettingsRepository @Inject constructor(
     )
     val incognitoEnabled: StateFlow<Boolean> = _incognitoEnabled.asStateFlow()
 
+    private val _imageCacheEnabled = MutableStateFlow(
+        prefs.getBoolean(KEY_IMAGE_CACHE_ENABLED, true),
+    )
+    val imageCacheEnabled: StateFlow<Boolean> = _imageCacheEnabled.asStateFlow()
+
     /** 上次检查更新时间（epoch millis），0 表示从未检查过 */
     private val _lastUpdateCheckAt = MutableStateFlow(
         prefs.getLong(KEY_LAST_UPDATE_CHECK_AT, 0L),
@@ -280,6 +285,11 @@ class SettingsRepository @Inject constructor(
     fun setIncognitoEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_INCOGNITO_ENABLED, enabled).apply()
         _incognitoEnabled.value = enabled
+    }
+
+    fun setImageCacheEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_IMAGE_CACHE_ENABLED, enabled).apply()
+        _imageCacheEnabled.value = enabled
     }
 
     fun setCustomBackgroundPath(path: String?) {
@@ -960,6 +970,7 @@ class SettingsRepository @Inject constructor(
         const val KEY_LAST_UPDATE_CHECK_AT = "last_update_check_at"
         const val KEY_APP_LOCK_ENABLED = "app_lock_enabled"
         const val KEY_INCOGNITO_ENABLED = "incognito_enabled"
+        const val KEY_IMAGE_CACHE_ENABLED = "image_cache_enabled"
         const val KEY_NOVEL_FONT_SIZE = "novel_font_size"
         const val KEY_NOVEL_LINE_HEIGHT = "novel_line_height"
         const val KEY_NOVEL_READER_THEME = "novel_reader_theme"

@@ -11,9 +11,12 @@ import coil3.request.allowHardware
 import coil3.request.crossfade
 import coil3.serviceLoaderEnabled
 import coil3.size.Precision
+import com.piku.client.core.network.image.ImageDiskCacheGate
+import com.piku.client.core.network.image.ImageDiskCacheInterceptor
 import com.piku.client.core.network.image.ImageRetryInterceptor
 import com.piku.client.core.network.image.ImageRouteProbe
 import com.piku.client.core.diag.CrashLogStore
+import com.piku.client.core.storage.prefs.SettingsRepository
 import com.piku.client.core.translation.ModelCatalogRepository
 import com.piku.client.source.poipiku.data.repository.BlockListSync
 import dagger.hilt.EntryPoint
@@ -24,9 +27,13 @@ import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
+import java.io.File
 import javax.inject.Named
+
+private const val IMAGE_CACHE_DIR = "image_cache"
 
 @HiltAndroidApp
 class PoipikuApplication : Application() {
@@ -50,6 +57,7 @@ class PoipikuApplication : Application() {
                     add(OkHttpNetworkFetcherFactory(callFactory = { entryPoint.imageOkHttpClient() }))
                     // 取图失败后的整单重试：传输失败隔一会儿再取一次，最多 3 次
                     add(entryPoint.imageRetryInterceptor())
+                    add(ImageDiskCacheInterceptor())
                     // 这里刻意不注册动画解码器：动图播放走白名单，由
                     // ui.common.rememberAnimatedImage 先用文件名判定（xxx.gif_640.jpg
                     // 里的 .gif 是 poipiku CDN 留下的动图指纹），再单独挂解码器
@@ -77,11 +85,24 @@ class PoipikuApplication : Application() {
                     // 原图就会把列表用的 _360/_640 挤出去，返回列表反而要重新下载。
                     // 目录是 cacheDir，系统存储紧张时可自行回收
                     DiskCache.Builder()
-                        .directory(context.cacheDir.resolve("image_cache"))
+                        .directory(context.cacheDir.resolve(IMAGE_CACHE_DIR))
                         .maxSizeBytes(200L * 1024 * 1024)
                         .build()
                 }
                 .build()
+        }
+
+        val settings = entryPoint.settingsRepository()
+        ImageDiskCacheGate.enabled = settings.imageCacheEnabled.value
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            settings.imageCacheEnabled.collect { enabled ->
+                ImageDiskCacheGate.enabled = enabled
+                if (!enabled && File(cacheDir, IMAGE_CACHE_DIR).exists()) {
+                    runCatching {
+                        SingletonImageLoader.get(this@PoipikuApplication).diskCache?.clear()
+                    }
+                }
+            }
         }
 
         // 冷启动后台刷新目录
@@ -116,6 +137,8 @@ class PoipikuApplication : Application() {
         fun imageRetryInterceptor(): ImageRetryInterceptor
 
         fun imageRouteProbe(): ImageRouteProbe
+
+        fun settingsRepository(): SettingsRepository
 
         fun modelCatalogRepository(): ModelCatalogRepository
 

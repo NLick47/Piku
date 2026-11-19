@@ -56,6 +56,7 @@
     <string name="menu_adult_content">R-18</string>
     <string name="menu_app_lock">应用锁</string>
     <string name="menu_incognito">无痕模式</string>
+    <string name="menu_image_cache">图片缓存</string>
     <string name="app_lock_need_credential">需先设置系统锁屏</string>
     <string name="app_lock_unlock">解锁</string>
     <string name="app_lock_prompt_title">解锁 Piku</string>

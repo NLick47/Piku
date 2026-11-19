@@ -50,6 +50,7 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.automirrored.outlined.Login
 import androidx.compose.material.icons.outlined.ManageAccounts
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.ScreenLockPortrait
 import androidx.compose.material.icons.outlined.SwapHoriz
@@ -121,8 +122,10 @@ fun UserDrawer(
     onToggleAdult: () -> Unit,
     appLockEnabled: Boolean = false,
     incognitoEnabled: Boolean = false,
+    imageCacheEnabled: Boolean = true,
     onToggleAppLock: () -> Unit = {},
     onToggleIncognito: () -> Unit = {},
+    onToggleImageCache: () -> Unit = {},
     onSettingsClick: () -> Unit,
     onAboutClick: () -> Unit,
     onThemeClick: () -> Unit,
@@ -177,8 +180,10 @@ fun UserDrawer(
                 onToggleAdult = onToggleAdult,
                 appLockEnabled = appLockEnabled,
                 incognitoEnabled = incognitoEnabled,
+                imageCacheEnabled = imageCacheEnabled,
                 onToggleAppLock = onToggleAppLock,
                 onToggleIncognito = onToggleIncognito,
+                onToggleImageCache = onToggleImageCache,
                 onSettingsClick = {
                     settingsExpanded = !settingsExpanded
                     onSettingsClick()
@@ -235,8 +240,10 @@ private fun DrawerPanel(
     onToggleAdult: () -> Unit,
     appLockEnabled: Boolean,
     incognitoEnabled: Boolean,
+    imageCacheEnabled: Boolean,
     onToggleAppLock: () -> Unit,
     onToggleIncognito: () -> Unit,
+    onToggleImageCache: () -> Unit,
     onSettingsClick: () -> Unit,
     onAboutClick: () -> Unit,
     onThemeClick: () -> Unit,
@@ -577,6 +584,14 @@ private fun DrawerPanel(
                             trailing = entry.trailing,
                         )
                     }
+                    ToggleRow(
+                        icon = Icons.Outlined.PhotoLibrary,
+                        label = stringResource(R.string.menu_image_cache),
+                        checked = imageCacheEnabled,
+                        onToggle = onToggleImageCache,
+                        dark = dark,
+                        accent = iconAccent,
+                    )
                     // 数据清理语义的行放展开区末尾：同步在前、保留在最后
                     DrawerMenuRow(
                         icon = Icons.Outlined.DeleteSweep,

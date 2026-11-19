@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.core.content.FileProvider
 import coil3.SingletonImageLoader
+import com.piku.client.core.network.image.ImageDiskCacheGate
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -50,6 +51,7 @@ class ImageShareHelper @Inject constructor(
 
     /** Coil 磁盘缓存键就是 URL；未命中返回 false */
     private fun copyFromImageCache(url: String, target: File): Boolean {
+        if (!ImageDiskCacheGate.enabled) return false
         val snapshot = runCatching {
             SingletonImageLoader.get(context).diskCache?.openSnapshot(url)
         }.getOrNull() ?: return false
