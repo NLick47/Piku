@@ -52,6 +52,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -223,25 +224,79 @@ class SearchViewModel @Inject constructor(
         }
     }
 
-    /** 标签作品模式的可见筛选组：声明组按 [SourceSearch.hiddenTagFilterGroups] 收敛（与选中值无关） */
+    /**
+     * 可见筛选组：整组隐藏（[SourceSearch.hiddenFilterGroups]）+ 组内个别选项隐藏
+     * （[SourceSearch.hiddenFilterOptions]，如未登录的 pixiv 人気順）。
+     * 面板与筛选行渲染的都是这份，所以藏掉的选项点不到。
+     */
+    private fun visibleGroupsOf(
+        plugin: SourceSearch,
+        hiddenGroupIds: Set<String>,
+    ): List<SearchFilterGroupSpec> {
+        val hiddenOptions = plugin.hiddenFilterOptions(isLoggedInForSearch())
+        return plugin.filterGroups
+            .filterNot { it.id in hiddenGroupIds }
+            .map { group ->
+                val hidden = hiddenOptions[group.id]
+                if (hidden.isNullOrEmpty()) group else group.copy(options = group.options.filterNot { it.id in hidden })
+            }
+    }
+
+    /**
+     * 选中值归一：落在已藏选项上的选择（登录时选了人気順、随后登出）回落该组默认项，
+     * 否则筛选行会挂着一个服务端根本不认的条件。
+     */
+    private fun normalizeFilters(
+        plugin: SourceSearch,
+        selected: Map<String, String>,
+    ): Map<String, String> {
+        val hiddenOptions = plugin.hiddenFilterOptions(isLoggedInForSearch())
+        if (hiddenOptions.isEmpty()) return selected
+        return buildMap {
+            putAll(selected)
+            hiddenOptions.forEach { (groupId, hidden) ->
+                val current = selected[groupId] ?: return@forEach
+                if (current !in hidden) return@forEach
+                val defaultId = plugin.filterGroups.firstOrNull { it.id == groupId }
+                    ?.options?.firstOrNull { it.default }?.id
+                if (defaultId != null) put(groupId, defaultId) else remove(groupId)
+            }
+        }
+    }
+
+    /** 作品 tab 的可见组：按选中值决定整组隐藏（小说档藏期间/对象） */
+    private fun worksVisibleGroups(
+        plugin: SourceSearch,
+        selected: Map<String, String>,
+    ): List<SearchFilterGroupSpec> = visibleGroupsOf(plugin, plugin.hiddenFilterGroups(selected))
+
+    /** 标签作品模式的可见组：整组隐藏与选中值无关（pixiv 藏类型/对象） */
     private fun tagVisibleGroups(plugin: SourceSearch?): List<SearchFilterGroupSpec> =
-        plugin?.filterGroups?.filterNot { it.id in plugin.hiddenTagFilterGroups() } ?: emptyList()
+        plugin?.let { visibleGroupsOf(it, it.hiddenTagFilterGroups()) } ?: emptyList()
 
     private val _uiState = MutableStateFlow(
-        SearchUiState(
+        searchPlugin?.let { plugin ->
+            val defaults = defaultFilters(plugin)
+            SearchUiState(
+                keyword = keyword,
+                tab = initialTab,
+                source = source,
+                pluginActive = true,
+                tagEntries = plugin.tagEntries,
+                idleHintRes = plugin.idleHintRes,
+                proportional = plugin.proportional,
+                listLayout = listLayoutFor(source),
+                filterGroups = plugin.filterGroups,
+                filterToggles = plugin.filterToggles,
+                visibleFilterGroups = worksVisibleGroups(plugin, defaults),
+                visibleTagFilterGroups = tagVisibleGroups(plugin),
+                selectedFilters = normalizeFilters(plugin, defaults),
+            )
+        } ?: SearchUiState(
             keyword = keyword,
             tab = initialTab,
             source = source,
-            pluginActive = searchPlugin != null,
-            tagEntries = searchPlugin?.tagEntries == true,
-            idleHintRes = searchPlugin?.idleHintRes ?: R.string.search_hint,
-            proportional = searchPlugin?.proportional == true,
             listLayout = listLayoutFor(source),
-            filterGroups = searchPlugin?.filterGroups ?: emptyList(),
-            filterToggles = searchPlugin?.filterToggles ?: emptyList(),
-            visibleFilterGroups = searchPlugin?.filterGroups ?: emptyList(),
-            visibleTagFilterGroups = tagVisibleGroups(searchPlugin),
-            selectedFilters = searchPlugin?.let(::defaultFilters) ?: emptyMap(),
         ),
     )
     val uiState: StateFlow<SearchUiState> = _uiState.asStateFlow()
@@ -257,6 +312,7 @@ class SearchViewModel @Inject constructor(
     private var tagWorksPage = 0
     private var suggestJob: Job? = null
     private var customTagsJob: Job? = null
+    private var sourceAuthJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -270,6 +326,7 @@ class SearchViewModel @Inject constructor(
             }
         }
         observeCustomTags()
+        observeSourceAuth()
         loadIdleContent()
         // 登录成功（含从登录引导回来）、自动重登、登出都要重载三个 tab：
         // 搜索结果与身份相关，登出后不能继续显示上一个账号才看得见的内容
@@ -301,6 +358,37 @@ class SearchViewModel @Inject constructor(
         customTagsJob = viewModelScope.launch {
             observeCustomTagsUseCase(source).collect { tags ->
                 _uiState.update { it.copy(customTags = tags) }
+            }
+        }
+    }
+
+    /**
+     * 按源订阅登录态：pixiv 等插件源的登录/登出不经过 poipiku 的 sessionVersion，
+     * 而筛选选项的可见性跟登录态走（未登录没有人気順），结果集也与身份相关
+     * （登录后走 app-api，R-18 与筛选参数才全量生效）。换源时随 [sourceGeneration] 重启。
+     */
+    private fun observeSourceAuth() {
+        sourceAuthJob?.cancel()
+        sourceAuthJob = viewModelScope.launch {
+            val auth = sourceAuthRegistry.byId(source) ?: return@launch
+            val generation = sourceGeneration
+            // 跳过订阅时的当前值：首屏加载在 init 里已经发过，别重发一遍
+            auth.status.drop(1).collect {
+                if (generation != sourceGeneration) return@collect
+                val plugin = searchPlugin ?: return@collect
+                val selected = normalizeFilters(plugin, _uiState.value.selectedFilters)
+                _uiState.update {
+                    it.copy(
+                        selectedFilters = selected,
+                        visibleFilterGroups = worksVisibleGroups(plugin, selected),
+                        visibleTagFilterGroups = tagVisibleGroups(plugin),
+                    )
+                }
+                if (base.isEmpty() && presetTag.isEmpty()) return@collect
+                usersPage = 0
+                loadUsers(append = false)
+                loadWorks(append = false)
+                loadTagsByMode(append = false)
             }
         }
     }
@@ -354,18 +442,20 @@ class SearchViewModel @Inject constructor(
         tagSuggestionsPage = 0
         tagWorksPage = 0
         _uiState.update {
+            val plugin = searchPlugin
+            val defaults = plugin?.let(::defaultFilters) ?: emptyMap()
             it.copy(
                 source = newSource,
-                pluginActive = searchPlugin != null,
-                tagEntries = searchPlugin?.tagEntries == true,
-                idleHintRes = searchPlugin?.idleHintRes ?: R.string.search_hint,
-                proportional = searchPlugin?.proportional == true,
+                pluginActive = plugin != null,
+                tagEntries = plugin?.tagEntries == true,
+                idleHintRes = plugin?.idleHintRes ?: R.string.search_hint,
+                proportional = plugin?.proportional == true,
                 listLayout = listLayoutFor(newSource),
-                filterGroups = searchPlugin?.filterGroups ?: emptyList(),
-                filterToggles = searchPlugin?.filterToggles ?: emptyList(),
-                visibleFilterGroups = searchPlugin?.filterGroups ?: emptyList(),
-                visibleTagFilterGroups = tagVisibleGroups(searchPlugin),
-                selectedFilters = searchPlugin?.let(::defaultFilters) ?: emptyMap(),
+                filterGroups = plugin?.filterGroups ?: emptyList(),
+                filterToggles = plugin?.filterToggles ?: emptyList(),
+                visibleFilterGroups = plugin?.let { p -> worksVisibleGroups(p, defaults) } ?: emptyList(),
+                visibleTagFilterGroups = tagVisibleGroups(plugin),
+                selectedFilters = plugin?.let { p -> normalizeFilters(p, defaults) } ?: emptyMap(),
                 suggestions = emptyList(),
                 trending = emptyList(),
                 trendingLoading = true,
@@ -402,6 +492,7 @@ class SearchViewModel @Inject constructor(
             )
         }
         observeCustomTags()
+        observeSourceAuth()
         loadIdleContent()
         if (base.isNotEmpty() || presetTag.isNotEmpty()) {
             loadWorks(append = false)
@@ -595,12 +686,11 @@ class SearchViewModel @Inject constructor(
     /** 应用筛选：记下选中值，作品与选中的标签作品全量重载 */
     fun applyFilters(selected: Map<String, String>) {
         val plugin = searchPlugin ?: return
+        val normalized = normalizeFilters(plugin, selected)
         _uiState.update {
             it.copy(
-                selectedFilters = selected,
-                visibleFilterGroups = plugin.filterGroups.filterNot { group ->
-                    group.id in plugin.hiddenFilterGroups(selected)
-                },
+                selectedFilters = normalized,
+                visibleFilterGroups = worksVisibleGroups(plugin, normalized),
             )
         }
         if (base.isEmpty()) return

@@ -116,8 +116,31 @@ class PixivContentSourceTest {
             page: Int,
             sMode: String,
             order: String,
-            mode: String,
-            type: String,
+            startDate: String?,
+            endDate: String?,
+            aiType: String?,
+        ): PixivSearchResponse = PixivSearchResponse()
+
+        override suspend fun searchIllustrations(
+            word: String,
+            wordQuery: String,
+            page: Int,
+            sMode: String,
+            order: String,
+            startDate: String?,
+            endDate: String?,
+            aiType: String?,
+        ): PixivSearchResponse = PixivSearchResponse()
+
+        override suspend fun searchManga(
+            word: String,
+            wordQuery: String,
+            page: Int,
+            sMode: String,
+            order: String,
+            startDate: String?,
+            endDate: String?,
+            aiType: String?,
         ): PixivSearchResponse = PixivSearchResponse()
 
         var detailResponse = PixivIllustResponse()

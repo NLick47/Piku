@@ -51,6 +51,7 @@ import com.piku.client.source.pixiv.data.repository.tagThumbnails
 import com.piku.client.source.pixiv.data.repository.toFollowUser
 import com.piku.client.source.pixiv.data.repository.toTrendingTag
 import com.piku.client.source.pixiv.data.repository.toWork
+import com.piku.client.source.pixiv.data.repository.webDateRange
 import com.piku.client.core.model.AppError
 import com.piku.client.core.model.FollowUser
 import com.piku.client.core.source.FILTER_TOGGLE_ON
@@ -74,6 +75,11 @@ class PixivSearchSourceTest {
             val page: Int,
             val sMode: String,
             val order: String,
+            /** 端点：artworks / illustrations / manga（类型筛选靠换端点） */
+            val endpoint: String = "artworks",
+            val startDate: String? = null,
+            val endDate: String? = null,
+            val aiType: String? = null,
         )
 
         val webSearchCalls = mutableListOf<WebSearchCall>()
@@ -85,10 +91,44 @@ class PixivSearchSourceTest {
             page: Int,
             sMode: String,
             order: String,
-            mode: String,
-            type: String,
+            startDate: String?,
+            endDate: String?,
+            aiType: String?,
+        ): PixivSearchResponse = record("artworks", word, page, sMode, order, startDate, endDate, aiType)
+
+        override suspend fun searchIllustrations(
+            word: String,
+            wordQuery: String,
+            page: Int,
+            sMode: String,
+            order: String,
+            startDate: String?,
+            endDate: String?,
+            aiType: String?,
+        ): PixivSearchResponse = record("illustrations", word, page, sMode, order, startDate, endDate, aiType)
+
+        override suspend fun searchManga(
+            word: String,
+            wordQuery: String,
+            page: Int,
+            sMode: String,
+            order: String,
+            startDate: String?,
+            endDate: String?,
+            aiType: String?,
+        ): PixivSearchResponse = record("manga", word, page, sMode, order, startDate, endDate, aiType)
+
+        private fun record(
+            endpoint: String,
+            word: String,
+            page: Int,
+            sMode: String,
+            order: String,
+            startDate: String?,
+            endDate: String?,
+            aiType: String?,
         ): PixivSearchResponse {
-            webSearchCalls.add(WebSearchCall(word, page, sMode, order))
+            webSearchCalls.add(WebSearchCall(word, page, sMode, order, endpoint, startDate, endDate, aiType))
             return webSearchResponse
         }
 
@@ -511,6 +551,18 @@ class PixivSearchSourceTest {
         )
     }
 
+    /** 人気順是会员功能：未登录时藏掉该选项，登录后三项齐全 */
+    @Test
+    fun popularSortHiddenWhenLoggedOut() {
+        val impl = source(FakeAppApi())
+
+        assertEquals(
+            mapOf(PixivSearchSource.GROUP_SORT to setOf(PixivSearchSource.SORT_POPULAR)),
+            impl.hiddenFilterOptions(loggedIn = false),
+        )
+        assertTrue(impl.hiddenFilterOptions(loggedIn = true).isEmpty())
+    }
+
     // ---------------- 参数映射：filters → app-api 查询参数 ----------------
 
     @Test
@@ -552,7 +604,8 @@ class PixivSearchSourceTest {
         assertEquals(PixivSearchSource.SORT_POPULAR, call.sort)
         assertEquals(PixivSearchSource.TARGET_TITLE, call.searchTarget)
         assertEquals(PixivSearchSource.DURATION_WEEK, call.duration)
-        assertEquals(1, call.searchAiType)
+        // search_ai_type 实测不生效（见 PixivRepository 的说明）：AI 过滤按返回项本地筛，不带该参数
+        assertNull(call.searchAiType)
         assertEquals(60, call.offset)
     }
 
@@ -602,7 +655,8 @@ class PixivSearchSourceTest {
 
         source(FakeAppApi(), webApi).searchTagWorks("東方Project", emptyMap(), 0)
 
-        assertEquals("s_tag_exact", webApi.webSearchCalls.single().sMode)
+        // 网页端完全一致是 s_tag_full；旧的 s_tag_exact 服务端已忽略（2026-11 实测）
+        assertEquals("s_tag_full", webApi.webSearchCalls.single().sMode)
     }
 
     @Test
@@ -611,10 +665,66 @@ class PixivSearchSourceTest {
         val impl = source(FakeAppApi(), webApi)
 
         impl.searchWorks("x", mapOf(PixivSearchSource.GROUP_SORT to PixivSearchSource.SORT_OLD), 0)
-        assertEquals("date_asc", webApi.webSearchCalls.first().order)
+        assertEquals("date", webApi.webSearchCalls.first().order)
 
         impl.searchWorks("x", mapOf(PixivSearchSource.GROUP_SORT to PixivSearchSource.SORT_POPULAR), 0)
         assertEquals("date_d", webApi.webSearchCalls.last().order)
+    }
+
+    /** 类型筛选：网页端的 type/mode 是死参数，只能换端点 */
+    @Test
+    fun anonymousSearchSwitchesEndpointByKind() = runTest {
+        val webApi = FakeApi()
+        val impl = source(FakeAppApi(), webApi)
+
+        impl.searchWorks("x", mapOf(SourceSearch.FILTER_KIND to SourceSearch.KIND_MANGA), 0)
+        assertEquals("manga", webApi.webSearchCalls.last().endpoint)
+
+        impl.searchWorks("x", mapOf(SourceSearch.FILTER_KIND to SourceSearch.KIND_ILLUST), 0)
+        assertEquals("illustrations", webApi.webSearchCalls.last().endpoint)
+
+        impl.searchWorks("x", mapOf(SourceSearch.FILTER_KIND to SourceSearch.KIND_ALL), 0)
+        assertEquals("artworks", webApi.webSearchCalls.last().endpoint)
+    }
+
+    /** 未登录的期间与 AI 过滤：duration 已失效，改传投稿日区间 scd/ecd + ai_type=1 */
+    @Test
+    fun anonymousSearchMapsDurationToDateRangeAndAiToggle() = runTest {
+        val webApi = FakeApi()
+        val impl = source(FakeAppApi(), webApi)
+
+        impl.searchWorks(
+            "x",
+            mapOf(
+                PixivSearchSource.GROUP_DURATION to PixivSearchSource.DURATION_WEEK,
+                PixivSearchSource.TOGGLE_HIDE_AI to FILTER_TOGGLE_ON,
+            ),
+            0,
+        )
+
+        val call = webApi.webSearchCalls.single()
+        // FIXED_NOW 换算到 JST 是 2023-11-15；近一周 = 11-09 ~ 11-15
+        assertEquals("2023-11-09", call.startDate)
+        assertEquals("2023-11-15", call.endDate)
+        assertEquals("1", call.aiType)
+
+        impl.searchWorks("x", emptyMap(), 0)
+        val plain = webApi.webSearchCalls.last()
+        assertNull(plain.startDate)
+        assertNull(plain.endDate)
+        assertNull(plain.aiType)
+    }
+
+    /** 期间区间按 JST 算：UTC 的 15:30 已经是日本的次日，跨年边界同样不能差一天 */
+    @Test
+    fun webDateRangeUsesJstBoundary() {
+        // 2023-12-31T15:30:00Z = 2024-01-01T00:30 JST
+        val now = 1_704_036_600_000L
+        val range = webDateRange(PixivSearchSource.DURATION_DAY, now)
+
+        assertEquals("2024-01-01" to "2024-01-01", range)
+        assertNull(webDateRange(PixivSearchSource.DURATION_ALL, now))
+        assertNull(webDateRange(null, now))
     }
 
     @Test
@@ -740,7 +850,8 @@ class PixivSearchSourceTest {
         assertEquals(PixivSearchSource.SORT_NEW, call.sort)
         assertNull(call.searchTarget)
         assertNull(call.duration)
-        assertEquals(1, call.searchAiType)
+        // 小说接口仍带 search_ai_type=0（过滤 AI）；作品接口那个参数不生效、改为本地筛
+        assertEquals(0, call.searchAiType)
         assertEquals(30, call.offset)
         assertEquals(0, appApi.searchCalls.size)
     }

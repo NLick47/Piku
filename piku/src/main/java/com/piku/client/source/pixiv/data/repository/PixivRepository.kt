@@ -55,6 +55,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import retrofit2.HttpException
+import java.time.Instant
+import java.time.ZoneId
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -229,34 +231,66 @@ class PixivRepository @Inject constructor(
             val error = appResult.exceptionOrNull()
             if (error == null || error !is AppError.LoginRequired) return appResult
         }
-        return webSearchWorks(word, searchTarget, sort, page, hdThumb)
+        return webSearchWorks(word, searchTarget, sort, duration, hideAi, illustType, page, hdThumb)
     }
 
     /**
-     * 网页端匿名搜索。期间与 AI 过滤不支持（匿名请求被服务端忽略），人気順也不生效，
-     * 一律映射回新着；target/sort 由 app-api 枚举翻译成网页端参数，插件契约不变。
+     * 网页端匿名搜索。参数能力与 app-api 不同，插件契约不变、在这里翻译：
+     * - 类型：网页端的 `type`/`mode` 是死参数，只能换端点（漫画→manga，插画→illustrations）
+     * - 期间：`duration` 已失效，改用投稿日区间 `scd`/`ecd`
+     * - 隐藏 AI：`ai_type=1` 生效
+     * - 人気順：会员功能，匿名请求被静默忽略 → 回落新着（插件层已对未登录藏掉该项）
      * 匿名翻页钳在 lastPage，越界请求返回的数据与末页相同，这里直接判空让 UI 落到尽头。
      */
     private suspend fun webSearchWorks(
         word: String,
         searchTarget: String?,
         sort: String?,
+        duration: String?,
+        hideAi: Boolean,
+        illustType: String?,
         page: Int,
         hdThumb: Boolean,
     ): Result<SourcePage> = apiCall {
-        val response = api.searchArtworks(
-            word = word,
-            page = page + 1,
-            sMode = when (searchTarget) {
-                PixivSearchSource.TARGET_EXACT -> WEB_S_MODE_TAG_EXACT
-                PixivSearchSource.TARGET_TITLE -> WEB_S_MODE_TC
-                else -> WEB_S_MODE_TAG
-            },
-            order = if (sort == PixivSearchSource.SORT_OLD) WEB_ORDER_OLD else WEB_ORDER_NEW,
-        )
+        val sMode = when (searchTarget) {
+            PixivSearchSource.TARGET_EXACT -> WEB_S_MODE_TAG_EXACT
+            PixivSearchSource.TARGET_TITLE -> WEB_S_MODE_TC
+            else -> WEB_S_MODE_TAG
+        }
+        val order = if (sort == PixivSearchSource.SORT_OLD) WEB_ORDER_OLD else WEB_ORDER_NEW
+        val range = webDateRange(duration, runtime.now())
+        val response = when (illustType) {
+            SourceSearch.KIND_MANGA -> api.searchManga(
+                word = word,
+                page = page + 1,
+                sMode = sMode,
+                order = order,
+                startDate = range?.first,
+                endDate = range?.second,
+                aiType = if (hideAi) WEB_AI_TYPE_EXCLUDE else null,
+            )
+            SourceSearch.KIND_ILLUST -> api.searchIllustrations(
+                word = word,
+                page = page + 1,
+                sMode = sMode,
+                order = order,
+                startDate = range?.first,
+                endDate = range?.second,
+                aiType = if (hideAi) WEB_AI_TYPE_EXCLUDE else null,
+            )
+            else -> api.searchArtworks(
+                word = word,
+                page = page + 1,
+                sMode = sMode,
+                order = order,
+                startDate = range?.first,
+                endDate = range?.second,
+                aiType = if (hideAi) WEB_AI_TYPE_EXCLUDE else null,
+            )
+        }
         // 网页端信封 error=true 时 body 为空壳：不查标志会把失败静默渲染成"无结果"
         if (response.error) throw AppError.Unknown
-        val result = response.body.illustManga
+        val result = response.body.works
         val inRange = result.lastPage <= 0 || page + 1 <= result.lastPage
         SourcePage(
             items = if (inRange) result.data.mapNotNull { it.toWork(hdThumb) } else emptyList(),
@@ -812,10 +846,35 @@ data class PixivIllustState(
 private const val TAG = "PikuDiag"
 
 private const val WEB_S_MODE_TAG = "s_tag"
-private const val WEB_S_MODE_TAG_EXACT = "s_tag_exact"
+private const val WEB_S_MODE_TAG_EXACT = "s_tag_full"
 private const val WEB_S_MODE_TC = "s_tc"
 private const val WEB_ORDER_NEW = "date_d"
-private const val WEB_ORDER_OLD = "date_asc"
+private const val WEB_ORDER_OLD = "date"
+
+/** 网页端 ai_type：1 = 排除 AI 生成（0/缺省 = 不过滤，2 直接 400） */
+private const val WEB_AI_TYPE_EXCLUDE = "1"
+
+/**
+ * 检索期间 → 网页端投稿日区间（`scd`/`ecd`，yyyy-MM-dd，pixiv 用 JST 口径）。
+ * `duration` 参数服务端已忽略（2026-11 实测），区间才是生效的那个。
+ */
+internal fun webDateRange(
+    duration: String?,
+    nowMillis: Long,
+    zone: ZoneId = PIXIV_SEARCH_ZONE,
+): Pair<String, String>? {
+    val days = when (duration) {
+        PixivSearchSource.DURATION_DAY -> 0L
+        PixivSearchSource.DURATION_WEEK -> 6L
+        PixivSearchSource.DURATION_MONTH -> 29L
+        else -> return null
+    }
+    val today = Instant.ofEpochMilli(nowMillis).atZone(zone).toLocalDate()
+    return today.minusDays(days).toString() to today.toString()
+}
+
+/** pixiv 的投稿日按日本时间算，跨时区时不能拿本地时区凑 */
+private val PIXIV_SEARCH_ZONE: ZoneId = ZoneId.of("Asia/Tokyo")
 
 /**
  * search_ai_type 按 pixivpy 注释 0 = 过滤 AI，但实测该值不生效；作品搜索已改为按返回项

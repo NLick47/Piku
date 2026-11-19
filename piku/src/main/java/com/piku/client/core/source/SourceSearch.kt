@@ -79,6 +79,13 @@ interface SourceSearch {
      */
     fun hiddenFilterGroups(selected: Map<String, String>): Set<String> = emptySet()
 
+    /**
+     * 登录态下拿不到的**选项**（组 → 选项 id 集合）。整组还在、只是某个值服务端不认时用它：
+     * 未登录的 pixiv 人気順就是这种（会员功能，匿名请求被静默忽略，选了也只是拿到新着）。
+     * 藏掉后选中值回落该组默认项，筛选面板里不出现点了没反应的值。
+     */
+    fun hiddenFilterOptions(loggedIn: Boolean): Map<String, Set<String>> = emptyMap()
+
     fun hiddenTagFilterGroups(): Set<String> = emptySet()
 
     /** 用户检索；仅 supportsUsers 的源会被调到 */

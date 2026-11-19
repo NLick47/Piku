@@ -58,6 +58,13 @@ class PixivSearchSource @Inject constructor(
 
     override fun hiddenTagFilterGroups(): Set<String> = setOf(SourceSearch.FILTER_KIND, GROUP_TARGET)
 
+    /**
+     * 未登录走网页端匿名链路，人気順是会员功能、请求被服务端静默忽略（2026-11 实测），
+     * 留着只会让用户选了人気順却拿到新着——藏掉，登录后三项齐全。
+     */
+    override fun hiddenFilterOptions(loggedIn: Boolean): Map<String, Set<String>> =
+        if (loggedIn) emptyMap() else mapOf(GROUP_SORT to setOf(SORT_POPULAR))
+
     override suspend fun searchWorks(
         query: String,
         filters: Map<String, String>,

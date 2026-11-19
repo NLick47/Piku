@@ -16,6 +16,11 @@ object PixivApiConfig {
 
     const val RELATED_MAX_PAGES = 6
 
+    /** 网页端检索端点：类型筛选只能靠换端点（type/mode 参数服务端忽略） */
+    const val SEARCH_ARTWORKS = "ajax/search/artworks/"
+    const val SEARCH_ILLUST = "ajax/search/illustrations/"
+    const val SEARCH_MANGA = "ajax/search/manga/"
+
     val DEBUG_PROXY: String? = null
 }
 
@@ -182,10 +187,21 @@ data class PixivSearchResponse(
     val body: PixivSearchBody = PixivSearchBody(),
 )
 
+/**
+ * 网页端检索信封。三个检索端点各回各的桶名，参数完全一致：
+ * artworks → illustManga（插画/漫画/动图混排）、illustrations → illust（不含漫画）、
+ * manga → manga（只有漫画）。类型筛选在网页端只能靠换端点，`type`/`mode` 参数服务端直接忽略。
+ */
 @Serializable
 data class PixivSearchBody(
-    val illustManga: PixivSearchResult = PixivSearchResult(),
-)
+    val illustManga: PixivSearchResult? = null,
+    val illust: PixivSearchResult? = null,
+    val manga: PixivSearchResult? = null,
+) {
+    /** 取实际回来的那个桶；都没有（空壳信封）给空结果 */
+    val works: PixivSearchResult
+        get() = illustManga ?: illust ?: manga ?: PixivSearchResult()
+}
 
 @Serializable
 data class PixivSearchResult(
@@ -248,6 +264,18 @@ interface PixivApi {
         @Query("illust_ids[]") illustIds: List<String>,
     ): PixivRecommendResponse
 
+    /**
+     * 网页端检索。三个端点（[PixivApiConfig.SEARCH_ARTWORKS]/[PixivApiConfig.SEARCH_ILLUST]/
+     * [PixivApiConfig.SEARCH_MANGA]）参数同构、只是桶不同；`type`/`mode` 是死参数（服务端忽略），
+     * 类型必须靠换端点。
+     *
+     * 匿名实测（2026-11）：
+     * - `scd`/`ecd`（投稿日区间，yyyy-MM-dd）生效；旧参数 `duration` 已被忽略
+     * - `ai_type=1` 排除 AI 生效（`ai_type=0`/缺省 = 不过滤，`ai_type=2` 回 400）
+     * - `s_mode`：s_tag = 标签部分一致，s_tag_full = 标签完全一致（旧的 s_tag_exact 已失效），
+     *   s_tc = 标题/简介
+     * - `order`：date_d 新着、date 旧着；popular_d 是会员功能，匿名请求被静默忽略
+     */
     @GET("ajax/search/artworks/{word}")
     suspend fun searchArtworks(
         @Path("word") word: String,
@@ -255,8 +283,35 @@ interface PixivApi {
         @Query("p") page: Int,
         @Query("s_mode") sMode: String,
         @Query("order") order: String,
-        @Query("mode") mode: String = "all",
-        @Query("type") type: String = "all",
+        @Query("scd") startDate: String? = null,
+        @Query("ecd") endDate: String? = null,
+        @Query("ai_type") aiType: String? = null,
+    ): PixivSearchResponse
+
+    /** 插画（含动图）检索；漫画档换这里，见 [searchArtworks] 的参数说明 */
+    @GET("ajax/search/illustrations/{word}")
+    suspend fun searchIllustrations(
+        @Path("word") word: String,
+        @Query("word") wordQuery: String = word,
+        @Query("p") page: Int,
+        @Query("s_mode") sMode: String,
+        @Query("order") order: String,
+        @Query("scd") startDate: String? = null,
+        @Query("ecd") endDate: String? = null,
+        @Query("ai_type") aiType: String? = null,
+    ): PixivSearchResponse
+
+    /** 漫画检索：只回 illustType=1，见 [searchArtworks] 的参数说明 */
+    @GET("ajax/search/manga/{word}")
+    suspend fun searchManga(
+        @Path("word") word: String,
+        @Query("word") wordQuery: String = word,
+        @Query("p") page: Int,
+        @Query("s_mode") sMode: String,
+        @Query("order") order: String,
+        @Query("scd") startDate: String? = null,
+        @Query("ecd") endDate: String? = null,
+        @Query("ai_type") aiType: String? = null,
     ): PixivSearchResponse
 
     @GET("ranking.php")
