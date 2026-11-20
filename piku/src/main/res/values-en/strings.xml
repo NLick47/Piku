@@ -860,6 +860,15 @@
     <string name="ao3_sort_hits">Most viewed</string>
     <string name="ao3_sort_words">Longest</string>
     <string name="ao3_sort_updated">Recently updated</string>
+    <string name="menu_ao3_bookmark_sync">Bookmark sync</string>
+    <string name="ao3_bookmark_sync_title">Bookmark sync</string>
+    <string name="ao3_bookmark_sync_hint">When on, favoriting also saves an AO3 bookmark. Un-favoriting only removes bookmarks this app created; bookmarks already in your account (with notes and tags) are left alone. To backfill existing favorites, select all on the collection page and tap Sync.</string>
+    <string name="ao3_bookmark_sync_public">Sync as public bookmark</string>
+    <string name="ao3_bookmark_sync_private">Sync as private bookmark</string>
+    <string name="ao3_bookmark_sync_local">Local only</string>
+    <string name="ao3_bookmark_sync_short_public">Public</string>
+    <string name="ao3_bookmark_sync_short_private">Private</string>
+    <string name="ao3_bookmark_sync_short_local">Local</string>
     <string name="work_status_ongoing">Ongoing</string>
     <string name="work_status_complete">Completed</string>
     <string name="work_word_count">%1$s words</string>

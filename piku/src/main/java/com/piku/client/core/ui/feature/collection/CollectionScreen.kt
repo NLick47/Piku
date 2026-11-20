@@ -272,7 +272,8 @@ fun CollectionScreen(
             } ?: stringResource(R.string.collection_sync_short),
             onSync = viewModel::syncSelectedToAccount,
             showSync = WorkSource.PIXIV in state.poolSources ||
-                WorkSource.POIPIKU in state.poolSources,
+                WorkSource.POIPIKU in state.poolSources ||
+                WorkSource.AO3 in state.poolSources,
             onMove = { pickMode = FolderPickMode.MOVE },
             onRemove = viewModel::removeSelected,
             modifier = Modifier

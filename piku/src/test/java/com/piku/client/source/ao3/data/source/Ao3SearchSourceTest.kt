@@ -53,6 +53,23 @@ class Ao3SearchSourceTest {
         ): ResponseBody = error("检索不该走作品列表")
 
         override suspend fun getUserWorks(user: String, page: Int): ResponseBody = error("检索不该走用户作品")
+
+        override suspend fun getWorkBookmarks(id: Long): ResponseBody = error("检索不该走书签")
+
+        override suspend fun newBookmarkForm(id: Long): ResponseBody = error("检索不该走书签")
+
+        override suspend fun createBookmark(
+            id: Long,
+            token: String,
+            pseudId: Long,
+            privateFlag: String,
+        ): retrofit2.Response<ResponseBody> = error("检索不该建书签")
+
+        override suspend fun deleteBookmark(
+            id: Long,
+            token: String,
+            method: String,
+        ): retrofit2.Response<ResponseBody> = error("检索不该删书签")
     }
 
     private fun rows(vararg rows: Pair<String, Int>): String = buildString {

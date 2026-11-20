@@ -49,6 +49,23 @@ class Ao3ScopesPopularTest {
         ): ResponseBody = error("榜单不该走标签作品")
 
         override suspend fun getUserWorks(user: String, page: Int): ResponseBody = error("榜单不该走用户作品")
+
+        override suspend fun getWorkBookmarks(id: Long): ResponseBody = error("榜单不该走书签")
+
+        override suspend fun newBookmarkForm(id: Long): ResponseBody = error("榜单不该走书签")
+
+        override suspend fun createBookmark(
+            id: Long,
+            token: String,
+            pseudId: Long,
+            privateFlag: String,
+        ): retrofit2.Response<ResponseBody> = error("榜单不该建书签")
+
+        override suspend fun deleteBookmark(
+            id: Long,
+            token: String,
+            method: String,
+        ): retrofit2.Response<ResponseBody> = error("榜单不该删书签")
     }
 
     private fun rows(vararg rows: Pair<String, Int>): String = buildString {

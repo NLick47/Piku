@@ -860,6 +860,15 @@
     <string name="ao3_sort_hits">閲覧数順</string>
     <string name="ao3_sort_words">文字数順</string>
     <string name="ao3_sort_updated">更新順</string>
+    <string name="menu_ao3_bookmark_sync">ブックマーク同期</string>
+    <string name="ao3_bookmark_sync_title">ブックマーク同期</string>
+    <string name="ao3_bookmark_sync_hint">オンにすると、お気に入り登録時に AO3 のブックマークも作成します。解除時に削除するのはこのアプリが作成したものだけで、アカウントに元からあるブックマーク（メモやタグ付き）は残します。既存のお気に入りはコレクションページで全選択して「同期」をタップしてください。</string>
+    <string name="ao3_bookmark_sync_public">公開ブックマークとして同期</string>
+    <string name="ao3_bookmark_sync_private">非公開ブックマークとして同期</string>
+    <string name="ao3_bookmark_sync_local">ローカルのみ</string>
+    <string name="ao3_bookmark_sync_short_public">公開</string>
+    <string name="ao3_bookmark_sync_short_private">非公開</string>
+    <string name="ao3_bookmark_sync_short_local">ローカル</string>
     <string name="work_status_ongoing">連載中</string>
     <string name="work_status_complete">完結</string>
     <string name="work_word_count">%1$s 字</string>

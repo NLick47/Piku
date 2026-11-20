@@ -57,6 +57,23 @@ class Ao3ContentBackupTest {
 
         override suspend fun getUserWorks(user: String, page: Int): ResponseBody =
             error("备份不该走用户作品接口")
+
+        override suspend fun getWorkBookmarks(id: Long): ResponseBody = error("备份不该走书签")
+
+        override suspend fun newBookmarkForm(id: Long): ResponseBody = error("备份不该走书签")
+
+        override suspend fun createBookmark(
+            id: Long,
+            token: String,
+            pseudId: Long,
+            privateFlag: String,
+        ): retrofit2.Response<ResponseBody> = error("备份不该建书签")
+
+        override suspend fun deleteBookmark(
+            id: Long,
+            token: String,
+            method: String,
+        ): retrofit2.Response<ResponseBody> = error("备份不该删书签")
     }
 
     /** 全文页的两章：章节容器 + userstuff.module[role=article]，与站点结构一致 */

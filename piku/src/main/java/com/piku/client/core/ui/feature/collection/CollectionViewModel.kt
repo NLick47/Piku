@@ -7,9 +7,11 @@ import com.piku.client.R
 import com.piku.client.source.pixiv.data.remote.PixivAppConfig
 import com.piku.client.core.data.CollectionEdit
 import com.piku.client.core.data.FavoriteRepository
+import com.piku.client.source.ao3.data.repository.Ao3BookmarkRepository
 import com.piku.client.source.pixiv.data.repository.PixivRepository
 import com.piku.client.source.poipiku.data.repository.PoipikuBookmarkRepository
 import com.piku.client.core.storage.prefs.SettingsRepository
+import com.piku.client.core.model.Ao3BookmarkMirror
 import com.piku.client.core.model.AuthStatus
 import com.piku.client.core.model.FavoriteFolder
 import com.piku.client.core.model.FolderSort
@@ -143,6 +145,7 @@ class CollectionViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val pixivRepository: PixivRepository,
     private val poipikuBookmarkRepository: PoipikuBookmarkRepository,
+    private val ao3BookmarkRepository: Ao3BookmarkRepository,
     private val sourceAuthRegistry: SourceAuthRegistry,
     observeLibraryPoolUseCase: ObserveLibraryPoolUseCase,
 ) : ViewModel() {
@@ -538,7 +541,7 @@ class CollectionViewModel @Inject constructor(
      *
      * - pixiv 插画：走 pixiv 收藏，已同步的跳过，可见性取当前镜像档位；
      * - poipiku 作品：走账号书签，toggle 收敛会自动处理"本来就有"的情况；
-     * - 其它源（AO3）与 pixiv 小说不处理。
+     * - 其它（pixiv 小说）不处理。
      *
      * 某个源未登录时只把该源的作品计为失败，不阻塞另一个源。
      */
@@ -550,7 +553,8 @@ class CollectionViewModel @Inject constructor(
             it.source == WorkSource.PIXIV && it.kind != WorkKind.NOVEL
         }
         val poipikuSelected = selected.filter { it.source == WorkSource.POIPIKU }
-        if (pixivSelected.isEmpty() && poipikuSelected.isEmpty()) {
+        val ao3Selected = selected.filter { it.source == WorkSource.AO3 }
+        if (pixivSelected.isEmpty() && poipikuSelected.isEmpty() && ao3Selected.isEmpty()) {
             feedback.show(R.string.collection_sync_none)
             return
         }
@@ -562,7 +566,10 @@ class CollectionViewModel @Inject constructor(
                     ?.status?.first() == AuthStatus.LOGGED_IN
                 val poipikuLoggedIn = sourceAuthRegistry.byId(WorkSource.POIPIKU)
                     ?.status?.first() == AuthStatus.LOGGED_IN
+                val ao3LoggedIn = sourceAuthRegistry.byId(WorkSource.AO3)
+                    ?.status?.first() == AuthStatus.LOGGED_IN
                 val poipikuAccountKey = poipikuBookmarkRepository.currentAccountKey()
+                val ao3AccountKey = ao3BookmarkRepository.currentAccountKey()
                 val alreadySynced = if (pixivLoggedIn && pixivSelected.isNotEmpty()) {
                     favoriteRepository.cloudSyncedKeys(pixivSelected.map { it.key })
                 } else {
@@ -574,12 +581,15 @@ class CollectionViewModel @Inject constructor(
                     emptyList()
                 }
                 val poipikuTargets = if (poipikuLoggedIn) poipikuSelected else emptyList()
-                val targets = pixivTargets + poipikuTargets
+                val ao3Targets = if (ao3LoggedIn) ao3Selected else emptyList()
+                val targets = pixivTargets + poipikuTargets + ao3Targets
                 if (targets.isEmpty()) {
                     when {
                         !pixivLoggedIn && pixivSelected.isNotEmpty() ->
                             feedback.show(R.string.collection_sync_login_hint)
                         !poipikuLoggedIn && poipikuSelected.isNotEmpty() ->
+                            feedback.show(R.string.collection_sync_login_hint)
+                        !ao3LoggedIn && ao3Selected.isNotEmpty() ->
                             feedback.show(R.string.collection_sync_login_hint)
                         else -> feedback.show(R.string.collection_sync_none)
                     }
@@ -589,11 +599,14 @@ class CollectionViewModel @Inject constructor(
                 var failed = 0
                 if (!pixivLoggedIn) failed += pixivSelected.size
                 if (!poipikuLoggedIn) failed += poipikuSelected.size
+                if (!ao3LoggedIn) failed += ao3Selected.size
                 _uiState.update { it.copy(syncProgress = 0 to targets.size) }
                 val restrict = when (settingsRepository.pixivBookmarkMirror.value) {
                     PixivBookmarkMirror.PRIVATE -> PixivAppConfig.RESTRICT_PRIVATE
                     else -> PixivAppConfig.RESTRICT_PUBLIC
                 }
+                val ao3Private =
+                    settingsRepository.ao3BookmarkMirror.value != Ao3BookmarkMirror.PUBLIC
                 var synced = 0
                 for ((index, work) in targets.withIndex()) {
                     // 批量同步途中用户可能在别的页面取消了收藏；不要把它重新加上去
@@ -619,7 +632,16 @@ class CollectionViewModel @Inject constructor(
                                 }
                             }
 
-                            WorkSource.AO3 -> Unit
+                            WorkSource.AO3 -> {
+                                if (ao3BookmarkRepository.currentAccountKey() != ao3AccountKey) {
+                                    failed += 1
+                                } else {
+                                    ao3BookmarkRepository
+                                        .setBookmarked(work.id, desired = true, isPrivate = ao3Private)
+                                        .onSuccess { synced += 1 }
+                                        .onFailure { failed += 1 }
+                                }
+                            }
                         }
                     }
                     _uiState.update { it.copy(syncProgress = (index + 1) to targets.size) }

@@ -1,7 +1,11 @@
 package com.piku.client.source.ao3.data.remote
 
 import okhttp3.ResponseBody
+import retrofit2.Response
+import retrofit2.http.Field
+import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
+import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
 import retrofit2.http.QueryMap
@@ -108,4 +112,27 @@ interface Ao3Api {
         @Path("user", encoded = true) user: String,
         @Query("page") page: Int = 1,
     ): ResponseBody
+
+    @GET("works/{id}/bookmarks")
+    suspend fun getWorkBookmarks(@Path("id") id: Long): ResponseBody
+
+    @GET("works/{id}/bookmarks/new")
+    suspend fun newBookmarkForm(@Path("id") id: Long): ResponseBody
+
+    @FormUrlEncoded
+    @POST("works/{id}/bookmarks")
+    suspend fun createBookmark(
+        @Path("id") id: Long,
+        @Field("authenticity_token") token: String,
+        @Field("bookmark[pseud_id]") pseudId: Long,
+        @Field("bookmark[private]") privateFlag: String,
+    ): Response<ResponseBody>
+
+    @FormUrlEncoded
+    @POST("bookmarks/{id}")
+    suspend fun deleteBookmark(
+        @Path("id") id: Long,
+        @Field("authenticity_token") token: String,
+        @Field("_method") method: String = "delete",
+    ): Response<ResponseBody>
 }

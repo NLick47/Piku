@@ -30,6 +30,62 @@ class Ao3ApiRequestShapeTest {
         .build()
         .create(Ao3Api::class.java)
 
+    private class Captured(val method: String, val path: String, val body: String)
+
+    private fun serveForm(capture: AtomicReference<Captured>): HttpServer {
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/") { exchange ->
+            val body = exchange.requestBody.use { it.readBytes().decodeToString() }
+            capture.set(Captured(exchange.requestMethod, exchange.requestURI.path, body))
+            exchange.sendResponseHeaders(200, -1)
+            exchange.close()
+        }
+        server.start()
+        return server
+    }
+
+    @Test
+    fun bookmarkCreatePostsRailsFormFields() {
+        val captured = AtomicReference<Captured>()
+        val server = serveForm(captured)
+        try {
+            runBlocking {
+                api(server.address.port).createBookmark(
+                    id = 123,
+                    token = "tok",
+                    pseudId = 42,
+                    privateFlag = "1",
+                )
+            }
+            val sent = captured.get()
+            assertEquals("POST", sent.method)
+            assertEquals("/works/123/bookmarks", sent.path)
+            assertTrue("csrf 没发出去: ${sent.body}", sent.body.contains("authenticity_token=tok"))
+            assertTrue("pseud 没发出去: ${sent.body}", sent.body.contains("bookmark%5Bpseud_id%5D=42"))
+            assertTrue("可见性没发出去: ${sent.body}", sent.body.contains("bookmark%5Bprivate%5D=1"))
+        } finally {
+            server.stop(0)
+        }
+    }
+
+    @Test
+    fun bookmarkDeleteUsesMethodOverrideOnTheBookmarkPath() {
+        val captured = AtomicReference<Captured>()
+        val server = serveForm(captured)
+        try {
+            runBlocking {
+                api(server.address.port).deleteBookmark(id = 987654, token = "tok")
+            }
+            val sent = captured.get()
+            assertEquals("POST", sent.method)
+            assertEquals("/bookmarks/987654", sent.path)
+            assertTrue("没伪装成 DELETE: ${sent.body}", sent.body.contains("_method=delete"))
+            assertTrue("csrf 没发出去: ${sent.body}", sent.body.contains("authenticity_token=tok"))
+        } finally {
+            server.stop(0)
+        }
+    }
+
     @Test
     fun listingCarriesSortColumnAndDirection() {
         val captured = AtomicReference("")

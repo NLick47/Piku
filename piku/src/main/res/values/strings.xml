@@ -858,6 +858,15 @@
     <string name="ao3_sort_hits">浏览优先</string>
     <string name="ao3_sort_words">字数优先</string>
     <string name="ao3_sort_updated">最近更新</string>
+    <string name="menu_ao3_bookmark_sync">收藏同步</string>
+    <string name="ao3_bookmark_sync_title">收藏同步</string>
+    <string name="ao3_bookmark_sync_hint">开启后，收藏时一并写入 AO3 账号书签；取消收藏只删除本 App 建的那条，账号里原有的书签（含笔记与标签）不动。已有收藏可在收藏页全选后点「同步」补齐。</string>
+    <string name="ao3_bookmark_sync_public">同步为公开书签</string>
+    <string name="ao3_bookmark_sync_private">同步为私密书签</string>
+    <string name="ao3_bookmark_sync_local">仅本地</string>
+    <string name="ao3_bookmark_sync_short_public">公开</string>
+    <string name="ao3_bookmark_sync_short_private">私密</string>
+    <string name="ao3_bookmark_sync_short_local">仅本地</string>
     <string name="work_status_ongoing">连载中</string>
     <string name="work_status_complete">已完结</string>
     <string name="work_word_count">%1$s 字</string>
