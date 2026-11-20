@@ -1,15 +1,10 @@
 package com.piku.client.core.reader
 
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
@@ -24,29 +19,38 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
@@ -61,9 +65,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -89,26 +95,21 @@ import com.piku.client.core.ui.theme.ShadowSpot
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
-private val ReaderCardShape = RoundedCornerShape(22.dp)
-private val ReaderPillShape = RoundedCornerShape(18.dp)
 private val ReaderChipShape = RoundedCornerShape(999.dp)
+private val ReaderSheetShape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)
+private val ReaderHintShape = RoundedCornerShape(10.dp)
 
-/** 设置面板里标签列的宽度：英文 Brightness 也要放得下 */
 private val SettingLabelWidth = 68.dp
 private val SettingValueWidth = 40.dp
 
-/** 浮动控件的公共外观：投影 + 半透明底 + 细描边（与详情页浮动栏同一套做法） */
-private fun Modifier.readerCard(theme: NovelReaderTheme, shape: Shape = ReaderCardShape): Modifier =
-    this
-        .shadow(10.dp, shape, ambientColor = ShadowAmbient, spotColor = ShadowSpot)
-        .clip(shape)
-        .background(theme.card)
-        .border(BorderStroke(0.5.dp, theme.border), shape)
-
-/** 卡片自己吃掉点击：否则点在面板空白处会穿透到"点正文收起控制栏" */
 private fun Modifier.consumeTaps(): Modifier = pointerInput(Unit) { detectTapGestures { } }
 
-/** 顶栏：返回 + 标题，浮动胶囊 */
+private fun Modifier.readerEdge(theme: NovelReaderTheme, top: Boolean): Modifier = drawBehind {
+    val stroke = 0.5.dp.toPx()
+    val y = if (top) stroke / 2f else size.height - stroke / 2f
+    drawLine(theme.border, Offset(0f, y), Offset(size.width, y), stroke)
+}
+
 @Composable
 internal fun ReaderTopBar(
     title: String,
@@ -116,18 +117,19 @@ internal fun ReaderTopBar(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .statusBarsPadding()
-            .padding(horizontal = 12.dp, vertical = 8.dp)
-            .readerCard(theme, ReaderPillShape)
-            .padding(start = 2.dp, end = 14.dp, top = 2.dp, bottom = 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .background(theme.card.copy(alpha = 1f))
+            .readerEdge(theme, top = false)
+            .consumeTaps()
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
+            .height(46.dp),
     ) {
         PikuBackButton(
             onClick = onClose,
             dark = !theme.light,
+            modifier = Modifier.align(Alignment.CenterStart),
             contentDescription = stringResource(R.string.detail_fullscreen_close),
             tint = theme.fg,
         )
@@ -138,21 +140,26 @@ internal fun ReaderTopBar(
             fontWeight = FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .align(Alignment.Center)
+                .padding(horizontal = 52.dp),
         )
     }
 }
 
-/**
- * 底部控件：进度行 + 操作行，设置面板从卡片上方展开。
- * [onSettingsChange] 的第二参为是否落盘：拖动过程只更新内存（跟着手指实时预览），松手才写一次盘。
- */
 @Composable
 internal fun NovelReaderControls(
     settings: NovelReaderSettings,
     theme: NovelReaderTheme,
     scrollState: ScrollState,
-    panelOpen: Boolean,
+    chaptered: Boolean,
+    chapterIndex: Int,
+    chapterCount: Int,
+    chapterTitle: String,
+    onPrevChapter: () -> Unit,
+    onNextChapter: () -> Unit,
+    onOpenChapterList: () -> Unit,
     onTogglePanel: () -> Unit,
     onSettingsChange: (NovelReaderSettings, Boolean) -> Unit,
     onInteract: () -> Unit,
@@ -163,118 +170,195 @@ internal fun NovelReaderControls(
     showTranslation: Boolean,
     streamProgress: Int?,
     onToggleTranslation: () -> Unit,
-    cacheStatus: String? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .navigationBarsPadding()
-            .padding(horizontal = 12.dp)
-            .padding(bottom = 10.dp),
+            .background(theme.card.copy(alpha = 1f))
+            .readerEdge(theme, top = true)
+            .consumeTaps()
+            .navigationBarsPadding(),
     ) {
-        AnimatedVisibility(
-            visible = panelOpen,
-            enter = expandVertically(expandFrom = Alignment.Bottom) + fadeIn(tween(160)),
-            exit = shrinkVertically(shrinkTowards = Alignment.Bottom) + fadeOut(tween(120)),
-        ) {
-            ReaderSettingsPanel(
-                settings = settings,
+        ReaderProgressRow(
+            scrollState = scrollState,
+            theme = theme,
+            streamProgress = streamProgress,
+            onSeekStart = onSeekStart,
+            onSeekEnd = onSeekEnd,
+        )
+        if (chaptered) {
+            ChapterNavRow(
                 theme = theme,
-                onSettingsChange = onSettingsChange,
-                onInteract = onInteract,
-                cacheStatus = cacheStatus,
-                modifier = Modifier.padding(bottom = 8.dp),
+                index = chapterIndex,
+                count = chapterCount,
+                chapterTitle = chapterTitle,
+                onPrev = onPrevChapter,
+                onNext = onNextChapter,
+                onOpenList = onOpenChapterList,
             )
         }
-        Column(modifier = Modifier.fillMaxWidth().readerCard(theme).consumeTaps()) {
-            ReaderProgressRow(
-                scrollState = scrollState,
-                theme = theme,
-                streamProgress = streamProgress,
-                onSeekStart = onSeekStart,
-                onSeekEnd = onSeekEnd,
-            )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 8.dp, end = 4.dp, bottom = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                ReaderTranslateChip(
-                    translationAvailable = translationAvailable,
-                    translating = translating,
-                    showTranslation = showTranslation,
-                    theme = theme,
-                    onClick = onToggleTranslation,
-                )
-                Spacer(Modifier.weight(1f))
-                ReaderFontButton(
-                    label = "A−",
-                    enabled = settings.fontSize > NOVEL_FONT_MIN,
-                    theme = theme,
-                    onClick = {
-                        onSettingsChange(
-                            settings.copy(fontSize = settings.fontSize - 1f),
-                            true,
-                        )
-                        onInteract()
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 2.dp, bottom = 4.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (translationAvailable) {
+                ReaderToolButton(
+                    glyph = if (showTranslation) stringResource(R.string.detail_chip_original) else stringResource(R.string.detail_chip_translate),
+                    label = when {
+                        translating -> stringResource(R.string.novel_tool_translating)
+                        showTranslation -> stringResource(R.string.novel_tool_translated)
+                        else -> stringResource(R.string.novel_tool_original)
                     },
-                )
-                Text(
-                    text = settings.fontSize.roundToInt().toString(),
-                    color = theme.fg.copy(alpha = 0.85f),
-                    fontSize = 12.sp,
-                    maxLines = 1,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.width(22.dp),
-                )
-                ReaderFontButton(
-                    label = "A+",
-                    enabled = settings.fontSize < NOVEL_FONT_MAX,
+                    state = if (translating) ReaderToolState.BUSY else ReaderToolState.ON,
                     theme = theme,
                     onClick = {
-                        onSettingsChange(
-                            settings.copy(fontSize = settings.fontSize + 1f),
-                            true,
-                        )
-                        onInteract()
-                    },
-                )
-                Spacer(Modifier.weight(1f))
-                IconButton(
-                    onClick = {
-                        onSettingsChange(settings.copy(themeId = theme.toggleFamily().id), true)
-                        onInteract()
-                    },
-                    modifier = Modifier.size(40.dp),
-                ) {
-                    Icon(
-                        imageVector = if (theme.light) Icons.Filled.DarkMode else Icons.Filled.LightMode,
-                        contentDescription = stringResource(
-                            if (theme.light) R.string.detail_novel_theme_dark
-                            else R.string.detail_novel_theme_light,
-                        ),
-                        tint = theme.fg,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-                ReaderGlyphButton(
-                    label = "Aa",
-                    contentDescription = stringResource(R.string.detail_novel_settings),
-                    selected = panelOpen,
-                    theme = theme,
-                    onClick = {
-                        onTogglePanel()
+                        onToggleTranslation()
                         onInteract()
                     },
                 )
             }
+            ReaderToolButton(
+                icon = if (theme.light) Icons.Filled.DarkMode else Icons.Filled.LightMode,
+                label = if (theme.light) stringResource(R.string.novel_tool_night) else stringResource(R.string.novel_tool_day),
+                theme = theme,
+                onClick = {
+                    onSettingsChange(settings.copy(themeId = theme.toggleFamily().id), true)
+                    onInteract()
+                },
+            )
+            ReaderToolButton(
+                icon = Icons.Outlined.Tune,
+                label = stringResource(R.string.manga_tools_settings),
+                theme = theme,
+                onClick = {
+                    onTogglePanel()
+                    onInteract()
+                },
+            )
         }
     }
 }
 
-/** 进度行：可拖的滑块 + 已读百分比；流式翻译期间这一格改为翻译进度（同旧版中间信息位的位置语义） */
+private enum class ReaderToolState { OFF, ON, BUSY }
+
+@Composable
+private fun ReaderToolButton(
+    label: String,
+    theme: NovelReaderTheme,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    glyph: String? = null,
+    icon: ImageVector? = null,
+    state: ReaderToolState = ReaderToolState.OFF,
+) {
+    val color = when (state) {
+        ReaderToolState.ON -> theme.accent
+        ReaderToolState.BUSY -> theme.link
+        ReaderToolState.OFF -> theme.fg.copy(alpha = 0.62f)
+    }
+    Column(
+        modifier = modifier
+            .widthIn(min = 56.dp)
+            .height(48.dp)
+            .clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Box(modifier = Modifier.height(18.dp), contentAlignment = Alignment.Center) {
+            if (glyph != null) {
+                Text(
+                    text = glyph,
+                    color = color,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                )
+            } else if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = color,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+        Text(text = label, color = color, fontSize = 10.sp, maxLines = 1)
+        if (state == ReaderToolState.ON || state == ReaderToolState.BUSY) {
+            Box(
+                Modifier
+                    .padding(top = 2.dp)
+                    .size(width = 14.dp, height = 2.dp)
+                    .background(color),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ChapterNavRow(
+    theme: NovelReaderTheme,
+    index: Int,
+    count: Int,
+    chapterTitle: String,
+    onPrev: () -> Unit,
+    onNext: () -> Unit,
+    onOpenList: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .readerEdge(theme, top = false)
+            .padding(horizontal = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onPrev, enabled = index > 0, modifier = Modifier.size(44.dp)) {
+            Icon(
+                imageVector = Icons.Filled.ChevronLeft,
+                contentDescription = stringResource(R.string.reader_chapter_prev),
+                tint = if (index > 0) theme.fg.copy(alpha = 0.75f) else theme.fg.copy(alpha = 0.25f),
+                modifier = Modifier.size(22.dp),
+            )
+        }
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(onClick = onOpenList)
+                .padding(horizontal = 4.dp, vertical = 5.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                text = stringResource(R.string.reader_chapter_position, index + 1, count),
+                color = theme.fg,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+            )
+            if (chapterTitle.isNotBlank()) {
+                Text(
+                    text = chapterTitle,
+                    color = theme.fg.copy(alpha = 0.55f),
+                    fontSize = 10.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        IconButton(onClick = onNext, enabled = index < count - 1, modifier = Modifier.size(44.dp)) {
+            Icon(
+                imageVector = Icons.Filled.ChevronRight,
+                contentDescription = stringResource(R.string.reader_chapter_next),
+                tint = if (index < count - 1) theme.fg.copy(alpha = 0.75f) else theme.fg.copy(alpha = 0.25f),
+                modifier = Modifier.size(22.dp),
+            )
+        }
+    }
+}
+
 @Composable
 private fun ReaderProgressRow(
     scrollState: ScrollState,
@@ -284,7 +368,6 @@ private fun ReaderProgressRow(
     onSeekEnd: () -> Unit,
 ) {
     val max = scrollState.maxValue
-    // 滑块跟手用连续比例；读数用落盘/还原的同一口径，避免"显示 51%、存的是 50%"
     val progress = if (max <= 0) 1f else (scrollState.value.toFloat() / max).coerceIn(0f, 1f)
     val percent = readerProgressPercent(scrollState.value, max)
     val scope = rememberCoroutineScope()
@@ -309,7 +392,6 @@ private fun ReaderProgressRow(
             modifier = Modifier.weight(1f).height(24.dp),
         )
         Text(
-            // 钳到 99 避免"翻译 100%"闪现，终态由 Completed 事件收尾
             text = if (streamProgress != null) {
                 stringResource(R.string.detail_novel_translating_percent, minOf(streamProgress, 99))
             } else {
@@ -325,7 +407,7 @@ private fun ReaderProgressRow(
 }
 
 @Composable
-private fun ReaderSettingsPanel(
+internal fun ReaderSettingsPanel(
     settings: NovelReaderSettings,
     theme: NovelReaderTheme,
     onSettingsChange: (NovelReaderSettings, Boolean) -> Unit,
@@ -336,224 +418,60 @@ private fun ReaderSettingsPanel(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .readerCard(theme)
+            .clip(ReaderSheetShape)
+            .background(theme.card.copy(alpha = 1f))
             .consumeTaps()
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .navigationBarsPadding()
+            .heightIn(max = 560.dp)
+            .verticalScroll(rememberScrollState()),
     ) {
-        ReaderSettingSlider(
-            label = stringResource(R.string.detail_novel_font_size),
-            valueText = settings.fontSize.roundToInt().toString(),
-            fraction = readerFraction(settings.fontSize, NOVEL_FONT_MIN, NOVEL_FONT_MAX),
-            theme = theme,
-            onValueChange = { fraction ->
-                onSettingsChange(
-                    settings.copy(
-                        fontSize = readerStep(fraction, NOVEL_FONT_MIN, NOVEL_FONT_MAX, 1f),
-                    ),
-                    false,
-                )
-            },
-            onValueChangeFinished = { fraction ->
-                onSettingsChange(
-                    settings.copy(
-                        fontSize = readerStep(fraction, NOVEL_FONT_MIN, NOVEL_FONT_MAX, 1f),
-                    ),
-                    true,
-                )
-                onInteract()
-            },
-        )
-        ReaderSettingSlider(
-            label = stringResource(R.string.detail_novel_line_spacing),
-            valueText = lineHeightText(settings.lineHeight),
-            fraction = readerFraction(settings.lineHeight, NOVEL_LINE_HEIGHT_MIN, NOVEL_LINE_HEIGHT_MAX),
-            theme = theme,
-            onValueChange = { fraction ->
-                onSettingsChange(
-                    settings.copy(
-                        lineHeight = readerStep(
-                            fraction,
-                            NOVEL_LINE_HEIGHT_MIN,
-                            NOVEL_LINE_HEIGHT_MAX,
-                            0.1f,
-                        ),
-                    ),
-                    false,
-                )
-            },
-            onValueChangeFinished = { fraction ->
-                onSettingsChange(
-                    settings.copy(
-                        lineHeight = readerStep(
-                            fraction,
-                            NOVEL_LINE_HEIGHT_MIN,
-                            NOVEL_LINE_HEIGHT_MAX,
-                            0.1f,
-                        ),
-                    ),
-                    true,
-                )
-                onInteract()
-            },
-        )
-        ReaderSettingSlider(
-            label = stringResource(R.string.detail_novel_padding),
-            valueText = settings.contentPadding.roundToInt().toString(),
-            fraction = readerFraction(settings.contentPadding, NOVEL_PADDING_MIN, NOVEL_PADDING_MAX),
-            theme = theme,
-            onValueChange = { fraction ->
-                onSettingsChange(
-                    settings.copy(
-                        contentPadding = readerStep(fraction, NOVEL_PADDING_MIN, NOVEL_PADDING_MAX, 1f),
-                    ),
-                    false,
-                )
-            },
-            onValueChangeFinished = { fraction ->
-                onSettingsChange(
-                    settings.copy(
-                        contentPadding = readerStep(fraction, NOVEL_PADDING_MIN, NOVEL_PADDING_MAX, 1f),
-                    ),
-                    true,
-                )
-                onInteract()
-            },
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = stringResource(R.string.detail_novel_layout),
-                color = theme.fg.copy(alpha = 0.65f),
-                fontSize = 12.sp,
-                maxLines = 1,
-                modifier = Modifier.width(SettingLabelWidth),
-            )
-            ReaderChoiceChip(
-                text = stringResource(R.string.detail_novel_indent),
-                selected = settings.indentFirstLine,
-                theme = theme,
-                toggle = true,
-                onClick = {
-                    onSettingsChange(settings.copy(indentFirstLine = !settings.indentFirstLine), true)
-                    onInteract()
-                },
-            )
-            Spacer(Modifier.width(4.dp))
-            ReaderChoiceChip(
-                text = stringResource(R.string.detail_novel_paragraph_gap),
-                selected = settings.paragraphGap,
-                theme = theme,
-                toggle = true,
-                onClick = {
-                    onSettingsChange(settings.copy(paragraphGap = !settings.paragraphGap), true)
-                    onInteract()
-                },
-            )
-            Spacer(Modifier.width(4.dp))
-            ReaderChoiceChip(
-                text = stringResource(R.string.detail_novel_justify),
-                selected = settings.justify,
-                theme = theme,
-                toggle = true,
-                onClick = {
-                    onSettingsChange(settings.copy(justify = !settings.justify), true)
-                    onInteract()
-                },
-            )
-        }
-        val followSystem = settings.brightness < 0f
-        ReaderSettingSlider(
-            label = stringResource(R.string.detail_novel_brightness),
-            valueText = if (followSystem) "" else "${(settings.brightness * 100).roundToInt()}%",
-            fraction = if (followSystem) 1f else settings.brightness,
-            theme = theme,
-            onValueChange = { fraction ->
-                onSettingsChange(
-                    settings.copy(
-                        brightness = readerStep(fraction, NOVEL_BRIGHTNESS_MIN, 1f, 0.05f),
-                    ),
-                    false,
-                )
-            },
-            onValueChangeFinished = { fraction ->
-                onSettingsChange(
-                    settings.copy(
-                        brightness = readerStep(fraction, NOVEL_BRIGHTNESS_MIN, 1f, 0.05f),
-                    ),
-                    true,
-                )
-                onInteract()
-            },
-            trailing = {
-                ReaderChoiceChip(
-                    text = stringResource(R.string.detail_novel_brightness_auto),
-                    selected = followSystem,
-                    theme = theme,
-                    onClick = {
-                        onSettingsChange(
-                            settings.copy(brightness = NovelReaderSettings.BRIGHTNESS_SYSTEM),
-                            true,
-                        )
-                        onInteract()
-                    },
-                )
-            },
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = stringResource(R.string.detail_novel_font),
-                color = theme.fg.copy(alpha = 0.65f),
-                fontSize = 12.sp,
-                maxLines = 1,
-                modifier = Modifier.width(SettingLabelWidth),
-            )
-            ReaderChoiceChip(
-                text = stringResource(R.string.detail_novel_font_sans),
-                selected = !settings.serif,
-                theme = theme,
-                onClick = {
-                    onSettingsChange(settings.copy(serif = false), true)
-                    onInteract()
-                },
-            )
-            Spacer(Modifier.width(6.dp))
-            ReaderChoiceChip(
-                text = stringResource(R.string.detail_novel_font_serif),
-                selected = settings.serif,
-                theme = theme,
-                onClick = {
-                    onSettingsChange(settings.copy(serif = true), true)
-                    onInteract()
-                },
-            )
-            Spacer(Modifier.weight(1f))
-            ReaderChoiceChip(
-                text = stringResource(R.string.detail_novel_keep_screen_on),
-                selected = settings.keepScreenOn,
-                theme = theme,
-                onClick = {
-                    onSettingsChange(settings.copy(keepScreenOn = !settings.keepScreenOn), true)
-                    onInteract()
-                },
-            )
-        }
-        Row(
+        Box(
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(30.dp)
+                    .height(4.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(theme.fg.copy(alpha = 0.3f)),
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 6.dp),
+            horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = stringResource(R.string.detail_novel_background),
-                color = theme.fg.copy(alpha = 0.65f),
-                fontSize = 12.sp,
-                maxLines = 1,
-                modifier = Modifier.width(SettingLabelWidth),
+            ReaderFontButton(
+                label = "A−",
+                enabled = settings.fontSize > NOVEL_FONT_MIN,
+                theme = theme,
+                onClick = {
+                    onSettingsChange(settings.copy(fontSize = settings.fontSize - 1f), true)
+                    onInteract()
+                },
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = settings.fontSize.roundToInt().toString(),
+                color = theme.fg,
+                fontSize = 14.sp,
+                maxLines = 1,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.width(28.dp),
+            )
+            ReaderFontButton(
+                label = "A+",
+                enabled = settings.fontSize < NOVEL_FONT_MAX,
+                theme = theme,
+                onClick = {
+                    onSettingsChange(settings.copy(fontSize = settings.fontSize + 1f), true)
+                    onInteract()
+                },
+            )
+        }
+        ReaderHairline(theme)
+        ReaderLabelRow(label = stringResource(R.string.detail_novel_background), theme = theme) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 NovelReaderTheme.entries.forEach { entry ->
                     ReaderThemeDot(
                         entry = entry,
@@ -566,9 +484,165 @@ private fun ReaderSettingsPanel(
                 }
             }
         }
+        ReaderSettingSlider(
+            label = stringResource(R.string.detail_novel_brightness),
+            valueText = if (settings.brightness < 0f) "" else "${(settings.brightness * 100).roundToInt()}%",
+            fraction = if (settings.brightness < 0f) 1f else settings.brightness,
+            theme = theme,
+            onValueChange = { fraction ->
+                onSettingsChange(
+                    settings.copy(brightness = readerStep(fraction, NOVEL_BRIGHTNESS_MIN, 1f, 0.05f)),
+                    false,
+                )
+            },
+            onValueChangeFinished = { fraction ->
+                onSettingsChange(
+                    settings.copy(brightness = readerStep(fraction, NOVEL_BRIGHTNESS_MIN, 1f, 0.05f)),
+                    true,
+                )
+                onInteract()
+            },
+            modifier = Modifier.padding(horizontal = 18.dp),
+        )
+        ReaderHairline(theme)
+        ReaderLabelRow(label = stringResource(R.string.detail_novel_layout), theme = theme) {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                ReaderChoiceChip(
+                    text = stringResource(R.string.novel_indent),
+                    selected = settings.indentFirstLine,
+                    theme = theme,
+                    toggle = true,
+                    onClick = {
+                        onSettingsChange(settings.copy(indentFirstLine = !settings.indentFirstLine), true)
+                        onInteract()
+                    },
+                )
+                ReaderChoiceChip(
+                    text = stringResource(R.string.novel_paragraph_gap),
+                    selected = settings.paragraphGap,
+                    theme = theme,
+                    toggle = true,
+                    onClick = {
+                        onSettingsChange(settings.copy(paragraphGap = !settings.paragraphGap), true)
+                        onInteract()
+                    },
+                )
+                ReaderChoiceChip(
+                    text = stringResource(R.string.novel_justify),
+                    selected = settings.justify,
+                    theme = theme,
+                    toggle = true,
+                    onClick = {
+                        onSettingsChange(settings.copy(justify = !settings.justify), true)
+                        onInteract()
+                    },
+                )
+            }
+        }
+        ReaderLabelRow(label = stringResource(R.string.detail_novel_font), theme = theme) {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                ReaderChoiceChip(
+                    text = stringResource(R.string.detail_novel_font_sans),
+                    selected = !settings.serif,
+                    theme = theme,
+                    onClick = {
+                        onSettingsChange(settings.copy(serif = false), true)
+                        onInteract()
+                    },
+                )
+                ReaderChoiceChip(
+                    text = stringResource(R.string.detail_novel_font_serif),
+                    selected = settings.serif,
+                    theme = theme,
+                    onClick = {
+                        onSettingsChange(settings.copy(serif = true), true)
+                        onInteract()
+                    },
+                )
+            }
+        }
+        ReaderSettingSlider(
+            label = stringResource(R.string.detail_novel_line_spacing),
+            valueText = lineHeightText(settings.lineHeight),
+            fraction = readerFraction(settings.lineHeight, NOVEL_LINE_HEIGHT_MIN, NOVEL_LINE_HEIGHT_MAX),
+            theme = theme,
+            onValueChange = { fraction ->
+                onSettingsChange(
+                    settings.copy(
+                        lineHeight = readerStep(fraction, NOVEL_LINE_HEIGHT_MIN, NOVEL_LINE_HEIGHT_MAX, 0.1f),
+                    ),
+                    false,
+                )
+            },
+            onValueChangeFinished = { fraction ->
+                onSettingsChange(
+                    settings.copy(
+                        lineHeight = readerStep(fraction, NOVEL_LINE_HEIGHT_MIN, NOVEL_LINE_HEIGHT_MAX, 0.1f),
+                    ),
+                    true,
+                )
+                onInteract()
+            },
+            modifier = Modifier.padding(horizontal = 18.dp),
+        )
+        ReaderSettingSlider(
+            label = stringResource(R.string.detail_novel_padding),
+            valueText = settings.contentPadding.roundToInt().toString(),
+            fraction = readerFraction(settings.contentPadding, NOVEL_PADDING_MIN, NOVEL_PADDING_MAX),
+            theme = theme,
+            onValueChange = { fraction ->
+                onSettingsChange(
+                    settings.copy(contentPadding = readerStep(fraction, NOVEL_PADDING_MIN, NOVEL_PADDING_MAX, 1f)),
+                    false,
+                )
+            },
+            onValueChangeFinished = { fraction ->
+                onSettingsChange(
+                    settings.copy(contentPadding = readerStep(fraction, NOVEL_PADDING_MIN, NOVEL_PADDING_MAX, 1f)),
+                    true,
+                )
+                onInteract()
+            },
+            modifier = Modifier.padding(horizontal = 18.dp),
+        )
+        ReaderHairline(theme)
+        ReaderToggleRow(
+            label = stringResource(R.string.detail_novel_brightness_auto),
+            on = settings.brightness < 0f,
+            theme = theme,
+            onClick = {
+                onSettingsChange(
+                    settings.copy(
+                        brightness = if (settings.brightness < 0f) 1f else NovelReaderSettings.BRIGHTNESS_SYSTEM,
+                    ),
+                    true,
+                )
+                onInteract()
+            },
+        )
+        ReaderToggleRow(
+            label = stringResource(R.string.detail_novel_keep_screen_on),
+            on = settings.keepScreenOn,
+            theme = theme,
+            onClick = {
+                onSettingsChange(settings.copy(keepScreenOn = !settings.keepScreenOn), true)
+                onInteract()
+            },
+        )
+        ReaderToggleRow(
+            label = stringResource(R.string.novel_volume_scroll),
+            on = settings.volumeScroll,
+            theme = theme,
+            onClick = {
+                onSettingsChange(settings.copy(volumeScroll = !settings.volumeScroll), true)
+                onInteract()
+            },
+        )
         if (cacheStatus != null) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 18.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
@@ -576,8 +650,8 @@ private fun ReaderSettingsPanel(
                     color = theme.fg.copy(alpha = 0.5f),
                     fontSize = 12.sp,
                     maxLines = 1,
+                    modifier = Modifier.weight(1f),
                 )
-                Spacer(Modifier.weight(1f))
                 Text(
                     text = cacheStatus,
                     color = theme.fg.copy(alpha = 0.8f),
@@ -589,7 +663,103 @@ private fun ReaderSettingsPanel(
     }
 }
 
-/** 带标签与数值的一行滑块 */
+@Composable
+private fun ReaderHairline(theme: NovelReaderTheme) {
+    Box(
+        Modifier
+            .padding(horizontal = 18.dp)
+            .fillMaxWidth()
+            .height(0.5.dp)
+            .background(theme.border),
+    )
+}
+
+@Composable
+private fun ReaderLabelRow(
+    label: String,
+    theme: NovelReaderTheme,
+    content: @Composable () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 18.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            color = theme.fg.copy(alpha = 0.6f),
+            fontSize = 12.sp,
+            maxLines = 1,
+            modifier = Modifier.width(SettingLabelWidth),
+        )
+        content()
+    }
+}
+
+@Composable
+internal fun NovelResumeHint(
+    theme: NovelReaderTheme,
+    percent: Int,
+    onRestart: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .clip(ReaderHintShape)
+            .background(theme.card.copy(alpha = 1f))
+            .border(BorderStroke(0.5.dp, theme.border), ReaderHintShape)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = stringResource(R.string.novel_resume, percent),
+            color = theme.fg,
+            fontSize = 12.sp,
+        )
+        Spacer(Modifier.weight(1f))
+        Text(
+            text = stringResource(R.string.manga_restart),
+            color = theme.link,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier
+                .clickable(onClick = onRestart)
+                .padding(start = 12.dp),
+        )
+    }
+}
+
+@Composable
+private fun ReaderToggleRow(
+    label: String,
+    on: Boolean,
+    theme: NovelReaderTheme,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(44.dp)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 18.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            color = theme.fg,
+            fontSize = 12.sp,
+            maxLines = 1,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = stringResource(if (on) R.string.reader_switch_on else R.string.reader_switch_off),
+            color = if (on) theme.accent else theme.fg.copy(alpha = 0.55f),
+            fontSize = 12.sp,
+        )
+    }
+}
+
 @Composable
 private fun ReaderSettingSlider(
     label: String,
@@ -599,15 +769,14 @@ private fun ReaderSettingSlider(
     onValueChange: (Float) -> Unit,
     onValueChangeFinished: (Float) -> Unit,
     modifier: Modifier = Modifier,
-    trailing: (@Composable () -> Unit)? = null,
 ) {
     Row(
-        modifier = modifier.fillMaxWidth().height(38.dp),
+        modifier = modifier.fillMaxWidth().height(40.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = label,
-            color = theme.fg.copy(alpha = 0.65f),
+            color = theme.fg.copy(alpha = 0.6f),
             fontSize = 12.sp,
             maxLines = 1,
             modifier = Modifier.width(SettingLabelWidth),
@@ -628,17 +797,9 @@ private fun ReaderSettingSlider(
             textAlign = TextAlign.End,
             modifier = Modifier.width(SettingValueWidth),
         )
-        if (trailing != null) {
-            Spacer(Modifier.width(6.dp))
-            trailing()
-        }
     }
 }
 
-/**
- * 通用滑块：拖动实时回调，松手回调终值。
- * 视觉只有 4dp 轨道 + 圆形滑块，配色由每档阅读主题给，与正文底同族。
- */
 @Composable
 internal fun ReaderSlider(
     fraction: Float,
@@ -652,7 +813,6 @@ internal fun ReaderSlider(
 ) {
     var dragging by remember { mutableStateOf(false) }
     val density = LocalDensity.current
-    // pointerInput 的 key 是 Unit，块里必须读"最新"的回调：否则一次拖动会一直用首次组合捕获的设置
     val currentOnValueChange by rememberUpdatedState(onValueChange)
     val currentOnValueChangeFinished by rememberUpdatedState(onValueChangeFinished)
     val currentOnDragStart by rememberUpdatedState(onDragStart)
@@ -730,7 +890,6 @@ internal fun ReaderSlider(
     }
 }
 
-/** 胶囊选项（字体、常亮、跟随系统）：选中态是强调色淡底 */
 @Composable
 private fun ReaderChoiceChip(
     text: String,
@@ -758,7 +917,6 @@ private fun ReaderChoiceChip(
     )
 }
 
-/** 背景色点：选中档位描一圈强调色 */
 @Composable
 private fun ReaderThemeDot(
     entry: NovelReaderTheme,
@@ -795,7 +953,6 @@ private fun ReaderThemeDot(
     }
 }
 
-/** 字号档位按钮（A− / A+）：命中区按 Material 最小触控尺寸 */
 @Composable
 private fun ReaderFontButton(
     label: String,
@@ -807,155 +964,16 @@ private fun ReaderFontButton(
     Text(
         text = label,
         color = theme.fg.copy(alpha = alpha),
-        fontSize = 16.sp,
+        fontSize = 18.sp,
+        fontWeight = FontWeight.Medium,
         modifier = Modifier
             .clip(RoundedCornerShape(10.dp))
             .minimumInteractiveComponentSize()
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 6.dp),
+            .padding(horizontal = 10.dp, vertical = 4.dp),
     )
 }
 
-/** 文字按钮（Aa）：选中时同"译"胶囊一样给个强调色淡底 */
-@Composable
-private fun ReaderGlyphButton(
-    label: String,
-    contentDescription: String,
-    selected: Boolean,
-    theme: NovelReaderTheme,
-    onClick: () -> Unit,
-) {
-    Text(
-        text = label,
-        color = if (selected) theme.accent else theme.fg.copy(alpha = 0.75f),
-        fontSize = 14.sp,
-        fontWeight = FontWeight.Medium,
-        modifier = Modifier
-            .clip(ReaderChipShape)
-            .background(if (selected) theme.accent.copy(alpha = 0.15f) else Color.Transparent)
-            .minimumInteractiveComponentSize()
-            .clickable(onClick = onClick)
-            .semantics { this.contentDescription = contentDescription }
-            .padding(horizontal = 10.dp, vertical = 6.dp),
-    )
-}
-
-/** 底部栏译/原切换chip：无正文不渲染；非流式的在途翻译禁点防重复扣额度；
- *  流式期间保持"原/译"短标签（翻译进度在进度行展示），点按仅切换原/译展示。
- *  一律可点：正文流与元数据翻译互不相干，元数据在途不应禁掉这个入口。 */
-@Composable
-private fun ReaderTranslateChip(
-    translationAvailable: Boolean,
-    translating: Boolean,
-    showTranslation: Boolean,
-    theme: NovelReaderTheme,
-    onClick: () -> Unit,
-) {
-    if (!translationAvailable) return
-    Text(
-        // 流式期间进度显示在进度行，这里保持"原/译"短标签只表模式与点击去向
-        text = when {
-            translating && !showTranslation -> stringResource(R.string.detail_translating)
-            showTranslation -> stringResource(R.string.detail_chip_original)
-            else -> stringResource(R.string.detail_chip_translate)
-        },
-        color = if (showTranslation) theme.link else theme.fg.copy(alpha = 0.7f),
-        fontSize = 14.sp,
-        modifier = Modifier
-            .clip(ReaderChipShape)
-            .background(
-                if (showTranslation) theme.link.copy(alpha = 0.15f)
-                else Color.Transparent,
-            )
-            // 一律可点：正文流与元数据翻译互不相干，元数据在途不应禁掉这个入口
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-    )
-}
-
-/** 设置值 → 滑块 0~1（上下限相同时固定在起点，避免除零） */
-internal fun readerFraction(value: Float, min: Float, max: Float): Float =
-    if (max <= min) 0f else ((value - min) / (max - min)).coerceIn(0f, 1f)
-
-/** 滑块 0~1 → 设置值：按 [step] 取整档，避免字号出现 16.37 这种小数 */
-internal fun readerStep(fraction: Float, min: Float, max: Float, step: Float): Float {
-    if (max <= min || step <= 0f) return min
-    val count = ((max - min) / step).roundToInt().coerceAtLeast(1)
-    val index = (fraction.coerceIn(0f, 1f) * count).roundToInt()
-    return min + (max - min) * index / count
-}
-
-/** 行距读数固定一位小数，不走系统小数分隔符 */
-private fun lineHeightText(lineHeight: Float): String {
-    val tenths = (lineHeight * 10).roundToInt()
-    return "${tenths / 10}.${tenths % 10}"
-}
-
-/**
- * 章节导航条：上一章 / 第 x/y 章 · 章名（点开目录）/ 下一章。
- * 只在分章作品显示，压在阅读控制栏上方。
- */
-@Composable
-internal fun NovelChapterBar(
-    theme: NovelReaderTheme,
-    index: Int,
-    count: Int,
-    chapterTitle: String,
-    onPrev: () -> Unit,
-    onNext: () -> Unit,
-    onOpenList: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp)
-            .readerCard(theme, ReaderPillShape)
-            .padding(horizontal = 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        IconButton(onClick = onPrev, enabled = index > 0) {
-            Icon(
-                imageVector = Icons.Filled.ChevronLeft,
-                contentDescription = stringResource(R.string.reader_chapter_prev),
-                tint = if (index > 0) theme.fg else theme.fg.copy(alpha = 0.3f),
-            )
-        }
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .clip(ReaderChipShape)
-                .clickable(onClick = onOpenList)
-                .padding(vertical = 6.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text(
-                text = stringResource(R.string.reader_chapter_position, index + 1, count),
-                color = theme.fg,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-            )
-            if (chapterTitle.isNotBlank()) {
-                Text(
-                    text = chapterTitle,
-                    color = theme.fg.copy(alpha = 0.6f),
-                    fontSize = 11.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-        IconButton(onClick = onNext, enabled = index < count - 1) {
-            Icon(
-                imageVector = Icons.Filled.ChevronRight,
-                contentDescription = stringResource(R.string.reader_chapter_next),
-                tint = if (index < count - 1) theme.fg else theme.fg.copy(alpha = 0.3f),
-            )
-        }
-    }
-}
-
-/** 章节目录：当前章高亮，点一条跳过去 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun NovelChapterSheet(
@@ -1049,7 +1067,6 @@ internal fun NovelChapterSheet(
     }
 }
 
-/** 目录行标题：AO3 的章标题形如「Chapter 1: 名字」，行首已有「第 N 章」，去掉重复前缀 */
 internal fun readerChapterLabel(title: String, fallback: String = ""): String {
     val trimmed = title.trim()
     if (trimmed.isEmpty()) return fallback
@@ -1060,4 +1077,19 @@ internal fun readerChapterLabel(title: String, fallback: String = ""): String {
         }
     }
     return trimmed
+}
+
+internal fun readerFraction(value: Float, min: Float, max: Float): Float =
+    if (max <= min) 0f else ((value - min) / (max - min)).coerceIn(0f, 1f)
+
+internal fun readerStep(fraction: Float, min: Float, max: Float, step: Float): Float {
+    if (max <= min || step <= 0f) return min
+    val count = ((max - min) / step).roundToInt().coerceAtLeast(1)
+    val index = (fraction.coerceIn(0f, 1f) * count).roundToInt()
+    return min + (max - min) * index / count
+}
+
+private fun lineHeightText(lineHeight: Float): String {
+    val tenths = (lineHeight * 10).roundToInt()
+    return "${tenths / 10}.${tenths % 10}"
 }

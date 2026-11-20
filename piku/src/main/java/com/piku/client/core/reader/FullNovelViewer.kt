@@ -12,26 +12,21 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -54,9 +49,15 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.ColorPainter
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
@@ -112,7 +113,9 @@ internal const val NOVEL_PADDING_MIN = SettingsRepository.NOVEL_PADDING_MIN
 internal const val NOVEL_PADDING_MAX = SettingsRepository.NOVEL_PADDING_MAX
 internal const val NOVEL_BRIGHTNESS_MIN = SettingsRepository.NOVEL_BRIGHTNESS_MIN
 
-private const val AUTO_HIDE_DELAY_MS = 2500L
+private const val AUTO_HIDE_DELAY_MS = 2600L
+private const val CONTROLS_FADE_OUT_MS = 220
+private const val RESUME_HINT_MS = 3200L
 private val POIPIKU_WORK_REGEX = Regex("""https?://poipiku\.com/(\d+)/(\d+)\.html""")
 
 /** 内嵌图占位比例（宽/高）：pixiv 插画多是竖图，先按 2:3 估位，出真尺寸后按真比例校正 */
@@ -127,12 +130,9 @@ private val IMAGE_FAILED_HEIGHT = 120.dp
 private const val IMAGE_MAX_IN_FLIGHT = 2
 
 private const val CONTENT_MAX_CHARS = 34
-/** 正文顶部/底部留白（浮动栏之外），也让正文在栏下淡出 */
-private val CONTENT_PADDING_TOP = 84.dp
-private val CONTENT_PADDING_BOTTOM = 112.dp
-/** 章节导航条的高度：底衬渐变要跟着变高，正文才会在栏下淡出 */
-private val CHAPTER_BAR_HEIGHT = 56.dp
-/** 章末「下一章」按钮的圆角 */
+private val CONTENT_PADDING_TOP = 32.dp
+private val CONTENT_PADDING_BOTTOM = 40.dp
+private val CONTENT_PADDING_BOTTOM_CHAPTERED = 144.dp
 private val ReaderFooterShape = androidx.compose.foundation.shape.RoundedCornerShape(999.dp)
 
 /**
@@ -210,6 +210,8 @@ fun FullNovelViewer(
     // 待恢复的章内百分比：首放/目录跳转时非零，定位完清零
     var chapterStartPercent by remember { mutableIntStateOf(if (chaptered) startPosition.localPercent else 0) }
     var chapterSheetOpen by remember { mutableStateOf(false) }
+    var resumeVisible by remember { mutableStateOf(initialPercent > 0) }
+    val focusRequester = remember { FocusRequester() }
     val bodyText = if (chaptered) {
         chapterTranslations.getOrNull(chapterIndex) ?: chapters[chapterIndex].text
     } else {
@@ -269,7 +271,22 @@ fun FullNovelViewer(
         return if (chaptered) NovelChapterProgress.overall(chapterLengths, chapterIndex, local) else local
     }
 
-    LaunchedEffect(Unit) { refreshAutoHide() }
+    fun scrollByScreens(screens: Int) {
+        if (viewportPx <= 0) return
+        val max = scrollState.maxValue
+        if (max <= 0) return
+        scope.launch {
+            scrollState.animateScrollTo((scrollState.value + screens * viewportPx).coerceIn(0, max))
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        refreshAutoHide()
+        if (resumeVisible) {
+            delay(RESUME_HINT_MS)
+            resumeVisible = false
+        }
+    }
 
     // 恢复进度：内容可滚动后按保存的百分比跳转。百分比与字号/内容长度无关，
     // 字号调整后也不会错位；maxValue 为 0（不足一屏）则保持顶部。
@@ -385,18 +402,39 @@ fun FullNovelViewer(
 
     val bg = theme.bg
     val fg = theme.fg
-    val statusBarInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val navBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
+    LaunchedEffect(settings.volumeScroll, panelOpen, chapterSheetOpen) {
+        if (settings.volumeScroll && !panelOpen && !chapterSheetOpen) {
+            runCatching { focusRequester.requestFocus() }
+        }
+    }
+
+    BackHandler {
+        when {
+            panelOpen -> togglePanel()
+            chapterSheetOpen -> chapterSheetOpen = false
+            else -> onClose()
+        }
+    }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .onSizeChanged { viewportPx = it.height }
             .background(bg)
+            .focusRequester(focusRequester)
+            .focusable()
+            .onKeyEvent { event ->
+                if (!settings.volumeScroll) return@onKeyEvent false
+                if (event.key != Key.VolumeDown && event.key != Key.VolumeUp) return@onKeyEvent false
+                if (event.type == KeyEventType.KeyUp) {
+                    scrollByScreens(if (event.key == Key.VolumeDown) 1 else -1)
+                }
+                true
+            }
             .pointerInput(Unit) {
                 detectTapGestures(onTap = {
                     when {
-                        // 面板开着：先收面板，控制栏留着
                         panelOpen -> {
                             panelOpen = false
                             refreshAutoHide()
@@ -410,8 +448,6 @@ fun FullNovelViewer(
                 })
             },
     ) {
-        BackHandler(onBack = onClose)
-
         SelectionContainer(
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -419,7 +455,10 @@ fun FullNovelViewer(
                 .fillMaxWidth()
                 .verticalScroll(scrollState)
                 .padding(horizontal = settings.contentPadding.dp)
-                .padding(top = CONTENT_PADDING_TOP, bottom = CONTENT_PADDING_BOTTOM)
+                .padding(
+                    top = CONTENT_PADDING_TOP,
+                    bottom = if (chaptered) CONTENT_PADDING_BOTTOM_CHAPTERED else CONTENT_PADDING_BOTTOM,
+                )
                 .statusBarsPadding()
                 .navigationBarsPadding(),
         ) {
@@ -523,56 +562,59 @@ fun FullNovelViewer(
             }
         }
 
-        // 控制栏：底衬是与正文同色的渐变，正文滚到栏下淡出而不是从栏边漏出来
         AnimatedVisibility(
             visible = controlsVisible,
-            enter = fadeIn(tween(200)) + slideInVertically(tween(220)) { -it / 3 },
-            exit = fadeOut(tween(140)) + slideOutVertically(tween(160)) { -it / 3 },
+            enter = fadeIn(tween(150)),
+            exit = fadeOut(tween(CONTROLS_FADE_OUT_MS)),
             modifier = Modifier.align(Alignment.TopCenter),
         ) {
-            Box(Modifier.fillMaxWidth()) {
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(statusBarInset + CONTENT_PADDING_TOP)
-                        .background(scrimTop(bg)),
-                )
-                ReaderTopBar(title = title, theme = theme, onClose = onClose)
-            }
+            ReaderTopBar(
+                title = title,
+                theme = theme,
+                onClose = onClose,
+                modifier = Modifier.blockInputsWhen(!controlsVisible),
+            )
         }
 
-        AnimatedVisibility(
-            visible = controlsVisible,
-            enter = fadeIn(tween(200)) + slideInVertically(tween(220)) { it / 3 },
-            exit = fadeOut(tween(140)) + slideOutVertically(tween(160)) { it / 3 },
-            modifier = Modifier.align(Alignment.BottomCenter),
+        Box(
+            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+            contentAlignment = Alignment.BottomCenter,
         ) {
-            Box(Modifier.fillMaxWidth()) {
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.BottomCenter)
-                        .height(navBarInset + CONTENT_PADDING_BOTTOM + if (chaptered) CHAPTER_BAR_HEIGHT else 0.dp)
-                        .background(scrimBottom(bg)),
-                )
-                Column(modifier = Modifier.align(Alignment.BottomCenter)) {
-                    if (chaptered) {
-                        NovelChapterBar(
-                            theme = theme,
-                            index = chapterIndex,
-                            count = chapters.size,
-                            chapterTitle = readerChapterLabel(chapters[chapterIndex].title),
-                            onPrev = { goToChapter(chapterIndex - 1) },
-                            onNext = { goToChapter(chapterIndex + 1) },
-                            onOpenList = { chapterSheetOpen = true },
-                            modifier = Modifier.padding(bottom = 8.dp),
-                        )
-                    }
+            Column(modifier = Modifier.fillMaxWidth()) {
+                AnimatedVisibility(
+                    visible = resumeVisible && controlsVisible && !panelOpen,
+                    enter = fadeIn(tween(150)),
+                    exit = fadeOut(tween(CONTROLS_FADE_OUT_MS)),
+                ) {
+                    NovelResumeHint(
+                        theme = theme,
+                        percent = initialPercent,
+                        onRestart = {
+                            resumeVisible = false
+                            position.percent = 0
+                            scope.launch { scrollState.scrollTo(0) }
+                        },
+                        modifier = Modifier
+                            .padding(horizontal = 14.dp)
+                            .padding(bottom = 8.dp),
+                    )
+                }
+                AnimatedVisibility(
+                    visible = controlsVisible && !panelOpen,
+                    enter = fadeIn(tween(150)),
+                    exit = fadeOut(tween(CONTROLS_FADE_OUT_MS)),
+                ) {
                     NovelReaderControls(
                         settings = settings,
                         theme = theme,
                         scrollState = scrollState,
-                        panelOpen = panelOpen,
+                        chaptered = chaptered,
+                        chapterIndex = chapterIndex,
+                        chapterCount = chapters.size,
+                        chapterTitle = if (chaptered) readerChapterLabel(chapters[chapterIndex].title) else "",
+                        onPrevChapter = { goToChapter(chapterIndex - 1) },
+                        onNextChapter = { goToChapter(chapterIndex + 1) },
+                        onOpenChapterList = { chapterSheetOpen = true },
                         onTogglePanel = { togglePanel() },
                         onSettingsChange = onSettingsChange,
                         onInteract = { refreshAutoHide() },
@@ -583,9 +625,23 @@ fun FullNovelViewer(
                         showTranslation = showTranslation,
                         streamProgress = novelStreamProgress,
                         onToggleTranslation = onToggleTranslation,
-                        cacheStatus = cacheStatus,
+                        modifier = Modifier.blockInputsWhen(!controlsVisible || panelOpen),
                     )
                 }
+            }
+            AnimatedVisibility(
+                visible = panelOpen && controlsVisible,
+                enter = fadeIn(tween(150)),
+                exit = fadeOut(tween(CONTROLS_FADE_OUT_MS)),
+            ) {
+                ReaderSettingsPanel(
+                    settings = settings,
+                    theme = theme,
+                    onSettingsChange = onSettingsChange,
+                    onInteract = { refreshAutoHide() },
+                    cacheStatus = cacheStatus,
+                    modifier = Modifier.blockInputsWhen(!panelOpen || !controlsVisible),
+                )
             }
         }
 
@@ -605,19 +661,6 @@ fun FullNovelViewer(
 private class ReaderPosition {
     var percent: Int = 0
 }
-
-/** 正文底色向透明收边：栏下正文淡出，栏外不留硬边 */
-private fun scrimTop(bg: Color): Brush = Brush.verticalGradient(
-    0f to bg,
-    0.62f to bg,
-    1f to bg.copy(alpha = 0f),
-)
-
-private fun scrimBottom(bg: Color): Brush = Brush.verticalGradient(
-    0f to bg.copy(alpha = 0f),
-    0.38f to bg,
-    1f to bg,
-)
 
 /** 阅读亮度（0~1）；负值 = 跟随系统 */
 internal fun applyWindowBrightness(window: Window, brightness: Float) {

@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Piku 小说阅读器 · 界面设计稿 v3</title>
+<style>
+:root{
+  --page:#F5F3F0; --card:#FFFFFF; --border:#E8E4DE;
+  --fg:#2C2C2C; --fg2:#A09A92;
+  --muted:#9A948C;
+  --blue:#4FC3F7;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--fg);
+  font:14px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+.wrap{max-width:1240px;margin:0 auto;padding:36px 24px 72px}
+h1{font-size:20px;font-weight:500;margin:0 0 6px}
+h2{font-size:15px;font-weight:500;margin:0 0 12px}
+h3{font-size:13px;font-weight:500;margin:0 0 4px}
+p{margin:0 0 10px}
+.lede{color:var(--fg2);font-size:13px;max-width:880px}
+.tag{display:inline-block;font-size:12px;color:#7D746A;border:0.5px solid var(--border);
+  border-radius:4px;padding:2px 8px;background:var(--card);margin:0 6px 8px 0}
+section{margin-top:34px}
+.panel{background:var(--card);border:0.5px solid var(--border);border-radius:12px;padding:18px 20px}
+.spec{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:16px}
+.rules{margin:0;padding-left:18px;font-size:13px;color:var(--fg)}
+.rules li{margin-bottom:7px}
+.rules code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:#7D746A}
+.note{font-size:12px;color:var(--fg2);border-left:2px solid var(--border);padding-left:10px;margin-top:12px}
+.screens{display:grid;grid-template-columns:repeat(auto-fit,minmax(258px,1fr));gap:22px}
+.screen-card{min-width:0}
+.screen-head{margin-bottom:9px}
+.screen-head p{font-size:12px;color:var(--fg2);margin:0;line-height:1.5}
+.phone{position:relative;width:100%;max-width:262px;aspect-ratio:1/2.05;border-radius:16px;
+  overflow:hidden;border:1px solid #DDD8D0;touch-action:none}
+/* 正文示意 */
+.art{position:absolute;inset:0;background:var(--artbg);color:var(--artfg);padding:11% 7.5%;
+  font-family:"Hiragino Mincho ProN","Yu Mincho",serif}
+.art .line{height:0.5em;background:currentColor;opacity:.6;margin-bottom:0.95em;border-radius:1px}
+.art .line.ind{width:92%;margin-left:8%}
+.art .line.short{width:55%}
+.art .line.gap{margin-top:1.3em}
+.art .ttl{font-size:1.25em;font-weight:600;margin-bottom:1em}
+.art .imgh{height:16%;margin:0.6em 0 1.1em;background:currentColor;opacity:.12;border-radius:2px}
+.pno{position:absolute;right:12px;bottom:10px;font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums;z-index:0}
+/* 主题变量：米黄 */
+.theme-paper{--artbg:#F3EEDA;--artfg:#2E2A23;
+  --glass:rgba(252,248,239,.86);--solid:#FCF8EF;
+  --fgc:#2E2A23;--fgc2:rgba(46,42,35,.62);--fgc3:rgba(46,42,35,.45);
+  --acc:#B08A52;--linkc:#5F584F;--hair:rgba(46,42,35,.12);--track:rgba(46,42,35,.16)}
+/* 主题变量：墨色 */
+.theme-ink{--artbg:#141312;--artfg:#D6D0C4;
+  --glass:rgba(41,39,36,.88);--solid:#292724;
+  --fgc:#D6D0C4;--fgc2:rgba(214,208,196,.62);--fgc3:rgba(214,208,196,.45);
+  --acc:#E0E0E0;--linkc:#E0E0E0;--hair:rgba(232,228,222,.14);--track:rgba(232,228,222,.2)}
+/* chrome：全宽薄 overlay，毛玻璃 */
+.glass{position:absolute;left:0;right:0;background:var(--glass);
+  -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
+.top{top:0;border-bottom:0.5px solid var(--hair)}
+.top .bar{height:46px;margin-top:20px;display:grid;grid-template-columns:46px 1fr auto;align-items:center;padding:0 4px}
+.top .ttl{text-align:center;font-size:13px;color:var(--fgc);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  padding:0 4px;font-weight:400}
+.top .right{display:flex;align-items:center;padding-right:2px}
+.ibtn{width:42px;height:44px;border:0;background:transparent;color:var(--fgc);
+  display:flex;align-items:center;justify-content:center;flex:0 0 auto;padding:0}
+.ibtn.mute{color:var(--fgc3)}
+.tchip{font-size:12px;color:var(--linkc);border-radius:999px;
+  padding:3px 10px;border:0.5px solid var(--hair);position:relative}
+.tchip::before{content:"";position:absolute;inset:0;background:var(--linkc);opacity:.1;border-radius:999px}
+.tchip span{position:relative}
+.bottom{bottom:0;border-top:0.5px solid var(--hair);padding-bottom:10px}
+.seek{display:flex;align-items:center;gap:10px;padding:10px 16px 2px}
+.track{flex:1;height:3px;border-radius:2px;background:var(--track);position:relative}
+.track i{position:absolute;top:0;left:0;height:3px;border-radius:2px;background:var(--acc)}
+.track em{position:absolute;top:-4px;width:11px;height:11px;border-radius:50%;background:var(--acc);display:block;
+  box-shadow:0 1px 3px rgba(0,0,0,.18)}
+.pnum{font-size:12px;color:var(--fgc2);min-width:44px;text-align:right;font-variant-numeric:tabular-nums}
+.tools{display:flex;align-items:center;justify-content:center;gap:6px;padding:2px 10px 0}
+.tool{min-width:56px;height:46px;border:0;background:transparent;color:var(--fgc2);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  font-size:10px;position:relative;padding:0 2px}
+.tool .lab{font-size:10px;white-space:nowrap}
+.tool.on{color:var(--acc)}
+.tool.busy{color:var(--blue)}
+.chrow{display:flex;align-items:center;border-bottom:0.5px solid var(--hair)}
+.chbtn{border:0;background:transparent;color:var(--fgc2);width:44px;height:44px;flex:0 0 auto;
+  display:flex;align-items:center;justify-content:center}
+.chmid{flex:1;text-align:center;padding:5px 4px;min-width:0}
+.chmid b{display:block;font-size:13px;color:var(--fgc);font-weight:500;font-variant-numeric:tabular-nums}
+.chmid span{display:block;font-size:10px;color:var(--fgc2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* 设置面板：底部滑出、实底、顶部圆角，替换底栏 */
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--solid);
+  border-radius:18px 18px 0 0;box-shadow:0 -6px 24px rgba(0,0,0,.10);padding-bottom:10px}
+.grab{width:30px;height:4px;border-radius:2px;background:var(--fgc3);opacity:.5;margin:8px auto 0}
+.sheet .scrim-tint{position:absolute;left:0;right:0;bottom:100%;height:44px;pointer-events:none}
+.srow{display:flex;align-items:center;gap:10px;min-height:44px;padding:0 18px;white-space:nowrap}
+.srow .slab{font-size:12px;color:var(--fgc2);width:56px;flex:0 0 auto}
+.srow .dest{color:var(--fgc2);font-size:12px;font-variant-numeric:tabular-nums}
+.srow .spacer{flex:1}
+.hairline{height:0.5px;background:var(--hair);margin:0 18px}
+.fontrow{display:flex;align-items:center;justify-content:center;gap:0;padding:10px 0 4px}
+.fontbtn{min-width:64px;height:44px;border:0;background:transparent;color:var(--fgc);
+  display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:500}
+.fontbtn small{font-size:15px;color:var(--fgc2);font-weight:400;margin:0 2px}
+.fontbtn.cur{font-size:19px;font-weight:600;color:var(--acc)}
+.sizedest{font-size:12px;color:var(--fgc2);min-width:26px;text-align:center;font-variant-numeric:tabular-nums}
+.themedots{display:flex;gap:14px;align-items:center;flex:1;justify-content:center;padding:6px 0}
+.tdot{width:26px;height:26px;border-radius:50%;border:0.5px solid var(--hair);position:relative}
+.tdot.on::after{content:"";position:absolute;inset:-5px;border:1.5px solid var(--acc);border-radius:50%}
+.sliderline{display:flex;align-items:center;gap:12px;flex:1}
+.slider{flex:1;height:3px;background:var(--track);border-radius:2px;position:relative}
+.slider i{position:absolute;left:0;top:0;height:3px;background:var(--acc);border-radius:2px}
+.slider em{position:absolute;top:-4px;width:11px;height:11px;border-radius:50%;background:var(--acc)}
+.seg{display:flex;align-items:center;justify-content:flex-end;gap:0;flex:1}
+.seg span{font-size:12px;padding:6px 12px;color:var(--fgc2);border-radius:999px;position:relative}
+.seg span.on{color:var(--acc);position:relative}
+.seg span.on::before{content:"";position:absolute;inset:0;background:var(--acc);opacity:.14;border-radius:999px}
+.seg span.on b{position:relative;font-weight:500}
+.seg .sep{width:1px;height:12px;background:var(--fgc3);opacity:.4;margin:0 4px}
+/* 提示 */
+.toast{position:absolute;left:14px;right:14px;bottom:132px;border-radius:10px;padding:10px 14px;
+  font-size:12px;display:flex;align-items:center;gap:8px;color:var(--fgc);
+  background:var(--glass);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
+  border:0.5px solid var(--hair);box-shadow:0 4px 16px rgba(0,0,0,.08)}
+.toast .spacer{flex:1}
+.toast b{font-weight:500;font-variant-numeric:tabular-nums}
+.toast .act{color:var(--linkc);font-size:12px;font-weight:500}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:10px 12px;border-bottom:0.5px solid var(--border);vertical-align:top}
+th{font-weight:500;color:var(--fg2);font-size:12px}
+td:last-child{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:#7D746A}
+footer{margin-top:34px;font-size:12px;color:var(--fg2);border-top:0.5px solid var(--border);padding-top:14px}
+@media(max-width:720px){.spec{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>小说阅读器 · 界面设计稿 v3</h1>
+  <p class="lede">方向改为经典读书 App 的阅读态（微信读书 / Kindle）：全宽毛玻璃薄 overlay、居中标题、工具收敛、设置面板参考微信读书的 Aa 面板。chrome 用半透明毛玻璃让正文从栏下隐约透出，底色仍跟随五档阅读主题——亮底三档配亮玻璃、暗底两档配暗玻璃。交互从简：整屏点按唤/收菜单（滚动形态不设侧边热区，切章走目录与章末入口），音量键滚一屏为可选开关。</p>
+  <div>
+    <span class="tag">设计稿 / 待确认</span>
+    <span class="tag">毛玻璃 overlay</span>
+    <span class="tag">跟随阅读主题</span>
+    <span class="tag">整屏点按唤出菜单</span>
+  </div>
+
+  <section>
+    <div class="spec">
+      <div class="panel">
+        <h2>结构变化</h2>
+        <ul class="rules">
+          <li><b>顶栏</b>：只有返回 + <b>居中书名</b>，毛玻璃 + 0.5dp 发丝线，右侧对称留空。译/原、Aa 都不上顶栏。</li>
+          <li><b>底栏</b>：进度滑块行保留；分章作品在滑块下加<b>章节行</b>：「‹ · 第 x/y 章（点开目录）· ›」纯图标翻章，中间章名点击开目录；工具行只剩 译/原（可用时） / 夜间 / 设置。单篇无章节行。</li>
+          <li><b>A−/A+、字体、背景色块全进设置面板</b>：底栏不再有一排字号 chips。夜间切换保留在底栏一键直达，面板里的背景色块是完整五档。</li>
+          <li><b>设置面板</b>：底部滑出、<b>实底 + 18dp 顶圆角</b>（面板要长时间盯着调，实底不透字），替换底栏。首行 A− [字号] A+ 大按钮，随后背景色块、亮度、排版开关、字体、行距/边距滑块、常亮/音量键。</li>
+          <li><b>浮动胶囊全部废弃</b>：无阴影卡片、无渐变 scrim，正文上下留白回归常规。</li>
+        </ul>
+        <p class="note">毛玻璃与实底的分工：顶/底栏薄、正文持续从下面滚过，半透明+blur 有「内容还在」的连续感；设置面板是遮挡性 UI，实底避免文字透出来干扰滑块。</p>
+      </div>
+      <div class="panel">
+        <h2>配色：仍全部取自 NovelReaderTheme</h2>
+        <table style="font-size:12px">
+          <tr><th>阅读主题</th><th>正文底</th><th>玻璃 / 面板</th><th>文字</th><th>强调</th></tr>
+          <tr><td>米黄 Paper</td><td>#F3EEDA</td><td>#FCF8EF @86% + blur</td><td>#2E2A23</td><td>#B08A52</td></tr>
+          <tr><td>纸白 Plain</td><td>#F7F5F1</td><td>#FFFFFF @86% + blur</td><td>#2B2926</td><td>#B08A52</td></tr>
+          <tr><td>护眼 Green</td><td>#D3E7D4</td><td>#F4FBF4 @86% + blur</td><td>#22301E</td><td>#4F7D57</td></tr>
+          <tr><td>墨色 Ink</td><td>#141312</td><td>#292724 @88% + blur</td><td>#D6D0C4</td><td>#E0E0E0</td></tr>
+          <tr><td>纯黑 Black</td><td>#000000</td><td>#292724 @88% + blur</td><td>#B5B1A9</td><td>#E0E0E0</td></tr>
+        </table>
+        <p class="note">不新增色值：玻璃 = card 加透明度，发丝线 = fg 派生（track 同款手法），译/原激活色用 link。状态栏图标明暗随 theme.light。</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>界面状态 · 米黄 Paper（亮玻璃）</h2>
+    <div class="screens theme-paper" id="screens"></div>
+  </section>
+
+  <section>
+    <h2>界面状态 · 墨色 Ink（暗玻璃）</h2>
+    <div class="screens theme-ink" id="screens-dark"></div>
+  </section>
+
+  <section>
+    <h2>改动映射</h2>
+    <div class="panel">
+      <table>
+        <tr><th>现状</th><th>本稿</th></tr>
+        <tr><td>浮动玻璃胶囊顶/底栏 + 渐变 scrim</td><td>全宽毛玻璃薄栏 + 发丝线，无卡片无 scrim</td></tr>
+        <tr><td>顶栏标题靠左、右侧堆着译/原与 Aa</td><td>标题居中、右侧留空，顶栏只有返回+标题</td></tr>
+        <tr><td>A−/A+/日夜/Aa 一排零碎 chips</td><td>底栏工具行（目录/上下章/译原/夜间/设置）；A−/A+ 进面板首行大按钮</td></tr>
+        <tr><td>设置面板挤在一张浮卡里、无分组</td><td>底部滑出实底圆角面板：字号大按钮 → 背景色块 → 亮度 → 排版开关 → 字体 → 行距/边距 → 常亮/音量键</td></tr>
+        <tr><td>章节条是浮动胶囊</td><td>废弃；分章底栏内嵌章节行（上一章 / 第x/y章点开目录 / 下一章），章末「下一章」入口保留</td></tr>
+        <tr><td>正文上下留白 84/112dp 配 scrim</td><td>常规留白（约 24dp），无 scrim</td></tr>
+        <tr><td>交互：任意点按开关控制栏</td><td>维持整屏点按=菜单，不设侧边热区；切章=底栏章节行 + 目录 + 章末入口；新增音量键滚一屏（默认关）、续读提示、淡出期拦截误触</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <footer>设计稿仅表达外观与交互状态，不含实现。SelectionContainer 长按选中复制、内嵌图放行泵、ReaderSlider 行为保持原样；确认后再落 Kotlin。</footer>
+</div>
+
+<script>
+const I = {
+  back:'<path d="M10 3L5 8l5 5"/>',
+  chevL:'<path d="M10 3L5 8l5 5"/>',
+  chevR:'<path d="M6 3l5 5-5 5"/>',
+  list:'<path d="M5 4h9M5 8h9M5 12h9M2.5 4h.01M2.5 8h.01M2.5 12h.01"/>',
+  chevU:'<path d="M4 10l4-5 4 5"/>',
+  chevD:'<path d="M4 6l4 5 4-5"/>',
+  moon:'<path d="M13 9.5A5.5 5.5 0 1 1 6.5 3a4.4 4.4 0 0 0 6.5 6.5z"/>',
+  sun:'<circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M13 3l-1 1M4 12l-1 1"/>',
+  touch:'<circle cx="8" cy="8" r="2.2"/><path d="M8 2.5v1.6M8 11.9v1.6M2.5 8h1.6M11.9 8h1.6"/>',
+  close:'<path d="M3 3l10 10M13 3L3 13"/>',
+  tune:'<path d="M2 5h3.5M10.5 5H14M2 11h3.5M10.5 11H14"/><circle cx="8" cy="5" r="1.5"/><circle cx="8" cy="11" r="1.5"/>',
+};
+const svg = (n,s=17) => '<svg viewBox="0 0 16 16" width="'+s+'" height="'+s+'" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">'+I[n]+'</svg>';
+
+/* 正文示意：宋体、首行缩进、段间距、一张内嵌图占位 */
+const art = () =>
+  '<div class="ttl">第二话　遠雷</div>'+
+  '<div class="line ind"></div><div class="line"></div><div class="line short"></div>'+
+  '<div class="imgh"></div>'+
+  '<div class="line ind gap"></div><div class="line"></div><div class="line short"></div>'+
+  '<div class="line ind gap"></div><div class="line"></div><div class="line"></div><div class="line short"></div>'+
+  '<span class="pno">42%</span>';
+
+const topbar = () => '<div class="glass top"><div class="bar">'+
+  '<button class="ibtn">'+svg('back')+'</button>'+
+  '<span class="ttl">少年時代 夏の終わりの章</span>'+
+  '<span style="width:46px;flex:0 0 auto"></span>'+
+  '</div></div>';
+
+const tool = (icon,lab,state='') => '<button class="tool '+state+'">'+icon+'<span class="lab">'+lab+'</span></button>';
+
+const tools = (opts={}) => {
+  let t = '';
+  if (opts.translate) {
+    t += tool('<span style="font-size:13px;font-weight:500;line-height:16px">译</span>','原文','on');
+  }
+  t += tool(svg(opts.night?I.sun:I.moon,16), opts.night?'日间':'夜间');
+  t += tool(svg('tune',16),'设置');
+  return '<div class="tools">'+t+'</div>';
+};
+
+const chrow = (opts={}) => '<div class="chrow">'+
+  '<button class="chbtn" title="上一章">'+svg('chevL',18)+'</button>'+
+  '<div class="chmid"><b>第 '+(opts.chIdx||3)+' / '+(opts.chTotal||24)+' 章</b><span>'+(opts.chName||'遠雷と夏祭りの夜')+'</span></div>'+
+  '<button class="chbtn" title="下一章">'+svg('chevR',18)+'</button>'+
+  '</div>';
+
+const bottombar = (opts={}) => '<div class="glass bottom">'+
+  '<div class="seek"><div class="track"><i style="width:'+(opts.pct||42)+'%"></i>'+
+  '<em style="left:calc('+(opts.pct||42)+'% - 5px)"></em></div>'+
+  '<span class="pnum">'+(opts.pnum||'42%')+'</span></div>'+
+  (opts.chaptered?chrow(opts):'')+
+  tools(opts)+'</div>';
+
+const sheet = (opts={}) => '<div class="sheet"><div class="grab"></div>'+
+  '<div class="fontrow">'+
+    '<button class="fontbtn">A<small>−</small></button>'+
+    '<span class="sizedest">16</span>'+
+    '<button class="fontbtn">A<small>+</small></button>'+
+  '</div>'+
+  '<div class="hairline"></div>'+
+  '<div class="srow"><span class="slab">背景</span><div class="themedots">'+
+    '<span class="tdot on" style="background:#F3EEDA"></span><span class="tdot" style="background:#F7F5F1"></span>'+
+    '<span class="tdot" style="background:#D3E7D4"></span><span class="tdot" style="background:#141312"></span>'+
+    '<span class="tdot" style="background:#000"></span></div></div>'+
+  '<div class="srow"><span class="slab">亮度</span><div class="sliderline"><div class="slider"><i style="width:72%"></i><em style="left:calc(72% - 5px)"></em></div></div><span class="dest">72%</span></div>'+
+  '<div class="hairline"></div>'+
+  '<div class="srow"><span class="slab">排版</span><div class="seg">'+
+    '<span class="on"><b>缩进</b></span><span>段距</span><span>对齐</span></div></div>'+
+  '<div class="srow"><span class="slab">字体</span><div class="seg"><span class="on"><b>黑体</b></span><span>宋体</span></div></div>'+
+  '<div class="srow"><span class="slab">行距</span><div class="sliderline"><div class="slider"><i style="width:36%"></i><em style="left:calc(36% - 5px)"></em></div></div><span class="dest">1.7</span></div>'+
+  '<div class="srow"><span class="slab">边距</span><div class="sliderline"><div class="slider"><i style="width:42%"></i><em style="left:calc(42% - 5px)"></em></div></div><span class="dest">20</span></div>'+
+  '<div class="hairline"></div>'+
+  '<div class="srow"><span class="slab">更多</span><span style="flex:1;font-size:12px;color:var(--fgc)">跟随系统亮度</span><span class="dest">开</span></div>'+
+  '<div class="srow"><span style="flex:1;font-size:12px;color:var(--fgc);padding-left:66px">屏幕常亮</span><span class="dest">关</span></div>'+
+  '<div class="srow"><span style="flex:1;font-size:12px;color:var(--fgc);padding-left:66px">音量键滚动</span><span class="dest">关</span></div>'+
+  '</div>';
+
+const resume = () => '<div class="toast">'+
+  '<span>从 <b>42%</b> 继续</span><span class="spacer"></span><span class="act">从头开始</span></div>';
+
+const states = [
+  { t:'01 沉浸态 · 控件收起', d:'正文与系统栏全部沉浸（现状保留）。点按唤出控件，2.6 秒自动收。',
+    h:'<div class="art">'+art()+'</div>' },
+  { t:'02 常态 · 单篇', d:'顶栏只有返回与居中标题；译/原（有译文时）、夜间、设置都在底栏。A−/A+ 收进面板。',
+    h:'<div class="art">'+art()+'</div>'+topbar()+bottombar({translate:true}) },
+  { t:'03 常态 · 分章', d:'底栏两层：章节行「‹ · 第 3/24 章（点开目录）· ›」图标翻章 + 工具行（译原/夜间/设置）；不再有单独章节条。',
+    h:'<div class="art">'+art()+'</div>'+topbar()+bottombar({chaptered:true,pct:18,pnum:'18%'}) },
+  { t:'04 设置面板', d:'底栏「设置」打开：底部滑出、实底顶圆角、替换底栏：A−/A+ 大按钮 → 背景五档色块 → 亮度 → 排版开关 → 字体 → 行距/边距 → 更多开关。',
+    h:'<div class="art">'+art()+'</div>'+topbar()+sheet() },
+  { t:'05 续读提示', d:'有进度重进时毛玻璃圆角轻提示，3.2s 自动消失；「从头开始」回顶部，不打断阅读。',
+    h:'<div class="art">'+art()+'</div>'+topbar()+resume()+bottombar({translate:true}) },
+];
+
+const statesDark = [
+  { t:'06 常态 · 分章 · Ink', d:'同一结构换暗玻璃：#292724 @88% + blur，文字 #D6D0C4，强调 #E0E0E0。',
+    h:'<div class="art">'+art()+'</div>'+topbar()+bottombar({chaptered:true,pct:18,pnum:'18%'}) },
+  { t:'07 设置面板 · Ink', d:'暗实底面板同构。',
+    h:'<div class="art">'+art()+'</div>'+topbar()+sheet() },
+];
+
+document.getElementById('screens').innerHTML = states.map(s =>
+  '<div class="screen-card"><div class="screen-head"><h3>'+s.t+'</h3><p>'+s.d+'</p></div>'+
+  '<div class="phone theme-paper">'+s.h+'</div></div>').join('');
+
+document.getElementById('screens-dark').innerHTML = statesDark.map(s =>
+  '<div class="screen-card"><div class="screen-head"><h3>'+s.t+'</h3><p>'+s.d+'</p></div>'+
+  '<div class="phone theme-ink">'+s.h+'</div></div>').join('');
+</script>
+</body>
+</html>

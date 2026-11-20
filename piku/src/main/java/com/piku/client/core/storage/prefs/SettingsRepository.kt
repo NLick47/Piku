@@ -491,6 +491,7 @@ class SettingsRepository @Inject constructor(
                 .putFloat(KEY_NOVEL_PADDING, clamped.contentPadding)
                 .putFloat(KEY_NOVEL_BRIGHTNESS, clamped.brightness)
                 .putBoolean(KEY_NOVEL_KEEP_SCREEN_ON, clamped.keepScreenOn)
+                .putBoolean(KEY_NOVEL_VOLUME_SCROLL, clamped.volumeScroll)
                 .apply()
         }
         _novelReaderSettings.value = clamped
@@ -507,6 +508,7 @@ class SettingsRepository @Inject constructor(
         contentPadding = prefs.getFloat(KEY_NOVEL_PADDING, NOVEL_PADDING_DEFAULT),
         brightness = prefs.getFloat(KEY_NOVEL_BRIGHTNESS, NovelReaderSettings.BRIGHTNESS_SYSTEM),
         keepScreenOn = prefs.getBoolean(KEY_NOVEL_KEEP_SCREEN_ON, false),
+        volumeScroll = prefs.getBoolean(KEY_NOVEL_VOLUME_SCROLL, false),
     )
 
     /** 漫画阅读器显示设置，与小说那份各存各的 */
@@ -995,6 +997,7 @@ class SettingsRepository @Inject constructor(
         const val KEY_NOVEL_PADDING = "novel_padding"
         const val KEY_NOVEL_BRIGHTNESS = "novel_brightness"
         const val KEY_NOVEL_KEEP_SCREEN_ON = "novel_keep_screen_on"
+        const val KEY_NOVEL_VOLUME_SCROLL = "novel_volume_scroll"
 
         const val KEY_MANGA_SCROLL_MODE = "manga_scroll_mode"
         const val KEY_MANGA_RIGHT_TO_LEFT = "manga_right_to_left"

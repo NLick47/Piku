@@ -748,7 +748,7 @@ private fun Modifier.readerTapZones(onTap: (Int) -> Unit): Modifier {
  * 淡出中的控制栏还挂在组合树上、照样能点：不吃掉事件的话，点左上角会同时翻页并退出阅读器。
  * 在 Initial 阶段消费所有事件，子元素的按钮和下方的图片手势都收不到——这一层暂时等于不存在。
  */
-private fun Modifier.blockInputsWhen(blocked: Boolean): Modifier =
+internal fun Modifier.blockInputsWhen(blocked: Boolean): Modifier =
     if (!blocked) {
         this
     } else {

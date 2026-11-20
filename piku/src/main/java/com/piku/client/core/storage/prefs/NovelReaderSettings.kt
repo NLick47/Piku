@@ -18,6 +18,7 @@ data class NovelReaderSettings(
     /** 阅读时的屏幕亮度（0~1）；[BRIGHTNESS_SYSTEM] 表示跟随系统 */
     val brightness: Float = BRIGHTNESS_SYSTEM,
     val keepScreenOn: Boolean = false,
+    val volumeScroll: Boolean = false,
 ) {
     companion object {
         const val BRIGHTNESS_SYSTEM = -1f
