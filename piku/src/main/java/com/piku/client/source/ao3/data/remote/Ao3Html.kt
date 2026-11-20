@@ -7,13 +7,16 @@ internal object Ao3Html {
     private val TAG = Regex("<[^>]*>")
     private val NUMERIC_DEC = Regex("""&#(\d+);""")
     private val NUMERIC_HEX = Regex("""&#x([0-9a-fA-F]+);""")
+    private val BLANK_LINE_RUN = Regex("\n{3,}")
+    private val LINE_EDGE_SPACE = Regex("(?m)^[ \t\r]+|[ \t\r]+$")
 
-    /** 标签剥掉、段落换成换行、实体解开；正文与摘要都用它 */
     fun cleanText(raw: String): String =
         raw.replace(BR, "\n")
             .replace(PARAGRAPH_END, "\n\n")
             .replace(TAG, "")
             .let(::decodeEntities)
+            .replace(LINE_EDGE_SPACE, "")
+            .replace(BLANK_LINE_RUN, "\n\n")
             .trim()
 
     fun decodeEntities(raw: String): String =
@@ -23,7 +26,7 @@ internal object Ao3Html {
             .replace("&quot;", "\"")
             .replace("&#39;", "'")
             .replace("&apos;", "'")
-            .replace("&nbsp;", " ")
+            .replace("&nbsp;", "\u00A0")
             .replace("&hellip;", "…")
             .replace("&mdash;", "—")
             .replace("&ndash;", "–")

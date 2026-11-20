@@ -619,7 +619,12 @@ class SourceWorkDetailViewModel @Inject constructor(
             seedNovelTranslation()
             // 正文可能刚换过：按当前原文把编排层已有的译文重新铺到 UI
             publishNovelTranslation()
-            _ui.update { it.copy(novelReaderOpen = true) }
+            _ui.update {
+                it.copy(
+                    novelReaderOpen = true,
+                    novelProgressPercent = settingsRepository.getNovelProgress(work.key),
+                )
+            }
             return
         }
         viewModelScope.launch {
