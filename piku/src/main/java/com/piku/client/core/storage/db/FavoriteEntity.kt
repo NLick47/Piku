@@ -20,5 +20,4 @@ data class FavoriteEntity(
     @ColumnInfo(defaultValue = "0") val r18: Boolean,
     val addedAt: Long,
     @ColumnInfo(defaultValue = "0") val contentBackedUp: Boolean = false,
-    @ColumnInfo(defaultValue = "0") val cloudSynced: Boolean = false,
 )

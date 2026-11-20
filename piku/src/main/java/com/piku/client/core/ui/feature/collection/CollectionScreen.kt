@@ -58,6 +58,8 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.BookmarkAdd
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Checklist
+import androidx.compose.material.icons.outlined.CloudDownload
+import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.automirrored.outlined.DriveFileMove
@@ -122,7 +124,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.piku.client.R
 import com.piku.client.core.model.FavoriteFolder
+import com.piku.client.core.model.BookmarkVisibility
 import com.piku.client.core.model.FolderSort
+import com.piku.client.core.model.ImportScope
 import com.piku.client.core.model.Work
 import com.piku.client.core.model.WorkKind
 import com.piku.client.core.source.SourceAuthorOpen
@@ -160,7 +164,7 @@ private fun glassSheen(dark: Boolean): Brush =
     )
 
 /** 收藏归属的面板语义：添加到（保留原夹）与移动到（原夹不再保留）是两件事 */
-private enum class FolderPickMode { ADD, MOVE }
+private enum class FolderPickMode { ADD, MOVE, IMPORT }
 
 @Composable
 fun CollectionScreen(
@@ -194,6 +198,10 @@ fun CollectionScreen(
     var renamingFolder by remember { mutableStateOf<FavoriteFolder?>(null) }
     var openHostWork by remember { mutableStateOf<Work?>(null) }
     var pickMode by remember { mutableStateOf<FolderPickMode?>(null) }
+    var syncSheetOpen by remember { mutableStateOf(false) }
+    var importSource by remember { mutableStateOf<WorkSource?>(null) }
+    var importScopePick by remember { mutableStateOf<WorkSource?>(null) }
+    var importScope by remember { mutableStateOf(ImportScope.ALL) }
 
     Box(
         modifier = Modifier
@@ -219,6 +227,8 @@ fun CollectionScreen(
                 onDeleteFolder = viewModel::requestDeleteFolder,
                 onOpenAll = { viewModel.openAll() },
                 onSearchAll = { viewModel.openAll(focusSearch = true) },
+                canSyncAccount = state.canSyncAccount,
+                onSyncAccount = { syncSheetOpen = true },
             )
         } else {
             FolderDetailContent(
@@ -266,14 +276,13 @@ fun CollectionScreen(
                 viewModel.loadSelectedFolderIds()
                 pickMode = FolderPickMode.ADD
             },
-            syncing = state.syncingToAccount,
-            syncLabel = state.syncProgress?.let { (done, total) ->
-                stringResource(R.string.collection_sync_progress, done, total)
-            } ?: stringResource(R.string.collection_sync_short),
-            onSync = viewModel::syncSelectedToAccount,
-            showSync = WorkSource.PIXIV in state.poolSources ||
-                WorkSource.POIPIKU in state.poolSources ||
-                WorkSource.AO3 in state.poolSources,
+            syncing = state.accountSync?.kind == AccountSyncKind.UPLOAD,
+            syncLabel = state.accountSync
+                ?.takeIf { it.kind == AccountSyncKind.UPLOAD }
+                ?.let { stringResource(R.string.collection_sync_progress, it.done, it.total) }
+                ?: stringResource(R.string.collection_sync_short),
+            onSync = { viewModel.requestUpload(UploadPick.Selected) },
+            showSync = state.canSyncAccount,
             onMove = { pickMode = FolderPickMode.MOVE },
             onRemove = viewModel::removeSelected,
             modifier = Modifier
@@ -281,9 +290,20 @@ fun CollectionScreen(
                 .navigationBarsPadding()
                 .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
         )
+        state.accountSync?.let { progress ->
+            AccountSyncBar(
+                progress = progress,
+                dark = dark,
+                onCancel = viewModel::cancelAccountSync,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+            )
+        }
         CollectionUndoBar(
             // 延迟入场：等多选工具条先退场（180ms）再淡入，交接瞬间两者叠在同一位置会闪
-            visible = !state.selectionMode && state.undoLabel != null,
+            visible = !state.selectionMode && state.accountSync == null && state.undoLabel != null,
             label = state.undoLabel?.resolve(context).orEmpty(),
             pendingCount = state.undoCount,
             dark = dark,
@@ -303,6 +323,59 @@ fun CollectionScreen(
         )
     }
 
+    if (syncSheetOpen) {
+        AccountSyncSheet(
+            sources = state.syncSources,
+            busy = state.accountSync != null,
+            dark = dark,
+            onUpload = {
+                syncSheetOpen = false
+                viewModel.requestUpload(UploadPick.All)
+            },
+            onPull = { source ->
+                syncSheetOpen = false
+                if (source in state.scopedSyncSources) importScopePick = source else importSource = source
+            },
+            onDismiss = { syncSheetOpen = false },
+        )
+    }
+
+    state.uploadPick?.let {
+        UploadVisibilitySheet(
+            dark = dark,
+            onPick = viewModel::confirmUploadVisibility,
+            onDismiss = viewModel::dismissUploadVisibility,
+        )
+    }
+
+    importScopePick?.let { source ->
+        ImportScopeSheet(
+            sourceName = sourceName(source),
+            dark = dark,
+            onPick = { scope ->
+                importScopePick = null
+                importScope = scope
+                importSource = source
+            },
+            onDismiss = { importScopePick = null },
+        )
+    }
+
+    importSource?.let { source ->
+        FolderPickSheet(
+            mode = FolderPickMode.IMPORT,
+            folders = state.folders,
+            currentFolderId = -1L,
+            addedFolderIds = emptySet(),
+            dark = dark,
+            onPick = { folder ->
+                importSource = null
+                viewModel.importFromAccount(source, folder, importScope)
+            },
+            onDismiss = { importSource = null },
+        )
+    }
+
     pickMode?.let { mode ->
         FolderPickSheet(
             mode = mode,
@@ -316,6 +389,7 @@ fun CollectionScreen(
                 when (mode) {
                     FolderPickMode.ADD -> viewModel.addSelectedTo(folder)
                     FolderPickMode.MOVE -> viewModel.moveSelectedTo(folder)
+                    FolderPickMode.IMPORT -> Unit
                 }
             },
             onDismiss = { pickMode = null },
@@ -503,6 +577,8 @@ private fun FolderListContent(
     onDeleteFolder: (FavoriteFolder) -> Unit,
     onOpenAll: () -> Unit,
     onSearchAll: () -> Unit,
+    canSyncAccount: Boolean,
+    onSyncAccount: () -> Unit,
 ) {
     Column(Modifier.fillMaxSize()) {
         Row(
@@ -544,6 +620,15 @@ private fun FolderListContent(
                     contentDescription = stringResource(R.string.collection_search_all),
                     tint = PikuColors.textPrimary,
                 )
+            }
+            if (canSyncAccount) {
+                IconButton(onClick = onSyncAccount) {
+                    Icon(
+                        imageVector = Icons.Outlined.CloudSync,
+                        contentDescription = stringResource(R.string.collection_sync_title),
+                        tint = PikuColors.textPrimary,
+                    )
+                }
             }
             IconButton(onClick = onNewFolder) {
                 Icon(
@@ -883,6 +968,204 @@ private fun FolderActionSheet(
                     onClick = onDelete,
                 )
             }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AccountSyncSheet(
+    sources: Set<WorkSource>,
+    busy: Boolean,
+    dark: Boolean,
+    onUpload: () -> Unit,
+    onPull: (WorkSource) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    PikuBottomSheet(
+        onDismissRequest = onDismiss,
+        dark = dark,
+        scrollable = true,
+    ) {
+        PikuSheetTitle(text = stringResource(R.string.collection_sync_title))
+        Spacer(Modifier.height(4.dp))
+        PikuSheetSubtitle(text = stringResource(R.string.collection_sync_subtitle))
+        Spacer(Modifier.height(16.dp))
+        SheetActionRow(
+            icon = Icons.Outlined.CloudUpload,
+            label = stringResource(R.string.collection_sync_upload),
+            subtitle = stringResource(R.string.collection_sync_upload_subtitle),
+            dark = dark,
+            enabled = !busy,
+            onClick = onUpload,
+        )
+        Spacer(Modifier.height(8.dp))
+        sources.forEach { source ->
+            SheetActionRow(
+                icon = Icons.Outlined.CloudDownload,
+                label = stringResource(R.string.collection_sync_pull_source, sourceName(source)),
+                subtitle = stringResource(R.string.collection_sync_pull_subtitle),
+                dark = dark,
+                enabled = !busy,
+                onClick = { onPull(source) },
+            )
+            Spacer(Modifier.height(8.dp))
+        }
+    }
+}
+
+@Composable
+private fun sourceName(source: WorkSource): String = stringResource(
+    when (source) {
+        WorkSource.PIXIV -> R.string.home_source_pixiv
+        WorkSource.POIPIKU -> R.string.home_source_poipiku
+        WorkSource.AO3 -> R.string.home_source_ao3
+    },
+)
+
+@Composable
+private fun AccountSyncBar(
+    progress: AccountSyncProgress,
+    dark: Boolean,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(16.dp)
+    val label = when (progress.kind) {
+        AccountSyncKind.UPLOAD -> stringResource(
+            R.string.collection_upload_progress,
+            progress.done,
+            progress.total,
+        )
+        AccountSyncKind.IMPORT -> stringResource(
+            R.string.collection_import_progress,
+            progress.done,
+            progress.added,
+        )
+    }
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .shadow(12.dp, shape, ambientColor = Color(0x33000000), spotColor = Color(0x40000000))
+            .clip(shape)
+            .background(if (dark) ContentCardBgDark else ContentCardBgLight)
+            .border(BorderStroke(0.5.dp, PikuColors.border), shape)
+            .padding(start = 14.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        CircularProgressIndicator(
+            strokeWidth = 2.dp,
+            color = PikuColors.accent,
+            modifier = Modifier.size(16.dp),
+        )
+        Spacer(Modifier.width(10.dp))
+        Text(
+            text = label,
+            color = PikuColors.textPrimary,
+            fontSize = 13.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(999.dp))
+                .clickable(onClick = onCancel)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = stringResource(R.string.collection_import_cancel),
+                color = PikuColors.textSecondary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ScopeRow(
+    label: String,
+    dark: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (dark) Color(0x12FFFFFF) else Color(0x0A000000))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            color = PikuColors.textPrimary,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun UploadVisibilitySheet(
+    dark: Boolean,
+    onPick: (BookmarkVisibility) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    PikuBottomSheet(
+        onDismissRequest = onDismiss,
+        dark = dark,
+        scrollable = true,
+    ) {
+        PikuSheetTitle(text = stringResource(R.string.collection_upload_visibility_title))
+        Spacer(Modifier.height(4.dp))
+        PikuSheetSubtitle(text = stringResource(R.string.collection_upload_visibility_hint))
+        Spacer(Modifier.height(14.dp))
+        listOf(
+            BookmarkVisibility.PRIVATE to R.string.collection_upload_visibility_private,
+            BookmarkVisibility.PUBLIC to R.string.collection_upload_visibility_public,
+        ).forEach { (visibility, labelRes) ->
+            ScopeRow(
+                label = stringResource(labelRes),
+                dark = dark,
+                onClick = { onPick(visibility) },
+            )
+            Spacer(Modifier.height(6.dp))
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ImportScopeSheet(
+    sourceName: String,
+    dark: Boolean,
+    onPick: (ImportScope) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    PikuBottomSheet(
+        onDismissRequest = onDismiss,
+        dark = dark,
+        scrollable = true,
+    ) {
+        PikuSheetTitle(text = stringResource(R.string.collection_import_scope_title))
+        Spacer(Modifier.height(4.dp))
+        PikuSheetSubtitle(text = stringResource(R.string.collection_import_scope_hint, sourceName))
+        Spacer(Modifier.height(14.dp))
+        listOf(
+            ImportScope.ALL to R.string.collection_import_scope_all,
+            ImportScope.PUBLIC to R.string.collection_import_scope_public,
+            ImportScope.PRIVATE to R.string.collection_import_scope_private,
+        ).forEach { (scope, labelRes) ->
+            ScopeRow(
+                label = stringResource(labelRes),
+                dark = dark,
+                onClick = { onPick(scope) },
+            )
+            Spacer(Modifier.height(6.dp))
+        }
     }
 }
 
@@ -1578,6 +1861,7 @@ private fun FolderPickSheet(
     onDismiss: () -> Unit,
 ) {
     val add = mode == FolderPickMode.ADD
+    val importing = mode == FolderPickMode.IMPORT
     PikuBottomSheet(
         onDismissRequest = onDismiss,
         dark = dark,
@@ -1585,17 +1869,25 @@ private fun FolderPickSheet(
     ) {
             PikuSheetTitle(
                 text = stringResource(
-                    if (add) R.string.collection_add_title else R.string.collection_move_title,
+                    when (mode) {
+                        FolderPickMode.ADD -> R.string.collection_add_title
+                        FolderPickMode.MOVE -> R.string.collection_move_title
+                        FolderPickMode.IMPORT -> R.string.collection_import_pick_title
+                    },
                 ),
             )
             Spacer(Modifier.height(4.dp))
             PikuSheetSubtitle(
                 text = stringResource(
-                    if (add) R.string.collection_add_subtitle else R.string.collection_move_subtitle,
+                    when (mode) {
+                        FolderPickMode.ADD -> R.string.collection_add_subtitle
+                        FolderPickMode.MOVE -> R.string.collection_move_subtitle
+                        FolderPickMode.IMPORT -> R.string.collection_import_pick_subtitle
+                    },
                 ),
             )
             Spacer(Modifier.height(14.dp))
-            val targets = folders.filterNot { it.id == currentFolderId }
+            val targets = if (importing) folders else folders.filterNot { it.id == currentFolderId }
             if (targets.isEmpty()) {
                 Text(
                     text = stringResource(R.string.collection_move_no_target),
@@ -1690,10 +1982,16 @@ private fun SheetActionRow(
     subtitle: String? = null,
     tint: Color = PikuColors.textPrimary,
     danger: Boolean = false,
+    enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
     val dangerTint = PikuColors.error
     val faint = PikuColors.textFaint
+    val labelTint = when {
+        !enabled -> faint
+        danger -> dangerTint
+        else -> tint
+    }
     // 危险区：浅红底色容器 + 红图标气泡；普通动作：透明容器 + 中性图标气泡
     val rowBg = if (danger) {
         if (dark) Color(0x1AE08A8A) else Color(0x14C24B4B)
@@ -1710,7 +2008,7 @@ private fun SheetActionRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(rowBg)
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -1724,7 +2022,7 @@ private fun SheetActionRow(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = if (danger) dangerTint else tint,
+                tint = if (enabled) labelTint else faint,
                 modifier = Modifier.size(18.dp),
             )
         }
@@ -1732,7 +2030,7 @@ private fun SheetActionRow(
         Column(Modifier.weight(1f)) {
             Text(
                 text = label,
-                color = if (danger) dangerTint else tint,
+                color = labelTint,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,

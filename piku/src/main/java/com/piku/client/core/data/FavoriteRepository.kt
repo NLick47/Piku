@@ -63,8 +63,7 @@ class FavoriteRepository @Inject constructor(
     private val favoriteFolderDao: FavoriteFolderDao,
     private val settingsRepository: SettingsRepository,
     private val webDavSyncRepository: WebDavSyncRepository,
-    /** 星标切换的远程镜像（poipiku 书签等）；放在仓储里，所有收藏入口都不会漏挂 */
-    private val favoriteMirrorService: FavoriteMirrorService,
+    private val bookmarkMirrorCoordinator: BookmarkMirrorCoordinator,
     /** 批量归属变更是多条语句，必须包在一个事务里，见 [addWorksToFolder] 等 */
     private val database: AppDatabase,
 ) {
@@ -76,7 +75,6 @@ class FavoriteRepository @Inject constructor(
 
     /**
      * 星标/收藏夹切换与镜像提交的串行锁。
-     * 快速连点收藏-取消时，如果本地事务与 [favoriteMirrorService] 的提交顺序交错，
      * 远端可能最终停在相反状态；把"读整体状态 → 提交镜像"整段串起来，最后一次本地
      * 操作一定最后提交。
      */
@@ -183,28 +181,9 @@ class FavoriteRepository @Inject constructor(
     fun observeWorkFolderIds(key: WorkKey): Flow<Set<Long>> =
         favoriteFolderDao.observeFolderIdsForWork(key.source, key.workId).map { it.toSet() }
 
-    fun observeSyncedFavoriteIds(): Flow<Set<WorkKey>> =
-        favoriteDao.observeSyncedFavoriteIds()
-            .map { rows -> rows.mapTo(mutableSetOf()) { WorkKey(it.source, it.workId) } }
-            .shareIn(scope, SharingStarted.WhileSubscribed(FAVORITE_IDS_KEEP_ALIVE_MS), replay = 1)
-
-    suspend fun isCloudSynced(key: WorkKey): Boolean =
-        favoriteDao.favoriteById(key.source, key.workId)?.cloudSynced ?: false
-
     /** 当前是否仍收藏在本地（任一收藏夹）。批量同步途中用户取消收藏时用它兜住。 */
     suspend fun isFavorite(key: WorkKey): Boolean =
         favoriteDao.favoriteById(key.source, key.workId) != null
-
-    suspend fun cloudSyncedKeys(keys: List<WorkKey>): Set<WorkKey> =
-        keys.groupBy { it.source }.flatMap { (source, ks) ->
-            ks.map { it.workId }.chunked(SQL_VAR_LIMIT)
-                .flatMap { favoriteDao.favoritesByIds(source, it) }
-        }.filter { it.cloudSynced }
-            .mapTo(mutableSetOf()) { WorkKey(it.source, it.workId) }
-
-    suspend fun setCloudSynced(key: WorkKey, synced: Boolean) {
-        favoriteDao.setCloudSynced(key.source, key.workId, synced)
-    }
 
     suspend fun toggleFavorite(work: Work): Boolean = favoriteMutationLock.withLock {
         val defaultFolderId = ensureDefaultFolder()
@@ -227,7 +206,7 @@ class FavoriteRepository @Inject constructor(
         if (wasFavorite != nowFavorite) {
             // 星标是主要自动镜像入口；收藏页批量整理不镜像，
             // 由收藏页的手动同步补齐，避免一次整理产生成百上千个远端请求
-            favoriteMirrorService.onFavoriteChanged(work, nowFavorite)
+            bookmarkMirrorCoordinator.onFavoriteChanged(work, nowFavorite)
         }
         added
     }
@@ -250,7 +229,7 @@ class FavoriteRepository @Inject constructor(
     /**
      * 详情页拿到真实页数后回填收藏行：历史会随每次打开重写，收藏只在加收藏那一刻写一次，
      * 旧行（或从旧记录、深链进来收藏的）会永远留着 0，列表里的张数角标就再也出不来。
-     * 只改张数一列：整行重写会把标题/缩略图/cloudSynced 覆盖成详情页手上那份（深链那份是空的）。
+     * 只改张数一列：整行重写会把标题/缩略图覆盖成详情页手上那份（深链那份是空的）。
      */
     suspend fun refreshImageCount(work: Work) {
         val existing = favoriteDao.favoriteById(work.source, work.key.workId) ?: return
@@ -272,7 +251,7 @@ class FavoriteRepository @Inject constructor(
         triggerAutoSync()
         // 只在"整体收藏状态"变化时镜像：在多个夹之间挪动不该反复 toggle 远端
         if (wasFavorite != nowFavorite) {
-            favoriteMirrorService.onFavoriteChanged(work, nowFavorite)
+            bookmarkMirrorCoordinator.onFavoriteChanged(work, nowFavorite)
         }
     }
 
@@ -310,7 +289,7 @@ class FavoriteRepository @Inject constructor(
                     workToAdd.key.workId,
                 ).isNotEmpty()
                 if (wasFavorite != nowFavorite) {
-                    favoriteMirrorService.onFavoriteChanged(workToAdd, nowFavorite)
+                    bookmarkMirrorCoordinator.onFavoriteChanged(workToAdd, nowFavorite)
                 }
             }
             folderId
@@ -363,28 +342,56 @@ class FavoriteRepository @Inject constructor(
      */
     suspend fun addWorksToFolder(works: List<Work>, folderId: Long): CollectionEdit {
         if (works.isEmpty()) return CollectionEdit()
-        val edit = database.withTransaction {
-            val keys = works.map { it.key }
-            val alreadyInFolder = membershipsIn(folderId, keys)
-                .mapTo(mutableSetOf()) { WorkKey(it.source, it.workId) }
-            val targets = works.filterNot { it.key in alreadyInFolder }
-            if (targets.isEmpty()) return@withTransaction CollectionEdit()
-
-            // 作品已在别的收藏夹里时保留原 addedAt（收藏时间），只有首次收藏才写新时间
-            val existingFavorites = favoritesByKeys(keys).associateBy { WorkKey(it.source, it.workId) }
-            val now = System.currentTimeMillis()
-            val added = mutableListOf<FavoriteMembershipEntity>()
-            for ((index, work) in targets.withIndex()) {
-                favoriteDao.upsert(favoriteRowFor(work, existingFavorites[work.key], now + index))
-                // 同一批内 addedAt 递增，保证批量添加后夹内顺序稳定（列表按 addedAt 倒序）
-                val membership = favoriteMembershipFor(work, folderId, now + index)
-                favoriteFolderDao.upsertMembership(membership)
-                added += membership
-            }
-            CollectionEdit(removed = added)
-        }
+        val now = System.currentTimeMillis()
+        val edit = insertIntoFolder(works, folderId) { index -> now + index }
         if (!edit.isEmpty) triggerAutoSync()
         return edit
+    }
+
+    suspend fun importWorks(
+        works: List<Work>,
+        folderId: Long,
+        addedAtBase: Long,
+        alsoInTransaction: suspend (List<WorkKey>) -> Unit = {},
+    ): CollectionEdit =
+        insertIntoFolder(
+            works = works,
+            folderId = folderId,
+            alsoInTransaction = alsoInTransaction,
+            stampAt = { index -> addedAtBase - index },
+        )
+
+    fun requestAutoSync() = triggerAutoSync()
+
+    suspend fun allWorksOnce(sources: List<WorkSource>): List<Work> =
+        favoriteDao.allOnce(sources).map { it.toWork() }
+
+    private suspend fun insertIntoFolder(
+        works: List<Work>,
+        folderId: Long,
+        alsoInTransaction: suspend (List<WorkKey>) -> Unit = {},
+        stampAt: (Int) -> Long,
+    ): CollectionEdit = database.withTransaction {
+        val keys = works.map { it.key }
+        val alreadyInFolder = membershipsIn(folderId, keys)
+            .mapTo(mutableSetOf()) { WorkKey(it.source, it.workId) }
+        if (works.all { it.key in alreadyInFolder }) {
+            alsoInTransaction(keys)
+            return@withTransaction CollectionEdit()
+        }
+
+        val existingFavorites = favoritesByKeys(keys).associateBy { WorkKey(it.source, it.workId) }
+        val added = mutableListOf<FavoriteMembershipEntity>()
+        for ((index, work) in works.withIndex()) {
+            if (work.key in alreadyInFolder) continue
+            val stamp = stampAt(index)
+            favoriteDao.upsert(favoriteRowFor(work, existingFavorites[work.key], stamp))
+            val membership = favoriteMembershipFor(work, folderId, stamp)
+            favoriteFolderDao.upsertMembership(membership)
+            added += membership
+        }
+        alsoInTransaction(keys)
+        CollectionEdit(removed = added)
     }
 
     /**
@@ -642,7 +649,6 @@ internal fun favoriteRowFor(
     return row.copy(
         addedAt = existing.addedAt,
         contentBackedUp = existing.contentBackedUp,
-        cloudSynced = existing.cloudSynced,
     )
 }
 

@@ -642,11 +642,7 @@ internal fun SourceWorkDetailScreen(
                 onToggleFolder = viewModel::toggleFavoriteFolder,
                 onCreateFolder = viewModel::createFavoriteFolder,
                 onDismiss = { favoriteSheetVisible = false },
-                // pixiv 云端区块：只有登录的 pixiv 插图作品有云端收藏可操作，其余作品整块不出现
-                pixivMirror = if (work.source == WorkSource.PIXIV &&
-                    work.kind != WorkKind.NOVEL &&
-                    state.loggedIn
-                ) {
+                pixivMirror = if (work.source == WorkSource.PIXIV && state.loggedIn) {
                     PixivMirrorActions(
                         favorited = state.isFavorite,
                         cloudSynced = state.cloudSynced,

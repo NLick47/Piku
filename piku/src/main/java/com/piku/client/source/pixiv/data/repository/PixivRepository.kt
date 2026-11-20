@@ -756,6 +756,48 @@ class PixivRepository @Inject constructor(
         requireNoActionError(response)
     }
 
+    suspend fun bookmarkNovel(
+        novelId: Long,
+        add: Boolean,
+        restrict: String = PixivAppConfig.RESTRICT_PUBLIC,
+    ): Result<Unit> = apiCall {
+        val signature = endpoints.clientSignature(runtime.now())
+        val response = if (add) {
+            appApi.novelBookmarkAdd(
+                clientTime = signature.time,
+                clientHash = signature.hash,
+                novelId = novelId,
+                restrict = restrict,
+            )
+        } else {
+            appApi.novelBookmarkDelete(
+                clientTime = signature.time,
+                clientHash = signature.hash,
+                novelId = novelId,
+            )
+        }
+        requireNoActionError(response)
+    }
+
+    suspend fun ownNovelBookmarks(
+        cursor: Long?,
+        restrict: String = PixivAppConfig.RESTRICT_PUBLIC,
+    ): Result<SourcePage> = apiCall {
+        val userId = pixivAuth.currentUserId() ?: throw AppError.LoginRequired
+        val signature = endpoints.clientSignature(runtime.now())
+        val response = appApi.userBookmarkNovels(
+            clientTime = signature.time,
+            clientHash = signature.hash,
+            userId = userId,
+            restrict = restrict,
+            maxBookmarkId = cursor,
+        )
+        SourcePage(
+            items = response.novels.mapNotNull { it.toWork() },
+            nextCursor = pixivBookmarkCursor(response.nextUrl)?.toString(),
+        )
+    }
+
     /** 200 但带 error 块的拒绝（如校验不过）：不能当成成功吞掉 */
     private fun requireNoActionError(response: PixivAppActionResponse) {
         val error = response.error ?: return
@@ -834,6 +876,14 @@ class PixivRepository @Inject constructor(
             items = response.illusts.mapNotNull { it.toWork() },
             nextCursor = pixivBookmarkCursor(response.nextUrl)?.toString(),
         )
+    }
+
+    suspend fun ownBookmarks(
+        cursor: Long?,
+        restrict: String = PixivAppConfig.RESTRICT_PUBLIC,
+    ): Result<SourcePage> {
+        val userId = pixivAuth.currentUserId() ?: return Result.failure(AppError.LoginRequired)
+        return authorBookmarks(userId, cursor, restrict)
     }
 }
 

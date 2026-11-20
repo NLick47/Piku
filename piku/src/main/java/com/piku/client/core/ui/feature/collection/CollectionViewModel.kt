@@ -4,21 +4,18 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.piku.client.R
-import com.piku.client.source.pixiv.data.remote.PixivAppConfig
 import com.piku.client.core.data.CollectionEdit
+import com.piku.client.core.data.BookmarkMirrorRepository
+import com.piku.client.core.storage.db.FavoriteMembershipEntity
 import com.piku.client.core.data.FavoriteRepository
-import com.piku.client.source.ao3.data.repository.Ao3BookmarkRepository
-import com.piku.client.source.pixiv.data.repository.PixivRepository
-import com.piku.client.source.poipiku.data.repository.PoipikuBookmarkRepository
 import com.piku.client.core.storage.prefs.SettingsRepository
-import com.piku.client.core.model.Ao3BookmarkMirror
 import com.piku.client.core.model.AuthStatus
+import com.piku.client.core.model.BookmarkVisibility
 import com.piku.client.core.model.FavoriteFolder
 import com.piku.client.core.model.FolderSort
-import com.piku.client.core.model.PixivBookmarkMirror
+import com.piku.client.core.model.ImportScope
 import com.piku.client.core.model.ReadingProgress
 import com.piku.client.core.model.Work
-import com.piku.client.core.model.WorkKind
 import com.piku.client.core.model.key
 import com.piku.client.core.model.WorkKey
 import com.piku.client.core.model.WorkSource
@@ -29,10 +26,12 @@ import com.piku.client.core.ui.common.FeedbackText
 import com.piku.client.core.usecase.ObserveLibraryPoolUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
@@ -118,10 +117,10 @@ data class CollectionUiState(
     val actionWorkFolderIds: Set<Long> = emptySet(),
     /** 从放大镜进入「全部收藏」时置位，工具栏聚焦一次检索框后立刻消费掉 */
     val focusSearch: Boolean = false,
-    /** 批量同步所选到账号书签进行中：工具条动作防连点 */
-    val syncingToAccount: Boolean = false,
-    /** 同步进度（已完成数, 总数）：网慢时给「在动」的观感 */
-    val syncProgress: Pair<Int, Int>? = null,
+    val syncSources: Set<WorkSource> = emptySet(),
+    val scopedSyncSources: Set<WorkSource> = emptySet(),
+    val accountSync: AccountSyncProgress? = null,
+    val uploadPick: UploadPick? = null,
 ) {
     val searching: Boolean get() = query.isNotBlank()
 
@@ -136,16 +135,28 @@ data class CollectionUiState(
 
     /** 是否在「全部收藏」视图：决定「移出」是移出收藏夹还是取消收藏 */
     val allScope: Boolean get() = view is CollectionView.All
+
+    val canSyncAccount: Boolean get() = syncSources.isNotEmpty()
 }
+
+enum class AccountSyncKind { UPLOAD, IMPORT }
+
+enum class UploadPick { All, Selected }
+
+data class AccountSyncProgress(
+    val kind: AccountSyncKind,
+    val done: Int = 0,
+    val total: Int = 0,
+    val added: Int = 0,
+)
+
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class CollectionViewModel @Inject constructor(
     private val favoriteRepository: FavoriteRepository,
+    private val bookmarkMirrorRepository: BookmarkMirrorRepository,
     private val settingsRepository: SettingsRepository,
-    private val pixivRepository: PixivRepository,
-    private val poipikuBookmarkRepository: PoipikuBookmarkRepository,
-    private val ao3BookmarkRepository: Ao3BookmarkRepository,
     private val sourceAuthRegistry: SourceAuthRegistry,
     observeLibraryPoolUseCase: ObserveLibraryPoolUseCase,
 ) : ViewModel() {
@@ -172,6 +183,9 @@ class CollectionViewModel @Inject constructor(
 
     /** 归属变更与撤销串行执行：保证撤销栈的顺序与用户操作顺序一致 */
     private val editLock = Mutex()
+
+    private var importJob: Job? = null
+    private var syncJob: Job? = null
 
     private data class UndoRecord(val edit: CollectionEdit, val label: FeedbackText)
 
@@ -246,6 +260,36 @@ class CollectionViewModel @Inject constructor(
         viewModelScope.launch {
             settingsRepository.folderSort.collect { saved ->
                 _uiState.update { if (it.sort == saved) it else it.copy(sort = saved) }
+            }
+        }
+        viewModelScope.launch {
+            pool.flatMapLatest { current ->
+                val entries = current.sources.mapNotNull { source ->
+                    val auth = sourceAuthRegistry.byId(source) ?: return@mapNotNull null
+                    if (bookmarkMirrorRepository.source(source) == null) {
+                        null
+                    } else {
+                        source to auth.status
+                    }
+                }
+                if (entries.isEmpty()) {
+                    flowOf(emptySet())
+                } else {
+                    val paired = entries.map { (source, status) -> status.map { source to it } }
+                    combine(paired) { states ->
+                        states.filter { (_, status) -> status == AuthStatus.LOGGED_IN }
+                            .mapTo(mutableSetOf()) { (source, _) -> source }
+                    }
+                }
+            }.collect { sources ->
+                _uiState.update {
+                    it.copy(
+                        syncSources = sources,
+                        scopedSyncSources = sources.filterTo(mutableSetOf()) { source ->
+                            bookmarkMirrorRepository.source(source)?.supportsVisibilityFilter == true
+                        },
+                    )
+                }
             }
         }
     }
@@ -536,127 +580,177 @@ class CollectionViewModel @Inject constructor(
         moveWorks(state.works.filter { it.key in state.selectedIds }, target)
     }
 
-    /**
-     * 批量「同步所选到账号书签」：把本地收藏补到对应源的远端。
-     *
-     * - pixiv 插画：走 pixiv 收藏，已同步的跳过，可见性取当前镜像档位；
-     * - poipiku 作品：走账号书签，toggle 收敛会自动处理"本来就有"的情况；
-     * - 其它（pixiv 小说）不处理。
-     *
-     * 某个源未登录时只把该源的作品计为失败，不阻塞另一个源。
-     */
-    fun syncSelectedToAccount() {
-        val state = _uiState.value
-        if (state.syncingToAccount) return
-        val selected = state.works.filter { it.key in state.selectedIds }
-        val pixivSelected = selected.filter {
-            it.source == WorkSource.PIXIV && it.kind != WorkKind.NOVEL
-        }
-        val poipikuSelected = selected.filter { it.source == WorkSource.POIPIKU }
-        val ao3Selected = selected.filter { it.source == WorkSource.AO3 }
-        if (pixivSelected.isEmpty() && poipikuSelected.isEmpty() && ao3Selected.isEmpty()) {
-            feedback.show(R.string.collection_sync_none)
-            return
-        }
-        // 在 launch 之前占住状态：快速连点两下时第二次直接返回，不会起两个同步循环
-        _uiState.update { it.copy(syncingToAccount = true) }
+    fun requestUpload(pick: UploadPick) {
+        if (_uiState.value.accountSync != null) return
         viewModelScope.launch {
-            try {
-                val pixivLoggedIn = sourceAuthRegistry.byId(WorkSource.PIXIV)
-                    ?.status?.first() == AuthStatus.LOGGED_IN
-                val poipikuLoggedIn = sourceAuthRegistry.byId(WorkSource.POIPIKU)
-                    ?.status?.first() == AuthStatus.LOGGED_IN
-                val ao3LoggedIn = sourceAuthRegistry.byId(WorkSource.AO3)
-                    ?.status?.first() == AuthStatus.LOGGED_IN
-                val poipikuAccountKey = poipikuBookmarkRepository.currentAccountKey()
-                val ao3AccountKey = ao3BookmarkRepository.currentAccountKey()
-                val alreadySynced = if (pixivLoggedIn && pixivSelected.isNotEmpty()) {
-                    favoriteRepository.cloudSyncedKeys(pixivSelected.map { it.key })
-                } else {
-                    emptySet()
-                }
-                val pixivTargets = if (pixivLoggedIn) {
-                    pixivSelected.filterNot { it.key in alreadySynced }
-                } else {
-                    emptyList()
-                }
-                val poipikuTargets = if (poipikuLoggedIn) poipikuSelected else emptyList()
-                val ao3Targets = if (ao3LoggedIn) ao3Selected else emptyList()
-                val targets = pixivTargets + poipikuTargets + ao3Targets
-                if (targets.isEmpty()) {
-                    when {
-                        !pixivLoggedIn && pixivSelected.isNotEmpty() ->
-                            feedback.show(R.string.collection_sync_login_hint)
-                        !poipikuLoggedIn && poipikuSelected.isNotEmpty() ->
-                            feedback.show(R.string.collection_sync_login_hint)
-                        !ao3LoggedIn && ao3Selected.isNotEmpty() ->
-                            feedback.show(R.string.collection_sync_login_hint)
-                        else -> feedback.show(R.string.collection_sync_none)
-                    }
-                    return@launch
-                }
-                // 未登录源的作品算失败；pixiv 已同步的旧收藏不算失败
-                var failed = 0
-                if (!pixivLoggedIn) failed += pixivSelected.size
-                if (!poipikuLoggedIn) failed += poipikuSelected.size
-                if (!ao3LoggedIn) failed += ao3Selected.size
-                _uiState.update { it.copy(syncProgress = 0 to targets.size) }
-                val restrict = when (settingsRepository.pixivBookmarkMirror.value) {
-                    PixivBookmarkMirror.PRIVATE -> PixivAppConfig.RESTRICT_PRIVATE
-                    else -> PixivAppConfig.RESTRICT_PUBLIC
-                }
-                val ao3Private =
-                    settingsRepository.ao3BookmarkMirror.value != Ao3BookmarkMirror.PUBLIC
-                var synced = 0
-                for ((index, work) in targets.withIndex()) {
-                    // 批量同步途中用户可能在别的页面取消了收藏；不要把它重新加上去
-                    if (favoriteRepository.isFavorite(work.key)) {
-                        when (work.source) {
-                            WorkSource.PIXIV -> pixivRepository.bookmarkIllust(
-                                work.id,
-                                add = true,
-                                restrict = restrict,
-                            )
-                                .onSuccess { favoriteRepository.setCloudSynced(work.key, true) }
-                                .onSuccess { synced += 1 }
-                                .onFailure { failed += 1 }
-
-                            WorkSource.POIPIKU -> {
-                                // 批量同步途中换了账号：剩余作品不能写到新账号
-                                if (poipikuBookmarkRepository.currentAccountKey() != poipikuAccountKey) {
-                                    failed += 1
-                                } else {
-                                    poipikuBookmarkRepository.setBookmarked(work.id, true)
-                                        .onSuccess { synced += 1 }
-                                        .onFailure { failed += 1 }
-                                }
-                            }
-
-                            WorkSource.AO3 -> {
-                                if (ao3BookmarkRepository.currentAccountKey() != ao3AccountKey) {
-                                    failed += 1
-                                } else {
-                                    ao3BookmarkRepository
-                                        .setBookmarked(work.id, desired = true, isPrivate = ao3Private)
-                                        .onSuccess { synced += 1 }
-                                        .onFailure { failed += 1 }
-                                }
-                            }
-                        }
-                    }
-                    _uiState.update { it.copy(syncProgress = (index + 1) to targets.size) }
-                }
-                when {
-                    // 全部目标在同步途中被取消收藏：不要报"已同步 0 个"
-                    synced == 0 && failed == 0 -> feedback.show(R.string.collection_sync_none)
-                    failed == 0 -> feedback.show(R.string.collection_sync_done, synced)
-                    else -> feedback.show(R.string.collection_sync_partial, synced, failed)
-                }
-            } finally {
-                _uiState.update { it.copy(syncingToAccount = false, syncProgress = null) }
+            val works = uploadWorks(pick)
+            if (works.isEmpty()) {
+                feedback.show(R.string.collection_sync_none)
+                return@launch
+            }
+            if (works.any { it.source in _uiState.value.scopedSyncSources }) {
+                _uiState.update { it.copy(uploadPick = pick) }
+            } else {
+                startUpload(works, BookmarkVisibility.PUBLIC)
             }
         }
     }
+
+    fun confirmUploadVisibility(visibility: BookmarkVisibility) {
+        val pick = _uiState.value.uploadPick ?: return
+        _uiState.update { it.copy(uploadPick = null) }
+        viewModelScope.launch {
+            val works = uploadWorks(pick)
+            if (works.isEmpty()) {
+                feedback.show(R.string.collection_sync_none)
+            } else {
+                startUpload(works, visibility)
+            }
+        }
+    }
+
+    fun dismissUploadVisibility() {
+        _uiState.update { it.copy(uploadPick = null) }
+    }
+
+    private suspend fun uploadWorks(pick: UploadPick): List<Work> = when (pick) {
+        UploadPick.All -> favoriteRepository.allWorksOnce(_uiState.value.poolSources.toList())
+        UploadPick.Selected -> _uiState.value.works.filter { it.key in _uiState.value.selectedIds }
+    }
+
+    private fun startUpload(
+        works: List<Work>,
+        visibility: BookmarkVisibility,
+    ) {
+        if (_uiState.value.accountSync != null) return
+        syncJob = viewModelScope.launch {
+            val bySource = works.groupBy { it.source }
+            val sources = _uiState.value.syncSources.filter { it in bySource }
+            if (sources.isEmpty()) {
+                feedback.show(R.string.collection_sync_login_hint)
+                return@launch
+            }
+            val jobs = sources.mapNotNull { source ->
+                bookmarkMirrorRepository.accountKey(source)?.let { source to it }
+            }
+            val grandTotal = works.size
+            var completed = 0
+            var added = 0
+            var failed = works.size - jobs.sumOf { (source, _) -> bySource[source].orEmpty().size }
+            _uiState.update {
+                it.copy(
+                    accountSync = AccountSyncProgress(
+                        kind = AccountSyncKind.UPLOAD,
+                        total = grandTotal,
+                    ),
+                )
+            }
+            try {
+                for ((source, account) in jobs) {
+                    val local = bySource[source].orEmpty()
+                    val base = completed
+                    val result =
+                        bookmarkMirrorRepository.upload(source, account, local, visibility) { done, _ ->
+                        _uiState.update { state ->
+                            state.copy(
+                                accountSync = state.accountSync?.copy(done = base + done),
+                            )
+                        }
+                    }
+                    completed += local.size
+                    added += result.added
+                    failed += result.failed
+                }
+                _uiState.update { it.copy(accountSync = it.accountSync?.copy(done = grandTotal)) }
+            } catch (e: CancellationException) {
+                throw e
+            } finally {
+                _uiState.update { it.copy(accountSync = null) }
+            }
+            when {
+                added == 0 && failed == 0 -> feedback.show(R.string.collection_sync_none)
+                failed == 0 -> feedback.show(R.string.collection_sync_done, added)
+                else -> feedback.show(R.string.collection_sync_partial, added, failed)
+            }
+        }
+    }
+
+    fun importFromAccount(
+        source: WorkSource,
+        folder: FavoriteFolder,
+        scope: ImportScope = ImportScope.ALL,
+    ) {
+        if (_uiState.value.accountSync != null) return
+        val account = bookmarkMirrorRepository.accountKey(source)
+        if (account == null) {
+            feedback.show(R.string.collection_sync_login_hint)
+            return
+        }
+        importJob = viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    accountSync = AccountSyncProgress(kind = AccountSyncKind.IMPORT),
+                )
+            }
+            val imported = mutableListOf<FavoriteMembershipEntity>()
+            try {
+                val result = bookmarkMirrorRepository.importInto(
+                    source = source,
+                    account = account,
+                    scope = scope,
+                    onPage = { works, stamp ->
+                        val edit = favoriteRepository.importWorks(works, folder.id, stamp) { keys ->
+                            bookmarkMirrorRepository.mark(source, account, keys)
+                        }
+                        imported += edit.removed
+                        edit.removed.map { WorkKey(it.source, it.workId) }
+                    },
+                    onProgress = { scanned, added ->
+                        _uiState.update { state ->
+                            state.copy(
+                                accountSync = state.accountSync?.copy(
+                                    done = scanned,
+                                    added = added,
+                                ),
+                            )
+                        }
+                    },
+                )
+                when {
+                    result.failure != null -> feedback.show(R.string.collection_import_failed)
+                    result.added == 0 -> feedback.show(R.string.collection_import_empty)
+                    else -> pushImportUndo(imported, folder)
+                }
+            } finally {
+                _uiState.update { it.copy(accountSync = null) }
+                if (imported.isNotEmpty()) favoriteRepository.requestAutoSync()
+            }
+        }
+    }
+
+    private fun pushImportUndo(imported: List<FavoriteMembershipEntity>, folder: FavoriteFolder) {
+        if (imported.isEmpty()) return
+        if (undoStack.size >= MAX_UNDO) undoStack.removeFirst()
+        undoStack.addLast(
+            UndoRecord(
+                CollectionEdit(removed = imported),
+                FeedbackText(
+                    R.string.collection_import_done,
+                    listOf(imported.size, folder.name),
+                ),
+            ),
+        )
+        syncUndoState()
+    }
+
+    fun cancelAccountSync() {
+        importJob?.cancel()
+        importJob = null
+        syncJob?.cancel()
+        syncJob = null
+        _uiState.update { it.copy(accountSync = null) }
+    }
+
 
     /**
      * 「移动」同样分两种：夹内是搬到目标夹，

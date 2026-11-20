@@ -226,6 +226,12 @@ interface PoipikuApi {
         @Query("input") input: String,
     ): TagSuggestionResponse
 
+    @GET("MyBookmarkListPcV.jsp")
+    suspend fun bookmarks(
+        @Query("ID") userId: Long,
+        @Query("PG") page: Int,
+    ): ResponseBody
+
     /**
      * 图集编辑页（服务端预填作品当前值，是编辑表单的回填数据源）
      * 注意：该 URL 不校验作品类型，TD 传小说 ID 也会返回图集编辑页壳——

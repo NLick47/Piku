@@ -2,9 +2,9 @@ package com.piku.client.source.ao3
 
 import android.content.Context
 import com.piku.client.core.source.ContentSource
+import com.piku.client.core.source.RemoteBookmarkSource
 import com.piku.client.core.source.SourceAuth
 import com.piku.client.core.source.SourceContentBackup
-import com.piku.client.core.source.SourceFavoriteMirror
 import com.piku.client.core.source.SourceLinkParser
 import com.piku.client.core.source.SourceScopes
 import com.piku.client.core.source.SourceSearch
@@ -13,11 +13,10 @@ import com.piku.client.core.ui.drawer.SourceDrawerPlugin
 import com.piku.client.source.ao3.data.auth.Ao3Auth
 import com.piku.client.source.ao3.data.auth.Ao3AuthStore
 import com.piku.client.source.ao3.data.link.Ao3LinkParser
-import com.piku.client.source.ao3.data.local.Ao3BookmarkSyncStore
 import com.piku.client.source.ao3.data.local.Ao3ScopeStore
 import com.piku.client.source.ao3.data.source.Ao3ContentBackup
 import com.piku.client.source.ao3.data.source.Ao3ContentSource
-import com.piku.client.source.ao3.data.source.Ao3FavoriteMirror
+import com.piku.client.source.ao3.data.source.Ao3RemoteBookmarks
 import com.piku.client.source.ao3.data.source.Ao3Scopes
 import com.piku.client.source.ao3.data.source.Ao3SearchSource
 import com.piku.client.source.ao3.ui.drawer.Ao3DrawerPlugin
@@ -42,10 +41,6 @@ object Ao3SourceModule {
     @IntoSet
     fun ao3ContentBackup(impl: Ao3ContentBackup): SourceContentBackup = impl
 
-    @Provides
-    @IntoSet
-    fun ao3FavoriteMirror(impl: Ao3FavoriteMirror): SourceFavoriteMirror = impl
-
     /** 检索插件按源登记：没登记的源会落到 poipiku 链路，AO3 的查询词会被当 poipiku 搜 */
     @Provides
     @IntoSet
@@ -62,13 +57,6 @@ object Ao3SourceModule {
     fun ao3ScopeStore(@ApplicationContext context: Context): Ao3ScopeStore =
         Ao3ScopeStore(context.getSharedPreferences(Ao3ScopeStore.PREFS_NAME, Context.MODE_PRIVATE))
 
-    @Provides
-    @Singleton
-    fun ao3BookmarkSyncStore(@ApplicationContext context: Context): Ao3BookmarkSyncStore =
-        Ao3BookmarkSyncStore(
-            context.getSharedPreferences(AO3_BOOKMARK_PREFS_NAME, Context.MODE_PRIVATE),
-        )
-
     /** 圈层能力按源登记：首页外壳按它渲染圈层行与选择器，没登记的源保持通用流式壳 */
     @Provides
     @IntoSet
@@ -78,6 +66,10 @@ object Ao3SourceModule {
     @Provides
     @IntoSet
     fun ao3DrawerPlugin(impl: Ao3DrawerPlugin): SourceDrawerPlugin = impl
+
+    @Provides
+    @IntoSet
+    fun ao3RemoteBookmarks(impl: Ao3RemoteBookmarks): RemoteBookmarkSource = impl
 
     /** 登录插件按源登记：账号信息落在 AO3 自己的 prefs 文件里，别源不可见 */
     @Provides
@@ -95,5 +87,4 @@ object Ao3SourceModule {
 
     internal const val AO3_PREFS_NAME = "ao3_credentials"
 
-    internal const val AO3_BOOKMARK_PREFS_NAME = "ao3_bookmark_sync"
 }

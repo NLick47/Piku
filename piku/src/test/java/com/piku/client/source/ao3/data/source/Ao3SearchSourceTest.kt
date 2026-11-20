@@ -55,6 +55,10 @@ class Ao3SearchSourceTest {
         override suspend fun getUserWorks(user: String, page: Int): ResponseBody = error("检索不该走用户作品")
 
         override suspend fun getWorkBookmarks(id: Long): ResponseBody = error("检索不该走书签")
+        override suspend fun ownBookmarks(
+            user: String,
+            page: Int,
+        ): ResponseBody = error("检索不该走书签列表")
 
         override suspend fun newBookmarkForm(id: Long): ResponseBody = error("检索不该走书签")
 

@@ -5,7 +5,6 @@ import com.piku.client.core.model.Work
 import com.piku.client.core.model.WorkKind
 import com.piku.client.core.model.WorkSource
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -28,7 +27,6 @@ class FavoriteRowForTest {
     private fun existingRow(
         addedAt: Long = 1_000L,
         contentBackedUp: Boolean = true,
-        cloudSynced: Boolean = true,
     ) = FavoriteEntity(
         source = WorkSource.POIPIKU,
         workId = "123",
@@ -41,7 +39,6 @@ class FavoriteRowForTest {
         r18 = false,
         addedAt = addedAt,
         contentBackedUp = contentBackedUp,
-        cloudSynced = cloudSynced,
     )
 
     @Test
@@ -50,7 +47,6 @@ class FavoriteRowForTest {
 
         assertEquals("重新收藏改写了首次收藏时间", 1_000L, row.addedAt)
         assertTrue("内容备份标记被抹掉了", row.contentBackedUp)
-        assertTrue("云端镜像标记被抹掉了", row.cloudSynced)
     }
 
     @Test
@@ -68,7 +64,6 @@ class FavoriteRowForTest {
 
         assertEquals(9_999L, row.addedAt)
         assertEquals("123", row.workId)
-        assertFalse(row.cloudSynced)
     }
 
     @Test

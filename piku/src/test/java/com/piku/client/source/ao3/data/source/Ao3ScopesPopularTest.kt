@@ -51,6 +51,10 @@ class Ao3ScopesPopularTest {
         override suspend fun getUserWorks(user: String, page: Int): ResponseBody = error("榜单不该走用户作品")
 
         override suspend fun getWorkBookmarks(id: Long): ResponseBody = error("榜单不该走书签")
+        override suspend fun ownBookmarks(
+            user: String,
+            page: Int,
+        ): ResponseBody = error("榜单不该走书签列表")
 
         override suspend fun newBookmarkForm(id: Long): ResponseBody = error("榜单不该走书签")
 

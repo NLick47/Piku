@@ -1,6 +1,7 @@
 package com.piku.client.source.pixiv
 
 import com.piku.client.core.source.ContentSource
+import com.piku.client.core.source.RemoteBookmarkSource
 import com.piku.client.core.source.SourceAuth
 import com.piku.client.core.source.SourceFollows
 import com.piku.client.core.source.SourceLinkParser
@@ -10,6 +11,7 @@ import com.piku.client.source.pixiv.data.auth.PixivAuthRepository
 import com.piku.client.source.pixiv.data.link.PixivLinkParser
 import com.piku.client.source.pixiv.data.source.PixivContentSource
 import com.piku.client.source.pixiv.data.source.PixivFollowsSource
+import com.piku.client.source.pixiv.data.source.PixivRemoteBookmarks
 import com.piku.client.source.pixiv.data.source.PixivSearchSource
 import com.piku.client.source.pixiv.ui.drawer.PixivDrawerPlugin
 import dagger.Module
@@ -46,4 +48,8 @@ object PixivSourceModule {
     @Provides
     @IntoSet
     fun pixivLinkParser(impl: PixivLinkParser): SourceLinkParser = impl
+
+    @Provides
+    @IntoSet
+    fun pixivRemoteBookmarks(impl: PixivRemoteBookmarks): RemoteBookmarkSource = impl
 }

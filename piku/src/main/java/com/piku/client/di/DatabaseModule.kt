@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.room.Room
 import com.piku.client.core.storage.db.AppDatabase
+import com.piku.client.core.storage.db.BookmarkMirrorDao
 import com.piku.client.core.storage.repo.CustomTagRepository
 import com.piku.client.core.storage.db.FavoriteDao
 import com.piku.client.core.storage.db.FavoriteFolderDao
@@ -50,6 +51,10 @@ object DatabaseModule {
     @Provides
     fun provideFavoriteFolderDao(database: AppDatabase): FavoriteFolderDao =
         database.favoriteFolderDao()
+
+    @Provides
+    fun provideBookmarkMirrorDao(database: AppDatabase): BookmarkMirrorDao =
+        database.bookmarkMirrorDao()
 
     @Provides
     fun provideHistoryDao(database: AppDatabase): HistoryDao = database.historyDao()

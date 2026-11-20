@@ -11,6 +11,8 @@ import coil3.request.allowHardware
 import coil3.request.crossfade
 import coil3.serviceLoaderEnabled
 import coil3.size.Precision
+import com.piku.client.core.data.BookmarkMirrorRepository
+import com.piku.client.core.model.WorkSource
 import com.piku.client.core.network.image.ImageDiskCacheGate
 import com.piku.client.core.network.image.ImageDiskCacheInterceptor
 import com.piku.client.core.network.image.ImageRetryInterceptor
@@ -18,6 +20,7 @@ import com.piku.client.core.network.image.ImageRouteProbe
 import com.piku.client.core.diag.CrashLogStore
 import com.piku.client.core.storage.prefs.SettingsRepository
 import com.piku.client.core.translation.ModelCatalogRepository
+import com.piku.client.source.pixiv.data.auth.PixivAuthRepository
 import com.piku.client.source.poipiku.data.repository.BlockListSync
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
@@ -122,6 +125,11 @@ class PoipikuApplication : Application() {
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             entryPoint.imageRouteProbe().run()
         }
+
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            val userId = entryPoint.pixivAuthRepository().currentUserId() ?: return@launch
+            entryPoint.bookmarkMirrorRepository().claimLegacy(WorkSource.PIXIV, userId.toString())
+        }
     }
 
     @EntryPoint
@@ -143,5 +151,9 @@ class PoipikuApplication : Application() {
         fun modelCatalogRepository(): ModelCatalogRepository
 
         fun blockListSync(): BlockListSync
+
+        fun bookmarkMirrorRepository(): BookmarkMirrorRepository
+
+        fun pixivAuthRepository(): PixivAuthRepository
     }
 }

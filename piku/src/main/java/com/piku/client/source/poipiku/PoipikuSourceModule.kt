@@ -3,7 +3,7 @@ package com.piku.client.source.poipiku
 import com.piku.client.core.source.ContentSource
 import com.piku.client.core.source.SourceAuth
 import com.piku.client.core.source.SourceContentBackup
-import com.piku.client.core.source.SourceFavoriteMirror
+import com.piku.client.core.source.RemoteBookmarkSource
 import com.piku.client.core.source.SourceFollows
 import com.piku.client.core.source.SourceLinkParser
 import com.piku.client.core.ui.drawer.SourceDrawerPlugin
@@ -11,7 +11,7 @@ import com.piku.client.source.poipiku.data.auth.PoipikuAuth
 import com.piku.client.source.poipiku.data.link.PoipikuLinkParser
 import com.piku.client.source.poipiku.data.source.PoipikuContentBackup
 import com.piku.client.source.poipiku.data.source.PoipikuContentSource
-import com.piku.client.source.poipiku.data.source.PoipikuFavoriteMirror
+import com.piku.client.source.poipiku.data.source.PoipikuRemoteBookmarks
 import com.piku.client.source.poipiku.data.source.PoipikuFollowsSource
 import com.piku.client.source.poipiku.domain.usecase.LoadTagFeedUseCase
 import com.piku.client.source.poipiku.domain.usecase.PoipikuTagFeed
@@ -49,7 +49,7 @@ object PoipikuSourceModule {
     /** 收藏镜像能力按源登记：没登记的源收藏时只写本地 */
     @Provides
     @IntoSet
-    fun poipikuFavoriteMirror(impl: PoipikuFavoriteMirror): SourceFavoriteMirror = impl
+    fun poipikuRemoteBookmarks(impl: PoipikuRemoteBookmarks): RemoteBookmarkSource = impl
 
     /** 抽屉插件按源登记：源专属抽屉条目与浮层由插件自己声明，外壳只按当前源渲染 */
     @Provides

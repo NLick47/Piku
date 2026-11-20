@@ -59,6 +59,10 @@ class Ao3ContentBackupTest {
             error("备份不该走用户作品接口")
 
         override suspend fun getWorkBookmarks(id: Long): ResponseBody = error("备份不该走书签")
+        override suspend fun ownBookmarks(
+            user: String,
+            page: Int,
+        ): ResponseBody = error("备份不该走书签列表")
 
         override suspend fun newBookmarkForm(id: Long): ResponseBody = error("备份不该走书签")
 

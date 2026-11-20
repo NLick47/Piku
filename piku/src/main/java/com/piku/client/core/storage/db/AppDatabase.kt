@@ -6,13 +6,14 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 /** schema 版本：动它就必须补一段迁移，单测会盯着"1..这里 不能断档" */
-internal const val DATABASE_SCHEMA_VERSION = 14
+internal const val DATABASE_SCHEMA_VERSION = 15
 
 @Database(
     entities = [
         FavoriteEntity::class,
         FavoriteFolderEntity::class,
         FavoriteMembershipEntity::class,
+        BookmarkMirrorEntity::class,
         HistoryEntity::class,
         SearchKeywordEntity::class,
         WorkPasswordEntity::class,
@@ -26,6 +27,7 @@ internal const val DATABASE_SCHEMA_VERSION = 14
 abstract class AppDatabase : RoomDatabase() {
     abstract fun favoriteDao(): FavoriteDao
     abstract fun favoriteFolderDao(): FavoriteFolderDao
+    abstract fun bookmarkMirrorDao(): BookmarkMirrorDao
     abstract fun historyDao(): HistoryDao
     abstract fun searchKeywordDao(): SearchKeywordDao
     abstract fun workPasswordDao(): WorkPasswordDao
@@ -290,6 +292,51 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS bookmark_mirrors (" +
+                        "source TEXT NOT NULL, " +
+                        "account TEXT NOT NULL, " +
+                        "workId TEXT NOT NULL, " +
+                        "PRIMARY KEY(source, account, workId))",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_bookmark_mirrors_source_account " +
+                        "ON bookmark_mirrors(source, account)",
+                )
+
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS favorites_new (" +
+                        "source TEXT NOT NULL, " +
+                        "workId TEXT NOT NULL, " +
+                        "authorId INTEGER NOT NULL DEFAULT 0, " +
+                        "title TEXT NOT NULL, " +
+                        "authorName TEXT NOT NULL, " +
+                        "thumbnailUrl TEXT NOT NULL DEFAULT '', " +
+                        "authorAvatarUrl TEXT, " +
+                        "imageCount INTEGER NOT NULL DEFAULT 0, " +
+                        "r18 INTEGER NOT NULL DEFAULT 0, " +
+                        "addedAt INTEGER NOT NULL, " +
+                        "contentBackedUp INTEGER NOT NULL DEFAULT 0, " +
+                        "PRIMARY KEY(source, workId))",
+                )
+                db.execSQL(
+                    "INSERT INTO favorites_new(source, workId, authorId, title, authorName, " +
+                        "thumbnailUrl, authorAvatarUrl, imageCount, r18, addedAt, contentBackedUp) " +
+                        "SELECT source, workId, authorId, title, authorName, thumbnailUrl, " +
+                        "authorAvatarUrl, imageCount, r18, addedAt, contentBackedUp FROM favorites",
+                )
+                db.execSQL(
+                    "INSERT INTO bookmark_mirrors(source, account, workId) " +
+                        "SELECT source, '', workId FROM favorites WHERE cloudSynced = 1",
+                )
+                db.execSQL("DROP TABLE favorites")
+                db.execSQL("ALTER TABLE favorites_new RENAME TO favorites")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_favorites_addedAt ON favorites(addedAt)")
+            }
+        }
+
         /** 全部迁移，必须覆盖 1..version 且不断档（有单测盯着） */
         val ALL_MIGRATIONS: Array<Migration> = arrayOf(
             MIGRATION_1_2,
@@ -305,6 +352,7 @@ abstract class AppDatabase : RoomDatabase() {
             MIGRATION_11_12,
             MIGRATION_12_13,
             MIGRATION_13_14,
+            MIGRATION_14_15,
         )
     }
 }

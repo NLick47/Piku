@@ -116,6 +116,12 @@ interface Ao3Api {
     @GET("works/{id}/bookmarks")
     suspend fun getWorkBookmarks(@Path("id") id: Long): ResponseBody
 
+    @GET("users/{user}/bookmarks")
+    suspend fun ownBookmarks(
+        @Path("user", encoded = true) user: String,
+        @Query("page") page: Int = 1,
+    ): ResponseBody
+
     @GET("works/{id}/bookmarks/new")
     suspend fun newBookmarkForm(@Path("id") id: Long): ResponseBody
 

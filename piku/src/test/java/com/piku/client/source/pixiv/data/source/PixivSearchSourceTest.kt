@@ -412,6 +412,28 @@ class PixivSearchSourceTest {
             clientHash: String,
             illustId: Long,
         ): PixivAppActionResponse = PixivAppActionResponse()
+
+        override suspend fun novelBookmarkAdd(
+            clientTime: String,
+            clientHash: String,
+            novelId: Long,
+            restrict: String,
+        ): PixivAppActionResponse = PixivAppActionResponse()
+
+        override suspend fun novelBookmarkDelete(
+            clientTime: String,
+            clientHash: String,
+            novelId: Long,
+        ): PixivAppActionResponse = PixivAppActionResponse()
+
+        override suspend fun userBookmarkNovels(
+            clientTime: String,
+            clientHash: String,
+            userId: Long,
+            restrict: String,
+            maxBookmarkId: Long?,
+            filter: String,
+        ): PixivNovelsResponse = PixivNovelsResponse()
     }
 
     private fun repository(

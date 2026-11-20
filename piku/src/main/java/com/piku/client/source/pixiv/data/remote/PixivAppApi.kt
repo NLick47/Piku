@@ -521,6 +521,36 @@ interface PixivAppApi {
         @Field("illust_id") illustId: Long,
     ): PixivAppActionResponse
 
+    @POST("v2/novel/bookmark/add")
+    @FormUrlEncoded
+    @Headers(HEADER_USER_AGENT, HEADER_APP_OS, HEADER_APP_OS_VERSION, HEADER_APP_VERSION)
+    suspend fun novelBookmarkAdd(
+        @Header("X-Client-Time") clientTime: String,
+        @Header("X-Client-Hash") clientHash: String,
+        @Field("novel_id") novelId: Long,
+        @Field("restrict") restrict: String = PixivAppConfig.RESTRICT_PUBLIC,
+    ): PixivAppActionResponse
+
+    @POST("v1/novel/bookmark/delete")
+    @FormUrlEncoded
+    @Headers(HEADER_USER_AGENT, HEADER_APP_OS, HEADER_APP_OS_VERSION, HEADER_APP_VERSION)
+    suspend fun novelBookmarkDelete(
+        @Header("X-Client-Time") clientTime: String,
+        @Header("X-Client-Hash") clientHash: String,
+        @Field("novel_id") novelId: Long,
+    ): PixivAppActionResponse
+
+    @GET("v1/user/bookmarks/novel")
+    @Headers(HEADER_USER_AGENT, HEADER_APP_OS, HEADER_APP_OS_VERSION, HEADER_APP_VERSION)
+    suspend fun userBookmarkNovels(
+        @Header("X-Client-Time") clientTime: String,
+        @Header("X-Client-Hash") clientHash: String,
+        @Query("user_id") userId: Long,
+        @Query("restrict") restrict: String = PixivAppConfig.RESTRICT_PUBLIC,
+        @Query("max_bookmark_id") maxBookmarkId: Long? = null,
+        @Query("filter") filter: String = PixivAppConfig.FILTER_ANDROID,
+    ): PixivNovelsResponse
+
     /** 画师主页资料（简介/统计/外链）。需登录 */
     @GET("v1/user/detail")
     @Headers(HEADER_USER_AGENT, HEADER_APP_OS, HEADER_APP_OS_VERSION, HEADER_APP_VERSION)

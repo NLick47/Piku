@@ -1,6 +1,8 @@
 package com.piku.client.source.poipiku.data.repository
 
 import com.piku.client.core.model.AppError
+import com.piku.client.core.model.WorkSource
+import com.piku.client.core.network.http.RequestPacer
 import com.piku.client.core.network.http.apiCall
 import com.piku.client.source.poipiku.data.remote.PoipikuApi
 import kotlinx.coroutines.sync.Mutex
@@ -35,21 +37,25 @@ class PoipikuBookmarkRepository @Inject constructor(
      * 最多两次 toggle：第一次结果已经是期望值就直接成功；否则说明远端本来就是期望值，
      * 只是被这次 toggle 翻走了，再翻一次即可。第二次仍不对（并发客户端插了一手）按失败返回。
      */
-    suspend fun setBookmarked(workId: Long, desired: Boolean): Result<Unit> =
-        toggleMutex.withLock {
-            apiCall {
-                val uid = authRepository.currentUserId() ?: throw AppError.LoginRequired
-                var state = toggle(uid, workId)
-                if (state != desired) {
-                    state = toggle(uid, workId)
-                }
-                if (state != desired) {
-                    throw BookmarkStateMismatch(desired, state)
-                }
+    suspend fun setBookmarked(
+        workId: Long,
+        desired: Boolean,
+        pacer: RequestPacer,
+    ): Result<Unit> = toggleMutex.withLock {
+        apiCall {
+            val uid = authRepository.currentUserId() ?: throw AppError.LoginRequired
+            var state = toggle(uid, workId, pacer)
+            if (state != desired) {
+                state = toggle(uid, workId, pacer)
+            }
+            if (state != desired) {
+                throw BookmarkStateMismatch(desired, state)
             }
         }
+    }
 
-    private suspend fun toggle(uid: Long, workId: Long): Boolean {
+    private suspend fun toggle(uid: Long, workId: Long, pacer: RequestPacer): Boolean {
+        pacer.await(WorkSource.POIPIKU)
         val response = api.updateBookmark(uid, workId)
         return when (response.result) {
             1 -> true

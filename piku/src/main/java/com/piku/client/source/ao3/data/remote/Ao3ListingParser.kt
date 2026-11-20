@@ -17,6 +17,11 @@ object Ao3ListingParser {
     /** 块首：`<li ... class="... work blurb group ...">` */
     private val BLURB_START = Regex("""<li[^>]*class="[^"]*\bwork blurb group\b[^"]*"[^>]*>""")
 
+    private val BOOKMARK_PRIVATE = Regex("""<span class="private" title="Private Bookmark"""")
+
+    private val BOOKMARK_BLURB_START =
+        Regex("""<li[^>]*id="bookmark_\d+"[^>]*class="[^"]*\bbookmark blurb group\b[^"]*"[^>]*>""")
+
     /** 块首自带的条目 id：`id="work_20251606"`；块首无 id 时从标题链接兜底取 */
     private val WORK_ID = Regex("""id="work_(\d+)"""")
 
@@ -66,15 +71,24 @@ object Ao3ListingParser {
     private val NEXT_PAGE = Regex("""<li[^>]*class="[^"]*\bnext\b[^"]*"[^>]*>\s*<a[^>]*>""", RegexOption.DOT_MATCHES_ALL)
 
     fun parse(html: String): List<Work> {
-        val blocks = splitBlurbs(html)
+        val blocks = splitBlurbs(html, BLURB_START)
         return blocks.mapNotNull { block -> parseBlurb(block) }
     }
+
+    fun parseBookmarkEntries(html: String): List<BookmarkEntry> {
+        val blocks = splitBlurbs(html, BOOKMARK_BLURB_START)
+        return blocks.mapNotNull { block ->
+            parseBlurb(block)?.let { BookmarkEntry(it, BOOKMARK_PRIVATE.containsMatchIn(block)) }
+        }
+    }
+
+    data class BookmarkEntry(val work: Work, val isPrivate: Boolean)
 
     /** 当前页之后是否还有页。AO3 的分页控件带 `rel="next"` 时才存在下一页 */
     fun hasNextPage(html: String): Boolean = NEXT_PAGE.containsMatchIn(html)
 
-    private fun splitBlurbs(html: String): List<String> {
-        val starts = BLURB_START.findAll(html).toList()
+    private fun splitBlurbs(html: String, start: Regex): List<String> {
+        val starts = start.findAll(html).toList()
         if (starts.isEmpty()) return emptyList()
         return starts.mapIndexed { index, match ->
             val from = match.range.first
