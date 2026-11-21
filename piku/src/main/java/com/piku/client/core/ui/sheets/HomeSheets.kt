@@ -5,6 +5,7 @@ import com.piku.client.core.ui.drawer.pixivMirrorOptionRes
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -29,6 +30,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ModalBottomSheetProperties
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -187,6 +189,55 @@ internal fun HomeSourceSheet(
                 dark = dark,
             )
             Spacer(Modifier.height(8.dp))
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun SourceOnboardingSheet(
+    selected: WorkSource,
+    options: List<WorkSource>,
+    labelRes: (WorkSource) -> Int,
+    onSelect: (WorkSource) -> Unit,
+    onSkip: () -> Unit,
+    dark: Boolean,
+) {
+    PikuBottomSheet(
+        onDismissRequest = { },
+        dark = dark,
+        properties = ModalBottomSheetProperties(
+            shouldDismissOnBackPress = false,
+            shouldDismissOnClickOutside = false,
+        ),
+    ) {
+        BackHandler { }
+        PikuSheetTitle(text = stringResource(R.string.home_source_select_title))
+        Spacer(Modifier.height(4.dp))
+        PikuSheetSubtitle(text = stringResource(R.string.source_onboarding_hint))
+        Spacer(Modifier.height(16.dp))
+        options.forEach { option ->
+            SettingsOptionRow(
+                text = stringResource(labelRes(option)),
+                selected = selected == option,
+                onClick = { onSelect(option) },
+                dark = dark,
+            )
+            Spacer(Modifier.height(8.dp))
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .clickable(onClick = onSkip)
+                .padding(vertical = 14.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = stringResource(R.string.source_onboarding_skip),
+                color = PikuColors.textSecondary,
+                fontSize = 13.sp,
+            )
         }
     }
 }

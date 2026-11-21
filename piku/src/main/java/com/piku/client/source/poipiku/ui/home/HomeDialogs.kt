@@ -20,6 +20,7 @@ import com.piku.client.core.ui.sheets.AboutSheet
 import com.piku.client.core.ui.sheets.CatalogSourceScreen
 import com.piku.client.core.ui.sheets.CategorySheet
 import com.piku.client.core.ui.sheets.HomeSourceSheet
+import com.piku.client.core.ui.sheets.SourceOnboardingSheet
 import com.piku.client.core.ui.sheets.ImageRouteSheet
 import com.piku.client.core.ui.sheets.LanguageSheet
 import com.piku.client.core.ui.sheets.LlmConfigScreen
@@ -50,6 +51,7 @@ internal class HomeDialogsState internal constructor(
     private val categories: MutableState<Boolean>,
     private val themeSheet: MutableState<Boolean>,
     private val homeSourceSheet: MutableState<Boolean>,
+    private val sourceOnboardingSheet: MutableState<Boolean>,
     private val imageRouteSheet: MutableState<Boolean>,
     private val pixivMirrorSheet: MutableState<Boolean>,
     private val retentionSheet: MutableState<Boolean>,
@@ -68,6 +70,9 @@ internal class HomeDialogsState internal constructor(
     var showHomeSource: Boolean
         get() = homeSourceSheet.value
         set(value) { homeSourceSheet.value = value }
+    var showSourceOnboarding: Boolean
+        get() = sourceOnboardingSheet.value
+        set(value) { sourceOnboardingSheet.value = value }
     var showImageRouteSheet: Boolean
         get() = imageRouteSheet.value
         set(value) { imageRouteSheet.value = value }
@@ -99,6 +104,7 @@ internal fun rememberHomeDialogsState(): HomeDialogsState {
     val categories = rememberSaveable { mutableStateOf(false) }
     val themeSheet = rememberSaveable { mutableStateOf(false) }
     val homeSourceSheet = rememberSaveable { mutableStateOf(false) }
+    val sourceOnboardingSheet = rememberSaveable { mutableStateOf(false) }
     val imageRouteSheet = rememberSaveable { mutableStateOf(false) }
     val pixivMirrorSheet = rememberSaveable { mutableStateOf(false) }
     val retentionSheet = rememberSaveable { mutableStateOf(false) }
@@ -112,6 +118,7 @@ internal fun rememberHomeDialogsState(): HomeDialogsState {
             categories = categories,
             themeSheet = themeSheet,
             homeSourceSheet = homeSourceSheet,
+            sourceOnboardingSheet = sourceOnboardingSheet,
             imageRouteSheet = imageRouteSheet,
             pixivMirrorSheet = pixivMirrorSheet,
             retentionSheet = retentionSheet,
@@ -167,6 +174,24 @@ internal fun HomeDialogs(
                 dialogs.showHomeSource = false
             },
             onDismiss = { dialogs.showHomeSource = false },
+            dark = dark,
+        )
+    }
+
+    if (dialogs.showSourceOnboarding) {
+        SourceOnboardingSheet(
+            selected = state.homeSource,
+            options = viewModel.sourceOptions,
+            labelRes = viewModel::homeSourceLabelRes,
+            onSelect = { source ->
+                viewModel.setHomeSource(source)
+                viewModel.markSourceOnboardingDone()
+                dialogs.showSourceOnboarding = false
+            },
+            onSkip = {
+                viewModel.markSourceOnboardingDone()
+                dialogs.showSourceOnboarding = false
+            },
             dark = dark,
         )
     }

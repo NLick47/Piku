@@ -147,6 +147,11 @@ class SettingsRepository @Inject constructor(
     )
     val homeSource: StateFlow<WorkSource> = _homeSource.asStateFlow()
 
+    private val _sourceOnboardingDone = MutableStateFlow(
+        prefs.getBoolean(KEY_SOURCE_ONBOARDING_DONE, false),
+    )
+    val sourceOnboardingDone: StateFlow<Boolean> = _sourceOnboardingDone.asStateFlow()
+
     /** 自定义背景压暗程度 0~1，0 表示不压暗 */
     private val _backgroundDim = MutableStateFlow(
         prefs.getFloat(KEY_BACKGROUND_DIM, BACKGROUND_DIM_DEFAULT),
@@ -258,6 +263,11 @@ class SettingsRepository @Inject constructor(
     fun setHomeSource(value: WorkSource) {
         prefs.edit().putString(KEY_HOME_SOURCE, value.name).apply()
         _homeSource.value = value
+    }
+
+    fun setSourceOnboardingDone() {
+        prefs.edit().putBoolean(KEY_SOURCE_ONBOARDING_DONE, true).apply()
+        _sourceOnboardingDone.value = true
     }
 
     fun setFolderSort(sort: FolderSort) {
@@ -976,6 +986,7 @@ class SettingsRepository @Inject constructor(
         const val KEY_THEME_MODE = "theme_mode"
         const val KEY_IMAGE_ROUTE_MODE = "image_route_mode"
         const val KEY_HOME_SOURCE = "home_source"
+        const val KEY_SOURCE_ONBOARDING_DONE = "source_onboarding_done"
         const val KEY_FOLDER_SORT = "folder_sort"
         const val KEY_PIXIV_BOOKMARK_MIRROR = "pixiv_bookmark_mirror"
         const val KEY_POIPIKU_BOOKMARK_SYNC = "poipiku_bookmark_sync"

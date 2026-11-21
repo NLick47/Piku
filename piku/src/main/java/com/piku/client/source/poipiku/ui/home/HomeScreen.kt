@@ -168,6 +168,12 @@ fun HomeScreen(
         }
     }
 
+    LaunchedEffect(Unit) {
+        if (viewModel.needsSourceOnboarding) {
+            dialogs.showSourceOnboarding = true
+        }
+    }
+
     LaunchedEffect(drawerState.isOpen) {
         if (drawerState.isOpen) viewModel.retryUserProfile()
     }

@@ -99,6 +99,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+private const val DEBUG_FORCE_SOURCE_ONBOARDING = true
+
 /** 检查更新状态机：弹层内结果区据此渲染 */
 sealed interface UpdateCheckState {
     data object Idle : UpdateCheckState
@@ -876,6 +878,15 @@ class HomeViewModel @Inject constructor(
 
     fun setHomeSource(value: WorkSource) {
         viewModelScope.launch { setHomeSourceUseCase(value) }
+    }
+
+    val needsSourceOnboarding: Boolean
+        get() = (BuildConfig.DEBUG && DEBUG_FORCE_SOURCE_ONBOARDING) ||
+            !settingsRepository.sourceOnboardingDone.value
+
+    fun markSourceOnboardingDone() {
+        if (BuildConfig.DEBUG && DEBUG_FORCE_SOURCE_ONBOARDING) return
+        settingsRepository.setSourceOnboardingDone()
     }
 
     /** 换源控件的可选项，按 WorkSource 声明序稳定输出 */
