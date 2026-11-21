@@ -8,9 +8,9 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -103,12 +103,6 @@ fun TextWorkBlurb(
                 bottom = PikuLayout.CardPadding,
             ),
     ) {
-        WorkBlurbHeader(
-            work = work,
-            heartVisible = heartVisible,
-            heartScale = { heartScale.value },
-        )
-        Spacer(Modifier.height(7.dp))
         Text(
             text = work.title,
             color = PikuColors.textPrimary,
@@ -118,6 +112,21 @@ fun TextWorkBlurb(
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
+        val attribution = listOf(work.authorName, work.categoryName)
+            .filter { it.isNotBlank() }
+            .joinToString(" · ")
+        if (attribution.isNotBlank()) {
+            Spacer(Modifier.height(3.dp))
+            Text(
+                text = attribution,
+                color = PikuColors.textSecondary,
+                fontSize = 11.sp,
+                lineHeight = 14.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         if (work.summary.isNotBlank()) {
             Spacer(Modifier.height(5.dp))
             Text(
@@ -141,29 +150,68 @@ fun TextWorkBlurb(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        Spacer(Modifier.height(7.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = listOf(work.authorName, work.categoryName)
-                    .filter { it.isNotBlank() }
-                    .joinToString(" · "),
-                color = PikuColors.textSecondary,
-                fontSize = 11.sp,
-                lineHeight = 14.sp,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-            if (work.textLength > 0) {
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = stringResource(R.string.work_word_count, formatCount(work.textLength)),
-                    color = PikuColors.textFaint,
-                    fontSize = 11.sp,
-                    lineHeight = 14.sp,
-                    maxLines = 1,
-                )
+        if (work.likes > 0 || work.textLength > 0 || work.inProgress || work.r18 || heartVisible) {
+            Spacer(Modifier.height(7.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (heartVisible) {
+                    Icon(
+                        imageVector = Icons.Filled.Favorite,
+                        contentDescription = null,
+                        tint = PikuColors.accent,
+                        modifier = Modifier
+                            .size(16.dp)
+                            .graphicsLayer {
+                                scaleX = heartScale.value
+                                scaleY = heartScale.value
+                            },
+                    )
+                } else if (work.likes > 0) {
+                    // 热度是选文的第三只眼（简介说了是什么、标签说了给谁看，kudos 说了多少人认可）
+                    Icon(
+                        imageVector = Icons.Filled.Favorite,
+                        contentDescription = null,
+                        tint = PikuColors.textFaint,
+                        modifier = Modifier.size(12.dp),
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = compactCount(work.likes),
+                        color = PikuColors.textFaint,
+                        fontSize = 11.sp,
+                    )
+                }
+                if (work.textLength > 0) {
+                    MetaSep(show = work.likes > 0 || heartVisible)
+                    Text(
+                        text = stringResource(R.string.work_word_count, formatCount(work.textLength)),
+                        color = PikuColors.textFaint,
+                        fontSize = 11.sp,
+                        lineHeight = 14.sp,
+                        maxLines = 1,
+                    )
+                }
+                if (work.inProgress || work.r18) {
+                    MetaSep(show = work.likes > 0 || work.textLength > 0 || heartVisible)
+                    if (work.inProgress) {
+                        Text(
+                            text = stringResource(R.string.work_status_ongoing),
+                            color = PikuColors.textFaint,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                        )
+                    }
+                    if (work.r18) {
+                        if (work.inProgress) Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = stringResource(R.string.work_rating_adult),
+                            color = AdultChipColor,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                        )
+                    }
+                }
             }
         }
         if (progress != null) {
@@ -174,66 +222,15 @@ fun TextWorkBlurb(
 }
 
 @Composable
-private fun WorkBlurbHeader(
-    work: Work,
-    heartVisible: Boolean,
-    heartScale: () -> Float,
-) {
-    val hasChips = work.inProgress || work.r18
-    if (!hasChips && work.likes <= 0 && !heartVisible) return
-    Column {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            // 小字轻量标记：不上胶囊底——两颗圆角块压在卡片首行太重，标签行已经给过底色
-            if (work.inProgress) {
-                Text(
-                    text = stringResource(R.string.work_status_ongoing),
-                    color = PikuColors.textFaint,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                )
-            }
-            if (work.r18) {
-                if (work.inProgress) Spacer(Modifier.width(6.dp))
-                Text(
-                    text = stringResource(R.string.work_rating_adult),
-                    color = AdultChipColor,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                )
-            }
-            Spacer(Modifier.weight(1f))
-            if (heartVisible) {
-                Icon(
-                    imageVector = Icons.Filled.Favorite,
-                    contentDescription = null,
-                    tint = PikuColors.accent,
-                    modifier = Modifier
-                        .size(18.dp)
-                        .graphicsLayer {
-                            scaleX = heartScale()
-                            scaleY = heartScale()
-                        },
-                )
-            } else if (work.likes > 0) {
-                // 热度是选文的第三只眼（简介说了是什么、标签说了给谁看，kudos 说了多少人认可）
-                Icon(
-                    imageVector = Icons.Filled.Favorite,
-                    contentDescription = null,
-                    tint = PikuColors.textFaint,
-                    modifier = Modifier.size(12.dp),
-                )
-                Spacer(Modifier.width(4.dp))
-                Text(
-                    text = compactCount(work.likes),
-                    color = PikuColors.textFaint,
-                    fontSize = 11.sp,
-                )
-            }
-        }
-        Spacer(Modifier.height(1.dp))
-    }
+private fun RowScope.MetaSep(show: Boolean) {
+    if (!show) return
+    Spacer(Modifier.width(6.dp))
+    Text(
+        text = "·",
+        color = PikuColors.textFaint,
+        fontSize = 10.sp,
+    )
+    Spacer(Modifier.width(6.dp))
 }
 
 internal fun formatCount(count: Int): String = String.format(java.util.Locale.US, "%,d", count)
