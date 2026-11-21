@@ -68,4 +68,12 @@ class PixivAppIllustMappingTest {
 
         assertEquals("", pages[0].originalUrl)
     }
+
+    @Test
+    fun detailTextMarksOnlyMangaSoRelatedSectionsFollowTheSeed() {
+        assertEquals(true, PixivAppIllustFull(type = "manga").toSourceWorkText().isManga)
+        assertEquals(false, PixivAppIllustFull(type = "illust").toSourceWorkText().isManga)
+        assertEquals(false, PixivAppIllustFull(type = "ugoira").toSourceWorkText().isManga)
+        assertEquals(false, PixivAppIllustFull().toSourceWorkText().isManga)
+    }
 }

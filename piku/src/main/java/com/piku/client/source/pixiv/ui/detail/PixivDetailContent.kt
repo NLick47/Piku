@@ -49,6 +49,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -77,7 +78,6 @@ import com.piku.client.core.ui.detail.tagsTranslationShown
 import com.piku.client.app.navigation.sharedWorkBounds
 import com.piku.client.core.ui.theme.GlassBarBgDark
 import com.piku.client.core.ui.theme.GlassBarBgLight
-import com.piku.client.core.ui.theme.OverlayScrimHeavy
 import com.piku.client.core.ui.theme.PikuColors
 import com.piku.client.core.ui.theme.ShadowAmbient
 import com.piku.client.core.ui.theme.ShadowSpot
@@ -88,9 +88,8 @@ import java.util.Locale
 /** 信息区左右留白（与 poipiku 详情同一把尺子） */
 private val PIXIV_CONTENT_PADDING = 20.dp
 
-/** 相关作品网格：一格的目标宽度，可用宽度除以它就是列数（411dp 屏 → 3 列） */
 private val RELATED_COLUMN_WIDTH = 112.dp
-private val RELATED_GAP = 10.dp
+private val RELATED_THUMB_COLUMN_WIDTH = 80.dp
 
 // 相关作品首批先渲染这么多，滚到快到底再追加同量
 private const val RELATED_BATCH = 20
@@ -240,6 +239,7 @@ internal fun PixivDetailContent(
                 works = related,
                 loading = relatedLoading,
                 scrollState = scrollState,
+                seedIsManga = detail.isManga,
                 onClick = onRelatedClick,
             )
         }
@@ -530,6 +530,7 @@ private fun StatsRow(
                 favorited = isFavorite,
                 cloudSynced = cloudSynced,
                 dark = dark,
+                heart = true,
                 onToggle = onBookmarkToggle,
                 onLongPress = onBookmarkLongPress,
             )
@@ -674,22 +675,65 @@ private fun RelatedRow(
     works: List<Work>,
     loading: Boolean,
     scrollState: ScrollState,
+    seedIsManga: Boolean,
     onClick: (Work) -> Unit,
 ) {
     if (works.isEmpty() && !loading) return
+    val illusts = works.filterNot { it.isManga }
+    val mangas = works.filter { it.isManga }
+    val mangaSection: @Composable () -> Unit = {
+        RelatedHeader(stringResource(R.string.pixiv_related_manga))
+        RelatedPagedGrid(
+            works = mangas,
+            scrollState = scrollState,
+            columnWidth = RELATED_COLUMN_WIDTH,
+            label = "manga",
+            card = { work, modifier -> RelatedMangaCard(work, onClick, modifier) },
+        )
+    }
+    val illustSection: @Composable () -> Unit = {
+        RelatedHeader(stringResource(R.string.pixiv_related_works))
+        if (illusts.isEmpty()) {
+            RelatedPlaceholderRow()
+        } else {
+            RelatedPagedGrid(
+                works = illusts,
+                scrollState = scrollState,
+                columnWidth = RELATED_THUMB_COLUMN_WIDTH,
+                label = "illust",
+                card = { work, modifier -> RelatedThumbCard(work, onClick, modifier) },
+            )
+        }
+    }
+    if (seedIsManga) {
+        if (mangas.isNotEmpty()) mangaSection()
+        if (illusts.isNotEmpty() || loading) illustSection()
+    } else {
+        if (illusts.isNotEmpty() || loading) illustSection()
+        if (mangas.isNotEmpty()) mangaSection()
+    }
+}
+
+@Composable
+private fun RelatedHeader(text: String) {
     Spacer(Modifier.height(18.dp))
     Text(
-        text = stringResource(R.string.pixiv_related_works),
+        text = text,
         color = PikuColors.textPrimary,
         fontSize = 14.sp,
         fontWeight = FontWeight.SemiBold,
     )
     Spacer(Modifier.height(10.dp))
-    if (works.isEmpty()) {
-        RelatedPlaceholderRow()
-        return
-    }
-    // 必须与 scrollState 同寿：重建后它恢复偏移，这里若只 remember 就缩回 20 条，原偏移会被钳到新内容底部
+}
+
+@Composable
+private fun RelatedPagedGrid(
+    works: List<Work>,
+    scrollState: ScrollState,
+    columnWidth: Dp,
+    label: String,
+    card: @Composable (Work, Modifier) -> Unit,
+) {
     var shown by rememberSaveable { mutableIntStateOf(RELATED_BATCH) }
     val preloadPx = with(LocalDensity.current) { RELATED_PRELOAD_DISTANCE.toPx() }
     val nearBottom by remember(preloadPx) {
@@ -701,20 +745,17 @@ private fun RelatedRow(
         if (append) shown = (from + RELATED_BATCH).coerceAtMost(works.size)
         Log.d(
             "PikuDiag",
-            "related grid key=$nearBottom append=$append total=${works.size} shown=$from->$shown " +
+            "related $label append=$append total=${works.size} shown=$from->$shown " +
                 "scroll=${scrollState.value}/${scrollState.maxValue}",
         )
     }
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val columns = (maxWidth / RELATED_COLUMN_WIDTH).toInt().coerceIn(2, 4)
+        val columns = (maxWidth / columnWidth).toInt().coerceIn(2, 4)
         val rows = works.take(shown).chunked(columns)
-        Column(verticalArrangement = Arrangement.spacedBy(RELATED_GAP)) {
+        Column {
             rows.forEach { row ->
-                Row(horizontalArrangement = Arrangement.spacedBy(RELATED_GAP)) {
-                    row.forEach { work ->
-                        RelatedCard(work = work, onClick = onClick, modifier = Modifier.weight(1f))
-                    }
-                    // 末行不满时补空位，卡片才不会被拉宽
+                Row {
+                    row.forEach { work -> card(work, Modifier.weight(1f)) }
                     repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
                 }
             }
@@ -726,42 +767,62 @@ private fun RelatedRow(
 private fun RelatedPlaceholderRow() {
     val pulse by rememberSkeletonPulse("relatedWorks")
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val columns = (maxWidth / RELATED_COLUMN_WIDTH).toInt().coerceIn(2, 4)
-        Row(horizontalArrangement = Arrangement.spacedBy(RELATED_GAP)) {
+        val columns = (maxWidth / RELATED_THUMB_COLUMN_WIDTH).toInt().coerceIn(2, 4)
+        Row {
             repeat(columns) {
-                Column(Modifier.weight(1f)) {
-                    SkeletonBlock(
-                        pulse = pulse,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(1f),
-                        shape = RoundedCornerShape(12.dp),
-                    )
-                    Spacer(Modifier.height(9.dp))
-                    SkeletonBlock(pulse, Modifier.fillMaxWidth(0.75f).height(11.dp))
-                    Spacer(Modifier.height(6.dp))
-                    SkeletonBlock(pulse, Modifier.fillMaxWidth(0.45f).height(9.dp))
-                }
+                SkeletonBlock(
+                    pulse = pulse,
+                    modifier = Modifier
+                        .weight(1f)
+                        .aspectRatio(1f),
+                    shape = RectangleShape,
+                )
             }
         }
     }
 }
 
 @Composable
-private fun RelatedCard(work: Work, onClick: (Work) -> Unit, modifier: Modifier) {
-    val shape = RoundedCornerShape(12.dp)
-    Column(
+private fun RelatedThumbCard(
+    work: Work,
+    onClick: (Work) -> Unit,
+    modifier: Modifier,
+) {
+    Box(
         modifier
-            .clip(shape)
-            .background(PikuColors.surface)
-            .border(BorderStroke(0.5.dp, PikuColors.border), shape)
+            .background(PikuColors.surfaceSoft)
+            .aspectRatio(1f)
             .clickable { onClick(work) },
+    ) {
+        AsyncImage(
+            model = work.thumbnailUrl,
+            contentDescription = work.title,
+            colorFilter = PikuColors.tameWhiteFilter,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop,
+        )
+        if (work.imageCount > 1) {
+            WorkImageCountBadge(
+                count = work.imageCount,
+                modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun RelatedMangaCard(
+    work: Work,
+    onClick: (Work) -> Unit,
+    modifier: Modifier,
+) {
+    Column(
+        modifier.clickable { onClick(work) },
     ) {
         Box(
             Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
-                .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
                 .background(PikuColors.surfaceSoft),
         ) {
             AsyncImage(
@@ -774,7 +835,7 @@ private fun RelatedCard(work: Work, onClick: (Work) -> Unit, modifier: Modifier)
             if (work.imageCount > 1) {
                 WorkImageCountBadge(
                     count = work.imageCount,
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp),
+                    modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
                 )
             }
         }

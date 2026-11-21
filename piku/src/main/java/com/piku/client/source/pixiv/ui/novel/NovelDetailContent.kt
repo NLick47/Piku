@@ -27,7 +27,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -48,6 +47,7 @@ import com.piku.client.R
 import com.piku.client.core.model.AppLanguage
 import com.piku.client.core.model.Work
 import com.piku.client.core.model.WorkDetail
+import com.piku.client.core.model.WorkSource
 import com.piku.client.core.model.WorkStats
 import com.piku.client.core.ui.common.feedThumbUrl
 import com.piku.client.core.ui.common.formatCount
@@ -226,15 +226,6 @@ private fun NovelStatsRow(
                 modifier = Modifier.weight(1f),
             )
         }
-        // 点赞数：pixiv 接口不给（null 时不占格），AO3 的 kudos 落这一格
-        stats?.likes?.let { likes ->
-            StatCell(
-                icon = Icons.Filled.Favorite,
-                value = compactCount(likes, language),
-                label = stringResource(R.string.pixiv_stat_likes),
-                modifier = Modifier.weight(1f),
-            )
-        }
         if (work.textLength > 0) {
             Text(
                 text = stringResource(R.string.work_word_count, formatCount(work.textLength)),
@@ -252,6 +243,7 @@ private fun NovelStatsRow(
                 favorited = isFavorite,
                 cloudSynced = cloudSynced,
                 dark = dark,
+                heart = work.source == WorkSource.PIXIV,
                 onToggle = onBookmarkToggle,
                 onLongPress = onBookmarkLongPress,
             )

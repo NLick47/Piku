@@ -123,6 +123,7 @@ data class SourceWorkText(
      * 0 = 该源没有这个状态，UI 不渲染。
      */
     @StringRes val statusRes: Int = 0,
+    val isManga: Boolean = false,
 )
 
 data class SourceWorkPage(

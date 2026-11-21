@@ -151,7 +151,8 @@ object Routes {
             "&r18=${work.r18}" +
             // 张数要带：详情页据此写历史/收藏，缺了这两处角标就永远是 0
             "&count=${work.imageCount}" +
-            "&len=${work.textLength}"
+            "&len=${work.textLength}" +
+            "&manga=${work.isManga}"
 }
 
 /**
@@ -725,6 +726,7 @@ fun AppNavHost(
                 navArgument("r18") { type = NavType.BoolType; defaultValue = false },
                 navArgument("count") { type = NavType.IntType; defaultValue = 0 },
                 navArgument("len") { type = NavType.IntType; defaultValue = 0 },
+                navArgument("manga") { type = NavType.BoolType; defaultValue = false },
             ),
         ) { entry ->
             // 路由参数重建 Work：详情 VM 拿它同步造打底 detail 秒进首帧，
@@ -743,6 +745,7 @@ fun AppNavHost(
                     imageCount = a.getInt("count"),
                     textLength = a.getInt("len"),
                     r18 = a.getBoolean("r18"),
+                    isManga = a.getBoolean("manga"),
                     source = WorkSource.entries.firstOrNull { it.name == a.getString("source") }
                         ?: WorkSource.PIXIV,
                     kind = WorkKind.entries.firstOrNull { it.name == a.getString("kind") }

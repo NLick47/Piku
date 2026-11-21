@@ -940,6 +940,7 @@ private const val SEARCH_AI_TYPE_HIDE = 0
 internal fun PixivAppIllustFull.toSourceWorkText(): SourceWorkText = SourceWorkText(
     description = cleanPixivDescription(caption),
     tags = tags.map { it.name }.filter { it.isNotBlank() },
+    isManga = type == "manga",
     stats = WorkStats(
         views = totalView,
         likes = null,
@@ -1048,6 +1049,7 @@ internal fun PixivAppIllust.toWork(hdThumb: Boolean = true): Work? {
         imageCount = pageCount,
         r18 = xRestrict > 0,
         ai = illustAiType == 2,
+        isManga = type == "manga",
         source = WorkSource.PIXIV,
     )
 }

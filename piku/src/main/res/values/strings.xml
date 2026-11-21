@@ -942,7 +942,8 @@
     <string name="pixiv_stat_bookmarks">收藏</string>
     <string name="pixiv_meta_posted">投稿 %1$s</string>
     <string name="pixiv_meta_pages">%1$d 张</string>
-    <string name="pixiv_related_works">相关作品</string>
+    <string name="pixiv_related_works">相关图片</string>
+    <string name="pixiv_related_manga">相关漫画</string>
     <string name="common_retry">重试</string>
 
     <!-- pixiv 登录（走官方登录页的 WebView 授权，凭据是令牌，与 poipiku 会话互不相干） -->

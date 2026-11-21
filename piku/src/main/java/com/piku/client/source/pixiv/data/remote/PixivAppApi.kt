@@ -122,6 +122,7 @@ data class PixivAppIllustFull(
     @Serializable(with = FlexibleStringSerializer::class) val id: String = "",
     val title: String = "",
     val caption: String = "",
+    val type: String = "",
     @SerialName("image_urls") val imageUrls: PixivAppImageUrls = PixivAppImageUrls(),
     val user: PixivAppUser = PixivAppUser(),
     @SerialName("page_count") val pageCount: Int = 1,
