@@ -74,6 +74,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.SingletonImageLoader
@@ -593,13 +594,14 @@ internal fun BoxScope.BackToTopFab(
     isScrolling: State<Boolean>,
     onGoTop: () -> Unit,
     dark: Boolean,
+    bottomExtra: Dp = 0.dp,
 ) {
     AnimatedVisibility(
         visible = showFab.value && !isScrolling.value,
         modifier = Modifier
             .align(Alignment.BottomEnd)
             .navigationBarsPadding()
-            .padding(end = PikuLayout.ScreenInset, bottom = 12.dp),
+            .padding(end = PikuLayout.ScreenInset, bottom = 12.dp + bottomExtra),
         enter = fadeIn() + scaleIn(initialScale = 0.8f),
         exit = fadeOut() + scaleOut(targetScale = 0.8f),
     ) {

@@ -448,8 +448,7 @@ class PixivRepository @Inject constructor(
 
     /**
      * 详情补充文本与统计。**登录态只走 app-api，绝不碰网页端**：登录限定与 R-18 只有这条路
-     * 拿得到文本，混进匿名视图的统计只会让同一页数据的来源说不清。app-api 不带点赞数，
-     * likes 置空让 UI 不渲染该格。未登录走网页端，简介要洗掉 HTML。
+     * 拿得到文本，混进匿名视图的统计只会让同一页数据的来源说不清。未登录走网页端，简介要洗掉 HTML。
      * 计数与元信息随详情接口一起回来，不再多打一次请求。
      */
     suspend fun workText(illustId: Long): Result<SourceWorkText?> =
@@ -934,8 +933,7 @@ private const val SEARCH_AI_TYPE_HIDE = 0
 
 /**
  * app-api 全量详情 → 详情文本与统计。标签对象字段是 name（与网页端的 tag 不同名，
- * 字段名对不上时标签区会整块消失），total_view/total_bookmarks 蛇形直映；
- * app-api 不带点赞数，likes 置空让 UI 不渲染该格。
+ * 字段名对不上时标签区会整块消失），total_view/total_bookmarks 蛇形直映。
  */
 internal fun PixivAppIllustFull.toSourceWorkText(): SourceWorkText = SourceWorkText(
     description = cleanPixivDescription(caption),
@@ -1056,7 +1054,6 @@ internal fun PixivAppIllust.toWork(hdThumb: Boolean = true): Work? {
 
 internal fun PixivIllustBody.toWorkStats(): WorkStats = WorkStats(
     views = viewCount,
-    likes = likeCount,
     bookmarks = bookmarkCount,
     postedAt = uploadDate.ifBlank { createDate },
     width = width,

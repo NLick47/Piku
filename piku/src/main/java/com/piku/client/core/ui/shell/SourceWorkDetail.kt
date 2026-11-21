@@ -1,4 +1,6 @@
 package com.piku.client.core.ui.shell
+import com.piku.client.source.pixiv.ui.detail.BookmarkHeartFab
+import com.piku.client.source.pixiv.ui.detail.HeartFabBackToTopGap
 import com.piku.client.source.pixiv.ui.detail.PixivDetailContent
 import com.piku.client.source.pixiv.ui.novel.NovelDetailContent
 import com.piku.client.core.ui.novelcache.novelCacheReaderStatus
@@ -125,6 +127,7 @@ internal fun SourceWorkDetailScreen(
     var viewerPage by remember(work.id) { mutableStateOf(-1) }
     var imageActionPage by remember(work.id) { mutableStateOf(-1) }
     var favoriteSheetVisible by remember(work.id) { mutableStateOf(false) }
+    var heartFabHidden by remember(work.id) { mutableStateOf(false) }
     // 图区已上屏的图：看图器拿它当零延迟垫底，不依赖任何缓存命中
     val shownPainters = remember(work.id) { mutableStateMapOf<Int, Painter>() }
     val context = LocalContext.current
@@ -414,9 +417,7 @@ internal fun SourceWorkDetailScreen(
                     related = state.related,
                     relatedLoading = state.relatedLoading,
                     onRelatedClick = onRelatedClick,
-                    // 收藏与关注收进概览卡本体，不用悬浮条——相关作品网格完整可见
                     isFavorite = state.isFavorite,
-                    cloudSynced = state.cloudSynced,
                     followed = state.followed,
                     showFollow = state.loggedIn && work.source == WorkSource.PIXIV && work.authorId > 0,
                     followSending = state.followSending,
@@ -424,6 +425,7 @@ internal fun SourceWorkDetailScreen(
                     onBookmarkToggle = viewModel::toggleFavorite,
                     onBookmarkLongPress = { favoriteSheetVisible = true },
                     onFollowClick = viewModel::toggleFollow,
+                    onHeartFabHiddenChange = { heartFabHidden = it },
                 )
             }
         }
@@ -495,11 +497,26 @@ internal fun SourceWorkDetailScreen(
         // 相关作品点开 = 导航层压栈新的 SOURCE_DETAIL（每层独立 VM），本层不再自己叠浮层
 
         // 层级与 poipiku 详情一致：顶栏先渲染，看图器盖过它，Snackbar 盖过看图器
+        if (work.source == WorkSource.PIXIV && work.kind != WorkKind.NOVEL) {
+            BookmarkHeartFab(
+                hidden = heartFabHidden,
+                favorited = state.isFavorite,
+                dark = dark,
+                onToggle = viewModel::toggleFavorite,
+                onLongPress = { favoriteSheetVisible = true },
+                modifier = Modifier.align(Alignment.BottomEnd),
+            )
+        }
         BackToTopFab(
             showFab = showBackToTop,
             isScrolling = isScrolling,
             onGoTop = { scrollState.scrollToTopSmart(scope) },
             dark = dark,
+            bottomExtra = if (work.source == WorkSource.PIXIV && work.kind != WorkKind.NOVEL && !heartFabHidden) {
+                HeartFabBackToTopGap
+            } else {
+                0.dp
+            },
         )
         DetailTopBar(
             onBack = onBack,

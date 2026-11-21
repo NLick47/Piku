@@ -858,6 +858,8 @@
     <string name="home_source_poipiku">Poipiku</string>
     <string name="home_source">コンテンツソース</string>
     <string name="home_source_select_title">コンテンツソースを選択</string>
+    <string name="source_onboarding_hint">タップで入る、いつでも切り替え可能</string>
+    <string name="source_onboarding_skip">今はスキップ</string>
     <string name="home_source_pixiv">Pixiv</string>
     <string name="home_source_ao3">AO3</string>
     <string name="ao3_login_title">AO3 にログイン</string>
@@ -939,10 +941,10 @@
     <string name="pixiv_novel_read">読む</string>
     <string name="pixiv_novel_loading">本文を取得中</string>
     <string name="pixiv_stat_views">閲覧数</string>
-    <string name="pixiv_stat_likes">いいね</string>
-    <string name="pixiv_stat_bookmarks">ブックマーク</string>
     <string name="pixiv_meta_posted">投稿 %1$s</string>
     <string name="pixiv_meta_pages">%1$d枚</string>
+    <string name="pixiv_meta_views">%1$s閲覧</string>
+    <string name="pixiv_meta_bookmarks">%1$sブックマーク</string>
     <string name="pixiv_related_works">関連画像</string>
     <string name="pixiv_related_manga">関連漫画</string>
     <string name="common_retry">再試行</string>

@@ -1,16 +1,26 @@
 package com.piku.client.source.pixiv.ui.detail
-import com.piku.client.core.ui.shell.BookmarkStatButton
 
 import android.graphics.Bitmap
 import android.util.Log
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
@@ -19,6 +29,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -28,9 +39,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -38,6 +49,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -50,9 +62,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -78,7 +93,10 @@ import com.piku.client.core.ui.detail.tagsTranslationShown
 import com.piku.client.app.navigation.sharedWorkBounds
 import com.piku.client.core.ui.theme.GlassBarBgDark
 import com.piku.client.core.ui.theme.GlassBarBgLight
+import com.piku.client.core.ui.theme.HeartDark
+import com.piku.client.core.ui.theme.HeartLight
 import com.piku.client.core.ui.theme.PikuColors
+import com.piku.client.core.ui.theme.PikuLayout
 import com.piku.client.core.ui.theme.ShadowAmbient
 import com.piku.client.core.ui.theme.ShadowSpot
 import com.piku.client.core.ui.theme.SoftBorderDark
@@ -148,10 +166,8 @@ internal fun PixivDetailContent(
     /** 相关作品在途：先摆骨架占位。它比详情晚到，空着会被看成「没有相关作品」 */
     relatedLoading: Boolean = false,
     onRelatedClick: (Work) -> Unit = {},
-    /** 收藏（本地）与关注：收纳进概览卡本体——关注在作者行，收藏在数据条的收藏格 */
+    /** 收藏（本地）与关注：收藏走右下浮动 ♡，关注在作者行 */
     isFavorite: Boolean = false,
-    /** 本地收藏已镜像到 pixiv 云端：星标角标 */
-    cloudSynced: Boolean = false,
     followed: Boolean = false,
     showFollow: Boolean = false,
     followSending: Boolean = false,
@@ -161,10 +177,19 @@ internal fun PixivDetailContent(
     /** 长按收藏格：打开收藏夹面板 */
     onBookmarkLongPress: () -> Unit = {},
     onFollowClick: () -> Unit = {},
+    onHeartFabHiddenChange: (Boolean) -> Unit = {},
 ) {
+    var contentHeightPx by remember { mutableFloatStateOf(0f) }
+    var cardBottomPx by remember { mutableFloatStateOf(Float.MAX_VALUE) }
+    val relatedTopEstimatePx = cardBottomPx + with(LocalDensity.current) { 18.dp.toPx() }
+    val relatedUnderHeartFab = related.isNotEmpty() && relatedTopEstimatePx < contentHeightPx * 0.5f
+    LaunchedEffect(relatedUnderHeartFab) {
+        onHeartFabHiddenChange(relatedUnderHeartFab)
+    }
     Column(
         Modifier
             .fillMaxSize()
+            .onGloballyPositioned { contentHeightPx = it.size.height.toFloat() }
             .verticalScroll(scrollState),
     ) {
         // 图通栏：左右到边、顶到顶栏下面，不钻到状态栏底下。
@@ -210,31 +235,34 @@ internal fun PixivDetailContent(
                 bottom = 96.dp,
             ),
         ) {
-            OverviewCard(
-                detail = detail,
-                stats = stats,
-                dark = dark,
-                language = language,
-                onAuthorClick = onAuthorClick,
-                onTagClick = onTagClick,
-                customTags = customTags,
-                onToggleCustomTag = onToggleCustomTag,
-                showTranslation = showTranslation,
-                translating = translating,
-                onToggleTranslation = onToggleTranslation,
-                onRetranslate = onRetranslate,
-                showTranslatedTags = showTranslatedTags,
-                tagsTranslating = tagsTranslating,
-                onToggleTagsTranslation = onToggleTagsTranslation,
-                isFavorite = isFavorite,
-                cloudSynced = cloudSynced,
-                followed = followed,
-                showFollow = showFollow,
-                followSending = followSending,
-                onBookmarkToggle = onBookmarkToggle,
-                onBookmarkLongPress = onBookmarkLongPress,
-                onFollowClick = onFollowClick,
-            )
+            Box(
+                Modifier.onGloballyPositioned { loc ->
+                    cardBottomPx = loc.boundsInRoot().bottom
+                },
+            ) {
+                OverviewCard(
+                    detail = detail,
+                    stats = stats,
+                    dark = dark,
+                    language = language,
+                    onAuthorClick = onAuthorClick,
+                    onTagClick = onTagClick,
+                    customTags = customTags,
+                    onToggleCustomTag = onToggleCustomTag,
+                    showTranslation = showTranslation,
+                    translating = translating,
+                    onToggleTranslation = onToggleTranslation,
+                    onRetranslate = onRetranslate,
+                    showTranslatedTags = showTranslatedTags,
+                    tagsTranslating = tagsTranslating,
+                    onToggleTagsTranslation = onToggleTagsTranslation,
+                    followed = followed,
+                    showFollow = showFollow,
+                    followSending = followSending,
+                    followQuiet = followQuiet,
+                    onFollowClick = onFollowClick,
+                )
+            }
             RelatedRow(
                 works = related,
                 loading = relatedLoading,
@@ -246,7 +274,7 @@ internal fun PixivDetailContent(
     }
 }
 
-/** 概览卡：标题、作者、简介、四格数据、元信息、标签 */
+/** 概览卡：标题、作者、简介、元信息、标签 */
 @Composable
 private fun OverviewCard(
     detail: WorkDetail,
@@ -264,14 +292,10 @@ private fun OverviewCard(
     showTranslatedTags: Boolean,
     tagsTranslating: Boolean,
     onToggleTagsTranslation: () -> Unit,
-    isFavorite: Boolean,
-    cloudSynced: Boolean,
     followed: Boolean,
     showFollow: Boolean,
     followSending: Boolean,
     followQuiet: Boolean = false,
-    onBookmarkToggle: () -> Unit,
-    onBookmarkLongPress: () -> Unit,
     onFollowClick: () -> Unit,
 ) {
     val shape = RoundedCornerShape(16.dp)
@@ -307,25 +331,7 @@ private fun OverviewCard(
             dark = dark,
             showTranslation = showTranslation,
         )
-        // 计数缺失（匿名限制、作品被限）时只藏两侧纯展示格，收藏开关恒在
-        Spacer(Modifier.height(12.dp))
-        Spacer(
-            Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(PikuColors.border),
-        )
-        Spacer(Modifier.height(10.dp))
-        StatsRow(
-            stats = stats,
-            language = language,
-            dark = dark,
-            isFavorite = isFavorite,
-            cloudSynced = cloudSynced,
-            onBookmarkToggle = onBookmarkToggle,
-            onBookmarkLongPress = onBookmarkLongPress,
-        )
-        MetaLine(stats = stats)
+        IllustMetaLine(stats = stats, language = language)
         TagsBlock(
             detail = detail,
             customTags = customTags,
@@ -496,49 +502,87 @@ internal fun FollowPill(
 }
 
 @Composable
-private fun StatsRow(
-    stats: WorkStats?,
-    language: AppLanguage,
+private fun IllustMetaLine(stats: WorkStats?, language: AppLanguage) {
+    val source = stats ?: return
+    val posted = source.postedAt.takeIf { it.length >= 10 }?.substring(0, 10).orEmpty()
+    val size = if (source.width > 0 && source.height > 0) {
+        "${source.width}×${source.height}"
+    } else {
+        ""
+    }
+    val pages = if (source.pageCount > 1) stringResource(R.string.pixiv_meta_pages, source.pageCount) else ""
+    val views = if (source.views > 0) stringResource(R.string.pixiv_meta_views, compactCount(source.views, language)) else ""
+    val bookmarks = if (source.bookmarks > 0) stringResource(R.string.pixiv_meta_bookmarks, compactCount(source.bookmarks, language)) else ""
+    val postedLabel = if (posted.isNotBlank()) stringResource(R.string.pixiv_meta_posted, posted) else ""
+    val parts = listOf(postedLabel, size, pages, views, bookmarks).filter { it.isNotBlank() }
+    if (parts.isEmpty()) return
+    Spacer(Modifier.height(10.dp))
+    Text(
+        text = parts.joinToString(" · "),
+        color = PikuColors.textSecondary,
+        fontSize = 11.sp,
+    )
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+internal fun BoxScope.BookmarkHeartFab(
+    hidden: Boolean,
+    favorited: Boolean,
     dark: Boolean,
-    isFavorite: Boolean,
-    cloudSynced: Boolean,
-    onBookmarkToggle: () -> Unit,
-    onBookmarkLongPress: () -> Unit,
+    onToggle: () -> Unit,
+    onLongPress: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        if (stats?.hasCounts == true) {
-            StatCell(
-                icon = Icons.Outlined.Visibility,
-                value = compactCount(stats.views, language),
-                label = stringResource(R.string.pixiv_stat_views),
-                modifier = Modifier.weight(1f),
+    val heart = if (dark) HeartDark else HeartLight
+    val heartScale = remember { Animatable(1f) }
+    LaunchedEffect(favorited) {
+        if (favorited) {
+            heartScale.snapTo(1.35f)
+            heartScale.animateTo(
+                1f,
+                spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
             )
-            // app-api 链路不带点赞数（likes=null）：不渲染该格，不当作 0
-            if (stats.likes != null) {
-                StatCell(
-                    icon = Icons.Outlined.FavoriteBorder,
-                    value = compactCount(stats.likes, language),
-                    label = stringResource(R.string.pixiv_stat_likes),
-                    modifier = Modifier.weight(1f),
-                )
-            }
         }
-        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-            BookmarkStatButton(
-                count = stats?.bookmarks ?: 0,
-                language = language,
-                favorited = isFavorite,
-                cloudSynced = cloudSynced,
-                dark = dark,
-                heart = true,
-                onToggle = onBookmarkToggle,
-                onLongPress = onBookmarkLongPress,
+    }
+    AnimatedVisibility(
+        visible = !hidden,
+        modifier = modifier
+            .navigationBarsPadding()
+            .padding(end = PikuLayout.ScreenInset, bottom = 12.dp),
+        enter = fadeIn() + scaleIn(initialScale = 0.8f),
+        exit = fadeOut() + scaleOut(targetScale = 0.8f),
+    ) {
+        val shape = RoundedCornerShape(28.dp)
+        Box(
+            Modifier
+                .size(56.dp)
+                .shadow(10.dp, shape, ambientColor = ShadowAmbient, spotColor = ShadowSpot)
+                .clip(shape)
+                .background(if (dark) GlassBarBgDark else GlassBarBgLight)
+                .border(
+                    BorderStroke(0.5.dp, if (dark) SoftBorderDark else SoftBorderLight),
+                    shape,
+                )
+                .combinedClickable(onClick = onToggle, onLongClick = onLongPress),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = if (favorited) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                contentDescription = stringResource(R.string.detail_favorite),
+                tint = if (favorited) heart else PikuColors.textSecondary,
+                modifier = Modifier
+                    .size(24.dp)
+                    .graphicsLayer {
+                        scaleX = heartScale.value
+                        scaleY = heartScale.value
+                    },
             )
         }
     }
 }
 
-
+internal val HeartFabBackToTopGap = 64.dp
 
 /**
  * 一格计数：图标 + 数字，不写「浏览/点赞/收藏」这类小字——眼睛、心、书签已经自解释，

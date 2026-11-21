@@ -858,6 +858,8 @@
     <string name="home_source_poipiku">Poipiku</string>
     <string name="home_source">Content source</string>
     <string name="home_source_select_title">Choose content source</string>
+    <string name="source_onboarding_hint">Tap one to enter — switch anytime</string>
+    <string name="source_onboarding_skip">Skip for now</string>
     <string name="home_source_pixiv">Pixiv</string>
     <string name="home_source_ao3">AO3</string>
     <string name="ao3_login_title">Log in to AO3</string>
@@ -939,10 +941,10 @@
     <string name="pixiv_novel_read">Read</string>
     <string name="pixiv_novel_loading">Loading text</string>
     <string name="pixiv_stat_views">Views</string>
-    <string name="pixiv_stat_likes">Likes</string>
-    <string name="pixiv_stat_bookmarks">Bookmarks</string>
     <string name="pixiv_meta_posted">Posted %1$s</string>
     <string name="pixiv_meta_pages">%1$d pages</string>
+    <string name="pixiv_meta_views">%1$s views</string>
+    <string name="pixiv_meta_bookmarks">%1$s bookmarks</string>
     <string name="pixiv_related_works">Related images</string>
     <string name="pixiv_related_manga">Related manga</string>
     <string name="common_retry">Retry</string>
