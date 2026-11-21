@@ -11,7 +11,6 @@ import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import coil3.size.Size as CoilSize
 import com.piku.client.core.data.ThumbnailResolver
-import com.piku.client.core.network.image.ImageDiskCacheGate
 import com.piku.client.core.ui.common.isAnimatedImage
 
 /** 预取时的解码尺寸提示：只影响这次预取自身的解码（见 [rememberWorkDetailPrefetch]） */
@@ -118,7 +117,6 @@ internal fun rememberPagerWindowPrefetch(
         val loader = SingletonImageLoader.get(context)
         window.forEach { target ->
             val memorySize = pageSizePx?.takeIf { target.memory }
-            if (memorySize == null && !ImageDiskCacheGate.enabled) return@forEach
             loader.enqueue(
                 ImageRequest.Builder(context)
                     .data(urls[target.page])
@@ -140,7 +138,6 @@ internal fun rememberPagerWindowPrefetch(
 
 /** 只写磁盘：磁盘缓存键就是 URL，正式请求照样命中；内存缓存键带目标尺寸，对不上是白占位图 */
 private fun enqueueDiskPrefetch(context: Context, url: String, sidePx: Int) {
-    if (!ImageDiskCacheGate.enabled) return
     SingletonImageLoader.get(context).enqueue(
         ImageRequest.Builder(context)
             .data(url)

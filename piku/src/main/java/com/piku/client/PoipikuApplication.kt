@@ -13,8 +13,6 @@ import coil3.serviceLoaderEnabled
 import coil3.size.Precision
 import com.piku.client.core.data.BookmarkMirrorRepository
 import com.piku.client.core.model.WorkSource
-import com.piku.client.core.network.image.ImageDiskCacheGate
-import com.piku.client.core.network.image.ImageDiskCacheInterceptor
 import com.piku.client.core.network.image.ImageRetryInterceptor
 import com.piku.client.core.network.image.ImageRouteProbe
 import com.piku.client.core.diag.CrashLogStore
@@ -60,7 +58,6 @@ class PoipikuApplication : Application() {
                     add(OkHttpNetworkFetcherFactory(callFactory = { entryPoint.imageOkHttpClient() }))
                     // 取图失败后的整单重试：传输失败隔一会儿再取一次，最多 3 次
                     add(entryPoint.imageRetryInterceptor())
-                    add(ImageDiskCacheInterceptor())
                     // 这里刻意不注册动画解码器：动图播放走白名单，由
                     // ui.common.rememberAnimatedImage 先用文件名判定（xxx.gif_640.jpg
                     // 里的 .gif 是 poipiku CDN 留下的动图指纹），再单独挂解码器
@@ -96,10 +93,8 @@ class PoipikuApplication : Application() {
         }
 
         val settings = entryPoint.settingsRepository()
-        ImageDiskCacheGate.enabled = settings.imageCacheEnabled.value
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             settings.imageCacheEnabled.collect { enabled ->
-                ImageDiskCacheGate.enabled = enabled
                 if (!enabled && File(cacheDir, IMAGE_CACHE_DIR).exists()) {
                     runCatching {
                         SingletonImageLoader.get(this@PoipikuApplication).diskCache?.clear()
