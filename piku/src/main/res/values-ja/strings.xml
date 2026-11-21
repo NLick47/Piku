@@ -943,7 +943,8 @@
     <string name="pixiv_stat_bookmarks">ブックマーク</string>
     <string name="pixiv_meta_posted">投稿 %1$s</string>
     <string name="pixiv_meta_pages">%1$d枚</string>
-    <string name="pixiv_related_works">関連作品</string>
+    <string name="pixiv_related_works">関連画像</string>
+    <string name="pixiv_related_manga">関連漫画</string>
     <string name="common_retry">再試行</string>
 
     <!-- pixivログイン（公式ページをWebViewで開く方式。資格情報はトークンで、poipikuのセッションとは無関係） -->

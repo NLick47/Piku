@@ -43,6 +43,11 @@ val StarDark = Color(0xFFFFD166)
 val StarTintLight = Color(0x2AE0A83C)
 val StarTintDark = Color(0x33FFD166)
 
+val HeartLight = Color(0xFFFF4060)
+val HeartDark = Color(0xFFFF6B84)
+val HeartTintLight = Color(0x2AFF4060)
+val HeartTintDark = Color(0x33FF6B84)
+
 val RankGold = StarLight
 val RankSilver = Color(0xFFB7BDC4)
 val RankBronze = Color(0xFFB98055)

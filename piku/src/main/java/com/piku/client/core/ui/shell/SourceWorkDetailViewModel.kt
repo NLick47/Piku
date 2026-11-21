@@ -475,6 +475,7 @@ class SourceWorkDetailViewModel @Inject constructor(
                     imageUrls = listOf(work.thumbnailUrl),
                     tags = emptyList(),
                     r18 = work.r18,
+                    isManga = work.isManga,
                 ),
             )
         }
@@ -558,6 +559,7 @@ class SourceWorkDetailViewModel @Inject constructor(
                         imageUrls = inline,
                         tags = text?.tags.orEmpty(),
                         r18 = work.r18,
+                        isManga = text?.isManga == true,
                     )
                     _ui.update {
                         it.copy(loading = false, detail = detail, pages = list, stats = text?.stats)

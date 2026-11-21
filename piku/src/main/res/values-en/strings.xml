@@ -943,7 +943,8 @@
     <string name="pixiv_stat_bookmarks">Bookmarks</string>
     <string name="pixiv_meta_posted">Posted %1$s</string>
     <string name="pixiv_meta_pages">%1$d pages</string>
-    <string name="pixiv_related_works">Related works</string>
+    <string name="pixiv_related_works">Related images</string>
+    <string name="pixiv_related_manga">Related manga</string>
     <string name="common_retry">Retry</string>
 
     <!-- pixiv login (WebView against the official page; credential is a token, unrelated to the poipiku session) -->

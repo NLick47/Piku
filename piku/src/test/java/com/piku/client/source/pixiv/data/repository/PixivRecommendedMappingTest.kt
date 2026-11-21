@@ -24,6 +24,7 @@ class PixivRecommendedMappingTest {
         xRestrict: Int = 0,
         illustAiType: Int = 0,
         pageCount: Int = 1,
+        type: String = "illust",
     ) = PixivAppIllust(
         id = id,
         title = "标题",
@@ -34,6 +35,7 @@ class PixivRecommendedMappingTest {
         height = height,
         xRestrict = xRestrict,
         illustAiType = illustAiType,
+        type = type,
     )
 
     @Test
@@ -78,6 +80,14 @@ class PixivRecommendedMappingTest {
         assertEquals(false, illust(illustAiType = 0).toWork()?.ai)
         assertEquals(false, illust(illustAiType = 1).toWork()?.ai)
         assertEquals(true, illust(illustAiType = 2).toWork()?.ai)
+    }
+
+    @Test
+    fun onlyMangaIsMarkedSoTheRelatedStreamCanSectionIt() {
+        assertEquals(true, illust(type = "manga").toWork()?.isManga)
+        assertEquals(false, illust(type = "illust").toWork()?.isManga)
+        assertEquals(false, illust(type = "ugoira").toWork()?.isManga)
+        assertEquals(false, illust(type = "").toWork()?.isManga)
     }
 
     @Test
